@@ -70,9 +70,8 @@ impl ScalableResult {
         }
 
         // Negative conclusions
-        for lit_key in indexed.all_literals() {
-            let lit = Literal::simple(lit_key);
-            let lit_id = lit.literal_id();
+        for &lit_id in indexed.all_literal_ids() {
+            let lit = id_to_literal(lit_id);
             if !self.delta.contains(&lit_id) {
                 conclusions.push(Conclusion::new(
                     ConclusionType::DefinitelyNotProvable,

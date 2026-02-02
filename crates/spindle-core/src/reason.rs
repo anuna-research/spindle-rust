@@ -11,10 +11,21 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
-use crate::intern::LiteralId;
+use crate::intern::{resolve, LiteralId};
 use crate::literal::Literal;
 use crate::rule::RuleType;
 use crate::theory::Theory;
+
+/// Convert a LiteralId back to a Literal
+#[inline]
+fn id_to_literal(id: LiteralId) -> Literal {
+    let name = resolve(id.symbol());
+    if id.is_negated() {
+        Literal::negated(name)
+    } else {
+        Literal::simple(name)
+    }
+}
 
 /// Perform defeasible reasoning on a theory
 pub fn reason(theory: &Theory) -> Vec<Conclusion> {
@@ -115,10 +126,9 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     }
 
     // Phase 3: Compute negative conclusions
-    // This runs once at the end, so String conversion is acceptable here
-    for lit_name in indexed.all_literals() {
-        let lit = Literal::simple(lit_name);
-        let lit_id = lit.literal_id();
+    // This runs once at the end, so the conversion is acceptable here
+    for &lit_id in indexed.all_literal_ids() {
+        let lit = id_to_literal(lit_id);
 
         if !definite_proven.contains(&lit_id) {
             conclusions.push(Conclusion::new(
