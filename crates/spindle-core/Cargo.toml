@@ -11,6 +11,7 @@ derive_more.workspace = true
 indexmap.workspace = true
 rustc-hash.workspace = true
 serde = { workspace = true, optional = true }
+serde_json.workspace = true
 
 [features]
 default = []

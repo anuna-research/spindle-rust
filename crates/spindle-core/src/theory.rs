@@ -46,7 +46,7 @@ impl Theory {
     /// Add a fact to the theory
     pub fn add_fact(&mut self, name: &str) -> RuleLabel {
         let label = self.next_label("f");
-        let rule = Rule::fact(&label, Literal::simple(name));
+        let rule = Rule::fact(&label, parse_literal_str(name));
         self.add_rule(rule);
         label
     }

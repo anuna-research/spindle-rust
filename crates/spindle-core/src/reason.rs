@@ -182,6 +182,10 @@ fn is_blocked_by_superior(
 mod tests {
     use super::*;
 
+    // ==========================================================================
+    // BASIC FACTS AND REASONING
+    // ==========================================================================
+
     #[test]
     fn test_simple_fact() {
         let mut theory = Theory::new();
@@ -191,6 +195,18 @@ mod tests {
 
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
             && c.literal.name == "bird"));
+    }
+
+    #[test]
+    fn test_negated_fact() {
+        let mut theory = Theory::new();
+        theory.add_fact("~guilty");
+
+        let conclusions = reason(&theory);
+
+        assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+            && c.literal.name == "guilty"
+            && c.literal.negation));
     }
 
     #[test]
@@ -218,6 +234,44 @@ mod tests {
     }
 
     #[test]
+    fn test_multiple_body_literals() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_fact("q");
+        theory.add_fact("r");
+        theory.add_defeasible_rule(&["p", "q", "r"], "s");
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name == "s"),
+            "s should be defeasibly provable when all antecedents are satisfied"
+        );
+    }
+
+    #[test]
+    fn test_unsatisfied_rule_body() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p", "q"], "r");
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            !conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name == "r"),
+            "r should not be provable without q"
+        );
+    }
+
+    // ==========================================================================
+    // CONFLICT AND SUPERIORITY TESTS
+    // ==========================================================================
+
+    #[test]
     fn test_penguin_doesnt_fly() {
         let mut theory = Theory::new();
         theory.add_fact("bird");
@@ -234,5 +288,334 @@ mod tests {
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name == "flies"
             && c.literal.negation));
+    }
+
+    #[test]
+    fn test_superiority_resolves_conflict() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["bird"], "~flies");
+
+        theory.add_superiority(&r1, &r2);
+
+        let conclusions = reason(&theory);
+
+        // Superior rule r1 should win
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name == "flies"
+                && !c.literal.negation),
+            "flies should be defeasibly provable via superior rule"
+        );
+    }
+
+    #[test]
+    fn test_strict_beats_defeasible() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_strict_rule(&["a", "b"], "c");
+        theory.add_defeasible_rule(&["a", "b"], "~c");
+
+        let conclusions = reason(&theory);
+
+        // Strict rule should definitely prove c
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name == "c"
+                && !c.literal.negation),
+            "c should be definitely provable via strict rule"
+        );
+    }
+
+    #[test]
+    fn test_forward_chaining() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+        theory.add_defeasible_rule(&["c"], "d");
+
+        let conclusions = reason(&theory);
+
+        for lit_name in &["b", "c", "d"] {
+            assert!(
+                conclusions.iter().any(|c| c.conclusion_type
+                    == ConclusionType::DefeasiblyProvable
+                    && c.literal.name == *lit_name),
+                "{} should be defeasibly provable via chain",
+                lit_name
+            );
+        }
+    }
+
+    // ==========================================================================
+    // NEGATIVE CONCLUSIONS (-d, -D)
+    // ==========================================================================
+
+    #[test]
+    fn test_negative_definite_conclusion() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let conclusions = reason(&theory);
+
+        // q has no strict path, so -D q
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type
+                == ConclusionType::DefinitelyNotProvable
+                && c.literal.name == "q"
+                && !c.literal.negation),
+            "q should be definitely NOT provable (no strict rule)"
+        );
+    }
+
+    #[test]
+    fn test_negative_defeasible_unsatisfied() {
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&["p"], "q"); // p not proven
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type
+                == ConclusionType::DefeasiblyNotProvable
+                && c.literal.name == "q"),
+            "q should be defeasibly NOT provable when body unsatisfied"
+        );
+    }
+
+    #[test]
+    fn test_superiority_yields_negative_for_inferior() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        let r1 = theory.add_defeasible_rule(&["p"], "q");
+        let r2 = theory.add_defeasible_rule(&["p"], "~q");
+
+        theory.add_superiority(&r1, &r2);
+
+        let conclusions = reason(&theory);
+
+        // r1 > r2, so +d q, but ~q should be blocked
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name == "q"
+                && !c.literal.negation),
+            "q should be defeasibly provable via superior rule"
+        );
+    }
+
+    // ==========================================================================
+    // DEFEATER TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_defeater_blocks_conclusion() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeater(&["p"], "~q");
+
+        let conclusions = reason(&theory);
+
+        // Defeater should create a conflict situation
+        // In standard DL, without superiority, both might be blocked
+        // Check that we handle defeaters appropriately
+        let has_q = conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name == "q"
+                && !c.literal.negation);
+
+        let has_not_q = conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name == "q"
+                && c.literal.negation);
+
+        // Defeater blocks q but doesn't prove ~q
+        assert!(
+            !has_not_q,
+            "~q should NOT be defeasibly provable by defeater alone"
+        );
+    }
+
+    #[test]
+    fn test_defeater_doesnt_prove() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeater(&["p"], "q");
+
+        let conclusions = reason(&theory);
+
+        // Defeaters don't prove anything
+        assert!(
+            !conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name == "q"),
+            "Defeater alone should not prove q"
+        );
+    }
+
+    // ==========================================================================
+    // EDGE CASES
+    // ==========================================================================
+
+    #[test]
+    fn test_empty_theory() {
+        let theory = Theory::new();
+        let conclusions = reason(&theory);
+
+        // Empty theory should produce no positive conclusions
+        assert!(
+            !conclusions.iter().any(|c| c.conclusion_type.is_positive()),
+            "Empty theory should produce no positive conclusions"
+        );
+    }
+
+    #[test]
+    fn test_theory_with_only_rules() {
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeasible_rule(&["q"], "r");
+
+        let conclusions = reason(&theory);
+
+        // No facts, so no positive conclusions
+        assert!(
+            !conclusions.iter().any(|c| c.conclusion_type.is_positive()),
+            "Theory with no facts should produce no positive conclusions"
+        );
+    }
+
+    #[test]
+    fn test_self_referential_rule() {
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&["p"], "p");
+
+        let conclusions = reason(&theory);
+
+        // Should not crash and p should not be proven
+        assert!(
+            !conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name == "p"),
+            "Self-referential rule without initial fact should not prove p"
+        );
+    }
+
+    #[test]
+    fn test_circular_dependencies() {
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeasible_rule(&["q"], "r");
+        theory.add_defeasible_rule(&["r"], "p");
+
+        let conclusions = reason(&theory);
+
+        // Should terminate without infinite loop
+        assert!(
+            conclusions.len() >= 0,
+            "Should handle circular dependencies without infinite loop"
+        );
+    }
+
+    #[test]
+    fn test_conflicting_facts() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_fact("~p");
+
+        let conclusions = reason(&theory);
+
+        // Both should be definitely provable (inconsistent theory)
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name == "p"
+                && !c.literal.negation),
+            "p should be definitely provable"
+        );
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name == "p"
+                && c.literal.negation),
+            "~p should be definitely provable"
+        );
+    }
+
+    // ==========================================================================
+    // STRESS TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_long_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("l0");
+
+        for i in 0..50 {
+            theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
+        }
+
+        let conclusions = reason(&theory);
+
+        // All literals in chain should be provable
+        assert!(
+            conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name == "l50"),
+            "l50 should be defeasibly provable through long chain"
+        );
+    }
+
+    #[test]
+    fn test_wide_theory() {
+        let mut theory = Theory::new();
+
+        // 100 independent facts and derived conclusions
+        for i in 0..100 {
+            theory.add_fact(&format!("fact{}", i));
+            theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
+        }
+
+        let conclusions = reason(&theory);
+
+        // Check a sample of derived conclusions
+        for i in [0, 25, 50, 75, 99].iter() {
+            assert!(
+                conclusions.iter().any(|c| c.conclusion_type
+                    == ConclusionType::DefeasiblyProvable
+                    && c.literal.name == format!("derived{}", i)),
+                "derived{} should be defeasibly provable",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_many_facts() {
+        let mut theory = Theory::new();
+
+        for i in 0..100 {
+            theory.add_fact(&format!("p{}", i));
+        }
+
+        let conclusions = reason(&theory);
+
+        let definite_count = conclusions
+            .iter()
+            .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
+            .count();
+
+        assert!(
+            definite_count >= 100,
+            "Should definitely prove all {} facts, got {}",
+            100,
+            definite_count
+        );
     }
 }

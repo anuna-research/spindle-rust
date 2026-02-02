@@ -582,4 +582,357 @@ mod tests {
         // q should be proven
         assert!(result.partial.contains("q"));
     }
+
+    // ==========================================================================
+    // SEMANTIC EQUIVALENCE TESTS (Standard vs Scalable)
+    // ==========================================================================
+
+    use crate::reason::reason;
+
+    /// Helper to extract defeasibly provable literals from standard reason()
+    fn extract_defeasible_provable(conclusions: &[Conclusion]) -> HashSet<String> {
+        conclusions
+            .iter()
+            .filter(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable)
+            .map(|c| c.literal.canonical_name())
+            .collect()
+    }
+
+    /// Helper to extract definitely provable literals from standard reason()
+    fn extract_definite_provable(conclusions: &[Conclusion]) -> HashSet<String> {
+        conclusions
+            .iter()
+            .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
+            .map(|c| c.literal.canonical_name())
+            .collect()
+    }
+
+    #[test]
+    fn test_semantic_empty_theory() {
+        let theory = Theory::new();
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+        let scl_def = scalable.partial.clone();
+
+        assert_eq!(std_def.len(), 0, "Standard: empty theory -> no +d");
+        assert_eq!(scl_def.len(), 0, "Scalable: empty theory -> no +d");
+    }
+
+    #[test]
+    fn test_semantic_single_fact() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+
+        assert!(std_def.contains("p"), "Standard: p should be +d");
+        assert!(scalable.partial.contains("p"), "Scalable: p should be +d");
+        assert!(scalable.delta.contains("p"), "Scalable: p should be +D");
+    }
+
+    #[test]
+    fn test_semantic_simple_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+
+        for lit in &["a", "b", "c"] {
+            assert!(
+                std_def.contains(*lit),
+                "Standard: {} should be +d",
+                lit
+            );
+            assert!(
+                scalable.partial.contains(*lit),
+                "Scalable: {} should be +d",
+                lit
+            );
+        }
+    }
+
+    #[test]
+    fn test_semantic_definite_match() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q");
+        theory.add_strict_rule(&["q"], "r");
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_definite = extract_definite_provable(&standard);
+
+        for lit in &["p", "q", "r"] {
+            assert!(
+                std_definite.contains(*lit),
+                "Standard: {} should be +D",
+                lit
+            );
+            assert!(
+                scalable.delta.contains(*lit),
+                "Scalable: {} should be +D (in delta)",
+                lit
+            );
+        }
+    }
+
+    #[test]
+    fn test_semantic_mixed_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q");
+        theory.add_defeasible_rule(&["q"], "r");
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+        let std_definite = extract_definite_provable(&standard);
+
+        // p, q definitely provable
+        assert!(std_definite.contains("p"));
+        assert!(std_definite.contains("q"));
+        assert!(scalable.delta.contains("p"));
+        assert!(scalable.delta.contains("q"));
+
+        // r defeasibly provable
+        assert!(std_def.contains("r"), "Standard: r should be +d");
+        assert!(scalable.partial.contains("r"), "Scalable: r should be +d");
+    }
+
+    #[test]
+    fn test_semantic_superiority_resolves() {
+        let mut theory = Theory::new();
+        theory.add_fact("trigger");
+
+        let r1 = theory.add_defeasible_rule(&["trigger"], "result");
+        let r2 = theory.add_defeasible_rule(&["trigger"], "~result");
+
+        theory.add_superiority(&r1, &r2);
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+
+        // r1 > r2, so result should win
+        assert!(
+            std_def.contains("result"),
+            "Standard: result should be +d (superior)"
+        );
+        assert!(
+            scalable.partial.contains("result"),
+            "Scalable: result should be +d (superior)"
+        );
+        assert!(
+            !scalable.partial.contains("~result"),
+            "Scalable: ~result should NOT be +d"
+        );
+    }
+
+    #[test]
+    fn test_semantic_tweety_triangle() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+
+        theory.add_superiority(&r2, &r1);
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+
+        // Penguin wins - ~flies provable
+        assert!(
+            std_def.contains("~flies"),
+            "Standard: ~flies should be +d"
+        );
+        assert!(
+            scalable.partial.contains("~flies"),
+            "Scalable: ~flies should be +d"
+        );
+        assert!(
+            !scalable.partial.contains("flies"),
+            "Scalable: flies should NOT be +d"
+        );
+    }
+
+    #[test]
+    fn test_semantic_long_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("l0");
+
+        for i in 0..10 {
+            theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
+        }
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+
+        // All chain literals should be provable in both modes
+        for i in 0..=10 {
+            let lit = format!("l{}", i);
+            assert!(
+                std_def.contains(&lit),
+                "Standard: {} should be +d",
+                lit
+            );
+            assert!(
+                scalable.partial.contains(&lit),
+                "Scalable: {} should be +d",
+                lit
+            );
+        }
+    }
+
+    #[test]
+    fn test_semantic_wide_theory() {
+        let mut theory = Theory::new();
+
+        for i in 0..20 {
+            theory.add_fact(&format!("fact{}", i));
+            theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
+        }
+
+        let standard = reason(&theory);
+        let scalable = reason_scalable(&theory);
+
+        let std_def = extract_defeasible_provable(&standard);
+
+        for i in 0..20 {
+            let fact = format!("fact{}", i);
+            let derived = format!("derived{}", i);
+
+            assert!(std_def.contains(&fact), "Standard: {} should be +d", fact);
+            assert!(
+                std_def.contains(&derived),
+                "Standard: {} should be +d",
+                derived
+            );
+            assert!(
+                scalable.partial.contains(&fact),
+                "Scalable: {} should be +d",
+                fact
+            );
+            assert!(
+                scalable.partial.contains(&derived),
+                "Scalable: {} should be +d",
+                derived
+            );
+        }
+    }
+
+    #[test]
+    fn test_closure_relationships() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_strict_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+        theory.add_defeasible_rule(&["c"], "d");
+
+        let result = reason_scalable(&theory);
+
+        // Delta ⊆ Partial (definite implies defeasible)
+        for lit in &result.delta {
+            assert!(
+                result.partial.contains(lit),
+                "Delta {} should be in Partial",
+                lit
+            );
+        }
+
+        // Partial ⊆ Lambda (partial is refined from lambda)
+        for lit in &result.partial {
+            assert!(
+                result.lambda.contains(lit),
+                "Partial {} should be in Lambda",
+                lit
+            );
+        }
+    }
+
+    // ==========================================================================
+    // STRESS TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_scalable_long_chain_performance() {
+        let mut theory = Theory::new();
+        theory.add_fact("l0");
+
+        for i in 0..100 {
+            theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
+        }
+
+        let result = reason_scalable(&theory);
+
+        assert!(
+            result.partial.contains("l100"),
+            "l100 should be provable through long chain"
+        );
+    }
+
+    #[test]
+    fn test_scalable_wide_theory_performance() {
+        let mut theory = Theory::new();
+
+        for i in 0..200 {
+            theory.add_fact(&format!("fact{}", i));
+            theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
+        }
+
+        let result = reason_scalable(&theory);
+
+        assert!(
+            result.partial.contains("derived199"),
+            "derived199 should be provable"
+        );
+    }
+
+    #[test]
+    fn test_scalable_many_conflicts_with_superiority() {
+        let mut theory = Theory::new();
+        theory.add_fact("trigger");
+
+        // Create 50 conflicts, all resolved by superiority
+        for i in 0..50 {
+            let r1 = theory.add_defeasible_rule(&["trigger"], &format!("q{}", i));
+            let r2 = theory.add_defeasible_rule(&["trigger"], &format!("~q{}", i));
+            theory.add_superiority(&r1, &r2);
+        }
+
+        let result = reason_scalable(&theory);
+
+        // All positive conclusions should win
+        for i in 0..50 {
+            assert!(
+                result.partial.contains(&format!("q{}", i)),
+                "q{} should be provable via superiority",
+                i
+            );
+            assert!(
+                !result.partial.contains(&format!("~q{}", i)),
+                "~q{} should NOT be provable",
+                i
+            );
+        }
+    }
 }
