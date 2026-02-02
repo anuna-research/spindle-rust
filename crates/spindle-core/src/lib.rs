@@ -50,6 +50,7 @@ pub mod conclusion;
 pub mod index;
 pub mod reason;
 pub mod scalable;
+pub mod grounding;
 pub mod error;
 
 /// Prelude module for convenient imports
