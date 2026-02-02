@@ -326,6 +326,7 @@ impl Spindle {
     /// +d literal
     /// META label key "value"
     /// META label key2 ("v1" "v2")
+    /// DEPS task1:dep1,dep2|task2:dep3
     /// ```
     #[wasm_bindgen(js_name = reasonSpl)]
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
@@ -353,7 +354,46 @@ impl Spindle {
             }
         }
 
+        // Extract dependencies from r-dep-* rules
+        // Pattern: r-dep-X has body containing completed-Y, completed-Z, etc.
+        // This means task X depends on tasks Y, Z
+        let deps = self.extract_deps_from_rules();
+        if !deps.is_empty() {
+            let deps_str: Vec<_> = deps
+                .iter()
+                .map(|(task, dep_list)| format!("{}:{}", task, dep_list.join(",")))
+                .collect();
+            output.push(format!("DEPS {}", deps_str.join("|")));
+        }
+
         Ok(output.join("\n"))
+    }
+
+    /// Extract task dependencies from r-dep-* rules
+    fn extract_deps_from_rules(&self) -> Vec<(String, Vec<String>)> {
+        let mut deps = Vec::new();
+
+        for rule in self.theory.rules() {
+            // Look for rules with label starting with "r-dep-"
+            if rule.label.starts_with("r-dep-") {
+                let task_id = rule.label.strip_prefix("r-dep-").unwrap();
+
+                // Extract completed-* literals from body
+                let mut task_deps = Vec::new();
+                for lit in &rule.body {
+                    let lit_name = &lit.name;
+                    if let Some(dep_task) = lit_name.strip_prefix("completed-") {
+                        task_deps.push(dep_task.to_string());
+                    }
+                }
+
+                if !task_deps.is_empty() {
+                    deps.push((task_id.to_string(), task_deps));
+                }
+            }
+        }
+
+        deps
     }
 }
 
