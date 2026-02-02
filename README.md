@@ -18,6 +18,12 @@ A Rust implementation of the SPINdle defeasible logic reasoning engine, ported f
 
 - **Superiority Relations**: Conflict resolution via rule preferences
 
+- **First-Order Variables**: Datalog-style grounding with `?x` variable syntax
+
+- **Two Input Formats**:
+  - DFL (Defeasible Logic Format) - Textual syntax
+  - SPL (Spindle Lisp) - LISP-based DSL
+
 ## Installation
 
 ```bash
@@ -27,8 +33,11 @@ cargo install --path crates/spindle-cli
 ## Usage
 
 ```bash
-# Reason about a theory
+# Reason about a theory (DFL format)
 spindle examples/penguin.dfl
+
+# Reason about a theory (SPL format)
+spindle examples/penguin.spl
 
 # Use scalable mode
 spindle --scalable examples/penguin.dfl
@@ -58,6 +67,25 @@ r2: penguin => -flies
 r2 > r1
 ```
 
+## SPL Format
+
+```lisp
+; Facts
+(given bird)
+(given penguin)
+
+; Defeasible rules
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+
+; Superiority
+(prefer r2 r1)
+
+; Predicates with variables
+(given (parent alice bob))
+(normally r3 (parent ?x ?y) (ancestor ?x ?y))
+```
+
 ## Library Usage
 
 ```rust
@@ -82,8 +110,8 @@ let conclusions = theory.reason();
 
 ## Crate Structure
 
-- `spindle-core` - Core reasoning engine and data structures
-- `spindle-parser` - DFL format parser
+- `spindle-core` - Core reasoning engine, data structures, and grounding
+- `spindle-parser` - DFL and SPL format parsers
 - `spindle-cli` - Command-line interface
 
 ## License
