@@ -130,7 +130,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     conclusions
 }
 
-/// Check if a rule is blocked by a superior rule for the complement
+/// Check if a rule is blocked by a superior rule or defeater for the complement
 fn is_blocked_by_superior(
     indexed: &IndexedTheory,
     theory: &Theory,
@@ -140,7 +140,7 @@ fn is_blocked_by_superior(
     let head_lit = rule.head_literal();
     let complement = head_lit.complement();
 
-    // Find rules for the complement
+    // Find rules for the complement (including defeaters)
     let attacking_rules = indexed.rules_with_head(&complement);
 
     for attacker in attacking_rules {
@@ -154,6 +154,23 @@ fn is_blocked_by_superior(
             continue;
         }
 
+        // IMPORTANT: Defeaters automatically block without needing explicit superiority
+        // A defeater is a rule that can block a conclusion but cannot prove its head
+        if attacker.rule_type == RuleType::Defeater {
+            // Check if rule is superior over the defeater (can override it)
+            let rule_superior = theory
+                .superiorities()
+                .iter()
+                .any(|s| s.superior == rule.label && s.inferior == attacker.label);
+
+            // Defeater blocks unless the rule is explicitly superior
+            if !rule_superior {
+                return true;
+            }
+            continue;
+        }
+
+        // For defeasible rules: check superiority relations
         // Check superiority: is attacker > rule?
         let attacker_superior = theory
             .superiorities()
@@ -422,9 +439,7 @@ mod tests {
 
         let conclusions = reason(&theory);
 
-        // Defeater should create a conflict situation
-        // In standard DL, without superiority, both might be blocked
-        // Check that we handle defeaters appropriately
+        // Defeater should block q from being proven
         let has_q = conclusions
             .iter()
             .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
@@ -437,7 +452,13 @@ mod tests {
                 && c.literal.name == "q"
                 && c.literal.negation);
 
-        // Defeater blocks q but doesn't prove ~q
+        // Defeater blocks q from being proven
+        assert!(
+            !has_q,
+            "q should NOT be defeasibly provable when blocked by defeater"
+        );
+
+        // Defeater doesn't prove ~q (it only blocks)
         assert!(
             !has_not_q,
             "~q should NOT be defeasibly provable by defeater alone"

@@ -292,6 +292,31 @@ impl Spindle {
         self.theory.rule_count()
     }
 
+    /// Get parsed rules as JSON for client-side processing
+    /// Returns array of {label, ruleType, body: string[], head: string[]}
+    #[wasm_bindgen(js_name = getRules)]
+    pub fn get_rules(&self) -> JsValue {
+        #[derive(Serialize)]
+        struct JsRule {
+            label: String,
+            #[serde(rename = "type")]
+            rule_type: String,
+            body: Vec<String>,
+            head: Vec<String>,
+        }
+
+        let rules: Vec<JsRule> = self.theory.rules()
+            .map(|r| JsRule {
+                label: r.label.clone(),
+                rule_type: format!("{:?}", r.rule_type),
+                body: r.body.iter().map(|l| l.to_string()).collect(),
+                head: r.head.iter().map(|l| l.to_string()).collect(),
+            })
+            .collect();
+
+        serde_wasm_bindgen::to_value(&rules).unwrap_or(JsValue::NULL)
+    }
+
     /// Clear the theory
     #[wasm_bindgen]
     pub fn clear(&mut self) {
@@ -301,7 +326,7 @@ impl Spindle {
     /// Parse DFL and reason in one call, returning string output (spinguile-compatible)
     ///
     /// Output format:
-    /// ```
+    /// ```text
     /// +D literal
     /// +d literal
     /// -D literal
@@ -321,7 +346,7 @@ impl Spindle {
     /// Parse SPL and reason in one call, returning string output (spinguile-compatible)
     ///
     /// Output format:
-    /// ```
+    /// ```text
     /// +D literal
     /// +d literal
     /// META label key "value"
@@ -354,47 +379,9 @@ impl Spindle {
             }
         }
 
-        // Extract dependencies from r-dep-* rules
-        // Pattern: r-dep-X has body containing completed-Y, completed-Z, etc.
-        // This means task X depends on tasks Y, Z
-        let deps = self.extract_deps_from_rules();
-        if !deps.is_empty() {
-            let deps_str: Vec<_> = deps
-                .iter()
-                .map(|(task, dep_list)| format!("{}:{}", task, dep_list.join(",")))
-                .collect();
-            output.push(format!("DEPS {}", deps_str.join("|")));
-        }
-
         Ok(output.join("\n"))
     }
 
-    /// Extract task dependencies from r-dep-* rules
-    fn extract_deps_from_rules(&self) -> Vec<(String, Vec<String>)> {
-        let mut deps = Vec::new();
-
-        for rule in self.theory.rules() {
-            // Look for rules with label starting with "r-dep-"
-            if rule.label.starts_with("r-dep-") {
-                let task_id = rule.label.strip_prefix("r-dep-").unwrap();
-
-                // Extract completed-* literals from body
-                let mut task_deps = Vec::new();
-                for lit in &rule.body {
-                    let lit_name = &lit.name;
-                    if let Some(dep_task) = lit_name.strip_prefix("completed-") {
-                        task_deps.push(dep_task.to_string());
-                    }
-                }
-
-                if !task_deps.is_empty() {
-                    deps.push((task_id.to_string(), task_deps));
-                }
-            }
-        }
-
-        deps
-    }
 }
 
 impl Default for Spindle {
@@ -413,6 +400,7 @@ fn parse_literal(s: &str) -> Literal {
         Literal::simple(s)
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -433,4 +421,5 @@ mod tests {
         spindle.parse_dfl("f1: >> bird\nr1: bird => flies").unwrap();
         assert_eq!(spindle.rule_count(), 2);
     }
+
 }

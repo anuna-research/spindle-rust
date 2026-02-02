@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use spindle_core::conclusion::ConclusionType;
-use spindle_parser::parse_dfl;
+use spindle_parser::{parse_dfl, parse_spl};
 
 /// Spindle - Defeasible Logic Reasoning Engine
 #[derive(Parser, Debug)]
@@ -101,11 +101,27 @@ fn run_reason(file: &PathBuf, scalable: bool, positive_only: bool) {
         }
     };
 
-    let theory = match parse_dfl(&content) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Parse error: {}", e);
-            std::process::exit(1);
+    // Auto-detect SPL vs DFL based on file extension or content
+    let is_spl = file.extension().map_or(false, |ext| ext == "spl")
+        || content.trim().starts_with("#lang")
+        || content.trim().starts_with('(')
+        || content.trim().starts_with(';');
+
+    let theory = if is_spl {
+        match parse_spl(&content) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("SPL parse error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        match parse_dfl(&content) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("DFL parse error: {}", e);
+                std::process::exit(1);
+            }
         }
     };
 

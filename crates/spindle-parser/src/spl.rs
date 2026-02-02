@@ -72,11 +72,17 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     Ok(theory)
 }
 
-/// Remove semicolon comments from input
+/// Remove semicolon comments and #lang directives from input
 fn remove_comments(input: &str) -> String {
     input
         .lines()
         .map(|line| {
+            let trimmed = line.trim();
+            // Skip #lang directives (Racket-specific)
+            if trimmed.starts_with("#lang") {
+                return "";
+            }
+            // Remove ; comments
             if let Some(pos) = line.find(';') {
                 &line[..pos]
             } else {
