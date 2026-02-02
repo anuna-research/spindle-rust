@@ -63,7 +63,7 @@ pub mod prelude {
     pub use crate::temporal::Temporal;
     pub use crate::rule::{Rule, RuleType, RuleLabel};
     pub use crate::superiority::Superiority;
-    pub use crate::theory::Theory;
+    pub use crate::theory::{Meta, MetaValue, Theory};
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{SpindleError, Result};
 }

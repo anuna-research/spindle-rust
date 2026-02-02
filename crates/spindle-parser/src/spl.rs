@@ -40,7 +40,7 @@ use nom::{
     IResult, Parser,
 };
 
-use spindle_core::{Literal, Rule, RuleType, Superiority, Theory};
+use spindle_core::{Literal, MetaValue, Rule, RuleType, Superiority, Theory};
 
 use crate::ParseError;
 
@@ -170,6 +170,8 @@ fn process_expr(theory: &mut Theory, expr: &SExpr) -> Result<(), ParseError> {
         "normally" => process_rule(theory, RuleType::Defeasible, &list[1..]),
         "except" => process_rule(theory, RuleType::Defeater, &list[1..]),
         "prefer" => process_prefer(theory, &list[1..]),
+        "meta" => process_meta(theory, &list[1..]),
+        "#lang" => Ok(()), // Ignore #lang directive
         _ => Err(ParseError::ParserError {
             line: 1,
             message: format!("Unknown keyword: {}", keyword),
@@ -345,6 +347,57 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
             }
         }
     }
+}
+
+/// Process meta: (meta label (key "value") (key2 "value2") ...)
+fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
+    if args.is_empty() {
+        return Err(ParseError::ParserError {
+            line: 1,
+            message: "meta requires a label".to_string(),
+        });
+    }
+
+    let label = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
+        line: 1,
+        message: "meta label must be an atom".to_string(),
+    })?;
+
+    // Process each property: (key "value") or (key ("v1" "v2"))
+    for prop in &args[1..] {
+        if let Some(prop_list) = prop.as_list() {
+            if prop_list.len() >= 2 {
+                let key = prop_list[0].as_atom().ok_or_else(|| ParseError::ParserError {
+                    line: 1,
+                    message: "meta property key must be an atom".to_string(),
+                })?;
+
+                // Check if value is a list or single value
+                let value = match &prop_list[1] {
+                    SExpr::Atom(s) => MetaValue::String(s.clone()),
+                    SExpr::List(items) => {
+                        // List of strings
+                        let strings: Result<Vec<String>, _> = items
+                            .iter()
+                            .map(|item| {
+                                item.as_atom()
+                                    .map(|s| s.to_string())
+                                    .ok_or_else(|| ParseError::ParserError {
+                                        line: 1,
+                                        message: "meta list values must be atoms".to_string(),
+                                    })
+                            })
+                            .collect();
+                        MetaValue::List(strings?)
+                    }
+                };
+
+                theory.add_meta(label, key, value);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Process prefer: (prefer r1 r2 ...)

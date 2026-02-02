@@ -21,6 +21,22 @@ fn parse_literal_str(s: &str) -> Literal {
     }
 }
 
+/// Metadata entry (key-value pair with optional list values)
+#[derive(Debug, Clone, PartialEq)]
+pub enum MetaValue {
+    /// Single string value
+    String(String),
+    /// List of strings
+    List(Vec<String>),
+}
+
+/// Metadata for a label (e.g., task description, priority)
+#[derive(Debug, Clone, Default)]
+pub struct Meta {
+    /// Properties for this label
+    pub properties: HashMap<String, MetaValue>,
+}
+
 /// A defeasible logic theory
 #[derive(Debug, Clone, Default)]
 pub struct Theory {
@@ -28,6 +44,8 @@ pub struct Theory {
     rules: HashMap<RuleLabel, Rule>,
     /// Superiority relations
     superiorities: Vec<Superiority>,
+    /// Metadata indexed by label
+    metadata: HashMap<String, Meta>,
     /// Auto-generated label counter
     label_counter: usize,
 }
@@ -107,6 +125,32 @@ impl Theory {
     /// Get all superiority relations
     pub fn superiorities(&self) -> &[Superiority] {
         &self.superiorities
+    }
+
+    /// Add metadata for a label
+    pub fn add_meta(&mut self, label: &str, key: &str, value: MetaValue) {
+        let meta = self.metadata.entry(label.to_string()).or_default();
+        meta.properties.insert(key.to_string(), value);
+    }
+
+    /// Add a string metadata value
+    pub fn add_meta_string(&mut self, label: &str, key: &str, value: &str) {
+        self.add_meta(label, key, MetaValue::String(value.to_string()));
+    }
+
+    /// Add a list metadata value
+    pub fn add_meta_list(&mut self, label: &str, key: &str, values: Vec<String>) {
+        self.add_meta(label, key, MetaValue::List(values));
+    }
+
+    /// Get metadata for a label
+    pub fn get_meta(&self, label: &str) -> Option<&Meta> {
+        self.metadata.get(label)
+    }
+
+    /// Get all metadata
+    pub fn metadata(&self) -> &HashMap<String, Meta> {
+        &self.metadata
     }
 
     /// Get the number of rules

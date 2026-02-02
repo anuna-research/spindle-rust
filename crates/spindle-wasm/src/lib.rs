@@ -30,7 +30,7 @@ use spindle_core::literal::Literal;
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
-use spindle_core::theory::Theory;
+use spindle_core::theory::{MetaValue, Theory};
 use spindle_parser::{parse_dfl, parse_spl};
 
 // Set up better panic messages in debug mode
@@ -319,15 +319,41 @@ impl Spindle {
     }
 
     /// Parse SPL and reason in one call, returning string output (spinguile-compatible)
+    ///
+    /// Output format:
+    /// ```
+    /// +D literal
+    /// +d literal
+    /// META label key "value"
+    /// META label key2 ("v1" "v2")
+    /// ```
     #[wasm_bindgen(js_name = reasonSpl)]
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
         self.theory = parse_spl(input).map_err(|e| JsError::new(&e.to_string()))?;
         let conclusions = reason(&self.theory);
-        Ok(conclusions
-            .iter()
-            .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
-            .collect::<Vec<_>>()
-            .join("\n"))
+
+        let mut output = Vec::new();
+
+        // Add conclusions
+        for c in &conclusions {
+            output.push(format!("{} {}", c.conclusion_type.symbol(), c.literal));
+        }
+
+        // Add metadata
+        for (label, meta) in self.theory.metadata() {
+            for (key, value) in &meta.properties {
+                let value_str = match value {
+                    MetaValue::String(s) => format!("\"{}\"", s),
+                    MetaValue::List(items) => {
+                        let quoted: Vec<_> = items.iter().map(|s| format!("\"{}\"", s)).collect();
+                        format!("({})", quoted.join(" "))
+                    }
+                };
+                output.push(format!("META {} {} {}", label, key, value_str));
+            }
+        }
+
+        Ok(output.join("\n"))
     }
 }
 
