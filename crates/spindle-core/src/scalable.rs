@@ -313,6 +313,9 @@ fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<LiteralId>) -
 
 /// Phase 3: Compute partial closure (defeasible conclusions with conflict resolution)
 ///
+/// Uses semi-naive evaluation: when a new literal is proven, only rules
+/// triggered by that literal are re-evaluated, rather than all candidates.
+///
 /// A literal q is in partial closure if:
 /// (1) q is in delta, OR
 /// (2) All of:
@@ -327,54 +330,47 @@ fn compute_partial_closure(
     delta: &HashSet<LiteralId>,
     lambda: &HashSet<LiteralId>,
 ) -> HashSet<LiteralId> {
+    use std::collections::VecDeque;
+    use rustc_hash::FxHashMap;
+
     let mut partial: HashSet<LiteralId> = delta.clone();
 
-    // Candidates: literals in lambda but not in delta
-    let candidates: Vec<LiteralId> = lambda
+    // Track remaining unsatisfied body literals for each rule
+    let mut remaining: FxHashMap<&str, usize> = FxHashMap::default();
+    for rule in theory.rules() {
+        if rule.rule_type == RuleType::Strict || rule.rule_type == RuleType::Defeasible {
+            // Count body literals not yet in partial
+            let unsatisfied = rule.body.iter()
+                .filter(|b| !partial.contains(&b.literal_id()))
+                .count();
+            remaining.insert(&rule.label, unsatisfied);
+        }
+    }
+
+    // Candidates: literals in lambda but not in delta, blocked by complement in delta
+    let blocked_by_delta: HashSet<LiteralId> = lambda
         .iter()
-        .filter(|k| !delta.contains(*k))
+        .filter(|k| delta.contains(&k.complement()))
         .copied()
         .collect();
 
-    // Helper: check if rule body is satisfied in partial (using LiteralId for O(1) lookup)
+    // Helper: check if rule body is satisfied in partial
     let body_satisfied = |rule: &Rule, partial: &HashSet<LiteralId>| -> bool {
-        rule.body
-            .iter()
-            .all(|b| partial.contains(&b.literal_id()))
+        rule.body.iter().all(|b| partial.contains(&b.literal_id()))
     };
 
     // Helper: check if attack body is NOT fully in lambda (attack fails)
     let attack_unsatisfied_lambda = |rule: &Rule| -> bool {
-        rule.body
-            .iter()
-            .any(|b| !lambda.contains(&b.literal_id()))
+        rule.body.iter().any(|b| !lambda.contains(&b.literal_id()))
     };
 
-    // Helper: check superiority using O(1) indexed lookup
-    let is_superior = |sup_label: &str, inf_label: &str| -> bool {
-        theory.is_superior(sup_label, inf_label)
-    };
-
-    // Helper: find attacking rules (rules for ~q)
-    let get_attacking_rules = |lit_id: LiteralId| -> Vec<&Rule> {
-        let comp_lit = id_to_literal(lit_id.complement());
-        indexed.rules_with_head(&comp_lit)
-    };
-
-    // Helper: find supporting rules (strict/defeasible rules for q)
-    let get_supporting_rules = |lit_id: LiteralId| -> Vec<&Rule> {
-        let lit = id_to_literal(lit_id);
-        indexed
-            .rules_with_head(&lit)
-            .into_iter()
-            .filter(|r| r.rule_type == RuleType::Strict || r.rule_type == RuleType::Defeasible)
-            .collect()
-    };
-
-    // Helper: can we defeat the attacker?
+    // Helper: can we defeat the attacker using superiority?
     let team_defeats = |lit_id: LiteralId, attacker: &Rule, partial: &HashSet<LiteralId>| -> bool {
-        for defender in get_supporting_rules(lit_id) {
-            if body_satisfied(defender, partial) && is_superior(&defender.label, &attacker.label) {
+        for defender in indexed.rules_with_head_id(lit_id) {
+            if (defender.rule_type == RuleType::Strict || defender.rule_type == RuleType::Defeasible)
+                && body_satisfied(defender, partial)
+                && theory.is_superior(&defender.label, &attacker.label)
+            {
                 return true;
             }
         }
@@ -383,22 +379,19 @@ fn compute_partial_closure(
 
     // Helper: all attacks defeated?
     let all_attacks_defeated = |lit_id: LiteralId, partial: &HashSet<LiteralId>| -> bool {
-        for attacker in get_attacking_rules(lit_id) {
+        for attacker in indexed.rules_with_head_id(lit_id.complement()) {
             // Skip facts
             if attacker.rule_type == RuleType::Fact {
                 continue;
             }
-
             // Attack fails if body not in lambda
             if attack_unsatisfied_lambda(attacker) {
                 continue;
             }
-
             // Attack fails if we have a superior defender
             if team_defeats(lit_id, attacker, partial) {
                 continue;
             }
-
             // This attack succeeds - literal can't be proven
             return false;
         }
@@ -411,34 +404,77 @@ fn compute_partial_closure(
         if delta.contains(&lit_id) {
             return true;
         }
-
-        // Complement in delta blocks
-        let comp_id = lit_id.complement();
-        if delta.contains(&comp_id) {
+        // Complement in delta blocks (precomputed)
+        if blocked_by_delta.contains(&lit_id) {
             return false;
         }
-
         // Need a supporting rule with satisfied body
-        let has_support = get_supporting_rules(lit_id)
+        let has_support = indexed.rules_with_head_id(lit_id)
             .iter()
-            .any(|r| body_satisfied(r, partial));
-
+            .any(|r| {
+                (r.rule_type == RuleType::Strict || r.rule_type == RuleType::Defeasible)
+                    && body_satisfied(r, partial)
+            });
         if !has_support {
             return false;
         }
-
         // All attacks must be defeated
         all_attacks_defeated(lit_id, partial)
     };
 
-    // Fixpoint iteration
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for &lit_id in &candidates {
-            if !partial.contains(&lit_id) && can_prove(lit_id, &partial) {
-                partial.insert(lit_id);
-                changed = true;
+    // Worklist of literals to process (semi-naive: only process triggered literals)
+    let mut worklist: VecDeque<LiteralId> = VecDeque::new();
+
+    // Initialize worklist with rules that have body fully satisfied
+    for rule in theory.rules() {
+        if (rule.rule_type == RuleType::Strict || rule.rule_type == RuleType::Defeasible)
+            && remaining.get(rule.label.as_str()) == Some(&0)
+        {
+            for head_lit in &rule.head {
+                let head_id = head_lit.literal_id();
+                if lambda.contains(&head_id) && !partial.contains(&head_id) {
+                    worklist.push_back(head_id);
+                }
+            }
+        }
+    }
+
+    // Track what's already in worklist to avoid duplicates
+    let mut in_worklist: HashSet<LiteralId> = worklist.iter().copied().collect();
+
+    // Semi-naive iteration
+    while let Some(lit_id) = worklist.pop_front() {
+        in_worklist.remove(&lit_id);
+
+        // Skip if already proven or not a candidate
+        if partial.contains(&lit_id) || !lambda.contains(&lit_id) {
+            continue;
+        }
+
+        // Try to prove this literal
+        if can_prove(lit_id, &partial) {
+            partial.insert(lit_id);
+
+            // Trigger rules that have this literal in body
+            for rule in indexed.rules_with_body_id(lit_id) {
+                if let Some(rem) = remaining.get_mut(rule.label.as_str()) {
+                    if *rem > 0 {
+                        *rem -= 1;
+                        if *rem == 0 {
+                            // Rule body now satisfied - add head to worklist
+                            for head_lit in &rule.head {
+                                let head_id = head_lit.literal_id();
+                                if lambda.contains(&head_id)
+                                    && !partial.contains(&head_id)
+                                    && !in_worklist.contains(&head_id)
+                                {
+                                    worklist.push_back(head_id);
+                                    in_worklist.insert(head_id);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
