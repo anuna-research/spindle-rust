@@ -40,6 +40,7 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod intern;
 pub mod literal;
 pub mod mode;
 pub mod temporal;
@@ -51,6 +52,7 @@ pub mod index;
 pub mod reason;
 pub mod scalable;
 pub mod grounding;
+pub mod worklist;
 pub mod explanation;
 pub mod trust;
 pub mod query;
@@ -58,11 +60,12 @@ pub mod error;
 
 /// Prelude module for convenient imports
 pub mod prelude {
+    pub use crate::intern::{intern, resolve, intern_literal, resolve_literal, SymbolId, LiteralId};
     pub use crate::literal::{Literal, LiteralName};
     pub use crate::mode::Mode;
     pub use crate::temporal::Temporal;
     pub use crate::rule::{Rule, RuleType, RuleLabel};
-    pub use crate::superiority::Superiority;
+    pub use crate::superiority::{Superiority, SuperiorityIndex};
     pub use crate::theory::{Meta, MetaValue, Theory};
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{SpindleError, Result};

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use crate::conclusion::Conclusion;
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
-use crate::superiority::Superiority;
+use crate::superiority::{Superiority, SuperiorityIndex};
 
 /// Parse a string literal, handling negation prefix
 fn parse_literal_str(s: &str) -> Literal {
@@ -44,6 +44,8 @@ pub struct Theory {
     rules: HashMap<RuleLabel, Rule>,
     /// Superiority relations
     superiorities: Vec<Superiority>,
+    /// Indexed superiority for O(1) lookup
+    sup_index: SuperiorityIndex,
     /// Metadata indexed by label
     metadata: HashMap<String, Meta>,
     /// Auto-generated label counter
@@ -100,6 +102,8 @@ impl Theory {
     pub fn add_superiority(&mut self, superior: &str, inferior: &str) {
         self.superiorities
             .push(Superiority::new(superior, inferior));
+        self.sup_index
+            .add(superior.to_owned(), inferior.to_owned());
     }
 
     /// Get a rule by label
@@ -125,6 +129,32 @@ impl Theory {
     /// Get all superiority relations
     pub fn superiorities(&self) -> &[Superiority] {
         &self.superiorities
+    }
+
+    /// Get the superiority index for O(1) lookups
+    ///
+    /// Use this for checking if one rule is superior to another:
+    /// ```rust
+    /// use spindle_core::prelude::*;
+    ///
+    /// let mut theory = Theory::new();
+    /// theory.add_superiority("r2", "r1");
+    ///
+    /// assert!(theory.sup_index().is_superior("r2", "r1"));
+    /// assert!(!theory.sup_index().is_superior("r1", "r2"));
+    /// ```
+    #[inline]
+    pub fn sup_index(&self) -> &SuperiorityIndex {
+        &self.sup_index
+    }
+
+    /// Check if `superior` rule is superior to `inferior` rule.
+    ///
+    /// This is a convenience method that uses the indexed lookup.
+    /// Complexity: O(1) average case.
+    #[inline]
+    pub fn is_superior(&self, superior: &str, inferior: &str) -> bool {
+        self.sup_index.is_superior(superior, inferior)
     }
 
     /// Add metadata for a label

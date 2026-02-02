@@ -537,7 +537,7 @@ mod tests {
     fn test_parse_with_variables() {
         let theory = parse_spl("(given (parent ?x ?y))").unwrap();
         let rule = theory.rules().next().unwrap();
-        assert_eq!(rule.head_literal().predicates.len(), 2);
-        assert!(rule.head_literal().predicates[0].starts_with('?'));
+        assert_eq!(rule.head_literal().predicates().len(), 2);
+        assert!(rule.head_literal().predicates()[0].starts_with('?'));
     }
 }

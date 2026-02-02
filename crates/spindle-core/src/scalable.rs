@@ -15,6 +15,11 @@
 //!   Actual defeasible conclusions with conflict resolution via superiority.
 //!   Uses the key insight: "NOT in lambda" replaces computing "-d" proofs.
 //!
+//! # Performance
+//!
+//! Uses `LiteralId` (4-byte Copy type) for HashSet keys instead of `String`,
+//! eliminating heap allocations in the hot closure computation loops.
+//!
 //! References:
 //! - SPINdle-Racket v1.7.0 scalable/closures.rkt
 //! - Allen, J.F. "Maintaining Knowledge about Temporal Intervals" (1983)
@@ -23,19 +28,22 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
+use crate::intern::LiteralId;
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::theory::Theory;
 
 /// Result of scalable reasoning: three closure sets
+///
+/// Uses `LiteralId` (4-byte Copy type) for efficient set operations.
 #[derive(Debug, Clone)]
 pub struct ScalableResult {
     /// Delta closure: definitely provable (+Δ)
-    pub delta: HashSet<String>,
+    pub delta: HashSet<LiteralId>,
     /// Lambda closure: potentially provable (over-approximation)
-    pub lambda: HashSet<String>,
+    pub lambda: HashSet<LiteralId>,
     /// Partial closure: defeasibly provable (+∂||)
-    pub partial: HashSet<String>,
+    pub partial: HashSet<LiteralId>,
 }
 
 impl ScalableResult {
@@ -43,35 +51,35 @@ impl ScalableResult {
     pub fn to_conclusions(&self, indexed: &IndexedTheory) -> Vec<Conclusion> {
         let mut conclusions = Vec::new();
 
-        for lit_key in &self.delta {
-            let lit = key_to_literal(lit_key);
+        for &lit_id in &self.delta {
+            let lit = id_to_literal(lit_id);
             conclusions.push(Conclusion::definitely_provable(lit.clone()));
         }
 
-        for lit_key in &self.partial {
-            if !self.delta.contains(lit_key) {
-                let lit = key_to_literal(lit_key);
+        for &lit_id in &self.partial {
+            if !self.delta.contains(&lit_id) {
+                let lit = id_to_literal(lit_id);
                 conclusions.push(Conclusion::defeasibly_provable(lit));
             }
         }
 
         // Add defeasibly provable for delta items too
-        for lit_key in &self.delta {
-            let lit = key_to_literal(lit_key);
+        for &lit_id in &self.delta {
+            let lit = id_to_literal(lit_id);
             conclusions.push(Conclusion::defeasibly_provable(lit));
         }
 
         // Negative conclusions
         for lit_key in indexed.all_literals() {
-            if !self.delta.contains(lit_key) {
-                let lit = key_to_literal(lit_key);
+            let lit = Literal::simple(lit_key);
+            let lit_id = lit.literal_id();
+            if !self.delta.contains(&lit_id) {
                 conclusions.push(Conclusion::new(
                     ConclusionType::DefinitelyNotProvable,
-                    lit,
+                    lit.clone(),
                 ));
             }
-            if !self.partial.contains(lit_key) {
-                let lit = key_to_literal(lit_key);
+            if !self.partial.contains(&lit_id) {
                 conclusions.push(Conclusion::new(
                     ConclusionType::DefeasiblyNotProvable,
                     lit,
@@ -81,28 +89,45 @@ impl ScalableResult {
 
         conclusions
     }
+
+    /// Check if a literal (by canonical name string) is in delta
+    ///
+    /// This is a convenience method for backward compatibility with tests.
+    pub fn contains_delta(&self, canonical: &str) -> bool {
+        let lit = key_to_literal(canonical);
+        self.delta.contains(&lit.literal_id())
+    }
+
+    /// Check if a literal (by canonical name string) is in lambda
+    pub fn contains_lambda(&self, canonical: &str) -> bool {
+        let lit = key_to_literal(canonical);
+        self.lambda.contains(&lit.literal_id())
+    }
+
+    /// Check if a literal (by canonical name string) is in partial
+    pub fn contains_partial(&self, canonical: &str) -> bool {
+        let lit = key_to_literal(canonical);
+        self.partial.contains(&lit.literal_id())
+    }
 }
 
-/// Convert a literal to a canonical key string
-fn literal_to_key(lit: &Literal) -> String {
-    lit.canonical_name()
+/// Convert a LiteralId back to a Literal
+#[inline]
+fn id_to_literal(id: LiteralId) -> Literal {
+    let name = crate::intern::resolve(id.symbol());
+    if id.is_negated() {
+        Literal::negated(name)
+    } else {
+        Literal::simple(name)
+    }
 }
 
-/// Convert a key string back to a literal
+/// Convert a key string back to a literal (for backward compatibility)
 fn key_to_literal(key: &str) -> Literal {
     if let Some(name) = key.strip_prefix('~') {
         Literal::negated(name)
     } else {
         Literal::simple(key)
-    }
-}
-
-/// Get the complement key of a literal key
-fn complement_key(key: &str) -> String {
-    if let Some(name) = key.strip_prefix('~') {
-        name.to_string()
-    } else {
-        format!("~{}", key)
     }
 }
 
@@ -157,9 +182,9 @@ pub fn reason_scalable(theory: &Theory) -> ScalableResult {
 fn compute_delta_closure(
     indexed: &IndexedTheory,
     states: &mut HashMap<RuleLabel, RuleState>,
-) -> HashSet<String> {
-    let mut delta: HashSet<String> = HashSet::new();
-    let mut worklist: VecDeque<String> = VecDeque::new();
+) -> HashSet<LiteralId> {
+    let mut delta: HashSet<LiteralId> = HashSet::new();
+    let mut worklist: VecDeque<LiteralId> = VecDeque::new();
 
     // Initialize with facts and empty-body strict rules
     for rule in indexed.theory().rules() {
@@ -167,18 +192,18 @@ fn compute_delta_closure(
             || (rule.rule_type == RuleType::Strict && rule.body.is_empty())
         {
             for head_lit in &rule.head {
-                let key = literal_to_key(head_lit);
-                if !delta.contains(&key) {
-                    delta.insert(key.clone());
-                    worklist.push_back(key);
+                let lit_id = head_lit.literal_id();
+                if !delta.contains(&lit_id) {
+                    delta.insert(lit_id);
+                    worklist.push_back(lit_id);
                 }
             }
         }
     }
 
     // Forward chaining loop
-    while let Some(lit_key) = worklist.pop_front() {
-        let lit = key_to_literal(&lit_key);
+    while let Some(lit_id) = worklist.pop_front() {
+        let lit = id_to_literal(lit_id);
 
         // Find rules containing this literal in body
         for rule in indexed.rules_with_body(&lit) {
@@ -192,10 +217,10 @@ fn compute_delta_closure(
                     state.activated = true;
 
                     for head_lit in &rule.head {
-                        let head_key = literal_to_key(head_lit);
-                        if !delta.contains(&head_key) {
-                            delta.insert(head_key.clone());
-                            worklist.push_back(head_key);
+                        let head_id = head_lit.literal_id();
+                        if !delta.contains(&head_id) {
+                            delta.insert(head_id);
+                            worklist.push_back(head_id);
                         }
                     }
                 }
@@ -213,9 +238,9 @@ fn compute_delta_closure(
 /// (2) There's a strict/defeasible rule with:
 ///     (a) All body literals in lambda
 ///     (b) Complement NOT in delta
-fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<String>) -> HashSet<String> {
-    let mut lambda: HashSet<String> = delta.clone();
-    let mut worklist: VecDeque<String> = delta.iter().cloned().collect();
+fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<LiteralId>) -> HashSet<LiteralId> {
+    let mut lambda: HashSet<LiteralId> = delta.clone();
+    let mut worklist: VecDeque<LiteralId> = delta.iter().copied().collect();
 
     // Track remaining counts for lambda computation
     let mut lambda_remaining: HashMap<RuleLabel, usize> = HashMap::new();
@@ -230,21 +255,21 @@ fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<String>) -> H
         if rule.rule_type == RuleType::Defeasible && rule.body.is_empty() {
             fired.insert(rule.label.clone());
             for head_lit in &rule.head {
-                let head_key = literal_to_key(head_lit);
-                let comp_key = complement_key(&head_key);
+                let head_id = head_lit.literal_id();
+                let comp_id = head_id.complement();
 
                 // Condition: complement not in delta
-                if !delta.contains(&comp_key) && !lambda.contains(&head_key) {
-                    lambda.insert(head_key.clone());
-                    worklist.push_back(head_key);
+                if !delta.contains(&comp_id) && !lambda.contains(&head_id) {
+                    lambda.insert(head_id);
+                    worklist.push_back(head_id);
                 }
             }
         }
     }
 
     // Forward chaining for defeasible rules
-    while let Some(lit_key) = worklist.pop_front() {
-        let lit = key_to_literal(&lit_key);
+    while let Some(lit_id) = worklist.pop_front() {
+        let lit = id_to_literal(lit_id);
 
         for rule in indexed.rules_with_body(&lit) {
             if fired.contains(&rule.label) {
@@ -257,7 +282,7 @@ fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<String>) -> H
             }
 
             // Check if this literal is actually in the rule's body
-            let in_body = rule.body.iter().any(|b| literal_to_key(b) == lit_key);
+            let in_body = rule.body.iter().any(|b| b.literal_id() == lit_id);
             if !in_body {
                 continue;
             }
@@ -270,13 +295,13 @@ fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<String>) -> H
                     fired.insert(rule.label.clone());
 
                     for head_lit in &rule.head {
-                        let head_key = literal_to_key(head_lit);
-                        let comp_key = complement_key(&head_key);
+                        let head_id = head_lit.literal_id();
+                        let comp_id = head_id.complement();
 
                         // Add to lambda if complement not in delta
-                        if !delta.contains(&comp_key) && !lambda.contains(&head_key) {
-                            lambda.insert(head_key.clone());
-                            worklist.push_back(head_key);
+                        if !delta.contains(&comp_id) && !lambda.contains(&head_id) {
+                            lambda.insert(head_id);
+                            worklist.push_back(head_id);
                         }
                     }
                 }
@@ -300,50 +325,46 @@ fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<String>) -> H
 fn compute_partial_closure(
     indexed: &IndexedTheory,
     theory: &Theory,
-    delta: &HashSet<String>,
-    lambda: &HashSet<String>,
-) -> HashSet<String> {
-    let mut partial: HashSet<String> = delta.clone();
+    delta: &HashSet<LiteralId>,
+    lambda: &HashSet<LiteralId>,
+) -> HashSet<LiteralId> {
+    let mut partial: HashSet<LiteralId> = delta.clone();
 
     // Candidates: literals in lambda but not in delta
-    let candidates: Vec<String> = lambda
+    let candidates: Vec<LiteralId> = lambda
         .iter()
         .filter(|k| !delta.contains(*k))
-        .cloned()
+        .copied()
         .collect();
 
-    // Helper: check if rule body is satisfied in partial
-    let body_satisfied = |rule: &Rule, partial: &HashSet<String>| -> bool {
+    // Helper: check if rule body is satisfied in partial (using LiteralId for O(1) lookup)
+    let body_satisfied = |rule: &Rule, partial: &HashSet<LiteralId>| -> bool {
         rule.body
             .iter()
-            .all(|b| partial.contains(&literal_to_key(b)))
+            .all(|b| partial.contains(&b.literal_id()))
     };
 
     // Helper: check if attack body is NOT fully in lambda (attack fails)
     let attack_unsatisfied_lambda = |rule: &Rule| -> bool {
         rule.body
             .iter()
-            .any(|b| !lambda.contains(&literal_to_key(b)))
+            .any(|b| !lambda.contains(&b.literal_id()))
     };
 
-    // Helper: check superiority
+    // Helper: check superiority using O(1) indexed lookup
     let is_superior = |sup_label: &str, inf_label: &str| -> bool {
-        theory
-            .superiorities()
-            .iter()
-            .any(|s| s.superior == sup_label && s.inferior == inf_label)
+        theory.is_superior(sup_label, inf_label)
     };
 
     // Helper: find attacking rules (rules for ~q)
-    let get_attacking_rules = |lit_key: &str| -> Vec<&Rule> {
-        let comp_key = complement_key(lit_key);
-        let comp_lit = key_to_literal(&comp_key);
+    let get_attacking_rules = |lit_id: LiteralId| -> Vec<&Rule> {
+        let comp_lit = id_to_literal(lit_id.complement());
         indexed.rules_with_head(&comp_lit)
     };
 
     // Helper: find supporting rules (strict/defeasible rules for q)
-    let get_supporting_rules = |lit_key: &str| -> Vec<&Rule> {
-        let lit = key_to_literal(lit_key);
+    let get_supporting_rules = |lit_id: LiteralId| -> Vec<&Rule> {
+        let lit = id_to_literal(lit_id);
         indexed
             .rules_with_head(&lit)
             .into_iter()
@@ -352,8 +373,8 @@ fn compute_partial_closure(
     };
 
     // Helper: can we defeat the attacker?
-    let team_defeats = |lit_key: &str, attacker: &Rule, partial: &HashSet<String>| -> bool {
-        for defender in get_supporting_rules(lit_key) {
+    let team_defeats = |lit_id: LiteralId, attacker: &Rule, partial: &HashSet<LiteralId>| -> bool {
+        for defender in get_supporting_rules(lit_id) {
             if body_satisfied(defender, partial) && is_superior(&defender.label, &attacker.label) {
                 return true;
             }
@@ -362,8 +383,8 @@ fn compute_partial_closure(
     };
 
     // Helper: all attacks defeated?
-    let all_attacks_defeated = |lit_key: &str, partial: &HashSet<String>| -> bool {
-        for attacker in get_attacking_rules(lit_key) {
+    let all_attacks_defeated = |lit_id: LiteralId, partial: &HashSet<LiteralId>| -> bool {
+        for attacker in get_attacking_rules(lit_id) {
             // Skip facts
             if attacker.rule_type == RuleType::Fact {
                 continue;
@@ -375,7 +396,7 @@ fn compute_partial_closure(
             }
 
             // Attack fails if we have a superior defender
-            if team_defeats(lit_key, attacker, partial) {
+            if team_defeats(lit_id, attacker, partial) {
                 continue;
             }
 
@@ -386,20 +407,20 @@ fn compute_partial_closure(
     };
 
     // Helper: can literal be proven defeasibly?
-    let can_prove = |lit_key: &str, partial: &HashSet<String>| -> bool {
+    let can_prove = |lit_id: LiteralId, partial: &HashSet<LiteralId>| -> bool {
         // Already in delta
-        if delta.contains(lit_key) {
+        if delta.contains(&lit_id) {
             return true;
         }
 
         // Complement in delta blocks
-        let comp_key = complement_key(lit_key);
-        if delta.contains(&comp_key) {
+        let comp_id = lit_id.complement();
+        if delta.contains(&comp_id) {
             return false;
         }
 
         // Need a supporting rule with satisfied body
-        let has_support = get_supporting_rules(lit_key)
+        let has_support = get_supporting_rules(lit_id)
             .iter()
             .any(|r| body_satisfied(r, partial));
 
@@ -408,16 +429,16 @@ fn compute_partial_closure(
         }
 
         // All attacks must be defeated
-        all_attacks_defeated(lit_key, partial)
+        all_attacks_defeated(lit_id, partial)
     };
 
     // Fixpoint iteration
     let mut changed = true;
     while changed {
         changed = false;
-        for lit_key in &candidates {
-            if !partial.contains(lit_key) && can_prove(lit_key, &partial) {
-                partial.insert(lit_key.clone());
+        for &lit_id in &candidates {
+            if !partial.contains(&lit_id) && can_prove(lit_id, &partial) {
+                partial.insert(lit_id);
                 changed = true;
             }
         }
@@ -437,8 +458,8 @@ mod tests {
         theory.add_fact("b");
 
         let result = reason_scalable(&theory);
-        assert!(result.delta.contains("a"));
-        assert!(result.delta.contains("b"));
+        assert!(result.contains_delta("a"));
+        assert!(result.contains_delta("b"));
         assert_eq!(result.delta.len(), 2);
     }
 
@@ -452,11 +473,11 @@ mod tests {
         theory.add_defeasible_rule(&["r"], "t"); // Should NOT be in delta
 
         let result = reason_scalable(&theory);
-        assert!(result.delta.contains("p"));
-        assert!(result.delta.contains("q"));
-        assert!(result.delta.contains("r"));
-        assert!(result.delta.contains("s"));
-        assert!(!result.delta.contains("t")); // Defeasible not in delta
+        assert!(result.contains_delta("p"));
+        assert!(result.contains_delta("q"));
+        assert!(result.contains_delta("r"));
+        assert!(result.contains_delta("s"));
+        assert!(!result.contains_delta("t")); // Defeasible not in delta
     }
 
     #[test]
@@ -470,16 +491,16 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // Delta: {p, q}
-        assert!(result.delta.contains("p"));
-        assert!(result.delta.contains("q"));
-        assert!(!result.delta.contains("r"));
-        assert!(!result.delta.contains("s"));
+        assert!(result.contains_delta("p"));
+        assert!(result.contains_delta("q"));
+        assert!(!result.contains_delta("r"));
+        assert!(!result.contains_delta("s"));
 
         // Lambda: {p, q, r, s}
-        assert!(result.lambda.contains("p"));
-        assert!(result.lambda.contains("q"));
-        assert!(result.lambda.contains("r"));
-        assert!(result.lambda.contains("s"));
+        assert!(result.contains_lambda("p"));
+        assert!(result.contains_lambda("q"));
+        assert!(result.contains_lambda("r"));
+        assert!(result.contains_lambda("s"));
     }
 
     #[test]
@@ -492,9 +513,9 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // ~q in delta
-        assert!(result.delta.contains("~q"));
+        assert!(result.contains_delta("~q"));
         // q should NOT be in lambda (blocked by condition 2.2)
-        assert!(!result.lambda.contains("q"));
+        assert!(!result.contains_lambda("q"));
     }
 
     #[test]
@@ -507,9 +528,9 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // All should be defeasibly provable
-        assert!(result.partial.contains("a"));
-        assert!(result.partial.contains("b"));
-        assert!(result.partial.contains("c"));
+        assert!(result.contains_partial("a"));
+        assert!(result.contains_partial("b"));
+        assert!(result.contains_partial("c"));
     }
 
     #[test]
@@ -522,13 +543,13 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // Both q and ~q in lambda (over-approximation)
-        assert!(result.lambda.contains("q"));
-        assert!(result.lambda.contains("~q"));
+        assert!(result.contains_lambda("q"));
+        assert!(result.contains_lambda("~q"));
 
         // Neither in partial (ambiguity block)
-        assert!(result.partial.contains("p"));
-        assert!(!result.partial.contains("q"));
-        assert!(!result.partial.contains("~q"));
+        assert!(result.contains_partial("p"));
+        assert!(!result.contains_partial("q"));
+        assert!(!result.contains_partial("~q"));
     }
 
     #[test]
@@ -542,8 +563,8 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // q should win via superiority
-        assert!(result.partial.contains("q"));
-        assert!(!result.partial.contains("~q"));
+        assert!(result.contains_partial("q"));
+        assert!(!result.contains_partial("~q"));
     }
 
     #[test]
@@ -562,10 +583,10 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // Eddie flies (no conflict)
-        assert!(result.partial.contains("flies_eddie"));
+        assert!(result.contains_partial("flies_eddie"));
         // Tweety doesn't fly (penguin wins)
-        assert!(result.partial.contains("~flies_tweety"));
-        assert!(!result.partial.contains("flies_tweety"));
+        assert!(result.contains_partial("~flies_tweety"));
+        assert!(!result.contains_partial("flies_tweety"));
     }
 
     #[test]
@@ -578,9 +599,9 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // x not in lambda, so attack fails
-        assert!(!result.lambda.contains("x"));
+        assert!(!result.contains_lambda("x"));
         // q should be proven
-        assert!(result.partial.contains("q"));
+        assert!(result.contains_partial("q"));
     }
 
     // ==========================================================================
@@ -632,8 +653,8 @@ mod tests {
         let std_def = extract_defeasible_provable(&standard);
 
         assert!(std_def.contains("p"), "Standard: p should be +d");
-        assert!(scalable.partial.contains("p"), "Scalable: p should be +d");
-        assert!(scalable.delta.contains("p"), "Scalable: p should be +D");
+        assert!(scalable.contains_partial("p"), "Scalable: p should be +d");
+        assert!(scalable.contains_delta("p"), "Scalable: p should be +D");
     }
 
     #[test]
@@ -655,7 +676,7 @@ mod tests {
                 lit
             );
             assert!(
-                scalable.partial.contains(*lit),
+                scalable.contains_partial(*lit),
                 "Scalable: {} should be +d",
                 lit
             );
@@ -681,7 +702,7 @@ mod tests {
                 lit
             );
             assert!(
-                scalable.delta.contains(*lit),
+                scalable.contains_delta(*lit),
                 "Scalable: {} should be +D (in delta)",
                 lit
             );
@@ -704,12 +725,12 @@ mod tests {
         // p, q definitely provable
         assert!(std_definite.contains("p"));
         assert!(std_definite.contains("q"));
-        assert!(scalable.delta.contains("p"));
-        assert!(scalable.delta.contains("q"));
+        assert!(scalable.contains_delta("p"));
+        assert!(scalable.contains_delta("q"));
 
         // r defeasibly provable
         assert!(std_def.contains("r"), "Standard: r should be +d");
-        assert!(scalable.partial.contains("r"), "Scalable: r should be +d");
+        assert!(scalable.contains_partial("r"), "Scalable: r should be +d");
     }
 
     #[test]
@@ -733,11 +754,11 @@ mod tests {
             "Standard: result should be +d (superior)"
         );
         assert!(
-            scalable.partial.contains("result"),
+            scalable.contains_partial("result"),
             "Scalable: result should be +d (superior)"
         );
         assert!(
-            !scalable.partial.contains("~result"),
+            !scalable.contains_partial("~result"),
             "Scalable: ~result should NOT be +d"
         );
     }
@@ -764,11 +785,11 @@ mod tests {
             "Standard: ~flies should be +d"
         );
         assert!(
-            scalable.partial.contains("~flies"),
+            scalable.contains_partial("~flies"),
             "Scalable: ~flies should be +d"
         );
         assert!(
-            !scalable.partial.contains("flies"),
+            !scalable.contains_partial("flies"),
             "Scalable: flies should NOT be +d"
         );
     }
@@ -796,7 +817,7 @@ mod tests {
                 lit
             );
             assert!(
-                scalable.partial.contains(&lit),
+                scalable.contains_partial(&lit),
                 "Scalable: {} should be +d",
                 lit
             );
@@ -828,12 +849,12 @@ mod tests {
                 derived
             );
             assert!(
-                scalable.partial.contains(&fact),
+                scalable.contains_partial(&fact),
                 "Scalable: {} should be +d",
                 fact
             );
             assert!(
-                scalable.partial.contains(&derived),
+                scalable.contains_partial(&derived),
                 "Scalable: {} should be +d",
                 derived
             );
@@ -851,20 +872,20 @@ mod tests {
         let result = reason_scalable(&theory);
 
         // Delta ⊆ Partial (definite implies defeasible)
-        for lit in &result.delta {
+        for &lit_id in &result.delta {
             assert!(
-                result.partial.contains(lit),
-                "Delta {} should be in Partial",
-                lit
+                result.partial.contains(&lit_id),
+                "Delta {:?} should be in Partial",
+                lit_id
             );
         }
 
         // Partial ⊆ Lambda (partial is refined from lambda)
-        for lit in &result.partial {
+        for &lit_id in &result.partial {
             assert!(
-                result.lambda.contains(lit),
-                "Partial {} should be in Lambda",
-                lit
+                result.lambda.contains(&lit_id),
+                "Partial {:?} should be in Lambda",
+                lit_id
             );
         }
     }
@@ -885,7 +906,7 @@ mod tests {
         let result = reason_scalable(&theory);
 
         assert!(
-            result.partial.contains("l100"),
+            result.contains_partial("l100"),
             "l100 should be provable through long chain"
         );
     }
@@ -902,7 +923,7 @@ mod tests {
         let result = reason_scalable(&theory);
 
         assert!(
-            result.partial.contains("derived199"),
+            result.contains_partial("derived199"),
             "derived199 should be provable"
         );
     }
@@ -924,12 +945,12 @@ mod tests {
         // All positive conclusions should win
         for i in 0..50 {
             assert!(
-                result.partial.contains(&format!("q{}", i)),
+                result.contains_partial(&format!("q{}", i)),
                 "q{} should be provable via superiority",
                 i
             );
             assert!(
-                !result.partial.contains(&format!("~q{}", i)),
+                !result.contains_partial(&format!("~q{}", i)),
                 "~q{} should NOT be provable",
                 i
             );

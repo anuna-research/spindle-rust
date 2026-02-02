@@ -24,14 +24,19 @@
 //! r1_1: parent(alice, bob), parent(bob, carol) => ancestor(alice, carol)
 //! ```
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::intern::{resolve, SymbolId};
+
+#[cfg(test)]
+use crate::intern::intern;
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::theory::Theory;
 
 /// Type alias for substitution (variable -> value)
-pub type Substitution = HashMap<String, String>;
+/// Uses interned SymbolId for O(1) hashing and zero allocation lookups
+pub type Substitution = FxHashMap<SymbolId, SymbolId>;
 
 /// Check if a term is a variable (starts with ?)
 pub fn is_variable(term: &str) -> bool {
@@ -40,7 +45,7 @@ pub fn is_variable(term: &str) -> bool {
 
 /// Check if a literal contains any variables
 pub fn literal_has_variables(lit: &Literal) -> bool {
-    is_variable(&lit.name) || lit.predicates.iter().any(|p| is_variable(p))
+    is_variable(lit.name()) || lit.predicates().iter().any(|p| is_variable(p))
 }
 
 /// Check if a rule contains any variables
@@ -56,31 +61,38 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
         return None;
     }
 
-    let mut subst = Substitution::new();
+    let mut subst = Substitution::default();
 
-    // Match name
-    if is_variable(&pattern.name) {
-        subst.insert(pattern.name.clone(), ground.name.clone());
-    } else if pattern.name != ground.name {
+    // Match name (using interned symbols)
+    let pattern_name_id = pattern.name_id();
+    let ground_name_id = ground.name_id();
+    let pattern_name = resolve(pattern_name_id);
+
+    if is_variable(pattern_name) {
+        subst.insert(pattern_name_id, ground_name_id);
+    } else if pattern_name_id != ground_name_id {
         return None;
     }
 
-    // Match predicates/arguments
-    if pattern.predicates.len() != ground.predicates.len() {
+    // Match predicates/arguments (using interned symbols)
+    let pattern_pred_ids = pattern.predicate_ids();
+    let ground_pred_ids = ground.predicate_ids();
+    if pattern_pred_ids.len() != ground_pred_ids.len() {
         return None;
     }
 
-    for (parg, garg) in pattern.predicates.iter().zip(ground.predicates.iter()) {
+    for (parg_id, garg_id) in pattern_pred_ids.iter().zip(ground_pred_ids.iter()) {
+        let parg = resolve(*parg_id);
         if is_variable(parg) {
             // Check for conflicting bindings
-            if let Some(existing) = subst.get(parg) {
-                if existing != garg {
+            if let Some(existing) = subst.get(parg_id) {
+                if *existing != *garg_id {
                     return None;
                 }
             } else {
-                subst.insert(parg.clone(), garg.clone());
+                subst.insert(*parg_id, *garg_id);
             }
-        } else if parg != garg {
+        } else if parg_id != garg_id {
             return None;
         }
     }
@@ -88,32 +100,38 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
     Some(subst)
 }
 
-/// Apply a substitution to a literal
+/// Apply a substitution to a literal (using interned SymbolIds)
 pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Literal {
-    let new_name = if is_variable(&lit.name) {
-        subst.get(&lit.name).cloned().unwrap_or_else(|| lit.name.clone())
+    let name_id = lit.name_id();
+    let name = resolve(name_id);
+
+    // Apply substitution to name (if it's a variable)
+    let new_name_id = if is_variable(name) {
+        subst.get(&name_id).copied().unwrap_or(name_id)
     } else {
-        lit.name.clone()
+        name_id
     };
 
-    let new_predicates: Vec<String> = lit
-        .predicates
+    // Apply substitution to predicates
+    let new_pred_ids: Vec<SymbolId> = lit
+        .predicate_ids()
         .iter()
-        .map(|p| {
+        .map(|pid| {
+            let p = resolve(*pid);
             if is_variable(p) {
-                subst.get(p).cloned().unwrap_or_else(|| p.clone())
+                subst.get(pid).copied().unwrap_or(*pid)
             } else {
-                p.clone()
+                *pid
             }
         })
         .collect();
 
-    Literal::new(
-        new_name,
+    Literal::from_ids(
+        new_name_id,
         lit.negation,
         lit.mode.clone(),
         lit.temporal.clone(),
-        new_predicates,
+        new_pred_ids,
     )
 }
 
@@ -139,41 +157,46 @@ fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitut
     let mut merged = s1.clone();
     for (k, v) in s2 {
         if let Some(existing) = merged.get(k) {
-            if existing != v {
+            if *existing != *v {
                 return None;
             }
         } else {
-            merged.insert(k.clone(), v.clone());
+            // SymbolId is Copy, no allocation needed
+            merged.insert(*k, *v);
         }
     }
     Some(merged)
 }
 
-/// Create a key for indexing facts
-fn fact_index_key(lit: &Literal) -> (String, bool, usize) {
-    (lit.name.clone(), lit.negation, lit.predicates.len())
+/// Create a key for indexing facts (using interned SymbolId, zero allocation)
+#[inline]
+fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize) {
+    (lit.name_id(), lit.negation, lit.predicate_ids().len())
 }
 
-/// Create a key for deduplicating literals
-fn literal_key(lit: &Literal) -> (String, bool, Vec<String>) {
-    (lit.name.clone(), lit.negation, lit.predicates.clone())
+/// Create a key for deduplicating literals (using interned IDs, minimal allocation)
+///
+/// Returns (name_id, negation, predicate_ids) - all Copy types except the Vec
+#[inline]
+fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<SymbolId>) {
+    (lit.name_id(), lit.negation, lit.predicate_ids().to_vec())
 }
 
 /// Match body literals against facts, returning all valid substitutions
 fn match_body_against_facts(
     body: &[Literal],
-    fact_index: &HashMap<(String, bool, usize), Vec<Literal>>,
+    fact_index: &FxHashMap<(SymbolId, bool, usize), Vec<Literal>>,
     all_facts: &[Literal],
 ) -> Vec<Substitution> {
     if body.is_empty() {
-        return vec![Substitution::new()];
+        return vec![Substitution::default()];
     }
 
     let first_lit = &body[0];
     let rest = &body[1..];
 
     // Get candidate facts
-    let candidates: Vec<&Literal> = if is_variable(&first_lit.name) {
+    let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
         all_facts.iter().collect()
     } else {
         fact_index
@@ -207,13 +230,14 @@ fn match_body_against_facts(
 /// Match body with at least one delta (new) fact
 fn match_body_with_delta(
     body: &[Literal],
-    fact_index: &HashMap<(String, bool, usize), Vec<Literal>>,
-    delta_index: &HashMap<(String, bool, usize), Vec<Literal>>,
+    fact_index: &FxHashMap<(SymbolId, bool, usize), Vec<Literal>>,
+    delta_index: &FxHashMap<(SymbolId, bool, usize), Vec<Literal>>,
     all_facts: &[Literal],
     delta_facts: &[Literal],
 ) -> Vec<Substitution> {
     let mut results = Vec::new();
-    let mut seen: HashSet<Vec<(String, String)>> = HashSet::new();
+    // Use Vec<(SymbolId, SymbolId)> for seen set - Copy types, much cheaper
+    let mut seen: FxHashSet<Vec<(SymbolId, SymbolId)>> = FxHashSet::default();
 
     for (i, delta_lit) in body.iter().enumerate() {
         let rest: Vec<Literal> = body
@@ -223,7 +247,7 @@ fn match_body_with_delta(
             .map(|(_, l)| l.clone())
             .collect();
 
-        let delta_candidates: Vec<&Literal> = if is_variable(&delta_lit.name) {
+        let delta_candidates: Vec<&Literal> = if is_variable(delta_lit.name()) {
             delta_facts.iter().collect()
         } else {
             delta_index
@@ -242,9 +266,10 @@ fn match_body_with_delta(
                 for rest_subst in match_body_against_facts(&substituted_rest, fact_index, all_facts)
                 {
                     if let Some(merged) = merge_substitutions(&subst, &rest_subst) {
-                        let key: Vec<(String, String)> = {
-                            let mut pairs: Vec<_> = merged.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-                            pairs.sort();
+                        // Create key from SymbolId pairs (Copy types, no heap allocation)
+                        let key: Vec<(SymbolId, SymbolId)> = {
+                            let mut pairs: Vec<_> = merged.iter().map(|(k, v)| (*k, *v)).collect();
+                            pairs.sort_by_key(|(k, _)| k.as_raw());
                             pairs
                         };
 
@@ -277,10 +302,10 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
         return theory.clone();
     }
 
-    // Track facts
-    let mut fact_keys: HashSet<(String, bool, Vec<String>)> = HashSet::new();
+    // Track facts using interned types (minimal allocation)
+    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<SymbolId>)> = FxHashSet::default();
     let mut facts_list: Vec<Literal> = Vec::new();
-    let mut fact_index: HashMap<(String, bool, usize), Vec<Literal>> = HashMap::new();
+    let mut fact_index: FxHashMap<(SymbolId, bool, usize), Vec<Literal>> = FxHashMap::default();
 
     // Initialize with ground facts
     for rule in theory.facts() {
@@ -300,7 +325,8 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
 
     let mut all_generated_rules: Vec<Rule> = ground_rules.into_iter().cloned().collect();
     let mut instance_counter = 0;
-    let mut known_instances: HashSet<(RuleLabel, Vec<(String, String)>)> = HashSet::new();
+    // Use interned SymbolIds for instance tracking (minimal allocation)
+    let mut known_instances: FxHashSet<(RuleLabel, Vec<(SymbolId, SymbolId)>)> = FxHashSet::default();
 
     // Iterate until fixpoint
     let mut facts_new = facts_list.clone();
@@ -313,8 +339,8 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
         let mut new_facts_this_round: Vec<Literal> = Vec::new();
         let mut new_rules_this_round: Vec<Rule> = Vec::new();
 
-        // Build delta index
-        let mut delta_index: HashMap<(String, bool, usize), Vec<Literal>> = HashMap::new();
+        // Build delta index (using interned types)
+        let mut delta_index: FxHashMap<(SymbolId, bool, usize), Vec<Literal>> = FxHashMap::default();
         for lit in &facts_new {
             delta_index
                 .entry(fact_index_key(lit))
@@ -333,9 +359,10 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
             );
 
             for subst in substitutions {
-                let sig_key: Vec<(String, String)> = {
-                    let mut pairs: Vec<_> = subst.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-                    pairs.sort();
+                // Create signature key from SymbolId pairs (Copy types, no allocation)
+                let sig_key: Vec<(SymbolId, SymbolId)> = {
+                    let mut pairs: Vec<_> = subst.iter().map(|(k, v)| (*k, *v)).collect();
+                    pairs.sort_by_key(|(k, _)| k.as_raw());
                     pairs
                 };
                 let sig = (rule.label.clone(), sig_key);
@@ -419,8 +446,13 @@ mod tests {
         );
 
         let subst = match_literal(&pattern, &ground).unwrap();
-        assert_eq!(subst.get("?x"), Some(&"alice".to_string()));
-        assert_eq!(subst.get("?y"), Some(&"bob".to_string()));
+        // Substitution now uses SymbolIds - verify via resolve
+        let x_id = intern("?x");
+        let y_id = intern("?y");
+        let alice_id = intern("alice");
+        let bob_id = intern("bob");
+        assert_eq!(subst.get(&x_id), Some(&alice_id));
+        assert_eq!(subst.get(&y_id), Some(&bob_id));
     }
 
     #[test]
@@ -452,12 +484,13 @@ mod tests {
             Default::default(),
             vec!["?x".to_string(), "?y".to_string()],
         );
-        let mut subst = Substitution::new();
-        subst.insert("?x".to_string(), "alice".to_string());
-        subst.insert("?y".to_string(), "bob".to_string());
+        // Build substitution using SymbolIds
+        let mut subst = Substitution::default();
+        subst.insert(intern("?x"), intern("alice"));
+        subst.insert(intern("?y"), intern("bob"));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates, vec!["alice".to_string(), "bob".to_string()]);
+        assert_eq!(result.predicates(), vec!["alice", "bob"]);
     }
 
     #[test]
@@ -506,8 +539,8 @@ mod tests {
         let has_grounded = grounded.rules().any(|r| {
             r.label.starts_with("r1_")
                 && r.head.iter().any(|h| {
-                    h.name == "ancestor"
-                        && h.predicates == vec!["alice".to_string(), "bob".to_string()]
+                    h.name() == "ancestor"
+                        && h.predicates() == vec!["alice", "bob"]
                 })
         });
         assert!(has_grounded);
@@ -577,7 +610,7 @@ mod tests {
             r.label.starts_with("r2_")
                 && r.head
                     .iter()
-                    .any(|h| h.name == "r" && h.predicates == vec!["a".to_string()])
+                    .any(|h| h.name() == "r" && h.predicates() == vec!["a"])
         });
         assert!(has_r2_grounded, "Grounding should produce r2 instance q(a) => r(a)");
     }

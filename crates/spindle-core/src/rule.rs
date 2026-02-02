@@ -166,7 +166,7 @@ mod tests {
         let fact = Rule::fact("f1", Literal::simple("bird"));
         assert!(fact.is_fact());
         assert!(fact.has_empty_body());
-        assert_eq!(fact.head_literal().name, "bird");
+        assert_eq!(fact.head_literal().name(), "bird");
     }
 
     #[test]
@@ -178,7 +178,7 @@ mod tests {
         );
         assert_eq!(rule.rule_type, RuleType::Defeasible);
         assert_eq!(rule.body.len(), 1);
-        assert_eq!(rule.body[0].name, "bird");
+        assert_eq!(rule.body[0].name(), "bird");
     }
 
     #[test]

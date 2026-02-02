@@ -556,7 +556,7 @@ mod tests {
     #[test]
     fn test_proof_node() {
         let node = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible);
-        assert_eq!(node.literal.name, "flies");
+        assert_eq!(node.literal.name(), "flies");
         assert_eq!(node.derivation_type, DerivationType::Defeasible);
     }
 

@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use crate::conclusion::{Conclusion, ConclusionType};
+use crate::conclusion::ConclusionType;
 use crate::literal::Literal;
 use crate::reason::reason;
 use crate::rule::{Rule, RuleType};
@@ -659,7 +659,7 @@ mod tests {
 
         let result = what_if(&theory, hypotheticals, &Literal::simple("ready_review"));
         assert!(result.is_provable());
-        assert!(result.new_conclusions.iter().any(|l| l.name == "ready_review"));
+        assert!(result.new_conclusions.iter().any(|l| l.name() == "ready_review"));
     }
 
     #[test]
@@ -701,7 +701,7 @@ mod tests {
         assert!(result.has_blockers());
 
         let missing = result.get_missing_premises();
-        assert!(missing.iter().any(|l| l.name == "q"));
+        assert!(missing.iter().any(|l| l.name() == "q"));
     }
 
     #[test]
@@ -774,7 +774,7 @@ mod tests {
         theory.add_defeasible_rule(&["precondition"], "result");
 
         let needed = requires(&theory, &Literal::simple("result"));
-        assert!(needed.iter().any(|l| l.name == "precondition"));
+        assert!(needed.iter().any(|l| l.name() == "precondition"));
     }
 
     #[test]

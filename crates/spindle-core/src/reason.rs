@@ -1,11 +1,17 @@
 //! Reasoning engine for defeasible logic
 //!
 //! Implements the standard DL(d) forward chaining algorithm.
+//!
+//! # Performance
+//!
+//! Uses `LiteralId` (4-byte Copy type) instead of `String` for HashSet
+//! keys, eliminating heap allocations in the hot reasoning loop.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
+use crate::intern::LiteralId;
 use crate::literal::Literal;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -15,9 +21,10 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     let indexed = IndexedTheory::build(theory.clone());
     let mut conclusions = Vec::new();
 
-    // Track what we've proven
-    let mut definite_proven: HashSet<String> = HashSet::new();
-    let mut defeasible_proven: HashSet<String> = HashSet::new();
+    // Track what we've proven using LiteralId (4-byte Copy type)
+    // This avoids String allocations in the hot reasoning loop
+    let mut definite_proven: HashSet<LiteralId> = HashSet::new();
+    let mut defeasible_proven: HashSet<LiteralId> = HashSet::new();
 
     // Track rule body satisfaction
     let mut body_remaining: HashMap<String, usize> = HashMap::new();
@@ -31,10 +38,10 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     // Phase 1: Initialize with facts
     for fact in theory.facts() {
         let lit = fact.head_literal().clone();
-        let key = lit.canonical_name();
+        let lit_id = lit.literal_id();
 
-        definite_proven.insert(key.clone());
-        defeasible_proven.insert(key.clone());
+        definite_proven.insert(lit_id);
+        defeasible_proven.insert(lit_id);
 
         conclusions.push(Conclusion::definitely_provable(lit.clone()));
         conclusions.push(Conclusion::defeasibly_provable(lit.clone()));
@@ -53,15 +60,15 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
                 // If body fully satisfied, try to fire rule
                 if *remaining == 0 {
                     let head_lit = rule.head_literal().clone();
-                    let head_key = head_lit.canonical_name();
+                    let head_id = head_lit.literal_id();
 
                     match rule.rule_type {
                         RuleType::Fact => unreachable!("Facts have no body"),
 
                         RuleType::Strict => {
-                            if !definite_proven.contains(&head_key) {
-                                definite_proven.insert(head_key.clone());
-                                defeasible_proven.insert(head_key.clone());
+                            if !definite_proven.contains(&head_id) {
+                                definite_proven.insert(head_id);
+                                defeasible_proven.insert(head_id);
 
                                 conclusions
                                     .push(Conclusion::definitely_provable(head_lit.clone()));
@@ -74,12 +81,11 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
 
                         RuleType::Defeasible => {
                             // Check for conflicts and superiority
-                            let complement = head_lit.complement();
-                            let comp_key = complement.canonical_name();
+                            let comp_id = head_id.complement();
 
                             // Only prove if complement isn't definitely proven
-                            if !definite_proven.contains(&comp_key)
-                                && !defeasible_proven.contains(&head_key)
+                            if !definite_proven.contains(&comp_id)
+                                && !defeasible_proven.contains(&head_id)
                             {
                                 // Check if we're blocked by superior rules
                                 let blocked = is_blocked_by_superior(
@@ -90,7 +96,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
                                 );
 
                                 if !blocked {
-                                    defeasible_proven.insert(head_key.clone());
+                                    defeasible_proven.insert(head_id);
                                     conclusions
                                         .push(Conclusion::defeasibly_provable(head_lit.clone()));
                                     worklist.push_back(head_lit);
@@ -109,17 +115,19 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     }
 
     // Phase 3: Compute negative conclusions
+    // This runs once at the end, so String conversion is acceptable here
     for lit_name in indexed.all_literals() {
         let lit = Literal::simple(lit_name);
+        let lit_id = lit.literal_id();
 
-        if !definite_proven.contains(lit_name) {
+        if !definite_proven.contains(&lit_id) {
             conclusions.push(Conclusion::new(
                 ConclusionType::DefinitelyNotProvable,
                 lit.clone(),
             ));
         }
 
-        if !defeasible_proven.contains(lit_name) {
+        if !defeasible_proven.contains(&lit_id) {
             conclusions.push(Conclusion::new(
                 ConclusionType::DefeasiblyNotProvable,
                 lit,
@@ -135,7 +143,7 @@ fn is_blocked_by_superior(
     indexed: &IndexedTheory,
     theory: &Theory,
     rule: &crate::rule::Rule,
-    proven: &HashSet<String>,
+    proven: &HashSet<LiteralId>,
 ) -> bool {
     let head_lit = rule.head_literal();
     let complement = head_lit.complement();
@@ -144,11 +152,11 @@ fn is_blocked_by_superior(
     let attacking_rules = indexed.rules_with_head(&complement);
 
     for attacker in attacking_rules {
-        // Check if attacker's body is satisfied
+        // Check if attacker's body is satisfied (using LiteralId for O(1) lookup)
         let body_satisfied = attacker
             .body
             .iter()
-            .all(|b| proven.contains(&b.canonical_name()));
+            .all(|b| proven.contains(&b.literal_id()));
 
         if !body_satisfied {
             continue;
@@ -158,10 +166,8 @@ fn is_blocked_by_superior(
         // A defeater is a rule that can block a conclusion but cannot prove its head
         if attacker.rule_type == RuleType::Defeater {
             // Check if rule is superior over the defeater (can override it)
-            let rule_superior = theory
-                .superiorities()
-                .iter()
-                .any(|s| s.superior == rule.label && s.inferior == attacker.label);
+            // Using O(1) indexed lookup instead of linear scan
+            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
 
             // Defeater blocks unless the rule is explicitly superior
             if !rule_superior {
@@ -171,17 +177,12 @@ fn is_blocked_by_superior(
         }
 
         // For defeasible rules: check superiority relations
+        // Using O(1) indexed lookups instead of linear scan
         // Check superiority: is attacker > rule?
-        let attacker_superior = theory
-            .superiorities()
-            .iter()
-            .any(|s| s.superior == attacker.label && s.inferior == rule.label);
+        let attacker_superior = theory.is_superior(&attacker.label, &rule.label);
 
         // Check if rule > attacker
-        let rule_superior = theory
-            .superiorities()
-            .iter()
-            .any(|s| s.superior == rule.label && s.inferior == attacker.label);
+        let rule_superior = theory.is_superior(&rule.label, &attacker.label);
 
         // If attacker is superior and rule is not superior over it, we're blocked
         if attacker_superior && !rule_superior {
@@ -211,7 +212,7 @@ mod tests {
         let conclusions = reason(&theory);
 
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-            && c.literal.name == "bird"));
+            && c.literal.name() == "bird"));
     }
 
     #[test]
@@ -222,7 +223,7 @@ mod tests {
         let conclusions = reason(&theory);
 
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-            && c.literal.name == "guilty"
+            && c.literal.name() == "guilty"
             && c.literal.negation));
     }
 
@@ -235,7 +236,7 @@ mod tests {
         let conclusions = reason(&theory);
 
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-            && c.literal.name == "animal"));
+            && c.literal.name() == "animal"));
     }
 
     #[test]
@@ -247,7 +248,7 @@ mod tests {
         let conclusions = reason(&theory);
 
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-            && c.literal.name == "flies"));
+            && c.literal.name() == "flies"));
     }
 
     #[test]
@@ -262,7 +263,7 @@ mod tests {
 
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name == "s"),
+                && c.literal.name() == "s"),
             "s should be defeasibly provable when all antecedents are satisfied"
         );
     }
@@ -279,7 +280,7 @@ mod tests {
             !conclusions
                 .iter()
                 .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                    && c.literal.name == "r"),
+                    && c.literal.name() == "r"),
             "r should not be provable without q"
         );
     }
@@ -303,7 +304,7 @@ mod tests {
 
         // ~flies should be defeasibly provable (penguins don't fly)
         assert!(conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-            && c.literal.name == "flies"
+            && c.literal.name() == "flies"
             && c.literal.negation));
     }
 
@@ -322,7 +323,7 @@ mod tests {
         // Superior rule r1 should win
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name == "flies"
+                && c.literal.name() == "flies"
                 && !c.literal.negation),
             "flies should be defeasibly provable via superior rule"
         );
@@ -341,7 +342,7 @@ mod tests {
         // Strict rule should definitely prove c
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name == "c"
+                && c.literal.name() == "c"
                 && !c.literal.negation),
             "c should be definitely provable via strict rule"
         );
@@ -361,7 +362,7 @@ mod tests {
             assert!(
                 conclusions.iter().any(|c| c.conclusion_type
                     == ConclusionType::DefeasiblyProvable
-                    && c.literal.name == *lit_name),
+                    && c.literal.name() == *lit_name),
                 "{} should be defeasibly provable via chain",
                 lit_name
             );
@@ -384,7 +385,7 @@ mod tests {
         assert!(
             conclusions.iter().any(|c| c.conclusion_type
                 == ConclusionType::DefinitelyNotProvable
-                && c.literal.name == "q"
+                && c.literal.name() == "q"
                 && !c.literal.negation),
             "q should be definitely NOT provable (no strict rule)"
         );
@@ -400,7 +401,7 @@ mod tests {
         assert!(
             conclusions.iter().any(|c| c.conclusion_type
                 == ConclusionType::DefeasiblyNotProvable
-                && c.literal.name == "q"),
+                && c.literal.name() == "q"),
             "q should be defeasibly NOT provable when body unsatisfied"
         );
     }
@@ -420,7 +421,7 @@ mod tests {
         // r1 > r2, so +d q, but ~q should be blocked
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name == "q"
+                && c.literal.name() == "q"
                 && !c.literal.negation),
             "q should be defeasibly provable via superior rule"
         );
@@ -443,13 +444,13 @@ mod tests {
         let has_q = conclusions
             .iter()
             .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name == "q"
+                && c.literal.name() == "q"
                 && !c.literal.negation);
 
         let has_not_q = conclusions
             .iter()
             .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name == "q"
+                && c.literal.name() == "q"
                 && c.literal.negation);
 
         // Defeater blocks q from being proven
@@ -478,7 +479,7 @@ mod tests {
             !conclusions
                 .iter()
                 .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                    && c.literal.name == "q"),
+                    && c.literal.name() == "q"),
             "Defeater alone should not prove q"
         );
     }
@@ -526,7 +527,7 @@ mod tests {
             !conclusions
                 .iter()
                 .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                    && c.literal.name == "p"),
+                    && c.literal.name() == "p"),
             "Self-referential rule without initial fact should not prove p"
         );
     }
@@ -558,13 +559,13 @@ mod tests {
         // Both should be definitely provable (inconsistent theory)
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name == "p"
+                && c.literal.name() == "p"
                 && !c.literal.negation),
             "p should be definitely provable"
         );
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name == "p"
+                && c.literal.name() == "p"
                 && c.literal.negation),
             "~p should be definitely provable"
         );
@@ -588,7 +589,7 @@ mod tests {
         // All literals in chain should be provable
         assert!(
             conclusions.iter().any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name == "l50"),
+                && c.literal.name() == "l50"),
             "l50 should be defeasibly provable through long chain"
         );
     }
@@ -610,7 +611,7 @@ mod tests {
             assert!(
                 conclusions.iter().any(|c| c.conclusion_type
                     == ConclusionType::DefeasiblyProvable
-                    && c.literal.name == format!("derived{}", i)),
+                    && c.literal.name() == format!("derived{}", i)),
                 "derived{} should be defeasibly provable",
                 i
             );
