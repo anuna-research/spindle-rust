@@ -15,3 +15,8 @@ Thumbs.db
 
 # Scratchpad
 scratchpad/
+
+# Benchmark artifacts
+__pycache__/
+bench/__pycache__/
+bench/compiled/
