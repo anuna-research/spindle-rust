@@ -53,6 +53,7 @@ pub mod scalable;
 pub mod grounding;
 pub mod explanation;
 pub mod trust;
+pub mod query;
 pub mod error;
 
 /// Prelude module for convenient imports
