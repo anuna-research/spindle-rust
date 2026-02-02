@@ -297,6 +297,38 @@ impl Spindle {
     pub fn clear(&mut self) {
         self.theory = Theory::new();
     }
+
+    /// Parse DFL and reason in one call, returning string output (spinguile-compatible)
+    ///
+    /// Output format:
+    /// ```
+    /// +D literal
+    /// +d literal
+    /// -D literal
+    /// -d literal
+    /// ```
+    #[wasm_bindgen(js_name = reasonDfl)]
+    pub fn reason_dfl(&mut self, input: &str) -> Result<String, JsError> {
+        self.theory = parse_dfl(input).map_err(|e| JsError::new(&e.to_string()))?;
+        let conclusions = reason(&self.theory);
+        Ok(conclusions
+            .iter()
+            .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+
+    /// Parse SPL and reason in one call, returning string output (spinguile-compatible)
+    #[wasm_bindgen(js_name = reasonSpl)]
+    pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
+        self.theory = parse_spl(input).map_err(|e| JsError::new(&e.to_string()))?;
+        let conclusions = reason(&self.theory);
+        Ok(conclusions
+            .iter()
+            .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
 }
 
 impl Default for Spindle {
