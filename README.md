@@ -28,6 +28,11 @@ A Rust implementation of the SPINdle defeasible logic reasoning engine, ported f
 
 - **Trust-Aware Reasoning**: Source attribution and trust-weighted conclusions
 
+- **Query Operators**:
+  - What-if: Hypothetical reasoning
+  - Why-not: Explanation of failures
+  - Abduction: Finding hypotheses to prove goals
+
 ## Installation
 
 ```bash
@@ -121,16 +126,18 @@ let conclusions = theory.reason();
   - `grounding` - Datalog-style variable grounding
   - `explanation` - Proof trees and explanations
   - `trust` - Trust-weighted reasoning
+  - `query` - What-if, why-not, abduction operators
 - `spindle-parser` - DFL and SPL format parsers
 - `spindle-cli` - Command-line interface
 
 ## Testing
 
-113 tests covering:
+128 tests covering:
 - Core reasoning (facts, rules, conflicts, superiority)
 - Semantic equivalence (standard vs scalable modes)
 - Edge cases (cycles, empty theories, defeaters)
 - Stress tests (long chains, wide theories)
+- Query operators (what-if, why-not, abduction)
 
 ```bash
 cargo test
