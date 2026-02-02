@@ -24,6 +24,10 @@ A Rust implementation of the SPINdle defeasible logic reasoning engine, ported f
   - DFL (Defeasible Logic Format) - Textual syntax
   - SPL (Spindle Lisp) - LISP-based DSL
 
+- **Explanations**: Proof trees with natural language and JSON output
+
+- **Trust-Aware Reasoning**: Source attribution and trust-weighted conclusions
+
 ## Installation
 
 ```bash
@@ -110,9 +114,27 @@ let conclusions = theory.reason();
 
 ## Crate Structure
 
-- `spindle-core` - Core reasoning engine, data structures, and grounding
+- `spindle-core` - Core reasoning engine
+  - `reason` - Standard DL(d) forward chaining
+  - `scalable` - Scalable DL(d||) three-phase algorithm
+  - `temporal` - Allen interval algebra
+  - `grounding` - Datalog-style variable grounding
+  - `explanation` - Proof trees and explanations
+  - `trust` - Trust-weighted reasoning
 - `spindle-parser` - DFL and SPL format parsers
 - `spindle-cli` - Command-line interface
+
+## Testing
+
+113 tests covering:
+- Core reasoning (facts, rules, conflicts, superiority)
+- Semantic equivalence (standard vs scalable modes)
+- Edge cases (cycles, empty theories, defeaters)
+- Stress tests (long chains, wide theories)
+
+```bash
+cargo test
+```
 
 ## License
 
