@@ -1,0 +1,3631 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Spindle-Rust</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A Rust implementation of the SPINdle defeasible logic reasoning engine">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "coal";
+            window.path_to_searchindex_js = "searchindex-d083aef9.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-49723f55.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Spindle-Rust</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://codeberg.org/anuna/spindle-rust" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="spindle-rust"><a class="header" href="#spindle-rust">Spindle-Rust</a></h1>
+<p><strong>Spindle-Rust</strong> is a Rust implementation of the SPINdle defeasible logic reasoning engine.</p>
+<p>This project is part of the SPINdle family:</p>
+<ul>
+<li><strong><a href="http://spindle.data61.csiro.au/">SPINdle</a></strong> - The original Java implementation by NICTA (now Data61/CSIRO)</li>
+<li><strong><a href="https://codeberg.org/anuna/spindle-racket">spindle-racket</a></strong> - A comprehensive Racket port with trust-weighted reasoning</li>
+<li><strong>spindle-rust</strong> - This Rust port, based on spindle-racket v1.7.0</li>
+</ul>
+<h2 id="what-is-defeasible-logic"><a class="header" href="#what-is-defeasible-logic">What is Defeasible Logic?</a></h2>
+<p>Defeasible logic is a <strong>non-monotonic reasoning</strong> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.</p>
+<pre><code class="language-dfl"># The classic "Tweety" example
+f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+
+r1: bird =&gt; flies        # Birds typically fly
+r2: penguin =&gt; -flies    # Penguins don't fly
+
+r2 &gt; r1                  # Penguin rule beats bird rule
+</code></pre>
+<p><strong>Result:</strong> <code>-flies</code> is provable (Tweety doesn’t fly).</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li><strong>Four rule types:</strong> facts, strict rules, defeasible rules, and defeaters</li>
+<li><strong>Two reasoning modes:</strong> standard DL(d) and scalable DL(d||)</li>
+<li><strong>Temporal reasoning:</strong> Allen interval algebra with 13 temporal relations</li>
+<li><strong>First-order variables:</strong> Datalog-style grounding with <code>?x</code> syntax</li>
+<li><strong>Query operators:</strong> what-if, why-not, and abduction</li>
+<li><strong>Trust-aware reasoning:</strong> source attribution and weighted conclusions</li>
+<li><strong>Two input formats:</strong> DFL (textual) and SPL (Lisp-based)</li>
+<li><strong>WebAssembly support:</strong> run in browsers and Node.js</li>
+</ul>
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+let mut theory = Theory::new();
+
+// Add facts
+theory.add_fact("bird");
+theory.add_fact("penguin");
+
+// Add defeasible rules
+let r1 = theory.add_defeasible_rule(&amp;["bird"], "flies");
+let r2 = theory.add_defeasible_rule(&amp;["penguin"], "~flies");
+
+// Penguin rule beats bird rule
+theory.add_superiority(&amp;r2, &amp;r1);
+
+// Reason and get conclusions
+let conclusions = theory.reason();
+<span class="boring">}</span></code></pre>
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<h3 id="cli"><a class="header" href="#cli">CLI</a></h3>
+<pre><code class="language-bash">cargo install --path crates/spindle-cli
+</code></pre>
+<h3 id="library"><a class="header" href="#library">Library</a></h3>
+<pre><code class="language-toml">[dependencies]
+spindle-core = { path = "crates/spindle-core" }
+spindle-parser = { path = "crates/spindle-parser" }
+</code></pre>
+<h2 id="crate-structure"><a class="header" href="#crate-structure">Crate Structure</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>spindle-core</code></td><td>Core reasoning engine</td></tr>
+<tr><td><code>spindle-parser</code></td><td>DFL and SPL format parsers</td></tr>
+<tr><td><code>spindle-cli</code></td><td>Command-line interface</td></tr>
+<tr><td><code>spindle-wasm</code></td><td>WebAssembly bindings</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li><a href="http://spindle.data61.csiro.au/">SPINdle Project</a> - Original Java implementation by NICTA/Data61</li>
+<li>Nute, D. (1994). “Defeasible Logic” - Foundational paper on defeasible logic</li>
+<li><a href="https://codeberg.org/anuna/spindle-racket">spindle-racket</a> - Racket implementation this port is based on</li>
+</ul>
+<h2 id="license"><a class="header" href="#license">License</a></h2>
+<p>LGPL-3.0-or-later (same as original SPINdle)</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h1>
+<p>This guide walks you through installing Spindle-Rust and running your first defeasible logic program.</p>
+<p>Spindle-Rust is a Rust port of <a href="http://spindle.data61.csiro.au/">SPINdle</a>, a defeasible logic reasoning system originally developed by NICTA (now Data61/CSIRO). This implementation is based on <a href="https://codeberg.org/anuna/spindle-racket">spindle-racket</a> v1.7.0.</p>
+<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<h3 id="building-from-source"><a class="header" href="#building-from-source">Building from Source</a></h3>
+<pre><code class="language-bash">git clone https://codeberg.org/anuna/spindle-rust
+cd spindle-rust
+cargo build --release
+</code></pre>
+<h3 id="installing-the-cli"><a class="header" href="#installing-the-cli">Installing the CLI</a></h3>
+<pre><code class="language-bash">cargo install --path crates/spindle-cli
+</code></pre>
+<p>This installs the <code>spindle</code> command to your Cargo bin directory.</p>
+<h2 id="your-first-theory"><a class="header" href="#your-first-theory">Your First Theory</a></h2>
+<p>Create a file called <code>hello.dfl</code>:</p>
+<pre><code class="language-dfl"># Facts
+f1: &gt;&gt; bird
+
+# Rules
+r1: bird =&gt; flies
+r2: bird =&gt; has_feathers
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">spindle hello.dfl
+</code></pre>
+<p>Output:</p>
+<pre><code>+D bird
++d bird
++d flies
++d has_feathers
+-D flies
+-D has_feathers
+</code></pre>
+<h3 id="understanding-the-output"><a class="header" href="#understanding-the-output">Understanding the Output</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Conclusion</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>+D bird</code></td><td><code>bird</code> is <strong>definitely</strong> provable (it’s a fact)</td></tr>
+<tr><td><code>+d bird</code></td><td><code>bird</code> is <strong>defeasibly</strong> provable</td></tr>
+<tr><td><code>+d flies</code></td><td><code>flies</code> is defeasibly provable via r1</td></tr>
+<tr><td><code>-D flies</code></td><td><code>flies</code> is <strong>not</strong> definitely provable (no strict rule)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="the-penguin-example"><a class="header" href="#the-penguin-example">The Penguin Example</a></h2>
+<p>Create <code>penguin.dfl</code>:</p>
+<pre><code class="language-dfl"># Tweety is a bird and a penguin
+f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+
+# Birds typically fly
+r1: bird =&gt; flies
+
+# Penguins typically don't fly
+r2: penguin =&gt; -flies
+
+# Penguin rule is more specific
+r2 &gt; r1
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">spindle penguin.dfl
+</code></pre>
+<p>Output:</p>
+<pre><code>+D bird
++D penguin
++d bird
++d penguin
++d -flies
+-D flies
+-D -flies
+-d flies
+</code></pre>
+<p>Key result: <code>+d -flies</code> - Tweety defeasibly doesn’t fly because the penguin rule (<code>r2</code>) beats the bird rule (<code>r1</code>).</p>
+<h2 id="using-spl-format"><a class="header" href="#using-spl-format">Using SPL Format</a></h2>
+<p>The same theory in SPL (Spindle Lisp) format, <code>penguin.spl</code>:</p>
+<pre><code class="language-lisp">; Facts
+(given bird)
+(given penguin)
+
+; Rules
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+
+; Superiority
+(prefer r2 r1)
+</code></pre>
+<p>Run it:</p>
+<pre><code class="language-bash">spindle penguin.spl
+</code></pre>
+<h2 id="cli-options"><a class="header" href="#cli-options">CLI Options</a></h2>
+<pre><code class="language-bash"># Show only positive conclusions
+spindle --positive penguin.dfl
+
+# Use scalable algorithm (for large theories)
+spindle --scalable penguin.dfl
+
+# Output as JSON
+spindle --json penguin.dfl
+
+# Validate syntax without reasoning
+spindle validate penguin.dfl
+
+# Show theory statistics
+spindle stats penguin.dfl
+</code></pre>
+<h2 id="using-as-a-library"><a class="header" href="#using-as-a-library">Using as a Library</a></h2>
+<p>Add to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+spindle-core = { path = "crates/spindle-core" }
+</code></pre>
+<p>Basic usage:</p>
+<pre class="playground"><code class="language-rust">use spindle_core::prelude::*;
+
+fn main() {
+    let mut theory = Theory::new();
+
+    // Add facts
+    theory.add_fact("bird");
+    theory.add_fact("penguin");
+
+    // Add defeasible rules
+    let r1 = theory.add_defeasible_rule(&amp;["bird"], "flies");
+    let r2 = theory.add_defeasible_rule(&amp;["penguin"], "~flies");
+
+    // Set superiority
+    theory.add_superiority(&amp;r2, &amp;r1);
+
+    // Reason
+    let conclusions = theory.reason();
+
+    for c in conclusions {
+        println!("{}", c);
+    }
+}</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><a href="#concepts">Concepts</a> - Understand defeasible logic fundamentals</li>
+<li><a href="#dfl-format-reference">DFL Reference</a> - Complete DFL syntax</li>
+<li><a href="#spl-format-reference">SPL Reference</a> - Complete SPL syntax</li>
+<li><a href="#variables-and-grounding">Examples</a> - Advanced examples with variables</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
+<p>Defeasible logic is a <strong>non-monotonic reasoning</strong> system. This chapter introduces the core concepts you need to understand Spindle.</p>
+<h2 id="classical-vs-defeasible-logic"><a class="header" href="#classical-vs-defeasible-logic">Classical vs. Defeasible Logic</a></h2>
+<p><strong>Classical (Monotonic) Logic:</strong></p>
+<ul>
+<li>Once proven, always proven</li>
+<li>Adding facts only adds conclusions</li>
+<li>Cannot handle exceptions</li>
+</ul>
+<p><strong>Defeasible (Non-Monotonic) Logic:</strong></p>
+<ul>
+<li>Conclusions are tentative</li>
+<li>New evidence can defeat existing conclusions</li>
+<li>Handles exceptions naturally</li>
+</ul>
+<h2 id="the-tweety-problem"><a class="header" href="#the-tweety-problem">The Tweety Problem</a></h2>
+<p>The motivating example for defeasible logic:</p>
+<blockquote>
+<p>Tweety is a bird. Tweety is a penguin. Birds fly. Penguins don’t fly. Does Tweety fly?</p>
+</blockquote>
+<p>Classical logic produces a contradiction. Defeasible logic resolves it by recognizing that “penguins don’t fly” is a more specific rule that should override “birds fly.”</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+r1: bird =&gt; flies
+r2: penguin =&gt; -flies
+r2 &gt; r1
+</code></pre>
+<p>Result: Tweety doesn’t fly.</p>
+<h2 id="key-terminology"><a class="header" href="#key-terminology">Key Terminology</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Term</th><th>Definition</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Literal</strong></td><td>An atomic proposition, possibly negated (e.g., <code>flies</code>, <code>-flies</code>)</td></tr>
+<tr><td><strong>Rule</strong></td><td>A conditional statement with body and head</td></tr>
+<tr><td><strong>Theory</strong></td><td>A collection of rules and superiority relations</td></tr>
+<tr><td><strong>Conclusion</strong></td><td>A proven literal with a provability level</td></tr>
+<tr><td><strong>Defeat</strong></td><td>When one rule blocks another’s conclusion</td></tr>
+<tr><td><strong>Superiority</strong></td><td>A preference relation between rules</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="chapters"><a class="header" href="#chapters">Chapters</a></h2>
+<ul>
+<li><a href="#rules-and-facts">Rules and Facts</a> - The four rule types</li>
+<li><a href="#conclusions">Conclusions</a> - Understanding +D, -D, +d, -d</li>
+<li><a href="#superiority">Superiority</a> - Resolving conflicts</li>
+<li><a href="#negation">Negation</a> - Strong negation in Spindle</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="rules-and-facts"><a class="header" href="#rules-and-facts">Rules and Facts</a></h1>
+<p>Spindle supports four types of rules, each with different semantics for how conclusions are drawn.</p>
+<h2 id="facts-"><a class="header" href="#facts-">Facts (<code>&gt;&gt;</code>)</a></h2>
+<p>Facts are unconditional truths. They have no body (antecedent) and are always true.</p>
+<p><strong>DFL:</strong></p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+f3: &gt;&gt; -guilty    # Negated fact
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(given (not guilty))
+</code></pre>
+<p>Facts produce <strong>definite conclusions</strong> (<code>+D</code>) that cannot be defeated.</p>
+<h2 id="strict-rules--"><a class="header" href="#strict-rules--">Strict Rules (<code>-&gt;</code>)</a></h2>
+<p>Strict rules express necessary implications. If the body is true, the head <strong>must</strong> be true.</p>
+<p><strong>DFL:</strong></p>
+<pre><code class="language-dfl">r1: penguin -&gt; bird        # All penguins are birds
+r2: human, mortal -&gt; dies  # All mortal humans die
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(always r1 penguin bird)
+(always r2 (and human mortal) dies)
+</code></pre>
+<p>Strict rules produce <strong>definite conclusions</strong> (<code>+D</code>). They cannot be defeated by defeasible rules.</p>
+<h3 id="when-to-use-strict-rules"><a class="header" href="#when-to-use-strict-rules">When to Use Strict Rules</a></h3>
+<p>Use strict rules for:</p>
+<ul>
+<li>Definitional relationships (<code>penguin -&gt; bird</code>)</li>
+<li>Logical necessities (<code>p, p-&gt;q -&gt; q</code>)</li>
+<li>Constraints that have no exceptions</li>
+</ul>
+<h2 id="defeasible-rules-"><a class="header" href="#defeasible-rules-">Defeasible Rules (<code>=&gt;</code>)</a></h2>
+<p>Defeasible rules express typical or default behavior that may have exceptions.</p>
+<p><strong>DFL:</strong></p>
+<pre><code class="language-dfl">r1: bird =&gt; flies           # Birds typically fly
+r2: student =&gt; has_loans    # Students typically have loans
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 student has_loans)
+</code></pre>
+<p>Defeasible rules produce <strong>defeasible conclusions</strong> (<code>+d</code>) that can be defeated by:</p>
+<ul>
+<li>Strict rules proving the opposite</li>
+<li>Superior defeasible rules</li>
+<li>Defeaters</li>
+</ul>
+<h3 id="when-to-use-defeasible-rules"><a class="header" href="#when-to-use-defeasible-rules">When to Use Defeasible Rules</a></h3>
+<p>Use defeasible rules for:</p>
+<ul>
+<li>Default behaviors with exceptions</li>
+<li>Typical properties</li>
+<li>Rules of thumb</li>
+</ul>
+<h2 id="defeaters-"><a class="header" href="#defeaters-">Defeaters (<code>~&gt;</code>)</a></h2>
+<p>Defeaters are special rules that <strong>block</strong> conclusions without proving anything themselves.</p>
+<p><strong>DFL:</strong></p>
+<pre><code class="language-dfl">d1: broken_wing ~&gt; flies    # A broken wing blocks "flies"
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(except d1 broken_wing flies)
+</code></pre>
+<h3 id="defeater-vs-defeasible-rule"><a class="header" href="#defeater-vs-defeasible-rule">Defeater vs. Defeasible Rule</a></h3>
+<pre><code class="language-dfl"># Defeasible rule: proves -flies
+r1: penguin =&gt; -flies
+
+# Defeater: only blocks flies, doesn't prove -flies
+d1: sick ~&gt; flies
+</code></pre>
+<p>The difference:</p>
+<ul>
+<li><code>r1</code> can prove <code>-flies</code> if its body is satisfied</li>
+<li><code>d1</code> can only block <code>flies</code>, it never proves <code>-flies</code></li>
+</ul>
+<h3 id="when-to-use-defeaters"><a class="header" href="#when-to-use-defeaters">When to Use Defeaters</a></h3>
+<p>Use defeaters when:</p>
+<ul>
+<li>You want to express doubt without asserting the opposite</li>
+<li>Evidence should block a conclusion but not prove its negation</li>
+<li>You’re modeling uncertainty</li>
+</ul>
+<h2 id="rule-bodies-antecedents"><a class="header" href="#rule-bodies-antecedents">Rule Bodies (Antecedents)</a></h2>
+<p>Rule bodies can contain:</p>
+<h3 id="single-literal"><a class="header" href="#single-literal">Single Literal</a></h3>
+<pre><code class="language-dfl">r1: bird =&gt; flies
+</code></pre>
+<h3 id="multiple-literals-conjunction"><a class="header" href="#multiple-literals-conjunction">Multiple Literals (Conjunction)</a></h3>
+<pre><code class="language-dfl">r1: bird, healthy =&gt; flies
+r2: student, employed =&gt; busy
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(normally r1 (and bird healthy) flies)
+</code></pre>
+<h3 id="negated-literals"><a class="header" href="#negated-literals">Negated Literals</a></h3>
+<pre><code class="language-dfl">r1: bird, -penguin =&gt; flies   # Non-penguin birds fly
+</code></pre>
+<h2 id="rule-heads-consequents"><a class="header" href="#rule-heads-consequents">Rule Heads (Consequents)</a></h2>
+<p>Rule heads are single literals that can be:</p>
+<h3 id="positive"><a class="header" href="#positive">Positive</a></h3>
+<pre><code class="language-dfl">r1: bird =&gt; flies
+</code></pre>
+<h3 id="negated"><a class="header" href="#negated">Negated</a></h3>
+<pre><code class="language-dfl">r1: penguin =&gt; -flies
+</code></pre>
+<h2 id="rule-labels"><a class="header" href="#rule-labels">Rule Labels</a></h2>
+<p>Every rule has a label (identifier) used for:</p>
+<ul>
+<li>Superiority relations (<code>r2 &gt; r1</code>)</li>
+<li>Explanations</li>
+<li>Debugging</li>
+</ul>
+<p><strong>DFL:</strong> Labels are required and appear before the colon:</p>
+<pre><code class="language-dfl">my_rule: bird =&gt; flies
+</code></pre>
+<p><strong>SPL:</strong> Labels are optional (auto-generated if omitted):</p>
+<pre><code class="language-lisp">(normally r1 bird flies)      ; labeled r1
+(normally bird flies)         ; auto-labeled
+</code></pre>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rule Type</th><th>Symbol</th><th>Conclusion</th><th>Can be Defeated?</th></tr>
+</thead>
+<tbody>
+<tr><td>Fact</td><td><code>&gt;&gt;</code></td><td>+D</td><td>No</td></tr>
+<tr><td>Strict</td><td><code>-&gt;</code></td><td>+D</td><td>No</td></tr>
+<tr><td>Defeasible</td><td><code>=&gt;</code></td><td>+d</td><td>Yes</td></tr>
+<tr><td>Defeater</td><td><code>~&gt;</code></td><td>None (blocks only)</td><td>N/A</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="conclusions"><a class="header" href="#conclusions">Conclusions</a></h1>
+<p>Spindle computes four types of conclusions, representing different levels of provability.</p>
+<h2 id="the-four-conclusion-types"><a class="header" href="#the-four-conclusion-types">The Four Conclusion Types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Symbol</th><th>Name</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>+D</code></td><td>Definitely Provable</td><td>Proven via facts and strict rules only</td></tr>
+<tr><td><code>-D</code></td><td>Definitely Not Provable</td><td>Cannot be proven via strict rules</td></tr>
+<tr><td><code>+d</code></td><td>Defeasibly Provable</td><td>Proven via defeasible rules (may be defeated)</td></tr>
+<tr><td><code>-d</code></td><td>Defeasibly Not Provable</td><td>Cannot be proven even defeasibly</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="definite-conclusions-d---d"><a class="header" href="#definite-conclusions-d---d">Definite Conclusions (+D / -D)</a></h2>
+<p><strong>Definite provability</strong> uses only facts and strict rules. No defeasible reasoning is involved.</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+r1: bird -&gt; animal    # Strict rule
+r2: bird =&gt; flies     # Defeasible rule
+</code></pre>
+<p>Conclusions:</p>
+<ul>
+<li><code>+D bird</code> - fact</li>
+<li><code>+D animal</code> - via strict rule r1</li>
+<li><code>-D flies</code> - no strict path to prove flies</li>
+</ul>
+<h3 id="when-is-d-useful"><a class="header" href="#when-is-d-useful">When is +D Useful?</a></h3>
+<p>Use definite provability when you need certainty:</p>
+<ul>
+<li>Legal requirements that must be met</li>
+<li>Safety constraints</li>
+<li>Logical necessities</li>
+</ul>
+<h2 id="defeasible-conclusions-d---d"><a class="header" href="#defeasible-conclusions-d---d">Defeasible Conclusions (+d / -d)</a></h2>
+<p><strong>Defeasible provability</strong> extends definite provability with defeasible rules.</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+r1: bird =&gt; flies
+</code></pre>
+<p>Conclusions:</p>
+<ul>
+<li><code>+d bird</code> - fact (also +D)</li>
+<li><code>+d flies</code> - via defeasible rule r1</li>
+</ul>
+<h3 id="the-relationship"><a class="header" href="#the-relationship">The Relationship</a></h3>
+<pre><code>+D implies +d
+   If definitely provable, then defeasibly provable
+
+-d implies -D
+   If not defeasibly provable, then definitely not provable
+</code></pre>
+<h2 id="conflict-and-ambiguity"><a class="header" href="#conflict-and-ambiguity">Conflict and Ambiguity</a></h2>
+<p>When rules conflict without a superiority relation, neither conclusion is provable:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; trigger
+r1: trigger =&gt; outcome
+r2: trigger =&gt; -outcome
+# No superiority declared
+</code></pre>
+<p>Conclusions:</p>
+<ul>
+<li><code>+D trigger</code></li>
+<li><code>-d outcome</code> - blocked by r2</li>
+<li><code>-d -outcome</code> - blocked by r1</li>
+</ul>
+<p>Both outcomes are <strong>ambiguous</strong> - neither can be proven.</p>
+<h2 id="resolved-conflict"><a class="header" href="#resolved-conflict">Resolved Conflict</a></h2>
+<p>With superiority, the conflict is resolved:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; trigger
+r1: trigger =&gt; outcome
+r2: trigger =&gt; -outcome
+r1 &gt; r2
+</code></pre>
+<p>Conclusions:</p>
+<ul>
+<li><code>+d outcome</code> - r1 wins</li>
+<li><code>-d -outcome</code> - r2 is defeated</li>
+</ul>
+<h2 id="example-multi-level"><a class="header" href="#example-multi-level">Example: Multi-Level</a></h2>
+<pre><code class="language-dfl">f1: &gt;&gt; a
+r1: a -&gt; b           # Strict: a implies b
+r2: b =&gt; c           # Defeasible: b typically implies c
+r3: b =&gt; -c          # Defeasible: b typically implies -c
+r2 &gt; r3              # r2 wins
+</code></pre>
+<p>Conclusions:</p>
+<ul>
+<li><code>+D a</code> - fact</li>
+<li><code>+D b</code> - strict from a</li>
+<li><code>+d a</code> - (implied by +D)</li>
+<li><code>+d b</code> - (implied by +D)</li>
+<li><code>+d c</code> - defeasible, r2 wins over r3</li>
+<li><code>-D c</code> - no strict path</li>
+<li><code>-D -c</code> - no strict path</li>
+<li><code>-d -c</code> - r3 defeated</li>
+</ul>
+<h2 id="negative-conclusions"><a class="header" href="#negative-conclusions">Negative Conclusions</a></h2>
+<p>Negative conclusions (<code>-D</code>, <code>-d</code>) indicate unprovability:</p>
+<h3 id="-d-definitely-not-provable"><a class="header" href="#-d-definitely-not-provable">-D (Definitely Not Provable)</a></h3>
+<p>No chain of facts and strict rules leads to this literal.</p>
+<h3 id="-d-defeasibly-not-provable"><a class="header" href="#-d-defeasibly-not-provable">-d (Defeasibly Not Provable)</a></h3>
+<p>No chain of rules (including defeasible) leads to this literal, OR the literal is blocked by:</p>
+<ul>
+<li>A strict rule proving the complement</li>
+<li>A superior defeasible rule</li>
+<li>A defeater</li>
+</ul>
+<h2 id="reading-spindle-output"><a class="header" href="#reading-spindle-output">Reading Spindle Output</a></h2>
+<pre><code class="language-bash">$ spindle penguin.dfl
++D bird
++D penguin
++d bird
++d penguin
++d -flies
+-D flies
+-D -flies
+-d flies
+</code></pre>
+<p>Interpretation:</p>
+<ul>
+<li><code>bird</code> and <code>penguin</code> are facts (both +D and +d)</li>
+<li><code>-flies</code> is defeasibly provable (penguin rule wins)</li>
+<li><code>flies</code> is not provable at any level</li>
+<li>Neither <code>flies</code> nor <code>-flies</code> is definitely provable</li>
+</ul>
+<h2 id="filtering-output"><a class="header" href="#filtering-output">Filtering Output</a></h2>
+<p>Show only positive conclusions:</p>
+<pre><code class="language-bash">spindle --positive penguin.dfl
+</code></pre>
+<p>Output:</p>
+<pre><code>+D bird
++D penguin
++d bird
++d penguin
++d -flies
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="superiority"><a class="header" href="#superiority">Superiority</a></h1>
+<p>Superiority relations resolve conflicts between competing rules.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>When two rules conclude opposite things, we have a conflict:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+r1: bird =&gt; flies
+r2: penguin =&gt; -flies
+</code></pre>
+<p>Both r1 and r2 fire. Without superiority, we get <strong>ambiguity</strong> - neither <code>flies</code> nor <code>-flies</code> is provable.</p>
+<h2 id="declaring-superiority"><a class="header" href="#declaring-superiority">Declaring Superiority</a></h2>
+<p>The <code>&gt;</code> operator declares that one rule is superior to another:</p>
+<pre><code class="language-dfl">r2 &gt; r1    # r2 beats r1
+</code></pre>
+<p>Now when both rules fire, r2 wins and <code>-flies</code> is provable.</p>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(prefer r2 r1)
+</code></pre>
+<h2 id="superiority-chains"><a class="header" href="#superiority-chains">Superiority Chains</a></h2>
+<p>You can declare chains of superiority:</p>
+<p><strong>DFL:</strong></p>
+<pre><code class="language-dfl">r3 &gt; r2
+r2 &gt; r1
+</code></pre>
+<p><strong>SPL (shorthand):</strong></p>
+<pre><code class="language-lisp">(prefer r3 r2 r1)   ; r3 &gt; r2 &gt; r1
+</code></pre>
+<h2 id="transitivity"><a class="header" href="#transitivity">Transitivity</a></h2>
+<p>Superiority is <strong>not automatically transitive</strong>. If you need <code>r3 &gt; r1</code>, declare it explicitly:</p>
+<pre><code class="language-dfl">r3 &gt; r2
+r2 &gt; r1
+r3 &gt; r1    # Must be explicit
+</code></pre>
+<h2 id="conflict-resolution-algorithm"><a class="header" href="#conflict-resolution-algorithm">Conflict Resolution Algorithm</a></h2>
+<p>When evaluating a defeasible conclusion:</p>
+<ol>
+<li>Find all rules that could prove the literal</li>
+<li>Find all rules that could prove the complement (attackers)</li>
+<li>For each attacker with satisfied body:
+<ul>
+<li>If no defender is superior to it → blocked</li>
+<li>If some defender is superior → attack fails</li>
+</ul>
+</li>
+<li>If all attacks fail → conclusion is provable</li>
+</ol>
+<h2 id="example-three-way-conflict"><a class="header" href="#example-three-way-conflict">Example: Three-Way Conflict</a></h2>
+<pre><code class="language-dfl">f1: &gt;&gt; a
+f2: &gt;&gt; b
+f3: &gt;&gt; c
+
+r1: a =&gt; result
+r2: b =&gt; -result
+r3: c =&gt; result
+
+r1 &gt; r2    # r1 beats r2
+r3 &gt; r2    # r3 beats r2
+</code></pre>
+<p>Analysis:</p>
+<ul>
+<li>r2 attacks <code>result</code></li>
+<li>Both r1 and r3 are superior to r2</li>
+<li>The attack is defeated</li>
+<li><code>+d result</code></li>
+</ul>
+<h2 id="symmetric-conflicts"><a class="header" href="#symmetric-conflicts">Symmetric Conflicts</a></h2>
+<p>If two rules are equally superior over each other (or neither is superior), ambiguity results:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; trigger
+r1: trigger =&gt; a
+r2: trigger =&gt; -a
+# No superiority
+</code></pre>
+<p>Result: Neither <code>a</code> nor <code>-a</code> is provable.</p>
+<h2 id="defeating-defeaters"><a class="header" href="#defeating-defeaters">Defeating Defeaters</a></h2>
+<p>Defeaters can be overridden by superiority:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+f2: &gt;&gt; healthy
+
+r1: bird =&gt; flies
+d1: bird ~&gt; flies      # Defeater blocks flies
+r2: healthy =&gt; flies
+
+r2 &gt; d1                # Healthy birds overcome the defeater
+</code></pre>
+<p>If both <code>bird</code> and <code>healthy</code> are true, r2 beats d1 and <code>flies</code> is provable.</p>
+<h2 id="strict-rules-and-superiority"><a class="header" href="#strict-rules-and-superiority">Strict Rules and Superiority</a></h2>
+<p>Strict rules <strong>always win</strong> over defeasible rules, regardless of superiority:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; p
+r1: p -&gt; q           # Strict
+r2: p =&gt; -q          # Defeasible
+r2 &gt; r1              # This has no effect!
+</code></pre>
+<p>Result: <code>+D q</code> (strict rule wins)</p>
+<p>Superiority only affects conflicts between:</p>
+<ul>
+<li>Defeasible rules</li>
+<li>Defeasible rules and defeaters</li>
+<li>Defeaters</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="use-specificity"><a class="header" href="#use-specificity">Use Specificity</a></h3>
+<p>More specific rules should be superior:</p>
+<pre><code class="language-dfl">r2: penguin =&gt; -flies
+r1: bird =&gt; flies
+r2 &gt; r1    # Penguin is more specific than bird
+</code></pre>
+<h3 id="document-reasoning"><a class="header" href="#document-reasoning">Document Reasoning</a></h3>
+<p>Use comments to explain why one rule beats another:</p>
+<pre><code class="language-dfl"># Medical override: confirmed diagnosis beats symptoms
+r_diagnosis &gt; r_symptoms
+</code></pre>
+<h3 id="avoid-cycles"><a class="header" href="#avoid-cycles">Avoid Cycles</a></h3>
+<p>Don’t create circular superiority:</p>
+<pre><code class="language-dfl"># BAD - creates a cycle
+r1 &gt; r2
+r2 &gt; r1
+</code></pre>
+<p>This leads to undefined behavior.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="negation"><a class="header" href="#negation">Negation</a></h1>
+<p>Spindle uses <strong>strong negation</strong> (also called explicit negation), not negation-as-failure.</p>
+<h2 id="strong-negation-vs-negation-as-failure"><a class="header" href="#strong-negation-vs-negation-as-failure">Strong Negation vs. Negation-as-Failure</a></h2>
+<h3 id="negation-as-failure-naf"><a class="header" href="#negation-as-failure-naf">Negation-as-Failure (NAF)</a></h3>
+<p>Used in Prolog and many logic programming systems:</p>
+<ul>
+<li>“not P” means “P cannot be proven”</li>
+<li>Absence of evidence is evidence of absence</li>
+</ul>
+<h3 id="strong-negation"><a class="header" href="#strong-negation">Strong Negation</a></h3>
+<p>Used in Spindle:</p>
+<ul>
+<li><code>-P</code> (or <code>~P</code>) is a separate proposition</li>
+<li>Must be explicitly proven</li>
+<li>Absence of <code>P</code> does not imply <code>-P</code></li>
+</ul>
+<h2 id="syntax"><a class="header" href="#syntax">Syntax</a></h2>
+<p>Both <code>-</code> and <code>~</code> denote negation:</p>
+<p><strong>DFL:</strong></p>
+<pre><code class="language-dfl">f1: &gt;&gt; -guilty       # Explicitly not guilty
+r1: penguin =&gt; ~flies
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(given (not guilty))
+(normally r1 penguin (not flies))
+</code></pre>
+<h2 id="three-valued-outcomes"><a class="header" href="#three-valued-outcomes">Three-Valued Outcomes</a></h2>
+<p>For any literal <code>P</code>, the outcome can be:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>State</th><th>Meaning</th><th>Conclusions</th></tr>
+</thead>
+<tbody>
+<tr><td>True</td><td>P is provable</td><td><code>+d P</code></td></tr>
+<tr><td>False</td><td>-P is provable</td><td><code>+d -P</code></td></tr>
+<tr><td>Unknown</td><td>Neither provable</td><td><code>-d P</code> and <code>-d -P</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="example-unknown-state"><a class="header" href="#example-unknown-state">Example: Unknown State</a></h2>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+r1: bird =&gt; flies
+# No information about grounded
+</code></pre>
+<p>Conclusions:</p>
+<ul>
+<li><code>+d flies</code> (via r1)</li>
+<li><code>-d grounded</code> (no rule proves it)</li>
+<li><code>-d -grounded</code> (no rule proves its negation either)</li>
+</ul>
+<p>The <code>grounded</code> literal is in an <strong>unknown</strong> state.</p>
+<h2 id="complementary-literals"><a class="header" href="#complementary-literals">Complementary Literals</a></h2>
+<p><code>P</code> and <code>-P</code> are <strong>complements</strong>. They interact in specific ways:</p>
+<h3 id="conflict"><a class="header" href="#conflict">Conflict</a></h3>
+<p>If rules prove both <code>P</code> and <code>-P</code>:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; a
+r1: a =&gt; p
+r2: a =&gt; -p
+</code></pre>
+<p>Without superiority, neither is provable (ambiguity).</p>
+<h3 id="definite-blocking"><a class="header" href="#definite-blocking">Definite Blocking</a></h3>
+<p>If <code>-P</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; -p        # Definite fact: -p
+r1: a =&gt; p       # Tries to prove p
+</code></pre>
+<p>Even if r1’s body is satisfied, <code>+d p</code> is blocked because <code>+D -p</code>.</p>
+<h2 id="negation-in-rule-bodies"><a class="header" href="#negation-in-rule-bodies">Negation in Rule Bodies</a></h2>
+<p>Negated literals can appear in rule bodies:</p>
+<pre><code class="language-dfl">r1: bird, -penguin =&gt; flies    # Non-penguin birds fly
+r2: student, -employed =&gt; needs_loan
+</code></pre>
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)
+</code></pre>
+<h2 id="double-negation"><a class="header" href="#double-negation">Double Negation</a></h2>
+<p><code>--P</code> is equivalent to <code>P</code>:</p>
+<pre><code class="language-dfl">r1: a =&gt; --flies    # Same as: a =&gt; flies
+</code></pre>
+<h2 id="consistency"><a class="header" href="#consistency">Consistency</a></h2>
+<p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>-P</code>:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; p
+f2: &gt;&gt; -p
+</code></pre>
+<p>Result:</p>
+<ul>
+<li><code>+D p</code></li>
+<li><code>+D -p</code></li>
+</ul>
+<p>This is an <strong>inconsistent theory</strong>. Spindle reports both conclusions without error.</p>
+<h3 id="detecting-inconsistency"><a class="header" href="#detecting-inconsistency">Detecting Inconsistency</a></h3>
+<p>To detect inconsistency, check for literals where both <code>+D P</code> and <code>+D -P</code> (or <code>+d P</code> and <code>+d -P</code>) are concluded.</p>
+<h2 id="closed-world-assumption"><a class="header" href="#closed-world-assumption">Closed World Assumption</a></h2>
+<p>Spindle does <strong>not</strong> use the Closed World Assumption by default. If you need it, add explicit rules:</p>
+<pre><code class="language-dfl"># CWA for 'guilty': if not proven guilty, then not guilty
+d1: &gt;&gt; -guilty           # Default: not guilty
+r1: evidence =&gt; guilty   # Can be overridden by evidence
+r1 &gt; d1
+</code></pre>
+<p>This pattern uses a defeatable default.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="dfl-format-reference"><a class="header" href="#dfl-format-reference">DFL Format Reference</a></h1>
+<p>DFL (Defeasible Logic Format) is a textual syntax for writing defeasible logic theories.</p>
+<h2 id="file-extension"><a class="header" href="#file-extension">File Extension</a></h2>
+<p><code>.dfl</code></p>
+<h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
+<p>Lines starting with <code>#</code> are comments:</p>
+<pre><code class="language-dfl"># This is a comment
+f1: &gt;&gt; bird   # Inline comment
+</code></pre>
+<h2 id="grammar"><a class="header" href="#grammar">Grammar</a></h2>
+<pre><code class="language-ebnf">theory      = (rule | superiority | comment | blank)*
+rule        = label ":" body? arrow head
+superiority = label "&gt;" label
+label       = identifier
+body        = literal ("," literal)*
+head        = literal
+literal     = negation? identifier
+negation    = "-" | "~" | "¬"
+arrow       = "&gt;&gt;" | "-&gt;" | "=&gt;" | "~&gt;"
+identifier  = [a-zA-Z_][a-zA-Z0-9_-]*
+comment     = "#" .*
+blank       = whitespace
+</code></pre>
+<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
+<h3 id="facts--1"><a class="header" href="#facts--1">Facts (<code>&gt;&gt;</code>)</a></h3>
+<p>No body, unconditional truth.</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+f3: &gt;&gt; -guilty
+</code></pre>
+<h3 id="strict-rules---1"><a class="header" href="#strict-rules---1">Strict Rules (<code>-&gt;</code>)</a></h3>
+<p>Body implies head necessarily.</p>
+<pre><code class="language-dfl">r1: penguin -&gt; bird
+r2: human, mortal -&gt; dies
+r3: a, b, c -&gt; result
+</code></pre>
+<h3 id="defeasible-rules--1"><a class="header" href="#defeasible-rules--1">Defeasible Rules (<code>=&gt;</code>)</a></h3>
+<p>Body typically implies head.</p>
+<pre><code class="language-dfl">r1: bird =&gt; flies
+r2: penguin =&gt; -flies
+r3: student, employed =&gt; busy
+</code></pre>
+<h3 id="defeaters--1"><a class="header" href="#defeaters--1">Defeaters (<code>~&gt;</code>)</a></h3>
+<p>Body blocks head (doesn’t prove it).</p>
+<pre><code class="language-dfl">d1: broken_wing ~&gt; flies
+d2: exception ~&gt; normal_behavior
+</code></pre>
+<h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
+<h3 id="simple-literals"><a class="header" href="#simple-literals">Simple Literals</a></h3>
+<pre><code class="language-dfl">bird
+flies
+has_feathers
+</code></pre>
+<h3 id="negated-literals-1"><a class="header" href="#negated-literals-1">Negated Literals</a></h3>
+<p>All three forms are equivalent:</p>
+<pre><code class="language-dfl">-flies
+~flies
+¬flies
+</code></pre>
+<h3 id="identifiers"><a class="header" href="#identifiers">Identifiers</a></h3>
+<p>Valid identifiers:</p>
+<ul>
+<li>Start with letter or underscore</li>
+<li>Contain letters, digits, underscores, hyphens</li>
+</ul>
+<pre><code class="language-dfl">bird
+_private
+has-feathers
+rule_1
+</code></pre>
+<h2 id="rule-bodies"><a class="header" href="#rule-bodies">Rule Bodies</a></h2>
+<h3 id="single-literal-1"><a class="header" href="#single-literal-1">Single Literal</a></h3>
+<pre><code class="language-dfl">r1: bird =&gt; flies
+</code></pre>
+<h3 id="multiple-literals-conjunction-1"><a class="header" href="#multiple-literals-conjunction-1">Multiple Literals (Conjunction)</a></h3>
+<p>Comma-separated:</p>
+<pre><code class="language-dfl">r1: bird, healthy =&gt; flies
+r2: a, b, c, d =&gt; result
+</code></pre>
+<h3 id="mixed-negation"><a class="header" href="#mixed-negation">Mixed Negation</a></h3>
+<pre><code class="language-dfl">r1: bird, -penguin =&gt; flies
+r2: student, -rich, -employed =&gt; needs_loan
+</code></pre>
+<h2 id="superiority-relations"><a class="header" href="#superiority-relations">Superiority Relations</a></h2>
+<p>Declare that one rule beats another:</p>
+<pre><code class="language-dfl">r2 &gt; r1
+more_specific &gt; general
+exception &gt; default
+</code></pre>
+<p>Multiple declarations:</p>
+<pre><code class="language-dfl">r3 &gt; r2
+r2 &gt; r1
+</code></pre>
+<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
+<pre><code class="language-dfl"># The Penguin Example
+# Demonstrates defeasible reasoning with exceptions
+
+# Facts
+f1: &gt;&gt; bird
+f2: &gt;&gt; penguin
+
+# Strict rule: all penguins are birds
+s1: penguin -&gt; bird
+
+# Defeasible rules
+r1: bird =&gt; flies
+r2: bird =&gt; has_feathers
+r3: penguin =&gt; -flies
+r4: penguin =&gt; swims
+
+# Superiority: penguin rules beat bird rules
+r3 &gt; r1
+
+# Defeater: broken wings block flying
+d1: broken_wing ~&gt; flies
+</code></pre>
+<h2 id="whitespace"><a class="header" href="#whitespace">Whitespace</a></h2>
+<ul>
+<li>Leading/trailing whitespace is ignored</li>
+<li>Whitespace around operators is optional</li>
+<li>Blank lines are ignored</li>
+</ul>
+<p>These are equivalent:</p>
+<pre><code class="language-dfl">r1: bird =&gt; flies
+r1:bird=&gt;flies
+r1 : bird =&gt; flies
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>Common errors:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Error</th><th>Example</th><th>Problem</th></tr>
+</thead>
+<tbody>
+<tr><td>Missing label</td><td><code>&gt;&gt; bird</code></td><td>Rules need labels</td></tr>
+<tr><td>Missing colon</td><td><code>r1 &gt;&gt; bird</code></td><td>Colon required after label</td></tr>
+<tr><td>Invalid arrow</td><td><code>r1: bird -&gt; flies</code></td><td>Wrong arrow for defeasible</td></tr>
+<tr><td>Undefined rule</td><td><code>r3 &gt; r1</code></td><td>r3 not defined</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="best-practices-1"><a class="header" href="#best-practices-1">Best Practices</a></h2>
+<ol>
+<li>
+<p><strong>Use meaningful labels</strong></p>
+<pre><code class="language-dfl"># Good
+bird_flies: bird =&gt; flies
+
+# Avoid
+r1: bird =&gt; flies
+</code></pre>
+</li>
+<li>
+<p><strong>Group related rules</strong></p>
+<pre><code class="language-dfl"># Bird rules
+r1: bird =&gt; flies
+r2: bird =&gt; has_feathers
+
+# Penguin rules
+r3: penguin =&gt; -flies
+</code></pre>
+</li>
+<li>
+<p><strong>Document superiority</strong></p>
+<pre><code class="language-dfl"># Penguin is more specific than bird
+r3 &gt; r1
+</code></pre>
+</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="spl-format-reference"><a class="header" href="#spl-format-reference">SPL Format Reference</a></h1>
+<p>SPL (Spindle Lisp) is a LISP-based DSL for defeasible logic with support for advanced features like variables, temporal reasoning, and metadata.</p>
+<h2 id="file-extension-1"><a class="header" href="#file-extension-1">File Extension</a></h2>
+<p><code>.spl</code></p>
+<h2 id="comments-1"><a class="header" href="#comments-1">Comments</a></h2>
+<p>Semicolon to end of line:</p>
+<pre><code class="language-lisp">; This is a comment
+(given bird)  ; Inline comment
+</code></pre>
+<h2 id="grammar-overview"><a class="header" href="#grammar-overview">Grammar Overview</a></h2>
+<pre><code class="language-ebnf">theory      = statement*
+statement   = fact | rule | prefer | meta
+fact        = "(given" literal ")"
+rule        = "(" keyword label? body head ")"
+keyword     = "always" | "normally" | "except"
+prefer      = "(prefer" label+ ")"
+meta        = "(meta" label property* ")"
+literal     = atom | "(" atom arg* ")" | "(not" literal ")"
+body        = literal | "(and" literal+ ")"
+atom        = identifier | variable
+variable    = "?" identifier
+</code></pre>
+<h2 id="facts"><a class="header" href="#facts">Facts</a></h2>
+<h3 id="simple-facts"><a class="header" href="#simple-facts">Simple Facts</a></h3>
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(given (not guilty))
+</code></pre>
+<h3 id="predicate-facts"><a class="header" href="#predicate-facts">Predicate Facts</a></h3>
+<pre><code class="language-lisp">(given (parent alice bob))
+(given (employed alice acme))
+</code></pre>
+<h3 id="flat-predicate-syntax"><a class="header" href="#flat-predicate-syntax">Flat Predicate Syntax</a></h3>
+<pre><code class="language-lisp">(given parent alice bob)     ; Same as (given (parent alice bob))
+(given employed alice acme)
+</code></pre>
+<h2 id="rules-1"><a class="header" href="#rules-1">Rules</a></h2>
+<h3 id="strict-rules-always"><a class="header" href="#strict-rules-always">Strict Rules (<code>always</code>)</a></h3>
+<pre><code class="language-lisp">(always r1 penguin bird)
+(always r2 (and human mortal) dies)
+</code></pre>
+<h3 id="defeasible-rules-normally"><a class="header" href="#defeasible-rules-normally">Defeasible Rules (<code>normally</code>)</a></h3>
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 penguin (not flies))
+</code></pre>
+<h3 id="defeaters-except"><a class="header" href="#defeaters-except">Defeaters (<code>except</code>)</a></h3>
+<pre><code class="language-lisp">(except d1 broken-wing flies)
+</code></pre>
+<h3 id="unlabeled-rules"><a class="header" href="#unlabeled-rules">Unlabeled Rules</a></h3>
+<p>Labels are optional (auto-generated):</p>
+<pre><code class="language-lisp">(normally bird flies)        ; Gets label like "r1"
+(always penguin bird)        ; Gets label like "s1"
+</code></pre>
+<h2 id="literals-1"><a class="header" href="#literals-1">Literals</a></h2>
+<h3 id="simple"><a class="header" href="#simple">Simple</a></h3>
+<pre><code class="language-lisp">bird
+flies
+has-feathers
+</code></pre>
+<h3 id="negated-1"><a class="header" href="#negated-1">Negated</a></h3>
+<pre><code class="language-lisp">(not flies)
+(not (parent alice bob))
+</code></pre>
+<p>Or with prefix:</p>
+<pre><code class="language-lisp">~flies
+</code></pre>
+<h3 id="predicates-with-arguments"><a class="header" href="#predicates-with-arguments">Predicates with Arguments</a></h3>
+<pre><code class="language-lisp">(parent alice bob)
+(employed ?x acme)
+(ancestor ?x ?z)
+</code></pre>
+<h2 id="conjunction"><a class="header" href="#conjunction">Conjunction</a></h2>
+<p>Use <code>and</code> for multiple conditions:</p>
+<pre><code class="language-lisp">(normally r1 (and bird healthy) flies)
+(normally r2 (and student employed) busy)
+</code></pre>
+<h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
+<p>Variables start with <code>?</code>:</p>
+<pre><code class="language-lisp">(given (parent alice bob))
+(given (parent bob charlie))
+
+; Transitive closure
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+(normally r2 (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
+</code></pre>
+<h3 id="wildcard"><a class="header" href="#wildcard">Wildcard</a></h3>
+<p>Use <code>_</code> to match anything:</p>
+<pre><code class="language-lisp">(normally r1 (parent _ ?y) (has-parent ?y))
+</code></pre>
+<h2 id="superiority-1"><a class="header" href="#superiority-1">Superiority</a></h2>
+<h3 id="two-rules"><a class="header" href="#two-rules">Two Rules</a></h3>
+<pre><code class="language-lisp">(prefer r2 r1)    ; r2 &gt; r1
+</code></pre>
+<h3 id="chain"><a class="header" href="#chain">Chain</a></h3>
+<pre><code class="language-lisp">(prefer r3 r2 r1)  ; r3 &gt; r2 &gt; r1
+</code></pre>
+<p>Expands to:</p>
+<pre><code class="language-lisp">(prefer r3 r2)
+(prefer r2 r1)
+</code></pre>
+<h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
+<p>Attach metadata to rules:</p>
+<pre><code class="language-lisp">(meta r1
+  (description "Birds normally fly")
+  (confidence 0.9)
+  (source "ornithology-handbook"))
+</code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<pre><code class="language-lisp">(meta rule-label
+  (key "string value")
+  (key2 ("list" "of" "values")))
+</code></pre>
+<h2 id="modal-operators"><a class="header" href="#modal-operators">Modal Operators</a></h2>
+<h3 id="obligation-must"><a class="header" href="#obligation-must">Obligation (<code>must</code>)</a></h3>
+<pre><code class="language-lisp">(normally signed-contract (must pay))
+</code></pre>
+<h3 id="permission-may"><a class="header" href="#permission-may">Permission (<code>may</code>)</a></h3>
+<pre><code class="language-lisp">(normally member (may access))
+</code></pre>
+<h3 id="forbidden-forbidden"><a class="header" href="#forbidden-forbidden">Forbidden (<code>forbidden</code>)</a></h3>
+<pre><code class="language-lisp">(normally unauthorized (forbidden enter))
+</code></pre>
+<h2 id="temporal-reasoning"><a class="header" href="#temporal-reasoning">Temporal Reasoning</a></h2>
+<h3 id="time-points"><a class="header" href="#time-points">Time Points</a></h3>
+<pre><code class="language-lisp">(moment 2024)                    ; Year
+(moment 2024 6 15)               ; Year, month, day
+(moment 2024 6 15 14 30 0 "UTC") ; Full timestamp
+(moment "2024-06-15T14:30:00Z")  ; ISO 8601
+inf                              ; Positive infinity
+-inf                             ; Negative infinity
+</code></pre>
+<h3 id="during"><a class="header" href="#during">During</a></h3>
+<pre><code class="language-lisp">(given (during bird 1 10))
+(given (during (employed alice acme) (moment 2020) (moment 2023)))
+</code></pre>
+<h3 id="allen-relations"><a class="header" href="#allen-relations">Allen Relations</a></h3>
+<p>All 13 Allen interval relations:</p>
+<pre><code class="language-lisp">(before ?t1 ?t2)       ; t1 ends before t2 starts
+(after ?t1 ?t2)        ; t1 starts after t2 ends
+(meets ?t1 ?t2)        ; t1 ends exactly when t2 starts
+(met-by ?t1 ?t2)       ; t1 starts exactly when t2 ends
+(overlaps ?t1 ?t2)     ; t1 starts before t2, ends during t2
+(overlapped-by ?t1 ?t2)
+(contains ?t1 ?t2)     ; t1 strictly contains t2
+(within ?t1 ?t2)       ; t1 is strictly within t2
+(starts ?t1 ?t2)       ; Same start, t1 ends first
+(started-by ?t1 ?t2)
+(finishes ?t1 ?t2)     ; t1 starts after t2, same end
+(finished-by ?t1 ?t2)
+(equals ?t1 ?t2)       ; Same start and end
+</code></pre>
+<h2 id="complete-example-1"><a class="header" href="#complete-example-1">Complete Example</a></h2>
+<pre><code class="language-lisp">; The Penguin Example
+
+; Facts
+(given bird)
+(given penguin)
+
+; Strict rule
+(always s1 penguin bird)
+
+; Defeasible rules
+(normally r1 bird flies)
+(normally r2 bird has-feathers)
+(normally r3 penguin (not flies))
+(normally r4 penguin swims)
+
+; Superiority
+(prefer r3 r1)
+
+; Defeater
+(except d1 broken-wing flies)
+
+; Metadata
+(meta r1 (description "Birds typically fly"))
+(meta r3 (description "Penguins are an exception"))
+</code></pre>
+<h2 id="dfl-vs-spl-comparison"><a class="header" href="#dfl-vs-spl-comparison">DFL vs SPL Comparison</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concept</th><th>DFL</th><th>SPL</th></tr>
+</thead>
+<tbody>
+<tr><td>Fact</td><td><code>f1: &gt;&gt; bird</code></td><td><code>(given bird)</code></td></tr>
+<tr><td>Strict</td><td><code>r1: a -&gt; b</code></td><td><code>(always r1 a b)</code></td></tr>
+<tr><td>Defeasible</td><td><code>r1: a =&gt; b</code></td><td><code>(normally r1 a b)</code></td></tr>
+<tr><td>Defeater</td><td><code>d1: a ~&gt; b</code></td><td><code>(except d1 a b)</code></td></tr>
+<tr><td>Superiority</td><td><code>r2 &gt; r1</code></td><td><code>(prefer r2 r1)</code></td></tr>
+<tr><td>Negation</td><td><code>-flies</code></td><td><code>(not flies)</code></td></tr>
+<tr><td>Conjunction</td><td><code>a, b =&gt; c</code></td><td><code>(normally (and a b) c)</code></td></tr>
+<tr><td>Variables</td><td>Not supported</td><td><code>?x</code>, <code>?y</code></td></tr>
+<tr><td>Predicates</td><td>Not supported</td><td><code>(parent ?x ?y)</code></td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
+<p>The <code>spindle</code> command-line tool for reasoning about defeasible logic theories.</p>
+<h2 id="installation-2"><a class="header" href="#installation-2">Installation</a></h2>
+<pre><code class="language-bash">cargo install --path crates/spindle-cli
+</code></pre>
+<h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
+<pre><code class="language-bash">spindle [OPTIONS] &lt;FILE&gt;
+spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt;
+</code></pre>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<h3 id="reason-default"><a class="header" href="#reason-default">reason (default)</a></h3>
+<p>Perform defeasible reasoning on a theory.</p>
+<pre><code class="language-bash">spindle examples/penguin.dfl
+spindle reason examples/penguin.dfl
+</code></pre>
+<h3 id="validate"><a class="header" href="#validate">validate</a></h3>
+<p>Check syntax without reasoning.</p>
+<pre><code class="language-bash">spindle validate examples/penguin.dfl
+</code></pre>
+<p>Output on success:</p>
+<pre><code>Valid DFL theory.
+</code></pre>
+<p>Output on error:</p>
+<pre><code>Error at line 5: could not parse: invalid =&gt; syntax
+</code></pre>
+<h3 id="stats"><a class="header" href="#stats">stats</a></h3>
+<p>Show theory statistics.</p>
+<pre><code class="language-bash">spindle stats examples/penguin.dfl
+</code></pre>
+<p>Output:</p>
+<pre><code>Theory Statistics:
+  Facts:       2
+  Strict:      1
+  Defeasible:  4
+  Defeaters:   1
+  Superiority: 1
+  Total rules: 8
+</code></pre>
+<h2 id="options"><a class="header" href="#options">Options</a></h2>
+<h3 id="--scalable"><a class="header" href="#--scalable"><code>--scalable</code></a></h3>
+<p>Use the scalable DL(d||) algorithm instead of standard DL(d).</p>
+<pre><code class="language-bash">spindle --scalable large-theory.dfl
+</code></pre>
+<p>Recommended for theories with:</p>
+<ul>
+<li>More than 1000 rules</li>
+<li>Complex conflict resolution</li>
+<li>Long inference chains</li>
+</ul>
+<h3 id="--positive"><a class="header" href="#--positive"><code>--positive</code></a></h3>
+<p>Show only positive conclusions (+D, +d).</p>
+<pre><code class="language-bash">spindle --positive examples/penguin.dfl
+</code></pre>
+<p>Output:</p>
+<pre><code>+D bird
++D penguin
++d bird
++d penguin
++d -flies
+</code></pre>
+<h2 id="file-format-detection"><a class="header" href="#file-format-detection">File Format Detection</a></h2>
+<p>The CLI auto-detects format by extension:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Extension</th><th>Format</th></tr>
+</thead>
+<tbody>
+<tr><td><code>.dfl</code></td><td>DFL (Defeasible Logic Format)</td></tr>
+<tr><td><code>.spl</code></td><td>SPL (Spindle Lisp)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>Success</td></tr>
+<tr><td>1</td><td>Error (parse error, file not found, etc.)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="basic-reasoning"><a class="header" href="#basic-reasoning">Basic Reasoning</a></h3>
+<pre><code class="language-bash"># Reason about a theory
+spindle penguin.dfl
+
+# Same with explicit command
+spindle reason penguin.dfl
+</code></pre>
+<h3 id="validate-before-reasoning"><a class="header" href="#validate-before-reasoning">Validate Before Reasoning</a></h3>
+<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
+</code></pre>
+<h3 id="compare-algorithms"><a class="header" href="#compare-algorithms">Compare Algorithms</a></h3>
+<pre><code class="language-bash"># Standard algorithm
+spindle theory.dfl &gt; standard.txt
+
+# Scalable algorithm
+spindle --scalable theory.dfl &gt; scalable.txt
+
+# Compare (should be identical for correct theories)
+diff standard.txt scalable.txt
+</code></pre>
+<h3 id="scripting"><a class="header" href="#scripting">Scripting</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+for file in theories/*.dfl; do
+    echo "Processing $file..."
+    if spindle validate "$file"; then
+        spindle --positive "$file"
+    else
+        echo "Invalid: $file"
+    fi
+done
+</code></pre>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>SPINDLE_LOG</code></td><td>Set log level (error, warn, info, debug, trace)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle theory.dfl
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="algorithms"><a class="header" href="#algorithms">Algorithms</a></h1>
+<p>Spindle implements two reasoning algorithms: standard DL(d) and scalable DL(d||).</p>
+<h2 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h2>
+<p>The default algorithm uses <strong>forward chaining</strong> to compute conclusions.</p>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<ol>
+<li><strong>Initialize</strong>: Add all facts to the proven set</li>
+<li><strong>Propagate</strong>: Find rules whose bodies are satisfied</li>
+<li><strong>Fire</strong>: Add conclusions, checking for conflicts</li>
+<li><strong>Repeat</strong>: Until no new conclusions</li>
+</ol>
+<h3 id="pseudocode"><a class="header" href="#pseudocode">Pseudocode</a></h3>
+<pre><code>function reason(theory):
+    proven = {}
+
+    # Phase 1: Facts
+    for fact in theory.facts:
+        add_conclusion(+D, fact.head)
+        add_conclusion(+d, fact.head)
+        worklist.add(fact.head)
+
+    # Phase 2: Forward chaining
+    while worklist not empty:
+        literal = worklist.pop()
+
+        for rule in rules_with_body_containing(literal):
+            if body_satisfied(rule, proven):
+                if rule.type == Strict:
+                    add_conclusion(+D, rule.head)
+                    add_conclusion(+d, rule.head)
+                elif rule.type == Defeasible:
+                    if not blocked_by_superior(rule):
+                        add_conclusion(+d, rule.head)
+                # Defeaters don't add conclusions
+
+    # Phase 3: Negative conclusions
+    for literal in all_literals:
+        if literal not in proven[+D]:
+            add_conclusion(-D, literal)
+        if literal not in proven[+d]:
+            add_conclusion(-d, literal)
+</code></pre>
+<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
+<p>When a defeasible rule fires, we check for blocking:</p>
+<pre><code>function blocked_by_superior(rule):
+    complement = negate(rule.head)
+
+    for attacker in rules_for(complement):
+        if body_satisfied(attacker):
+            if attacker.type == Defeater:
+                if not is_superior(rule, attacker):
+                    return true  # Blocked by defeater
+            elif attacker.type == Defeasible:
+                if is_superior(attacker, rule):
+                    return true  # Blocked by superior rule
+
+    return false
+</code></pre>
+<h3 id="complexity"><a class="header" href="#complexity">Complexity</a></h3>
+<ul>
+<li>Time: O(n * m) where n = rules, m = average body size</li>
+<li>Space: O(n) for proven literals</li>
+</ul>
+<h2 id="scalable-dld"><a class="header" href="#scalable-dld">Scalable DL(d||)</a></h2>
+<p>For large theories, the three-phase algorithm is more efficient.</p>
+<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
+<pre><code>Theory → [Delta] → [Lambda] → [Partial] → Conclusions
+            ↓          ↓           ↓
+       Definite   Potential   Defeasible
+       (+D)       (approx)    (+d)
+</code></pre>
+<h3 id="phase-1-delta-closure-p_δ"><a class="header" href="#phase-1-delta-closure-p_δ">Phase 1: Delta Closure (P_Δ)</a></h3>
+<p>Computes <strong>definite conclusions</strong> using only facts and strict rules.</p>
+<pre><code>function compute_delta(theory):
+    delta = {}
+    worklist = theory.facts
+
+    while worklist not empty:
+        literal = worklist.pop()
+        delta.add(literal)
+
+        for rule in strict_rules_with_body(literal):
+            if body_satisfied(rule, delta):
+                if rule.head not in delta:
+                    worklist.add(rule.head)
+
+    return delta
+</code></pre>
+<p><strong>Result</strong>: All <code>+D</code> conclusions.</p>
+<h3 id="phase-2-lambda-closure-p_λ"><a class="header" href="#phase-2-lambda-closure-p_λ">Phase 2: Lambda Closure (P_λ)</a></h3>
+<p>Computes an <strong>over-approximation</strong> of defeasible conclusions.</p>
+<p>A literal is in lambda if:</p>
+<ol>
+<li>It’s in delta, OR</li>
+<li>Some strict/defeasible rule has:
+<ul>
+<li>Body fully in lambda</li>
+<li>Complement NOT in delta</li>
+</ul>
+</li>
+</ol>
+<pre><code>function compute_lambda(theory, delta):
+    lambda = delta.copy()
+    worklist = delta.copy()
+
+    while worklist not empty:
+        literal = worklist.pop()
+
+        for rule in rules_with_body(literal):
+            if rule.type in [Strict, Defeasible]:
+                if body_satisfied(rule, lambda):
+                    if complement(rule.head) not in delta:
+                        if rule.head not in lambda:
+                            lambda.add(rule.head)
+                            worklist.add(rule.head)
+
+    return lambda
+</code></pre>
+<p><strong>Key insight</strong>: If something is NOT in lambda, it’s definitely not defeasibly provable. This allows efficient pruning.</p>
+<h3 id="phase-3-partial-closure-p_"><a class="header" href="#phase-3-partial-closure-p_">Phase 3: Partial Closure (P_∂||)</a></h3>
+<p>Computes actual <strong>defeasible conclusions</strong> with conflict resolution.</p>
+<pre><code>function compute_partial(theory, delta, lambda):
+    partial = delta.copy()
+
+    candidates = lambda - delta  # Only check these
+    changed = true
+
+    while changed:
+        changed = false
+        for literal in candidates:
+            if literal not in partial:
+                if can_prove_defeasibly(literal, partial, lambda):
+                    partial.add(literal)
+                    changed = true
+
+    return partial
+</code></pre>
+<p>The <code>can_prove_defeasibly</code> function:</p>
+<pre><code>function can_prove_defeasibly(literal, partial, lambda):
+    # Need a supporting rule with satisfied body
+    has_support = false
+    for rule in rules_for(literal):
+        if rule.type in [Strict, Defeasible]:
+            if body_satisfied(rule, partial):
+                has_support = true
+                break
+
+    if not has_support:
+        return false
+
+    # All attacks must be defeated
+    for attacker in rules_for(complement(literal)):
+        # Attack fails if body not satisfiable
+        if not body_satisfiable(attacker, lambda):
+            continue
+
+        # Attack fails if we have a superior defender
+        if team_defeats(literal, attacker, partial):
+            continue
+
+        # This attack succeeds
+        return false
+
+    return true
+</code></pre>
+<h3 id="performance-comparison"><a class="header" href="#performance-comparison">Performance Comparison</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Standard</th><th>Scalable</th></tr>
+</thead>
+<tbody>
+<tr><td>Small theories (&lt;100 rules)</td><td>Faster</td><td>Overhead</td></tr>
+<tr><td>Large theories (&gt;1000 rules)</td><td>Slower</td><td>Faster</td></tr>
+<tr><td>Memory</td><td>Lower</td><td>Higher (3 sets)</td></tr>
+<tr><td>Conflicts</td><td>Per-rule check</td><td>Batch processing</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="when-to-use-scalable"><a class="header" href="#when-to-use-scalable">When to Use Scalable</a></h3>
+<p>Use <code>--scalable</code> when:</p>
+<ul>
+<li>Theory has &gt;1000 rules</li>
+<li>Many potential conflicts</li>
+<li>Long inference chains</li>
+<li>Lambda pruning will help</li>
+</ul>
+<h2 id="semi-naive-evaluation"><a class="header" href="#semi-naive-evaluation">Semi-Naive Evaluation</a></h2>
+<p>Phase 3 uses <strong>semi-naive evaluation</strong> for efficiency:</p>
+<p>Instead of checking all candidates each iteration, only check literals whose dependencies changed:</p>
+<pre><code>function compute_partial_seminaive(theory, delta, lambda):
+    partial = delta.copy()
+    worklist = rules_with_empty_body()
+
+    while worklist not empty:
+        literal = worklist.pop()
+
+        if can_prove_defeasibly(literal, partial, lambda):
+            partial.add(literal)
+
+            # Only add rules triggered by this literal
+            for rule in rules_with_body(literal):
+                if body_satisfied(rule, partial):
+                    worklist.add(rule.head)
+
+    return partial
+</code></pre>
+<p>This avoids redundant checks and provides significant speedup for large theories.</p>
+<h2 id="semantic-equivalence"><a class="header" href="#semantic-equivalence">Semantic Equivalence</a></h2>
+<p>Both algorithms produce identical results for well-formed theories:</p>
+<pre><code>∀ theory: reason(theory) ≡ reason_scalable(theory)
+</code></pre>
+<p>The test suite verifies this property across many test cases.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="variables-and-grounding"><a class="header" href="#variables-and-grounding">Variables and Grounding</a></h1>
+<p>Spindle supports first-order variables using Datalog-style bottom-up grounding.</p>
+<h2 id="variable-syntax"><a class="header" href="#variable-syntax">Variable Syntax</a></h2>
+<p>Variables are prefixed with <code>?</code>:</p>
+<pre><code class="language-lisp">?x
+?person
+?any_value
+</code></pre>
+<h2 id="basic-example"><a class="header" href="#basic-example">Basic Example</a></h2>
+<pre><code class="language-lisp">; Facts with predicates
+(given (parent alice bob))
+(given (parent bob charlie))
+
+; Rule with variables
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+</code></pre>
+<p>The rule <code>r1</code> matches against facts:</p>
+<ul>
+<li><code>(parent alice bob)</code> → <code>(ancestor alice bob)</code></li>
+<li><code>(parent bob charlie)</code> → <code>(ancestor bob charlie)</code></li>
+</ul>
+<h2 id="transitive-closure"><a class="header" href="#transitive-closure">Transitive Closure</a></h2>
+<p>A classic example - computing ancestors:</p>
+<pre><code class="language-lisp">; Base facts
+(given (parent alice bob))
+(given (parent bob charlie))
+(given (parent charlie david))
+
+; Base case: parents are ancestors
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+
+; Recursive case: ancestor of ancestor
+(normally r2 (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
+</code></pre>
+<p><strong>Results:</strong></p>
+<ul>
+<li><code>ancestor(alice, bob)</code> - via r1</li>
+<li><code>ancestor(bob, charlie)</code> - via r1</li>
+<li><code>ancestor(charlie, david)</code> - via r1</li>
+<li><code>ancestor(alice, charlie)</code> - via r2</li>
+<li><code>ancestor(bob, david)</code> - via r2</li>
+<li><code>ancestor(alice, david)</code> - via r2</li>
+</ul>
+<h2 id="how-grounding-works"><a class="header" href="#how-grounding-works">How Grounding Works</a></h2>
+<h3 id="step-1-collect-ground-facts"><a class="header" href="#step-1-collect-ground-facts">Step 1: Collect Ground Facts</a></h3>
+<p>Extract all predicate instances from facts:</p>
+<pre><code class="language-lisp">(given (parent alice bob))   →  parent(alice, bob)
+(given (parent bob charlie)) →  parent(bob, charlie)
+</code></pre>
+<h3 id="step-2-match-rule-bodies"><a class="header" href="#step-2-match-rule-bodies">Step 2: Match Rule Bodies</a></h3>
+<p>For each rule, find all substitutions that satisfy the body:</p>
+<pre><code class="language-lisp">(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+</code></pre>
+<p>Substitutions:</p>
+<ul>
+<li><code>{?x → alice, ?y → bob}</code></li>
+<li><code>{?x → bob, ?y → charlie}</code></li>
+</ul>
+<h3 id="step-3-generate-ground-rules"><a class="header" href="#step-3-generate-ground-rules">Step 3: Generate Ground Rules</a></h3>
+<p>Apply substitutions to create ground instances:</p>
+<pre><code class="language-lisp">; Ground instances of r1
+r1_1: parent(alice, bob) =&gt; ancestor(alice, bob)
+r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
+</code></pre>
+<h3 id="step-4-forward-chaining"><a class="header" href="#step-4-forward-chaining">Step 4: Forward Chaining</a></h3>
+<p>Reason over the ground theory using standard algorithms.</p>
+<h2 id="multiple-variables"><a class="header" href="#multiple-variables">Multiple Variables</a></h2>
+<pre><code class="language-lisp">(given (edge a b))
+(given (edge b c))
+(given (edge c d))
+
+(normally path (and (edge ?x ?y) (edge ?y ?z)) (connected ?x ?z))
+</code></pre>
+<p>The join <code>(edge ?x ?y)</code> ∧ <code>(edge ?y ?z)</code> requires matching on <code>?y</code>:</p>
+<ul>
+<li><code>{?x→a, ?y→b}</code> joins with <code>{?y→b, ?z→c}</code> → <code>connected(a, c)</code></li>
+<li><code>{?x→b, ?y→c}</code> joins with <code>{?y→c, ?z→d}</code> → <code>connected(b, d)</code></li>
+</ul>
+<h2 id="wildcard-variable"><a class="header" href="#wildcard-variable">Wildcard Variable</a></h2>
+<p>Use <code>_</code> when you don’t care about a value:</p>
+<pre><code class="language-lisp">(normally r1 (parent _ ?y) (has-parent ?y))
+</code></pre>
+<p>This matches any parent relationship.</p>
+<h2 id="variable-scope"><a class="header" href="#variable-scope">Variable Scope</a></h2>
+<p>Variables are scoped to their rule:</p>
+<pre><code class="language-lisp">; ?x in r1 is independent of ?x in r2
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+(normally r2 (friend ?x ?y) (knows ?x ?y))
+</code></pre>
+<h2 id="safety-requirement"><a class="header" href="#safety-requirement">Safety Requirement</a></h2>
+<p>All head variables must appear in the body (<strong>range-restricted</strong>):</p>
+<pre><code class="language-lisp">; VALID: ?x and ?y appear in body
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+
+; INVALID: ?z not in body (unsafe)
+(normally r2 (parent ?x ?y) (triple ?x ?y ?z))
+</code></pre>
+<p>Unsafe rules would generate infinite ground instances.</p>
+<h2 id="negation-with-variables"><a class="header" href="#negation-with-variables">Negation with Variables</a></h2>
+<p>Negated predicates in the body:</p>
+<pre><code class="language-lisp">(given (bird tweety))
+(given (penguin tweety))
+(given (bird eddie))
+
+; Non-penguin birds fly
+(normally r1 (and (bird ?x) (not (penguin ?x))) (flies ?x))
+</code></pre>
+<p><strong>Important</strong>: The negated predicate must be <strong>ground</strong> after substitution. Spindle uses stratified negation.</p>
+<h2 id="grounding-with-superiority"><a class="header" href="#grounding-with-superiority">Grounding with Superiority</a></h2>
+<p>Superiority applies to the <strong>rule template</strong>, affecting all ground instances:</p>
+<pre><code class="language-lisp">(given (bird tweety))
+(given (penguin tweety))
+
+(normally r1 (bird ?x) (flies ?x))
+(normally r2 (penguin ?x) (not (flies ?x)))
+(prefer r2 r1)
+</code></pre>
+<p>Result: <code>r2</code> beats <code>r1</code> for all matching instances, so <code>¬flies(tweety)</code>.</p>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<p>Grounding can produce many rules:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Facts</th><th>Rule Body Size</th><th>Ground Rules</th></tr>
+</thead>
+<tbody>
+<tr><td>100</td><td>1</td><td>100</td></tr>
+<tr><td>100</td><td>2 (join)</td><td>up to 10,000</td></tr>
+<tr><td>100</td><td>3 (join)</td><td>up to 1,000,000</td></tr>
+</tbody>
+</table>
+</div>
+<p>Tips:</p>
+<ul>
+<li>Keep rule bodies small</li>
+<li>Use specific predicates to reduce matching</li>
+<li>Consider the <code>--scalable</code> flag for large ground theories</li>
+</ul>
+<h2 id="dfl-limitations"><a class="header" href="#dfl-limitations">DFL Limitations</a></h2>
+<p>The DFL format does <strong>not</strong> support variables. Use SPL for first-order rules:</p>
+<pre><code class="language-dfl"># DFL - no variables, must enumerate manually
+r1: parent_alice_bob =&gt; ancestor_alice_bob
+r2: parent_bob_charlie =&gt; ancestor_bob_charlie
+</code></pre>
+<pre><code class="language-lisp">; SPL - single rule with variables
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="temporal-reasoning-1"><a class="header" href="#temporal-reasoning-1">Temporal Reasoning</a></h1>
+<p>Spindle supports temporal reasoning using Allen’s interval algebra.</p>
+<h2 id="time-points-1"><a class="header" href="#time-points-1">Time Points</a></h2>
+<h3 id="basic-moments"><a class="header" href="#basic-moments">Basic Moments</a></h3>
+<pre><code class="language-lisp">(moment 2024)                      ; Year only
+(moment 2024 6 15)                 ; Year, month, day
+(moment 2024 6 15 14 30 0 "UTC")   ; Full timestamp
+(moment "2024-06-15T14:30:00Z")    ; ISO 8601 string
+</code></pre>
+<h3 id="special-values"><a class="header" href="#special-values">Special Values</a></h3>
+<pre><code class="language-lisp">inf    ; Positive infinity (never ends)
+-inf   ; Negative infinity (always existed)
+</code></pre>
+<h2 id="during-operator"><a class="header" href="#during-operator">During Operator</a></h2>
+<p>The <code>during</code> operator associates a literal with a time interval:</p>
+<pre><code class="language-lisp">(given (during bird 1 10))
+(given (during (employed alice acme) (moment 2020) (moment 2023)))
+</code></pre>
+<p>Syntax: <code>(during literal start end)</code></p>
+<h3 id="example-employment-history"><a class="header" href="#example-employment-history">Example: Employment History</a></h3>
+<pre><code class="language-lisp">; Alice worked at Acme from 2020 to 2022
+(given (during (employed alice acme) (moment 2020) (moment 2022)))
+
+; Alice works at Beta from 2022 onwards
+(given (during (employed alice beta) (moment 2022) inf))
+
+; Employees can access company resources
+(normally r1 (during (employed ?x ?company) ?t) (during (can-access ?x ?company) ?t))
+</code></pre>
+<h2 id="allens-interval-relations"><a class="header" href="#allens-interval-relations">Allen’s Interval Relations</a></h2>
+<p>Spindle supports all 13 Allen interval relations for comparing time intervals.</p>
+<h3 id="basic-relations"><a class="header" href="#basic-relations">Basic Relations</a></h3>
+<pre><code class="language-lisp">(before ?t1 ?t2)    ; t1 ends before t2 starts
+                    ; |--t1--|
+                    ;           |--t2--|
+
+(after ?t1 ?t2)     ; t1 starts after t2 ends
+                    ;           |--t1--|
+                    ; |--t2--|
+
+(meets ?t1 ?t2)     ; t1 ends exactly when t2 starts
+                    ; |--t1--|
+                    ;        |--t2--|
+
+(met-by ?t1 ?t2)    ; t1 starts exactly when t2 ends
+                    ;        |--t1--|
+                    ; |--t2--|
+</code></pre>
+<h3 id="overlap-relations"><a class="header" href="#overlap-relations">Overlap Relations</a></h3>
+<pre><code class="language-lisp">(overlaps ?t1 ?t2)      ; t1 starts before t2, ends during t2
+                        ; |----t1----|
+                        ;       |----t2----|
+
+(overlapped-by ?t1 ?t2) ; t2 starts before t1, ends during t1
+                        ;       |----t1----|
+                        ; |----t2----|
+</code></pre>
+<h3 id="containment-relations"><a class="header" href="#containment-relations">Containment Relations</a></h3>
+<pre><code class="language-lisp">(contains ?t1 ?t2)  ; t1 strictly contains t2
+                    ; |--------t1--------|
+                    ;     |--t2--|
+
+(within ?t1 ?t2)    ; t1 is strictly within t2
+                    ;     |--t1--|
+                    ; |--------t2--------|
+</code></pre>
+<h3 id="boundary-sharing-relations"><a class="header" href="#boundary-sharing-relations">Boundary-Sharing Relations</a></h3>
+<pre><code class="language-lisp">(starts ?t1 ?t2)      ; Same start, t1 ends first
+                      ; |--t1--|
+                      ; |------t2------|
+
+(started-by ?t1 ?t2)  ; Same start, t2 ends first
+                      ; |------t1------|
+                      ; |--t2--|
+
+(finishes ?t1 ?t2)    ; t1 starts after t2, same end
+                      ;       |--t1--|
+                      ; |------t2----|
+
+(finished-by ?t1 ?t2) ; t2 starts after t1, same end
+                      ; |------t1----|
+                      ;       |--t2--|
+
+(equals ?t1 ?t2)      ; Same start and end
+                      ; |----t1----|
+                      ; |----t2----|
+</code></pre>
+<h2 id="temporal-rules"><a class="header" href="#temporal-rules">Temporal Rules</a></h2>
+<h3 id="propagating-temporal-properties"><a class="header" href="#propagating-temporal-properties">Propagating Temporal Properties</a></h3>
+<pre><code class="language-lisp">; If something is a bird during interval t, it has feathers during t
+(normally r1 (during bird ?t) (during has-feathers ?t))
+</code></pre>
+<h3 id="temporal-constraints"><a class="header" href="#temporal-constraints">Temporal Constraints</a></h3>
+<pre><code class="language-lisp">; Events that precede others
+(normally r1
+  (and (during event1 ?t1)
+       (during event2 ?t2)
+       (before ?t1 ?t2))
+  event1-precedes-event2)
+</code></pre>
+<h3 id="overlapping-intervals"><a class="header" href="#overlapping-intervals">Overlapping Intervals</a></h3>
+<pre><code class="language-lisp">; If two meetings overlap, there's a conflict
+(normally conflict
+  (and (during (meeting ?room ?m1) ?t1)
+       (during (meeting ?room ?m2) ?t2)
+       (overlaps ?t1 ?t2))
+  (scheduling-conflict ?room))
+</code></pre>
+<h2 id="example-project-timeline"><a class="header" href="#example-project-timeline">Example: Project Timeline</a></h2>
+<pre><code class="language-lisp">; Project phases
+(given (during (phase design) (moment 2024 1 1) (moment 2024 3 31)))
+(given (during (phase implementation) (moment 2024 3 1) (moment 2024 8 31)))
+(given (during (phase testing) (moment 2024 7 1) (moment 2024 9 30)))
+
+; Phases that overlap
+(normally r1
+  (and (during (phase ?p1) ?t1)
+       (during (phase ?p2) ?t2)
+       (overlaps ?t1 ?t2))
+  (parallel-work ?p1 ?p2))
+
+; Resource needed during phase
+(normally r2 (during (phase implementation) ?t) (during needs-developers ?t))
+</code></pre>
+<h2 id="querying-at-specific-times"><a class="header" href="#querying-at-specific-times">Querying at Specific Times</a></h2>
+<p>To query conclusions at a specific time, filter the results by temporal bounds.</p>
+<pre><code class="language-lisp">; Is alice employed at acme in 2021?
+; Check: (during (employed alice acme) ?t) where 2021 is within ?t
+</code></pre>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ol>
+<li><strong>Discrete time</strong>: Moments are discrete, not continuous</li>
+<li><strong>No duration arithmetic</strong>: Cannot compute <code>t1 + 5 days</code></li>
+<li><strong>No fuzzy boundaries</strong>: Intervals have precise start/end</li>
+<li><strong>Grounding required</strong>: Temporal variables must be bound by facts</li>
+</ol>
+<h2 id="best-practices-2"><a class="header" href="#best-practices-2">Best Practices</a></h2>
+<ol>
+<li>
+<p><strong>Use meaningful intervals</strong></p>
+<pre><code class="language-lisp">; Good: named intervals
+(given (during project-alpha (moment 2024 1 1) (moment 2024 12 31)))
+
+; Avoid: magic numbers
+(given (during x 1 365))
+</code></pre>
+</li>
+<li>
+<p><strong>Document temporal semantics</strong></p>
+<pre><code class="language-lisp">; Employment is during working hours only
+(meta r1 (note "Applies during business hours"))
+</code></pre>
+</li>
+<li>
+<p><strong>Consider open intervals</strong></p>
+<pre><code class="language-lisp">; Ongoing employment (no end date)
+(given (during (employed alice acme) (moment 2024) inf))
+</code></pre>
+</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="query-operators"><a class="header" href="#query-operators">Query Operators</a></h1>
+<p>Spindle provides three query operators for interactive reasoning: what-if, why-not, and abduction.</p>
+<h2 id="what-if-queries"><a class="header" href="#what-if-queries">What-If Queries</a></h2>
+<p><strong>What-if</strong> performs hypothetical reasoning: “What would be concluded if these facts were true?”</p>
+<h3 id="api"><a class="header" href="#api">API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::{what_if, HypotheticalClaim};
+use spindle_core::literal::Literal;
+
+let hypotheticals = vec![
+    HypotheticalClaim::new(Literal::simple("wounded"))
+];
+let goal = Literal::negated("flies");
+let result = what_if(&amp;theory, hypotheticals, &amp;goal);
+<span class="boring">}</span></code></pre>
+<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<ol>
+<li>Create a copy of the theory</li>
+<li>Add hypothetical facts</li>
+<li>Reason over the modified theory</li>
+<li>Return new conclusions</li>
+</ol>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p>Original theory:</p>
+<pre><code class="language-lisp">(given bird)
+(normally r1 bird flies)
+(normally r2 wounded (not flies))
+(prefer r2 r1)
+</code></pre>
+<p>Query: What if <code>wounded</code> is true?</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("wounded"))];
+let goal = Literal::negated("flies");
+let result = what_if(&amp;theory, hypotheticals, &amp;goal);
+// result.is_provable() = true
+// result.new_conclusions = [Literal("~flies")]
+<span class="boring">}</span></code></pre>
+<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h3>
+<ul>
+<li>Exploring consequences of decisions</li>
+<li>Scenario analysis</li>
+<li>Testing rule interactions</li>
+</ul>
+<h2 id="why-not-queries"><a class="header" href="#why-not-queries">Why-Not Queries</a></h2>
+<p><strong>Why-not</strong> explains why a literal is NOT provable.</p>
+<h3 id="api-1"><a class="header" href="#api-1">API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::why_not;
+use spindle_core::literal::Literal;
+
+let literal = Literal::simple("flies");
+let explanation = why_not(&amp;theory, &amp;literal);
+<span class="boring">}</span></code></pre>
+<h3 id="how-it-works-1-1"><a class="header" href="#how-it-works-1-1">How It Works</a></h3>
+<ol>
+<li>Check if the literal is actually unprovable</li>
+<li>Find rules that could prove it</li>
+<li>For each rule, identify what’s blocking it:
+<ul>
+<li>Missing body literals</li>
+<li>Defeated by superior rules</li>
+<li>Blocked by defeaters</li>
+</ul>
+</li>
+</ol>
+<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
+<p>Theory:</p>
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
+</code></pre>
+<p>Query: Why is <code>flies</code> not provable?</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let literal = Literal::simple("flies");
+let explanation = why_not(&amp;theory, &amp;literal);
+// explanation.literal = Literal("flies")
+// explanation.would_derive = Some("r1")
+// explanation.blocked_by = [BlockingCondition { ... }]
+<span class="boring">}</span></code></pre>
+<h3 id="result-structure"><a class="header" href="#result-structure">Result Structure</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct WhyNotResult {
+    literal: Literal,              // What we're asking about
+    would_derive: Option&lt;String&gt;,  // Rule that could prove it
+    blocked_by: Vec&lt;BlockingCondition&gt;,  // What's blocking
+}
+
+struct BlockingCondition {
+    blocking_type: BlockingType,   // Type of blocking
+    rule_label: String,            // The blocked rule
+    missing_literals: Vec&lt;Literal&gt;, // Missing premises (if applicable)
+    blocking_rule: Option&lt;String&gt;, // Blocking rule (if applicable)
+    explanation: String,           // Human-readable explanation
+}
+
+enum BlockingType {
+    MissingPremise,    // Body not satisfied
+    Defeated,          // Defeated by defeater
+    Contradicted,      // Complement is proven
+}
+<span class="boring">}</span></code></pre>
+<h3 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h3>
+<ul>
+<li>Debugging unexpected results</li>
+<li>Understanding rule interactions</li>
+<li>Explaining decisions to users</li>
+</ul>
+<h2 id="abduction"><a class="header" href="#abduction">Abduction</a></h2>
+<p><strong>Abduction</strong> finds hypotheses that would make a goal provable.</p>
+<h3 id="api-2"><a class="header" href="#api-2">API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::abduce;
+use spindle_core::literal::Literal;
+
+let goal = Literal::simple("goal");
+let result = abduce(&amp;theory, &amp;goal, max_solutions);
+<span class="boring">}</span></code></pre>
+<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
+<ol>
+<li>Start with the goal literal</li>
+<li>Find rules that could prove it</li>
+<li>For each rule, identify missing body literals</li>
+<li>Recursively abduce missing literals</li>
+<li>Return minimal sets of assumptions</li>
+</ol>
+<h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
+<p>Theory:</p>
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(normally r3 (and bird healthy) strong-flyer)
+(prefer r2 r1)
+</code></pre>
+<p>Query: What facts would make <code>flies</code> provable?</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let goal = Literal::simple("flies");
+let result = abduce(&amp;theory, &amp;goal, 3);
+// result.solutions[0].facts = HashSet { Literal("bird") }
+<span class="boring">}</span></code></pre>
+<h3 id="solution-structure"><a class="header" href="#solution-structure">Solution Structure</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct AbductionResult {
+    goal: Literal,
+    solutions: Vec&lt;AbductionSolution&gt;,
+}
+
+struct AbductionSolution {
+    facts: HashSet&lt;Literal&gt;,      // Facts to assume
+    rules_used: HashSet&lt;String&gt;,  // Rules involved
+    confidence: f64,              // Trust score (if weighted)
+}
+<span class="boring">}</span></code></pre>
+<h3 id="handling-conflicts"><a class="header" href="#handling-conflicts">Handling Conflicts</a></h3>
+<p>Abduction considers superiority:</p>
+<pre><code class="language-lisp">(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
+</code></pre>
+<p>Abducing <code>flies</code> might return:</p>
+<ul>
+<li><code>["bird", "healthy"]</code> with a rule <code>r3: bird, healthy =&gt; flies</code> where <code>r3 &gt; r2</code></li>
+<li>Or indicate that <code>flies</code> cannot be achieved given <code>penguin</code></li>
+</ul>
+<h3 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h3>
+<ul>
+<li>Diagnosis: What conditions explain symptoms?</li>
+<li>Planning: What actions achieve a goal?</li>
+<li>Debugging: What facts would fix this?</li>
+</ul>
+<h2 id="combined-queries"><a class="header" href="#combined-queries">Combined Queries</a></h2>
+<h3 id="debugging-workflow"><a class="header" href="#debugging-workflow">Debugging Workflow</a></h3>
+<ol>
+<li><strong>Observe</strong>: <code>flies</code> is not provable</li>
+<li><strong>Why-not</strong>: Discover r2 is blocking</li>
+<li><strong>What-if</strong>: Test <code>what_if(["healthy"])</code></li>
+<li><strong>Abduce</strong>: Find minimal fix</li>
+</ol>
+<h3 id="example-session"><a class="header" href="#example-session">Example Session</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// 1. Check current state
+let conclusions = theory.reason();
+assert!(!is_provable(&amp;conclusions, "flies"));
+
+// 2. Understand why
+let why = why_not(&amp;theory, "flies");
+println!("Blocked by: {:?}", why.blockers);
+
+// 3. Explore hypotheticals
+let hypo = what_if(&amp;theory, &amp;["super_bird"], "flies");
+if hypo.provable {
+    println!("Would work if super_bird");
+}
+
+// 4. Find minimal solution
+let solutions = abduce(&amp;theory, "flies", 3);
+println!("Minimal fixes: {:?}", solutions);
+<span class="boring">}</span></code></pre>
+<h2 id="webassembly-api"><a class="header" href="#webassembly-api">WebAssembly API</a></h2>
+<p>The WASM bindings expose these operators:</p>
+<pre><code class="language-typescript">import { Spindle } from 'spindle-wasm';
+
+const spindle = new Spindle();
+spindle.parseDfl(`
+  f1: &gt;&gt; bird
+  f2: &gt;&gt; penguin
+  r1: bird =&gt; flies
+  r2: penguin =&gt; ~flies
+  r2 &gt; r1
+`);
+
+// What-if
+const whatIf = spindle.whatIf(["healthy"], "flies");
+console.log(whatIf);
+
+// Why-not
+const whyNot = spindle.whyNot("flies");
+console.log(whyNot);
+
+// Abduction
+const abduce = spindle.abduce("flies", 3);
+console.log(abduce);
+</code></pre>
+<h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
+<ol>
+<li><strong>Depth limits</strong>: Abduction has a configurable depth limit to avoid infinite search</li>
+<li><strong>Minimal solutions</strong>: Abduction returns minimal sets, not all possible sets</li>
+<li><strong>Grounded queries</strong>: Queries work on grounded theories; variables must be bound</li>
+<li><strong>Performance</strong>: Deep abduction can be expensive for large theories</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h1>
+<p>This guide covers performance optimization for Spindle.</p>
+<h2 id="choosing-an-algorithm"><a class="header" href="#choosing-an-algorithm">Choosing an Algorithm</a></h2>
+<h3 id="standard-dld-1"><a class="header" href="#standard-dld-1">Standard DL(d)</a></h3>
+<p>Best for:</p>
+<ul>
+<li>Small to medium theories (&lt;1000 rules)</li>
+<li>Simple conflict patterns</li>
+<li>Low memory environments</li>
+</ul>
+<pre><code class="language-bash">spindle theory.dfl
+</code></pre>
+<h3 id="scalable-dld-1"><a class="header" href="#scalable-dld-1">Scalable DL(d||)</a></h3>
+<p>Best for:</p>
+<ul>
+<li>Large theories (&gt;1000 rules)</li>
+<li>Complex conflict resolution</li>
+<li>Long inference chains</li>
+</ul>
+<pre><code class="language-bash">spindle --scalable theory.dfl
+</code></pre>
+<h3 id="benchmark-your-theory"><a class="header" href="#benchmark-your-theory">Benchmark Your Theory</a></h3>
+<pre><code class="language-bash"># Time both algorithms
+time spindle theory.dfl &gt; /dev/null
+time spindle --scalable theory.dfl &gt; /dev/null
+</code></pre>
+<h2 id="theory-design"><a class="header" href="#theory-design">Theory Design</a></h2>
+<h3 id="minimize-rule-bodies"><a class="header" href="#minimize-rule-bodies">Minimize Rule Bodies</a></h3>
+<p>Larger bodies = more matching work:</p>
+<pre><code class="language-lisp">; Slower: 5-way join
+(normally r1 (and a b c d e) result)
+
+; Faster: chain of 2-way joins
+(normally r1 (and a b) ab)
+(normally r2 (and ab c) abc)
+(normally r3 (and abc d) abcd)
+(normally r4 (and abcd e) result)
+</code></pre>
+<h3 id="use-specific-predicates"><a class="header" href="#use-specific-predicates">Use Specific Predicates</a></h3>
+<pre><code class="language-lisp">; Slower: matches all 'thing' facts
+(normally r1 (thing ?x) (processed ?x))
+
+; Faster: matches only relevant facts
+(normally r1 (unprocessed-item ?x) (processed ?x))
+</code></pre>
+<h3 id="reduce-grounding-explosion"><a class="header" href="#reduce-grounding-explosion">Reduce Grounding Explosion</a></h3>
+<p>Variables can cause combinatorial explosion:</p>
+<pre><code class="language-lisp">; If there are 100 'node' facts, this creates 10,000 ground rules
+(normally r1 (and (node ?x) (node ?y)) (pair ?x ?y))
+
+; Add constraints to reduce matching
+(normally r1 (and (node ?x) (node ?y) (edge ?x ?y)) (connected ?x ?y))
+</code></pre>
+<h2 id="memory-optimization"><a class="header" href="#memory-optimization">Memory Optimization</a></h2>
+<h3 id="string-interning"><a class="header" href="#string-interning">String Interning</a></h3>
+<p>Spindle uses string interning internally. You can benefit by:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Reuse literal names
+let bird = "bird";
+theory.add_fact(bird);
+theory.add_defeasible_rule(&amp;[bird], "flies");
+<span class="boring">}</span></code></pre>
+<h3 id="stream-large-results"><a class="header" href="#stream-large-results">Stream Large Results</a></h3>
+<p>For large result sets:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Instead of collecting all conclusions
+let conclusions: Vec&lt;Conclusion&gt; = theory.reason();
+
+// Process incrementally (future API)
+for conclusion in theory.reason_iter() {
+    process(conclusion);
+}
+<span class="boring">}</span></code></pre>
+<h3 id="theory-cloning"><a class="header" href="#theory-cloning">Theory Cloning</a></h3>
+<p>Avoid unnecessary cloning:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Expensive: clones the whole theory
+let copy = theory.clone();
+
+// Better: reuse the indexed theory
+let indexed = IndexedTheory::build(theory);
+// Use indexed for multiple queries
+<span class="boring">}</span></code></pre>
+<h2 id="conflict-optimization"><a class="header" href="#conflict-optimization">Conflict Optimization</a></h2>
+<h3 id="minimize-conflicts"><a class="header" href="#minimize-conflicts">Minimize Conflicts</a></h3>
+<p>Fewer conflicts = faster resolution:</p>
+<pre><code class="language-lisp">; Many potential conflicts
+(normally r1 a result)
+(normally r2 b ~result)
+(normally r3 c result)
+(normally r4 d ~result)
+
+; Better: restructure to reduce conflicts
+(normally supports a supports-result)
+(normally supports c supports-result)
+(normally opposes b opposes-result)
+(normally opposes d opposes-result)
+(normally conclusion supports-result result)
+(normally conclusion opposes-result ~result)
+(prefer conclusion ...)
+</code></pre>
+<h3 id="explicit-superiority"><a class="header" href="#explicit-superiority">Explicit Superiority</a></h3>
+<p>Unresolved conflicts cause ambiguity propagation:</p>
+<pre><code class="language-lisp">; Bad: no superiority, causes ambiguity checks
+(normally r1 a q)
+(normally r2 b ~q)
+
+; Good: explicit resolution
+(normally r1 a q)
+(normally r2 b ~q)
+(prefer r1 r2)  ; or (prefer r2 r1)
+</code></pre>
+<h2 id="indexing-benefits"><a class="header" href="#indexing-benefits">Indexing Benefits</a></h2>
+<p>Spindle indexes rules by:</p>
+<ul>
+<li>Head literal → O(1) lookup</li>
+<li>Body literal → O(1) lookup</li>
+<li>Superiority → O(1) lookup</li>
+</ul>
+<p>The indexed theory is built once and reused:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let indexed = IndexedTheory::build(theory);
+
+// Fast: O(1) lookups
+for rule in indexed.rules_with_head(&amp;literal) { ... }
+for rule in indexed.rules_with_body(&amp;literal) { ... }
+<span class="boring">}</span></code></pre>
+<h2 id="profiling"><a class="header" href="#profiling">Profiling</a></h2>
+<h3 id="theory-statistics"><a class="header" href="#theory-statistics">Theory Statistics</a></h3>
+<pre><code class="language-bash">spindle stats theory.dfl
+</code></pre>
+<p>Look for:</p>
+<ul>
+<li>High rule count → consider <code>--scalable</code></li>
+<li>Many defeaters → potential blocking overhead</li>
+<li>Complex bodies → grounding overhead</li>
+</ul>
+<h3 id="rust-profiling"><a class="header" href="#rust-profiling">Rust Profiling</a></h3>
+<pre><code class="language-bash"># Build with profiling
+cargo build --release
+
+# Profile with flamegraph
+cargo flamegraph -- spindle theory.dfl
+</code></pre>
+<h3 id="memory-profiling"><a class="header" href="#memory-profiling">Memory Profiling</a></h3>
+<pre><code class="language-bash"># Use heaptrack
+heaptrack spindle large-theory.dfl
+heaptrack_print heaptrack.spindle.*.gz
+</code></pre>
+<h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
+<p>Run the built-in benchmarks:</p>
+<pre><code class="language-bash">cd crates/spindle-core
+cargo bench
+</code></pre>
+<p>Key benchmarks:</p>
+<ul>
+<li><code>reason_penguin</code> - basic conflict resolution</li>
+<li><code>reason_long_chain</code> - forward chaining depth</li>
+<li><code>reason_wide</code> - parallel independent rules</li>
+<li><code>scalable_vs_standard</code> - algorithm comparison</li>
+</ul>
+<h2 id="performance-checklist"><a class="header" href="#performance-checklist">Performance Checklist</a></h2>
+<ol>
+<li>
+<p><strong>Choose the right algorithm</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Small theory → standard</li>
+<li><input disabled="" type="checkbox"> Large theory → <code>--scalable</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Optimize theory design</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Keep rule bodies small</li>
+<li><input disabled="" type="checkbox"> Use specific predicates</li>
+<li><input disabled="" type="checkbox"> Control grounding size</li>
+</ul>
+</li>
+<li>
+<p><strong>Resolve conflicts</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Add superiority relations</li>
+<li><input disabled="" type="checkbox"> Avoid unnecessary ambiguity</li>
+</ul>
+</li>
+<li>
+<p><strong>Monitor resources</strong></p>
+<ul>
+<li><input disabled="" type="checkbox"> Check <code>spindle stats</code> output</li>
+<li><input disabled="" type="checkbox"> Profile if needed</li>
+<li><input disabled="" type="checkbox"> Benchmark algorithm choice</li>
+</ul>
+</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
+<p>Common issues and how to resolve them.</p>
+<h2 id="parse-errors"><a class="header" href="#parse-errors">Parse Errors</a></h2>
+<h3 id="could-not-parse-error"><a class="header" href="#could-not-parse-error">“Could not parse” Error</a></h3>
+<pre><code>Error at line 5: could not parse: bird flies
+</code></pre>
+<p><strong>Cause</strong>: Missing arrow operator.</p>
+<p><strong>Fix</strong>: Add the correct arrow:</p>
+<pre><code class="language-dfl">r1: bird =&gt; flies
+</code></pre>
+<h3 id="unknown-keyword-error-spl"><a class="header" href="#unknown-keyword-error-spl">“Unknown keyword” Error (SPL)</a></h3>
+<pre><code>SPL parse error: Unknown keyword: defeasible
+</code></pre>
+<p><strong>Cause</strong>: Wrong keyword.</p>
+<p><strong>Fix</strong>: Use correct SPL keywords:</p>
+<ul>
+<li><code>given</code> (not <code>fact</code>)</li>
+<li><code>normally</code> (not <code>defeasible</code>)</li>
+<li><code>always</code> (not <code>strict</code>)</li>
+<li><code>except</code> (not <code>defeater</code>)</li>
+</ul>
+<h3 id="missing-label-dfl"><a class="header" href="#missing-label-dfl">Missing Label (DFL)</a></h3>
+<pre><code>Error at line 3: could not parse: &gt;&gt; bird
+</code></pre>
+<p><strong>Cause</strong>: DFL rules require labels.</p>
+<p><strong>Fix</strong>: Add a label:</p>
+<pre><code class="language-dfl">f1: &gt;&gt; bird
+</code></pre>
+<h2 id="unexpected-conclusions"><a class="header" href="#unexpected-conclusions">Unexpected Conclusions</a></h2>
+<h3 id="expected-conclusion-missing"><a class="header" href="#expected-conclusion-missing">Expected Conclusion Missing</a></h3>
+<p><strong>Symptom</strong>: A literal you expected to be <code>+d</code> is <code>-d</code>.</p>
+<p><strong>Debugging steps</strong>:</p>
+<ol>
+<li>
+<p>Check if the rule exists:</p>
+<pre><code class="language-bash">spindle stats theory.dfl
+</code></pre>
+</li>
+<li>
+<p>Check if the body is satisfied:</p>
+<pre><code class="language-dfl"># Is 'bird' actually proven?
+r1: bird =&gt; flies
+</code></pre>
+</li>
+<li>
+<p>Check for conflicts:</p>
+<pre><code class="language-bash"># Look for rules proving the complement
+grep "~flies\|-flies" theory.dfl
+</code></pre>
+</li>
+<li>
+<p>Check superiority:</p>
+<pre><code class="language-bash"># Is there a superior rule blocking?
+grep "&gt;" theory.dfl
+</code></pre>
+</li>
+</ol>
+<h3 id="unexpected-conclusion-present"><a class="header" href="#unexpected-conclusion-present">Unexpected Conclusion Present</a></h3>
+<p><strong>Symptom</strong>: A literal is <code>+d</code> when it shouldn’t be.</p>
+<p><strong>Debugging steps</strong>:</p>
+<ol>
+<li>
+<p>Find which rule proves it:</p>
+<pre><code class="language-bash">grep "=&gt; literal\|-&gt; literal" theory.dfl
+</code></pre>
+</li>
+<li>
+<p>Check if a defeater is missing:</p>
+<pre><code class="language-dfl"># Add a defeater to block
+d1: exception ~&gt; unexpected_literal
+</code></pre>
+</li>
+</ol>
+<h3 id="both-literals-unprovable-ambiguity"><a class="header" href="#both-literals-unprovable-ambiguity">Both Literals Unprovable (Ambiguity)</a></h3>
+<p><strong>Symptom</strong>: Neither <code>q</code> nor <code>~q</code> is <code>+d</code>.</p>
+<p><strong>Cause</strong>: Conflicting rules without superiority.</p>
+<p><strong>Fix</strong>: Add superiority:</p>
+<pre><code class="language-dfl">r1: a =&gt; q
+r2: b =&gt; ~q
+r1 &gt; r2    # or r2 &gt; r1
+</code></pre>
+<h2 id="superiority-issues"><a class="header" href="#superiority-issues">Superiority Issues</a></h2>
+<h3 id="superiority-not-working"><a class="header" href="#superiority-not-working">Superiority Not Working</a></h3>
+<p><strong>Symptom</strong>: Declared <code>r1 &gt; r2</code> but r2 still wins.</p>
+<p><strong>Check</strong>:</p>
+<ol>
+<li>
+<p>Rule labels match exactly:</p>
+<pre><code class="language-dfl">r1: bird =&gt; flies      # Label is "r1"
+r2: penguin =&gt; ~flies  # Label is "r2"
+r1 &gt; r2                # Must match exactly
+</code></pre>
+</li>
+<li>
+<p>Rule type compatibility:</p>
+<ul>
+<li>Superiority only affects defeasible rules and defeaters</li>
+<li>Strict rules always win regardless of superiority</li>
+</ul>
+</li>
+<li>
+<p>Both rules actually fire:</p>
+<pre><code class="language-bash"># Both bodies must be satisfied
+spindle --positive theory.dfl | grep "bird\|penguin"
+</code></pre>
+</li>
+</ol>
+<h3 id="circular-superiority"><a class="header" href="#circular-superiority">Circular Superiority</a></h3>
+<pre><code class="language-dfl"># BAD: creates undefined behavior
+r1 &gt; r2
+r2 &gt; r1
+</code></pre>
+<p><strong>Fix</strong>: Remove one declaration or restructure rules.</p>
+<h2 id="grounding-issues"><a class="header" href="#grounding-issues">Grounding Issues</a></h2>
+<h3 id="variables-not-matching"><a class="header" href="#variables-not-matching">Variables Not Matching</a></h3>
+<p><strong>Symptom</strong>: Rules with variables don’t produce expected results.</p>
+<p><strong>Check</strong>:</p>
+<ol>
+<li>
+<p>Facts use predicates:</p>
+<pre><code class="language-lisp">; Wrong: not a predicate
+(given parent-alice-bob)
+
+; Right: predicate with arguments
+(given (parent alice bob))
+</code></pre>
+</li>
+<li>
+<p>Variable positions match:</p>
+<pre><code class="language-lisp">; Fact: (parent alice bob)
+;              ?x    ?y
+
+; Rule must match positions
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+</code></pre>
+</li>
+<li>
+<p>All head variables appear in body:</p>
+<pre><code class="language-lisp">; INVALID: ?z not in body
+(normally r1 (parent ?x ?y) (triple ?x ?y ?z))
+</code></pre>
+</li>
+</ol>
+<h3 id="grounding-explosion"><a class="header" href="#grounding-explosion">Grounding Explosion</a></h3>
+<p><strong>Symptom</strong>: Memory exhaustion or very slow reasoning.</p>
+<p><strong>Cause</strong>: Too many variable combinations.</p>
+<p><strong>Fix</strong>:</p>
+<ul>
+<li>Add constraints to rule bodies</li>
+<li>Break large joins into smaller rules</li>
+<li>Use the <code>--scalable</code> flag</li>
+</ul>
+<h2 id="file-format-issues"><a class="header" href="#file-format-issues">File Format Issues</a></h2>
+<h3 id="wrong-format-detection"><a class="header" href="#wrong-format-detection">Wrong Format Detection</a></h3>
+<p><strong>Symptom</strong>: File parses incorrectly.</p>
+<p><strong>Fix</strong>: Use correct extension:</p>
+<ul>
+<li><code>.dfl</code> for DFL format</li>
+<li><code>.spl</code> for SPL format</li>
+</ul>
+<h3 id="encoding-issues"><a class="header" href="#encoding-issues">Encoding Issues</a></h3>
+<p><strong>Symptom</strong>: Special characters cause errors.</p>
+<p><strong>Fix</strong>: Use UTF-8 encoding. The negation symbol <code>¬</code> is supported.</p>
+<h2 id="algorithm-differences"><a class="header" href="#algorithm-differences">Algorithm Differences</a></h2>
+<h3 id="different-results-standard-vs-scalable"><a class="header" href="#different-results-standard-vs-scalable">Different Results: Standard vs Scalable</a></h3>
+<p><strong>Symptom</strong>: <code>--scalable</code> gives different results.</p>
+<p><strong>This should not happen</strong>. Both algorithms are semantically equivalent.</p>
+<p><strong>Debug</strong>:</p>
+<pre><code class="language-bash">spindle theory.dfl &gt; standard.txt
+spindle --scalable theory.dfl &gt; scalable.txt
+diff standard.txt scalable.txt
+</code></pre>
+<p>If different, please report a bug.</p>
+<h2 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h2>
+<h3 id="slow-reasoning"><a class="header" href="#slow-reasoning">Slow Reasoning</a></h3>
+<p><strong>Check</strong>:</p>
+<ol>
+<li>Theory size: <code>spindle stats theory.dfl</code></li>
+<li>Algorithm: try <code>--scalable</code> for large theories</li>
+<li>Grounding: check for variable explosion</li>
+<li>Conflicts: add superiority to reduce ambiguity</li>
+</ol>
+<h3 id="memory-exhaustion"><a class="header" href="#memory-exhaustion">Memory Exhaustion</a></h3>
+<p><strong>Causes</strong>:</p>
+<ul>
+<li>Too many ground rules (variable explosion)</li>
+<li>Very long inference chains</li>
+<li>Large number of conflicts</li>
+</ul>
+<p><strong>Fixes</strong>:</p>
+<ul>
+<li>Reduce variable combinations</li>
+<li>Use <code>--scalable</code> algorithm</li>
+<li>Restructure theory</li>
+</ul>
+<h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h2>
+<h3 id="validate-first"><a class="header" href="#validate-first">Validate First</a></h3>
+<p>Always validate before reasoning:</p>
+<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
+</code></pre>
+<h3 id="minimal-reproduction"><a class="header" href="#minimal-reproduction">Minimal Reproduction</a></h3>
+<p>Create a minimal theory that reproduces the issue:</p>
+<pre><code class="language-dfl"># Start with just the failing rules
+f1: &gt;&gt; bird
+r1: bird =&gt; flies
+# Add rules until issue appears
+</code></pre>
+<h3 id="use-positive-output"><a class="header" href="#use-positive-output">Use Positive Output</a></h3>
+<p>Focus on what IS proven:</p>
+<pre><code class="language-bash">spindle --positive theory.dfl
+</code></pre>
+<h3 id="check-statistics"><a class="header" href="#check-statistics">Check Statistics</a></h3>
+<pre><code class="language-bash">spindle stats theory.dfl
+</code></pre>
+<p>Look for unexpected counts.</p>
+<h3 id="enable-logging"><a class="header" href="#enable-logging">Enable Logging</a></h3>
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle theory.dfl 2&gt;&amp;1 | less
+</code></pre>
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<p>If you can’t resolve an issue:</p>
+<ol>
+<li>Create a minimal reproduction</li>
+<li>Include the theory file</li>
+<li>Show expected vs actual output</li>
+<li>Report at: https://codeberg.org/anuna/spindle-rust/issues</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
+<p>This guide covers using Spindle as a Rust library.</p>
+<h2 id="installation-3"><a class="header" href="#installation-3">Installation</a></h2>
+<p>Add to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+spindle-core = { git = "https://codeberg.org/anuna/spindle-rust", package = "spindle-core" }
+spindle-parser = { git = "https://codeberg.org/anuna/spindle-rust", package = "spindle-parser" }
+</code></pre>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<pre class="playground"><code class="language-rust">use spindle_core::prelude::*;
+
+fn main() {
+    let mut theory = Theory::new();
+
+    // Add facts
+    theory.add_fact("bird");
+    theory.add_fact("penguin");
+
+    // Add defeasible rules
+    let r1 = theory.add_defeasible_rule(&amp;["bird"], "flies");
+    let r2 = theory.add_defeasible_rule(&amp;["penguin"], "~flies");
+
+    // Set superiority
+    theory.add_superiority(&amp;r2, &amp;r1);
+
+    // Reason
+    let conclusions = theory.reason();
+
+    for c in &amp;conclusions {
+        if c.conclusion_type.is_positive() {
+            println!("{}", c);
+        }
+    }
+}</code></pre>
+<h2 id="creating-theories"><a class="header" href="#creating-theories">Creating Theories</a></h2>
+<h3 id="programmatic-construction"><a class="header" href="#programmatic-construction">Programmatic Construction</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+let mut theory = Theory::new();
+
+// Facts
+theory.add_fact("bird");
+theory.add_fact("~guilty");  // Negated fact
+
+// Strict rules
+theory.add_strict_rule(&amp;["penguin"], "bird");
+
+// Defeasible rules
+let r1 = theory.add_defeasible_rule(&amp;["bird"], "flies");
+let r2 = theory.add_defeasible_rule(&amp;["penguin"], "~flies");
+
+// Defeaters
+theory.add_defeater(&amp;["broken_wing"], "flies");
+
+// Superiority
+theory.add_superiority(&amp;r2, &amp;r1);
+<span class="boring">}</span></code></pre>
+<h3 id="parsing-dfl"><a class="header" href="#parsing-dfl">Parsing DFL</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_parser::parse_dfl;
+
+let dfl = r#"
+    f1: &gt;&gt; bird
+    f2: &gt;&gt; penguin
+    r1: bird =&gt; flies
+    r2: penguin =&gt; ~flies
+    r2 &gt; r1
+"#;
+
+let theory = parse_dfl(dfl)?;
+<span class="boring">}</span></code></pre>
+<h3 id="parsing-spl"><a class="header" href="#parsing-spl">Parsing SPL</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_parser::parse_spl;
+
+let spl = r#"
+    (given bird)
+    (given penguin)
+    (normally r1 bird flies)
+    (normally r2 penguin (not flies))
+    (prefer r2 r1)
+"#;
+
+let theory = parse_spl(spl)?;
+<span class="boring">}</span></code></pre>
+<h2 id="reasoning"><a class="header" href="#reasoning">Reasoning</a></h2>
+<h3 id="standard-algorithm"><a class="header" href="#standard-algorithm">Standard Algorithm</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::reason::reason;
+
+let conclusions = reason(&amp;theory);
+<span class="boring">}</span></code></pre>
+<h3 id="scalable-algorithm"><a class="header" href="#scalable-algorithm">Scalable Algorithm</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::scalable::reason_scalable;
+
+let result = reason_scalable(&amp;theory);
+let conclusions = result.to_conclusions(&amp;indexed_theory);
+<span class="boring">}</span></code></pre>
+<h3 id="convenience-method"><a class="header" href="#convenience-method">Convenience Method</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Uses standard algorithm
+let conclusions = theory.reason();
+<span class="boring">}</span></code></pre>
+<h2 id="working-with-conclusions"><a class="header" href="#working-with-conclusions">Working with Conclusions</a></h2>
+<h3 id="conclusion-types"><a class="header" href="#conclusion-types">Conclusion Types</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::conclusion::ConclusionType;
+
+for c in &amp;conclusions {
+    match c.conclusion_type {
+        ConclusionType::DefinitelyProvable =&gt; {
+            println!("+D {}", c.literal);
+        }
+        ConclusionType::DefinitelyNotProvable =&gt; {
+            println!("-D {}", c.literal);
+        }
+        ConclusionType::DefeasiblyProvable =&gt; {
+            println!("+d {}", c.literal);
+        }
+        ConclusionType::DefeasiblyNotProvable =&gt; {
+            println!("-d {}", c.literal);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="filtering-conclusions"><a class="header" href="#filtering-conclusions">Filtering Conclusions</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Positive conclusions only
+let positive: Vec&lt;_&gt; = conclusions
+    .iter()
+    .filter(|c| c.conclusion_type.is_positive())
+    .collect();
+
+// Defeasibly provable only
+let defeasible: Vec&lt;_&gt; = conclusions
+    .iter()
+    .filter(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable)
+    .collect();
+<span class="boring">}</span></code></pre>
+<h3 id="checking-specific-literals"><a class="header" href="#checking-specific-literals">Checking Specific Literals</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn is_provable(conclusions: &amp;[Conclusion], name: &amp;str) -&gt; bool {
+    conclusions.iter().any(|c| {
+        c.conclusion_type == ConclusionType::DefeasiblyProvable
+            &amp;&amp; c.literal.name() == name
+            &amp;&amp; !c.literal.negation
+    })
+}
+
+if is_provable(&amp;conclusions, "flies") {
+    println!("It flies!");
+}
+<span class="boring">}</span></code></pre>
+<h2 id="literals-2"><a class="header" href="#literals-2">Literals</a></h2>
+<h3 id="creating-literals"><a class="header" href="#creating-literals">Creating Literals</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::literal::Literal;
+
+let simple = Literal::simple("bird");
+let negated = Literal::negated("flies");
+let with_args = Literal::new(
+    "parent",
+    false,  // not negated
+    Default::default(),  // no mode
+    Default::default(),  // no temporal
+    vec!["alice".to_string(), "bob".to_string()],
+);
+<span class="boring">}</span></code></pre>
+<h3 id="literal-properties"><a class="header" href="#literal-properties">Literal Properties</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let lit = Literal::negated("flies");
+
+println!("Name: {}", lit.name());           // "flies"
+println!("Negated: {}", lit.is_negated());  // true
+println!("Canonical: {}", lit.canonical_name()); // "~flies"
+
+let complement = lit.complement();  // Literal::simple("flies")
+<span class="boring">}</span></code></pre>
+<h2 id="rules-2"><a class="header" href="#rules-2">Rules</a></h2>
+<h3 id="creating-rules-directly"><a class="header" href="#creating-rules-directly">Creating Rules Directly</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::rule::{Rule, RuleType};
+
+let rule = Rule::new(
+    "r1",
+    RuleType::Defeasible,
+    vec![Literal::simple("bird")],
+    vec![Literal::simple("flies")],
+);
+
+theory.add_rule(rule);
+<span class="boring">}</span></code></pre>
+<h3 id="inspecting-rules"><a class="header" href="#inspecting-rules">Inspecting Rules</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>for rule in theory.rules() {
+    println!("Label: {}", rule.label);
+    println!("Type: {:?}", rule.rule_type);
+    println!("Body: {:?}", rule.body);
+    println!("Head: {:?}", rule.head);
+}
+<span class="boring">}</span></code></pre>
+<h2 id="query-operators-1"><a class="header" href="#query-operators-1">Query Operators</a></h2>
+<h3 id="what-if"><a class="header" href="#what-if">What-If</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::{what_if, HypotheticalClaim};
+use spindle_core::literal::Literal;
+
+let hypotheticals = vec![
+    HypotheticalClaim::new(Literal::simple("wounded"))
+];
+let goal = Literal::negated("flies");
+
+let result = what_if(&amp;theory, hypotheticals, &amp;goal);
+if result.is_provable() {
+    println!("Would be provable with those facts");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="why-not"><a class="header" href="#why-not">Why-Not</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::why_not;
+use spindle_core::literal::Literal;
+
+let literal = Literal::simple("flies");
+let explanation = why_not(&amp;theory, &amp;literal);
+for blocker in &amp;explanation.blocked_by {
+    println!("Blocked by: {}", blocker.explanation);
+}
+<span class="boring">}</span></code></pre>
+<h3 id="abduction-1"><a class="header" href="#abduction-1">Abduction</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::abduce;
+use spindle_core::literal::Literal;
+
+let goal = Literal::simple("goal");
+let result = abduce(&amp;theory, &amp;goal, 3);
+for solution in &amp;result.solutions {
+    println!("Solution: {:?}", solution.facts);
+}
+<span class="boring">}</span></code></pre>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::error::{SpindleError, Result};
+use spindle_parser::ParseError;
+
+fn load_theory(path: &amp;str) -&gt; Result&lt;Theory&gt; {
+    let content = std::fs::read_to_string(path)?;
+
+    if path.ends_with(".dfl") {
+        parse_dfl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
+    } else if path.ends_with(".spl") {
+        parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
+    } else {
+        Err(SpindleError::Parse("Unknown format".to_string()))
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="advanced-indexed-theory"><a class="header" href="#advanced-indexed-theory">Advanced: Indexed Theory</a></h2>
+<p>For multiple queries, build an indexed theory once:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::index::IndexedTheory;
+
+let indexed = IndexedTheory::build(theory.clone());
+
+// O(1) lookups
+for rule in indexed.rules_with_head(&amp;literal) {
+    // Process rules that conclude this literal
+}
+
+for rule in indexed.rules_with_body(&amp;literal) {
+    // Process rules that have this literal in body
+}
+<span class="boring">}</span></code></pre>
+<h2 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h2>
+<p><code>Theory</code> and <code>Conclusion</code> are <code>Send + Sync</code>. You can:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::Arc;
+use rayon::prelude::*;
+
+let theory = Arc::new(theory);
+
+let results: Vec&lt;_&gt; = queries
+    .par_iter()
+    .map(|query| {
+        let t = theory.clone();
+        process_query(&amp;t, query)
+    })
+    .collect();
+<span class="boring">}</span></code></pre>
+<h2 id="example-complete-application"><a class="header" href="#example-complete-application">Example: Complete Application</a></h2>
+<pre class="playground"><code class="language-rust">use spindle_core::prelude::*;
+use spindle_parser::parse_dfl;
+use std::fs;
+
+fn main() -&gt; Result&lt;()&gt; {
+    // Load theory
+    let content = fs::read_to_string("rules.dfl")?;
+    let mut theory = parse_dfl(&amp;content)?;
+
+    // Add runtime facts
+    theory.add_fact("current_user_admin");
+
+    // Reason
+    let conclusions = theory.reason();
+
+    // Check permissions
+    let can_delete = conclusions.iter().any(|c| {
+        c.conclusion_type == ConclusionType::DefeasiblyProvable
+            &amp;&amp; c.literal.name() == "can_delete"
+    });
+
+    if can_delete {
+        println!("User can delete");
+    } else {
+        println!("Permission denied");
+    }
+
+    Ok(())
+}</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="webassembly-integration"><a class="header" href="#webassembly-integration">WebAssembly Integration</a></h1>
+<p>Spindle compiles to WebAssembly for use in browsers and Node.js.</p>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
+<pre><code class="language-bash">cargo install wasm-pack
+</code></pre>
+<h3 id="build-for-web"><a class="header" href="#build-for-web">Build for Web</a></h3>
+<pre><code class="language-bash">cd crates/spindle-wasm
+wasm-pack build --target web --release
+</code></pre>
+<h3 id="build-for-nodejs"><a class="header" href="#build-for-nodejs">Build for Node.js</a></h3>
+<pre><code class="language-bash">wasm-pack build --target nodejs --release
+</code></pre>
+<h3 id="build-for-bundlers-webpack-etc"><a class="header" href="#build-for-bundlers-webpack-etc">Build for Bundlers (webpack, etc.)</a></h3>
+<pre><code class="language-bash">wasm-pack build --target bundler --release
+</code></pre>
+<h2 id="installation-4"><a class="header" href="#installation-4">Installation</a></h2>
+<h3 id="npmyarn"><a class="header" href="#npmyarn">npm/yarn</a></h3>
+<pre><code class="language-bash">npm install spindle-wasm
+# or
+yarn add spindle-wasm
+</code></pre>
+<h3 id="from-local-build"><a class="header" href="#from-local-build">From Local Build</a></h3>
+<pre><code class="language-javascript">// Point to your build output
+import init, { Spindle } from './pkg/spindle_wasm.js';
+</code></pre>
+<h2 id="browser-usage"><a class="header" href="#browser-usage">Browser Usage</a></h2>
+<h3 id="es-modules"><a class="header" href="#es-modules">ES Modules</a></h3>
+<pre><code class="language-html">&lt;script type="module"&gt;
+import init, { Spindle } from './pkg/spindle_wasm.js';
+
+async function main() {
+    await init();
+
+    const spindle = new Spindle();
+    spindle.addFact("bird");
+    spindle.addFact("penguin");
+    spindle.addDefeasibleRule(["bird"], "flies");
+    spindle.addDefeasibleRule(["penguin"], "~flies");
+    spindle.addSuperiority("r2", "r1");
+
+    const conclusions = spindle.reason();
+    console.log(conclusions);
+}
+
+main();
+&lt;/script&gt;
+</code></pre>
+<h3 id="with-bundler-vite-webpack"><a class="header" href="#with-bundler-vite-webpack">With Bundler (Vite, webpack)</a></h3>
+<pre><code class="language-typescript">import init, { Spindle } from 'spindle-wasm';
+
+async function setup() {
+    await init();
+    return new Spindle();
+}
+
+const spindle = await setup();
+</code></pre>
+<h2 id="nodejs-usage"><a class="header" href="#nodejs-usage">Node.js Usage</a></h2>
+<pre><code class="language-javascript">const { Spindle } = require('spindle-wasm');
+
+const spindle = new Spindle();
+
+spindle.parseDfl(`
+    f1: &gt;&gt; bird
+    f2: &gt;&gt; penguin
+    r1: bird =&gt; flies
+    r2: penguin =&gt; ~flies
+    r2 &gt; r1
+`);
+
+const conclusions = spindle.reason();
+console.log(conclusions);
+</code></pre>
+<h2 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h2>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<pre><code class="language-typescript">const spindle = new Spindle();
+</code></pre>
+<p>Creates a new empty theory.</p>
+<h3 id="adding-facts"><a class="header" href="#adding-facts">Adding Facts</a></h3>
+<pre><code class="language-typescript">spindle.addFact("bird");
+spindle.addFact("~guilty");  // Negated fact
+</code></pre>
+<h3 id="adding-rules"><a class="header" href="#adding-rules">Adding Rules</a></h3>
+<pre><code class="language-typescript">// Defeasible rules
+spindle.addDefeasibleRule(["bird"], "flies");
+spindle.addDefeasibleRule(["bird", "healthy"], "strong_flyer");
+
+// Strict rules
+spindle.addStrictRule(["penguin"], "bird");
+
+// Defeaters
+spindle.addDefeater(["broken_wing"], "flies");
+</code></pre>
+<h3 id="superiority-2"><a class="header" href="#superiority-2">Superiority</a></h3>
+<pre><code class="language-typescript">spindle.addSuperiority("r2", "r1");  // r2 &gt; r1
+</code></pre>
+<h3 id="parsing"><a class="header" href="#parsing">Parsing</a></h3>
+<pre><code class="language-typescript">// Parse DFL
+spindle.parseDfl(`
+    f1: &gt;&gt; bird
+    r1: bird =&gt; flies
+`);
+
+// Parse SPL
+spindle.parseSpl(`
+    (given bird)
+    (normally r1 bird flies)
+`);
+</code></pre>
+<h3 id="reasoning-1"><a class="header" href="#reasoning-1">Reasoning</a></h3>
+<pre><code class="language-typescript">const conclusions = spindle.reason();
+// Returns: Array of conclusion objects
+
+// Each conclusion:
+{
+    conclusion_type: "+D" | "-D" | "+d" | "-d",
+    literal: string,
+    positive: boolean
+}
+</code></pre>
+<h3 id="scalable-reasoning"><a class="header" href="#scalable-reasoning">Scalable Reasoning</a></h3>
+<pre><code class="language-typescript">const conclusions = spindle.reasonScalable();
+</code></pre>
+<h3 id="query"><a class="header" href="#query">Query</a></h3>
+<pre><code class="language-typescript">// Check if a literal is provable
+const result = spindle.query("flies");
+// Returns: { status: "provable" | "not_provable", literal, conclusion_type }
+</code></pre>
+<h3 id="what-if-1"><a class="header" href="#what-if-1">What-If</a></h3>
+<pre><code class="language-typescript">const result = spindle.whatIf(["wounded"], "~flies");
+// Returns: { provable: boolean, new_conclusions: Array }
+</code></pre>
+<h3 id="why-not-1"><a class="header" href="#why-not-1">Why-Not</a></h3>
+<pre><code class="language-typescript">const explanation = spindle.whyNot("flies");
+// Returns: { literal, would_derive, blockers: Array }
+</code></pre>
+<h3 id="abduction-2"><a class="header" href="#abduction-2">Abduction</a></h3>
+<pre><code class="language-typescript">const solutions = spindle.abduce("goal", 3);
+// Returns: { goal, solutions: Array&lt;Array&lt;string&gt;&gt; }
+</code></pre>
+<h3 id="reset"><a class="header" href="#reset">Reset</a></h3>
+<pre><code class="language-typescript">spindle.clear();  // Clear all rules and facts
+</code></pre>
+<h2 id="typescript-types"><a class="header" href="#typescript-types">TypeScript Types</a></h2>
+<pre><code class="language-typescript">interface Conclusion {
+    conclusion_type: "+D" | "-D" | "+d" | "-d";
+    literal: string;
+    positive: boolean;
+}
+
+interface QueryResult {
+    status: "provable" | "not_provable";
+    literal: string;
+    conclusion_type?: string;
+}
+
+interface WhatIfResult {
+    provable: boolean;
+    new_conclusions: Conclusion[];
+}
+
+interface WhyNotExplanation {
+    literal: string;
+    would_derive: string | null;
+    blockers: Blocker[];
+}
+
+interface Blocker {
+    rule: string;
+    reason: string;
+}
+
+interface AbductionResult {
+    goal: string;
+    solutions: string[][];
+}
+</code></pre>
+<h2 id="complete-example-2"><a class="header" href="#complete-example-2">Complete Example</a></h2>
+<pre><code class="language-typescript">import init, { Spindle } from 'spindle-wasm';
+
+async function reasonAboutPenguins() {
+    await init();
+
+    const spindle = new Spindle();
+
+    // Build theory
+    spindle.parseDfl(`
+        f1: &gt;&gt; bird
+        f2: &gt;&gt; penguin
+
+        r1: bird =&gt; flies
+        r2: bird =&gt; has_feathers
+        r3: penguin =&gt; ~flies
+        r4: penguin =&gt; swims
+
+        r3 &gt; r1
+    `);
+
+    // Reason
+    const conclusions = spindle.reason();
+
+    // Filter positive conclusions
+    const positive = conclusions.filter(c =&gt;
+        c.conclusion_type === "+D" || c.conclusion_type === "+d"
+    );
+
+    console.log("Provable:", positive.map(c =&gt; c.literal));
+
+    // Query specific literal
+    const fliesResult = spindle.query("flies");
+    console.log("Does it fly?", fliesResult.status);
+
+    // What-if analysis
+    const whatIf = spindle.whatIf(["super_bird"], "flies");
+    console.log("With super_bird:", whatIf.provable);
+
+    // Explain why not
+    if (fliesResult.status === "not_provable") {
+        const explanation = spindle.whyNot("flies");
+        console.log("Why not flies:", explanation.blockers);
+    }
+}
+
+reasonAboutPenguins();
+</code></pre>
+<h2 id="react-integration"><a class="header" href="#react-integration">React Integration</a></h2>
+<pre><code class="language-tsx">import { useState, useEffect } from 'react';
+import init, { Spindle } from 'spindle-wasm';
+
+function useSpindle() {
+    const [spindle, setSpindle] = useState&lt;Spindle | null&gt;(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() =&gt; {
+        init().then(() =&gt; {
+            setSpindle(new Spindle());
+            setLoading(false);
+        });
+    }, []);
+
+    return { spindle, loading };
+}
+
+function ReasoningComponent() {
+    const { spindle, loading } = useSpindle();
+    const [conclusions, setConclusions] = useState([]);
+
+    const reason = () =&gt; {
+        if (!spindle) return;
+
+        spindle.reset();
+        spindle.addFact("bird");
+        spindle.addDefeasibleRule(["bird"], "flies");
+
+        const result = spindle.reason();
+        setConclusions(result);
+    };
+
+    if (loading) return &lt;div&gt;Loading WASM...&lt;/div&gt;;
+
+    return (
+        &lt;div&gt;
+            &lt;button onClick={reason}&gt;Reason&lt;/button&gt;
+            &lt;ul&gt;
+                {conclusions.map((c, i) =&gt; (
+                    &lt;li key={i}&gt;{c.conclusion_type} {c.literal}&lt;/li&gt;
+                ))}
+            &lt;/ul&gt;
+        &lt;/div&gt;
+    );
+}
+</code></pre>
+<h2 id="performance-notes"><a class="header" href="#performance-notes">Performance Notes</a></h2>
+<ol>
+<li><strong>Initialize once</strong>: Call <code>init()</code> once at startup</li>
+<li><strong>Reuse Spindle instances</strong>: Create once, reset between uses</li>
+<li><strong>Batch operations</strong>: Add all rules before reasoning</li>
+<li><strong>Use scalable for large theories</strong>: <code>reasonScalable()</code> for &gt;1000 rules</li>
+</ol>
+<h2 id="bundle-size"><a class="header" href="#bundle-size">Bundle Size</a></h2>
+<p>Approximate sizes (gzipped):</p>
+<ul>
+<li>Core WASM: ~150KB</li>
+<li>JavaScript bindings: ~10KB</li>
+</ul>
+<h2 id="browser-compatibility"><a class="header" href="#browser-compatibility">Browser Compatibility</a></h2>
+<p>Requires WebAssembly support:</p>
+<ul>
+<li>Chrome 57+</li>
+<li>Firefox 52+</li>
+<li>Safari 11+</li>
+<li>Edge 16+</li>
+<li>Node.js 8+</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="architecture"><a class="header" href="#architecture">Architecture</a></h1>
+<p>This document describes the internal architecture of Spindle-Rust.</p>
+<h2 id="crate-structure-1"><a class="header" href="#crate-structure-1">Crate Structure</a></h2>
+<pre><code>spindle-rust/
+├── crates/
+│   ├── spindle-core/     # Core reasoning engine
+│   ├── spindle-parser/   # DFL and SPL parsers
+│   ├── spindle-cli/      # Command-line interface
+│   └── spindle-wasm/     # WebAssembly bindings
+</code></pre>
+<h2 id="spindle-core"><a class="header" href="#spindle-core">spindle-core</a></h2>
+<p>The core reasoning engine with these modules:</p>
+<pre><code>spindle-core/src/
+├── lib.rs              # Crate root, prelude
+├── intern.rs           # String interning
+├── literal.rs          # Literal representation
+├── mode.rs             # Modal operators
+├── temporal.rs         # Temporal reasoning
+├── rule.rs             # Rule types
+├── superiority.rs      # Superiority relations
+├── theory.rs           # Theory container
+├── conclusion.rs       # Conclusion types
+├── index.rs            # Theory indexing
+├── reason.rs           # Standard DL(d) algorithm
+├── scalable.rs         # Scalable DL(d||) algorithm
+├── grounding.rs        # Variable grounding
+├── worklist.rs         # Worklist data structures
+├── explanation.rs      # Proof trees
+├── trust.rs            # Trust-weighted reasoning
+├── query.rs            # Query operators
+└── error.rs            # Error types
+</code></pre>
+<h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+<pre><code>Input (DFL/SPL)
+      │
+      ▼
+┌─────────────┐
+│   Parser    │  spindle-parser
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│   Theory    │  Rules, facts, superiority
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│  Grounding  │  Instantiate variables
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│   Index     │  Build lookup tables
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│  Reasoning  │  DL(d) or DL(d||)
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│ Conclusions │  +D, -D, +d, -d
+└─────────────┘
+</code></pre>
+<h2 id="key-design-decisions"><a class="header" href="#key-design-decisions">Key Design Decisions</a></h2>
+<h3 id="string-interning-1"><a class="header" href="#string-interning-1">String Interning</a></h3>
+<p>All literal names are interned to reduce memory and enable O(1) comparisons.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// intern.rs
+pub struct SymbolId(u32);   // Interned string ID
+pub struct LiteralId(u32);  // Interned literal (name + negation)
+
+// Convert string to ID (only allocates once per unique string)
+let id = intern("bird");
+
+// Compare IDs (O(1), no string comparison)
+if id1 == id2 { ... }
+
+// Resolve back to string when needed
+let name = resolve(id);
+<span class="boring">}</span></code></pre>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>HashSet<code>LiteralId</code> uses 4 bytes per entry vs ~24+ for String</li>
+<li>No heap allocation in hot reasoning loops</li>
+<li>O(1) equality checks</li>
+</ul>
+<h3 id="indexed-theory"><a class="header" href="#indexed-theory">Indexed Theory</a></h3>
+<p>Rules are indexed by head and body literals for O(1) lookup.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// index.rs
+pub struct IndexedTheory {
+    theory: Theory,
+    by_head: HashMap&lt;LiteralId, Vec&lt;&amp;Rule&gt;&gt;,
+    by_body: HashMap&lt;LiteralId, Vec&lt;&amp;Rule&gt;&gt;,
+}
+
+// O(1) lookup instead of O(n) scan
+indexed.rules_with_head(&amp;literal)
+indexed.rules_with_body(&amp;literal)
+<span class="boring">}</span></code></pre>
+<h3 id="literalid-design"><a class="header" href="#literalid-design">LiteralId Design</a></h3>
+<p>A <code>LiteralId</code> packs symbol ID and negation into a single u32:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct LiteralId(u32);
+
+impl LiteralId {
+    // High bit = negation flag
+    // Lower 31 bits = symbol ID
+
+    pub fn is_negated(&amp;self) -&gt; bool {
+        (self.0 &amp; 0x8000_0000) != 0
+    }
+
+    pub fn symbol(&amp;self) -&gt; SymbolId {
+        SymbolId(self.0 &amp; 0x7FFF_FFFF)
+    }
+
+    pub fn complement(&amp;self) -&gt; LiteralId {
+        LiteralId(self.0 ^ 0x8000_0000)
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>This allows:</p>
+<ul>
+<li>O(1) negation check</li>
+<li>O(1) complement computation</li>
+<li>Efficient hash set storage</li>
+</ul>
+<h3 id="superiority-index"><a class="header" href="#superiority-index">Superiority Index</a></h3>
+<p>Superiority relations are indexed for O(1) lookup:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct SuperiorityIndex {
+    // superior -&gt; set of inferior rules
+    superiors: HashMap&lt;RuleLabel, HashSet&lt;RuleLabel&gt;&gt;,
+}
+
+// O(1) check
+theory.is_superior("r1", "r2")
+<span class="boring">}</span></code></pre>
+<h2 id="algorithm-implementation"><a class="header" href="#algorithm-implementation">Algorithm Implementation</a></h2>
+<h3 id="standard-dld-reasonrs"><a class="header" href="#standard-dld-reasonrs">Standard DL(d) (reason.rs)</a></h3>
+<pre><code>Phase 1: Initialize with facts
+  ├── Add to definite_proven
+  ├── Add to defeasible_proven
+  └── Add to worklist
+
+Phase 2: Forward chaining
+  while worklist not empty:
+    ├── Pop literal
+    ├── Find rules with literal in body
+    ├── Decrement body counters
+    └── If counter = 0:
+        ├── Strict → add +D, +d
+        ├── Defeasible → check blocking, add +d
+        └── Defeater → (no conclusion)
+
+Phase 3: Negative conclusions
+  for each literal:
+    ├── If not in definite_proven → -D
+    └── If not in defeasible_proven → -d
+</code></pre>
+<h3 id="scalable-dld-scalablers"><a class="header" href="#scalable-dld-scalablers">Scalable DL(d||) (scalable.rs)</a></h3>
+<pre><code>Phase 1: Delta Closure
+  ├── Initialize with facts
+  └── Forward chain strict rules only
+  Result: +D conclusions
+
+Phase 2: Lambda Closure
+  ├── Start with delta
+  ├── Add defeasible if:
+  │   ├── Body in lambda
+  │   └── Complement not in delta
+  Result: Over-approximation of +d
+
+Phase 3: Partial Closure (semi-naive)
+  ├── Start with delta
+  ├── Worklist of candidates from lambda
+  └── For each candidate:
+      ├── Check supporting rules
+      ├── Check attacking rules
+      ├── Check superiority
+      └── Add if all attacks defeated
+  Result: Actual +d conclusions
+</code></pre>
+<h2 id="memory-layout"><a class="header" href="#memory-layout">Memory Layout</a></h2>
+<h3 id="theory"><a class="header" href="#theory">Theory</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Theory {
+    rules: Vec&lt;Rule&gt;,
+    superiorities: Vec&lt;Superiority&gt;,
+    meta: HashMap&lt;String, Meta&gt;,
+}
+
+pub struct Rule {
+    label: String,
+    rule_type: RuleType,     // 1 byte + padding
+    body: Vec&lt;Literal&gt;,
+    head: Vec&lt;Literal&gt;,
+}
+
+pub struct Literal {
+    name: String,            // 24 bytes (String)
+    negation: bool,          // 1 byte + padding
+    mode: Option&lt;Mode&gt;,      // 1-2 bytes + padding
+    temporal: Option&lt;...&gt;,   // Variable
+    predicates: Vec&lt;String&gt;, // 24 bytes (Vec)
+}
+<span class="boring">}</span></code></pre>
+<h3 id="optimized-representation-reasoning"><a class="header" href="#optimized-representation-reasoning">Optimized Representation (reasoning)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// During reasoning, we use IDs instead of strings
+proven: HashSet`LiteralId`  // 4 bytes per entry
+worklist: VecDeque`LiteralId`
+<span class="boring">}</span></code></pre>
+<h2 id="extension-points"><a class="header" href="#extension-points">Extension Points</a></h2>
+<h3 id="adding-a-new-rule-type"><a class="header" href="#adding-a-new-rule-type">Adding a New Rule Type</a></h3>
+<ol>
+<li>Add variant to <code>RuleType</code> enum</li>
+<li>Update parsers (dfl.rs, spl.rs)</li>
+<li>Update reasoning logic (reason.rs, scalable.rs)</li>
+<li>Add tests</li>
+</ol>
+<h3 id="adding-a-new-query-operator"><a class="header" href="#adding-a-new-query-operator">Adding a New Query Operator</a></h3>
+<ol>
+<li>Add function to <code>query.rs</code></li>
+<li>Implement the algorithm</li>
+<li>Add to WASM bindings if needed</li>
+<li>Document in guides/queries.md</li>
+</ol>
+<h3 id="adding-temporal-features"><a class="header" href="#adding-temporal-features">Adding Temporal Features</a></h3>
+<ol>
+<li>Extend <code>temporal.rs</code></li>
+<li>Update literal matching in <code>grounding.rs</code></li>
+<li>Update parsers for new syntax</li>
+</ol>
+<h2 id="testing-strategy"><a class="header" href="#testing-strategy">Testing Strategy</a></h2>
+<pre><code>tests/
+├── Unit tests (per module)
+│   ├── reason.rs - 40+ tests
+│   ├── scalable.rs - 30+ tests
+│   └── ...
+├── Integration tests
+│   └── Semantic equivalence (standard vs scalable)
+├── Parser tests
+│   ├── dfl.rs
+│   └── spl.rs
+└── WASM tests
+    └── Basic functionality
+</code></pre>
+<h3 id="key-test-categories"><a class="header" href="#key-test-categories">Key Test Categories</a></h3>
+<ol>
+<li><strong>Basic reasoning</strong>: facts, rules, chains</li>
+<li><strong>Conflict resolution</strong>: superiority, defeaters</li>
+<li><strong>Edge cases</strong>: cycles, empty, self-reference</li>
+<li><strong>Stress tests</strong>: long chains, wide theories</li>
+<li><strong>Semantic equivalence</strong>: standard ≡ scalable</li>
+</ol>
+<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Complexity</th></tr>
+</thead>
+<tbody>
+<tr><td>Add fact</td><td>O(1) amortized</td></tr>
+<tr><td>Add rule</td><td>O(1) amortized</td></tr>
+<tr><td>Build index</td><td>O(n) where n = rules</td></tr>
+<tr><td>Lookup by head</td><td>O(1)</td></tr>
+<tr><td>Lookup by body</td><td>O(1)</td></tr>
+<tr><td>Superiority check</td><td>O(1)</td></tr>
+<tr><td>Standard reasoning</td><td>O(n * m)</td></tr>
+<tr><td>Scalable reasoning</td><td>O(n * m) with better constants</td></tr>
+</tbody>
+</table>
+</div>
+<p>Where:</p>
+<ul>
+<li>n = number of rules</li>
+<li>m = average body size</li>
+</ul>
+<h2 id="dependencies"><a class="header" href="#dependencies">Dependencies</a></h2>
+<p>Core dependencies:</p>
+<ul>
+<li><code>rustc-hash</code> - Fast hash function for internal HashMaps</li>
+</ul>
+<p>Parser dependencies:</p>
+<ul>
+<li><code>nom</code> - Parser combinator library</li>
+</ul>
+<p>WASM dependencies:</p>
+<ul>
+<li><code>wasm-bindgen</code> - Rust/JavaScript interop</li>
+<li><code>serde</code> - JSON serialization</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

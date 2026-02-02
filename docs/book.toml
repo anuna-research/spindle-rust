@@ -1,0 +1,19 @@
+[book]
+title = "Spindle-Rust"
+authors = ["anuna"]
+description = "A Rust implementation of the SPINdle defeasible logic reasoning engine"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "coal"
+git-repository-url = "https://codeberg.org/anuna/spindle-rust"
+edit-url-template = "https://codeberg.org/anuna/spindle-rust/_edit/main/docs/{path}"
+
+[output.html.fold]
+enable = true
+level = 1

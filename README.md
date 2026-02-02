@@ -1,6 +1,11 @@
 # Spindle-Rust
 
-A Rust implementation of the SPINdle defeasible logic reasoning engine, ported from [spindle-racket](https://github.com/anthropics/spindle-racket) v1.7.0.
+A Rust implementation of the [SPINdle](http://spindle.data61.csiro.au/) defeasible logic reasoning engine.
+
+This project is part of the SPINdle family:
+- **[SPINdle](http://spindle.data61.csiro.au/)** - The original Java implementation (v2.2.4) by NICTA (now Data61/CSIRO)
+- **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A Racket port with trust-weighted reasoning and `#lang spindle`
+- **spindle-rust** - This Rust port, based on spindle-racket v1.7.0
 
 ## Features
 
@@ -200,6 +205,20 @@ const abduce = spindle.abduce("flies", 3);
 ```bash
 cargo test
 ```
+
+## Documentation
+
+Full documentation is available at [docs/](docs/) or build locally:
+
+```bash
+cd docs && mdbook serve
+```
+
+## References
+
+- [SPINdle Project](http://spindle.data61.csiro.au/) - Original Java implementation by NICTA/Data61
+- Nute, D. (1994). "Defeasible Logic" - Foundational paper
+- [spindle-racket](https://codeberg.org/anuna/spindle-racket) - Racket implementation
 
 ## License
 
