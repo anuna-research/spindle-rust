@@ -1,0 +1,335 @@
+; SPINdle-Racket to Rust Port Plan
+; Version 1.7.0 -> spindle-rust v0.1.0
+;
+; This plan coordinates the port of spindle-racket defeasible logic
+; reasoning engine to Rust, organized in phases.
+
+;; =============================================================================
+;; PHASE 0: PROJECT SETUP
+;; =============================================================================
+
+(given task-setup-cargo)
+(meta task-setup-cargo
+  (description "Initialize Cargo workspace with crate structure")
+  (phase "0-setup")
+  (priority "high"))
+
+(given task-setup-ci)
+(meta task-setup-ci
+  (description "Setup GitHub Actions CI/CD pipeline")
+  (phase "0-setup")
+  (priority "medium"))
+
+(given no-deps-setup-cargo)
+(given no-deps-setup-ci)
+
+;; =============================================================================
+;; PHASE 1: CORE DATA STRUCTURES
+;; =============================================================================
+
+(given task-port-literals)
+(meta task-port-literals
+  (description "Port Literal, Mode, Temporal structs from spindle.rkt")
+  (phase "1-core-structs")
+  (source-file "src/spindle.rkt")
+  (lines "~200"))
+
+(given task-port-rules)
+(meta task-port-rules
+  (description "Port Rule, Superiority, RuleType structs")
+  (phase "1-core-structs")
+  (source-file "src/spindle.rkt")
+  (lines "~150"))
+
+(given task-port-theory)
+(meta task-port-theory
+  (description "Port Theory, IndexedTheory, Conclusion structs")
+  (phase "1-core-structs")
+  (source-file "src/spindle.rkt")
+  (lines "~300"))
+
+(given task-port-indexing)
+(meta task-port-indexing
+  (description "Port theory indexing for O(1) rule lookup")
+  (phase "1-core-structs")
+  (source-file "src/spindle.rkt")
+  (lines "~200"))
+
+;; Dependencies within Phase 1
+(given dep-rules-on-literals)
+(given dep-theory-on-rules)
+(given dep-indexing-on-theory)
+
+;; =============================================================================
+;; PHASE 2: DFL PARSER
+;; =============================================================================
+
+(given task-port-lexer)
+(meta task-port-lexer
+  (description "Port DFL lexer using nom or logos")
+  (phase "2-parser")
+  (source-file "src/parser/lexer.rkt"))
+
+(given task-port-parser)
+(meta task-port-parser
+  (description "Port DFL parser with AST generation")
+  (phase "2-parser")
+  (source-file "src/parser/parser.rkt"))
+
+(given task-port-ast)
+(meta task-port-ast
+  (description "Port DFL AST types and conversions")
+  (phase "2-parser")
+  (source-file "src/parser/ast.rkt"))
+
+;; Dependencies
+(given dep-parser-on-lexer)
+(given dep-parser-on-ast)
+(given dep-parser-on-structs)
+
+;; =============================================================================
+;; PHASE 3: STANDARD REASONING ENGINE
+;; =============================================================================
+
+(given task-port-standard-reason)
+(meta task-port-standard-reason
+  (description "Port standard DL(d) forward chaining reasoner")
+  (phase "3-reasoning")
+  (source-file "src/spindle.rkt")
+  (lines "~800"))
+
+(given task-port-conflict-resolution)
+(meta task-port-conflict-resolution
+  (description "Port conflict detection and superiority resolution")
+  (phase "3-reasoning")
+  (source-file "src/spindle.rkt")
+  (lines "~400"))
+
+(given task-port-conclusions)
+(meta task-port-conclusions
+  (description "Port conclusion computation (+D/-D/+d/-d)")
+  (phase "3-reasoning")
+  (source-file "src/spindle.rkt")
+  (lines "~300"))
+
+;; Dependencies
+(given dep-reason-on-indexing)
+(given dep-reason-on-parser)
+(given dep-conflict-on-reason)
+(given dep-conclusions-on-conflict)
+
+;; =============================================================================
+;; PHASE 4: SCALABLE REASONING (DL(d||))
+;; =============================================================================
+
+(given task-port-delta-closure)
+(meta task-port-delta-closure
+  (description "Port Phase 1 delta closure (definite conclusions)")
+  (phase "4-scalable")
+  (source-file "src/scalable/closures.rkt"))
+
+(given task-port-lambda-closure)
+(meta task-port-lambda-closure
+  (description "Port Phase 2 lambda closure (over-approximation)")
+  (phase "4-scalable")
+  (source-file "src/scalable/closures.rkt"))
+
+(given task-port-partial-closure)
+(meta task-port-partial-closure
+  (description "Port Phase 3 partial closure (defeasible with conflicts)")
+  (phase "4-scalable")
+  (source-file "src/scalable/closures.rkt"))
+
+(given task-port-injection)
+(meta task-port-injection
+  (description "Port injection-based forward chaining")
+  (phase "4-scalable")
+  (source-file "src/scalable/injection.rkt"))
+
+;; Dependencies
+(given dep-scalable-on-standard)
+(given dep-lambda-on-delta)
+(given dep-partial-on-lambda)
+(given dep-injection-on-indexing)
+
+;; =============================================================================
+;; PHASE 5: TEMPORAL REASONING
+;; =============================================================================
+
+(given task-port-temporal)
+(meta task-port-temporal
+  (description "Port Allen interval algebra (13 relations)")
+  (phase "5-temporal")
+  (source-file "src/temporal.rkt"))
+
+(given task-port-moment)
+(meta task-port-moment
+  (description "Port ISO 8601 timestamp parsing")
+  (phase "5-temporal")
+  (source-file "src/moment.rkt"))
+
+;; Dependencies
+(given dep-temporal-on-structs)
+
+;; =============================================================================
+;; PHASE 6: GROUNDING (First-Order Variables)
+;; =============================================================================
+
+(given task-port-grounding)
+(meta task-port-grounding
+  (description "Port Datalog-style variable grounding")
+  (phase "6-grounding")
+  (source-file "src/grounding.rkt"))
+
+;; Dependencies
+(given dep-grounding-on-theory)
+
+;; =============================================================================
+;; PHASE 7: TESTS
+;; =============================================================================
+
+(given task-port-core-tests)
+(meta task-port-core-tests
+  (description "Port core reasoning tests (800+ cases)")
+  (phase "7-tests")
+  (source-file "tests/spindle-tests.rkt"))
+
+(given task-port-scalable-tests)
+(meta task-port-scalable-tests
+  (description "Port scalable algorithm tests")
+  (phase "7-tests")
+  (source-file "tests/scalable-*.rkt"))
+
+(given task-port-temporal-tests)
+(meta task-port-temporal-tests
+  (description "Port temporal reasoning tests")
+  (phase "7-tests")
+  (source-file "tests/temporal-*.rkt"))
+
+;; Dependencies
+(given dep-tests-on-all-phases)
+
+;; =============================================================================
+;; PHASE 8: CLI
+;; =============================================================================
+
+(given task-build-cli)
+(meta task-build-cli
+  (description "Build spindle CLI with clap")
+  (phase "8-cli")
+  (priority "medium"))
+
+;; =============================================================================
+;; READINESS RULES
+;; =============================================================================
+
+;; Phase 0: Setup (no dependencies)
+(normally r-ready-setup-cargo
+  (and task-setup-cargo no-deps-setup-cargo)
+  ready-setup-cargo)
+
+(normally r-ready-setup-ci
+  (and task-setup-ci no-deps-setup-ci)
+  ready-setup-ci)
+
+;; Phase 1: Core Structs
+(normally r-ready-literals
+  (and task-port-literals completed-setup-cargo)
+  ready-port-literals)
+
+(normally r-ready-rules
+  (and task-port-rules completed-port-literals)
+  ready-port-rules)
+
+(normally r-ready-theory
+  (and task-port-theory completed-port-rules)
+  ready-port-theory)
+
+(normally r-ready-indexing
+  (and task-port-indexing completed-port-theory)
+  ready-port-indexing)
+
+;; Phase 2: Parser
+(normally r-ready-lexer
+  (and task-port-lexer completed-port-indexing)
+  ready-port-lexer)
+
+(normally r-ready-ast
+  (and task-port-ast completed-port-indexing)
+  ready-port-ast)
+
+(normally r-ready-parser
+  (and task-port-parser completed-port-lexer completed-port-ast)
+  ready-port-parser)
+
+;; Phase 3: Standard Reasoning
+(normally r-ready-standard-reason
+  (and task-port-standard-reason completed-port-parser completed-port-indexing)
+  ready-port-standard-reason)
+
+(normally r-ready-conflict
+  (and task-port-conflict-resolution completed-port-standard-reason)
+  ready-port-conflict-resolution)
+
+(normally r-ready-conclusions
+  (and task-port-conclusions completed-port-conflict-resolution)
+  ready-port-conclusions)
+
+;; Phase 4: Scalable
+(normally r-ready-delta
+  (and task-port-delta-closure completed-port-conclusions)
+  ready-port-delta-closure)
+
+(normally r-ready-injection
+  (and task-port-injection completed-port-delta-closure)
+  ready-port-injection)
+
+(normally r-ready-lambda
+  (and task-port-lambda-closure completed-port-delta-closure)
+  ready-port-lambda-closure)
+
+(normally r-ready-partial
+  (and task-port-partial-closure completed-port-lambda-closure)
+  ready-port-partial-closure)
+
+;; Phase 5: Temporal
+(normally r-ready-temporal
+  (and task-port-temporal completed-port-theory)
+  ready-port-temporal)
+
+(normally r-ready-moment
+  (and task-port-moment completed-port-temporal)
+  ready-port-moment)
+
+;; Phase 6: Grounding
+(normally r-ready-grounding
+  (and task-port-grounding completed-port-conclusions)
+  ready-port-grounding)
+
+;; Phase 7: Tests
+(normally r-ready-core-tests
+  (and task-port-core-tests completed-port-conclusions)
+  ready-port-core-tests)
+
+(normally r-ready-scalable-tests
+  (and task-port-scalable-tests completed-port-partial-closure)
+  ready-port-scalable-tests)
+
+(normally r-ready-temporal-tests
+  (and task-port-temporal-tests completed-port-moment)
+  ready-port-temporal-tests)
+
+;; Phase 8: CLI
+(normally r-ready-cli
+  (and task-build-cli completed-port-conclusions completed-port-parser)
+  ready-build-cli)
+
+;; =============================================================================
+;; COMPLETION MARKERS (initially none completed)
+;; =============================================================================
+; Completion facts will be asserted as tasks are done via:
+; hence assert port-plan.spl '(given completed-<task-name>)'
+
+(claims agent:system
+  :at "2026-20-20T16:58:51Z"
+  (given claimed-setup-cargo))

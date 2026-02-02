@@ -1,0 +1,193 @@
+//! Rules in defeasible logic
+//!
+//! Four rule types are supported:
+//! - Facts (>>): Unconditional truths
+//! - Strict rules (->): Must hold if antecedent is true
+//! - Defeasible rules (=>): Normally hold unless defeated
+//! - Defeaters (~>): Block conclusions without proving anything
+
+use std::fmt;
+
+use crate::literal::Literal;
+use crate::mode::Mode;
+use crate::temporal::Temporal;
+
+/// Type alias for rule labels
+pub type RuleLabel = String;
+
+/// The type of a rule, determining its strength
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RuleType {
+    /// Fact (>>): Unconditional truth, no antecedents
+    Fact,
+    /// Strict rule (->): If antecedent then consequent (cannot be defeated)
+    Strict,
+    /// Defeasible rule (=>): If antecedent then typically consequent
+    Defeasible,
+    /// Defeater (~>): Blocks conclusions but doesn't prove anything
+    Defeater,
+}
+
+impl RuleType {
+    /// Get the arrow symbol for this rule type
+    pub fn arrow(&self) -> &'static str {
+        match self {
+            RuleType::Fact => ">>",
+            RuleType::Strict => "->",
+            RuleType::Defeasible => "=>",
+            RuleType::Defeater => "~>",
+        }
+    }
+
+    /// Check if this rule type can produce definite conclusions
+    pub fn is_definite(&self) -> bool {
+        matches!(self, RuleType::Fact | RuleType::Strict)
+    }
+
+    /// Check if this rule type can produce defeasible conclusions
+    pub fn is_defeasible(&self) -> bool {
+        matches!(self, RuleType::Defeasible)
+    }
+
+    /// Check if this is a defeater (blocks but doesn't prove)
+    pub fn is_defeater(&self) -> bool {
+        matches!(self, RuleType::Defeater)
+    }
+}
+
+impl fmt::Display for RuleType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.arrow())
+    }
+}
+
+/// A rule in defeasible logic
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Rule {
+    /// Unique label for this rule
+    pub label: RuleLabel,
+    /// Type of rule (fact, strict, defeasible, defeater)
+    pub rule_type: RuleType,
+    /// Modal operator (if any)
+    pub mode: Mode,
+    /// Temporal bounds (if any)
+    pub temporal: Temporal,
+    /// Body literals (antecedents/premises)
+    pub body: Vec<Literal>,
+    /// Head literals (consequents/conclusions)
+    pub head: Vec<Literal>,
+}
+
+impl Rule {
+    /// Create a new rule
+    pub fn new(
+        label: impl Into<String>,
+        rule_type: RuleType,
+        body: Vec<Literal>,
+        head: Vec<Literal>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            rule_type,
+            mode: Mode::empty(),
+            temporal: Temporal::empty(),
+            body,
+            head,
+        }
+    }
+
+    /// Create a fact (no body)
+    pub fn fact(label: impl Into<String>, head: Literal) -> Self {
+        Self::new(label, RuleType::Fact, vec![], vec![head])
+    }
+
+    /// Create a strict rule
+    pub fn strict(label: impl Into<String>, body: Vec<Literal>, head: Literal) -> Self {
+        Self::new(label, RuleType::Strict, body, vec![head])
+    }
+
+    /// Create a defeasible rule
+    pub fn defeasible(label: impl Into<String>, body: Vec<Literal>, head: Literal) -> Self {
+        Self::new(label, RuleType::Defeasible, body, vec![head])
+    }
+
+    /// Create a defeater
+    pub fn defeater(label: impl Into<String>, body: Vec<Literal>, head: Literal) -> Self {
+        Self::new(label, RuleType::Defeater, body, vec![head])
+    }
+
+    /// Check if this rule is a fact
+    pub fn is_fact(&self) -> bool {
+        self.rule_type == RuleType::Fact
+    }
+
+    /// Check if this rule has an empty body
+    pub fn has_empty_body(&self) -> bool {
+        self.body.is_empty()
+    }
+
+    /// Get the single head literal (panics if multiple heads)
+    pub fn head_literal(&self) -> &Literal {
+        assert_eq!(self.head.len(), 1, "Expected single head literal");
+        &self.head[0]
+    }
+}
+
+impl fmt::Display for Rule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: ", self.label)?;
+
+        if !self.body.is_empty() {
+            let body_str: Vec<_> = self.body.iter().map(|l| l.to_string()).collect();
+            write!(f, "{} ", body_str.join(", "))?;
+        }
+
+        write!(f, "{} ", self.rule_type.arrow())?;
+
+        let head_str: Vec<_> = self.head.iter().map(|l| l.to_string()).collect();
+        write!(f, "{}", head_str.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rule_types() {
+        assert_eq!(RuleType::Fact.arrow(), ">>");
+        assert_eq!(RuleType::Strict.arrow(), "->");
+        assert_eq!(RuleType::Defeasible.arrow(), "=>");
+        assert_eq!(RuleType::Defeater.arrow(), "~>");
+    }
+
+    #[test]
+    fn test_fact_creation() {
+        let fact = Rule::fact("f1", Literal::simple("bird"));
+        assert!(fact.is_fact());
+        assert!(fact.has_empty_body());
+        assert_eq!(fact.head_literal().name, "bird");
+    }
+
+    #[test]
+    fn test_defeasible_rule() {
+        let rule = Rule::defeasible(
+            "r1",
+            vec![Literal::simple("bird")],
+            Literal::simple("flies"),
+        );
+        assert_eq!(rule.rule_type, RuleType::Defeasible);
+        assert_eq!(rule.body.len(), 1);
+        assert_eq!(rule.body[0].name, "bird");
+    }
+
+    #[test]
+    fn test_rule_display() {
+        let rule = Rule::defeasible(
+            "r1",
+            vec![Literal::simple("bird")],
+            Literal::simple("flies"),
+        );
+        assert_eq!(format!("{}", rule), "r1: bird => flies");
+    }
+}

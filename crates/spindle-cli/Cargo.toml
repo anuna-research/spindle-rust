@@ -1,0 +1,16 @@
+[package]
+name = "spindle-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for spindle defeasible logic reasoning"
+
+[[bin]]
+name = "spindle"
+path = "src/main.rs"
+
+[dependencies]
+spindle-core = { path = "../spindle-core" }
+spindle-parser = { path = "../spindle-parser" }
+clap.workspace = true
+serde_json.workspace = true

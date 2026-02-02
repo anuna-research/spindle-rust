@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/spindle-core",
+    "crates/spindle-parser",
+    "crates/spindle-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Spindle Contributors"]
+license = "LGPL-3.0-or-later"
+repository = "https://github.com/anthropics/spindle-rust"
+description = "Defeasible logic reasoning engine - Rust port of SPINdle"
+keywords = ["defeasible-logic", "reasoning", "non-monotonic", "logic"]
+categories = ["science", "algorithms"]
+
+[workspace.dependencies]
+# Core dependencies
+thiserror = "2"
+derive_more = { version = "1", features = ["display", "from"] }
+
+# Parser dependencies
+nom = "8"
+logos = "0.14"
+
+# CLI dependencies
+clap = { version = "4", features = ["derive"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Collections
+indexmap = "2"
+rustc-hash = "2"
+
+# Testing
+pretty_assertions = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
