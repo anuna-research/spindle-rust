@@ -33,6 +33,8 @@ A Rust implementation of the SPINdle defeasible logic reasoning engine, ported f
   - Why-not: Explanation of failures
   - Abduction: Finding hypotheses to prove goals
 
+- **WebAssembly Support**: Run in browsers and Node.js via wasm-bindgen
+
 ## Installation
 
 ```bash
@@ -117,6 +119,61 @@ theory.add_superiority(&r2, &r1);
 let conclusions = theory.reason();
 ```
 
+## WebAssembly Usage
+
+Build the WASM package:
+
+```bash
+cd crates/spindle-wasm
+wasm-pack build --target web --release
+```
+
+Use in JavaScript/TypeScript:
+
+```typescript
+import init, { Spindle } from 'spindle-wasm';
+
+await init();
+
+const spindle = new Spindle();
+
+// Add theory programmatically
+spindle.addFact("bird");
+spindle.addFact("penguin");
+spindle.addDefeasibleRule(["bird"], "flies");
+spindle.addDefeasibleRule(["penguin"], "~flies");
+spindle.addSuperiority("r2", "r1");
+
+// Or parse DFL
+spindle.parseDfl(`
+  f1: >> bird
+  f2: >> penguin
+  r1: bird => flies
+  r2: penguin => ~flies
+  r2 > r1
+`);
+
+// Reason
+const conclusions = spindle.reason();
+// => [{conclusion_type: "+D", literal: "bird", positive: true}, ...]
+
+// Query
+const result = spindle.query("~flies");
+// => {status: "provable", literal: "~flies", conclusion_type: "+d"}
+
+// What-if hypothetical reasoning
+const whatIf = spindle.whatIf(["wounded"], "~flies");
+// => {provable: true, new_conclusions: [...]}
+
+// Why-not failure explanation
+const whyNot = spindle.whyNot("flies");
+// => {literal: "flies", would_derive: "r1", blockers: [...]}
+
+// Abduction
+const abduce = spindle.abduce("flies", 3);
+// => {goal: "flies", solutions: [[...], [...]]}
+```
+
 ## Crate Structure
 
 - `spindle-core` - Core reasoning engine
@@ -129,6 +186,7 @@ let conclusions = theory.reason();
   - `query` - What-if, why-not, abduction operators
 - `spindle-parser` - DFL and SPL format parsers
 - `spindle-cli` - Command-line interface
+- `spindle-wasm` - WebAssembly bindings for JavaScript/TypeScript
 
 ## Testing
 
