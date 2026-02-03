@@ -198,14 +198,12 @@ impl RuleWorklist {
 
     /// Add a rule to the worklist if not already present.
     pub fn enqueue(&mut self, label: RuleLabel) {
-        if !self.in_queue.contains(&label) {
-            if let Some(state) = self.states.get_mut(&label) {
-                if !state.fired {
-                    state.in_worklist = true;
-                    self.in_queue.insert(label.clone());
-                    self.queue.push_back(label);
-                }
-            }
+        if !self.in_queue.contains(&label)
+            && let Some(state) = self.states.get_mut(&label)
+            && !state.fired {
+            state.in_worklist = true;
+            self.in_queue.insert(label.clone());
+            self.queue.push_back(label);
         }
     }
 

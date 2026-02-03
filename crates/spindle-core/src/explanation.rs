@@ -440,65 +440,62 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Expl
 
     let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
-    if let Some(rule_label) = &conclusion.rule_label {
-        if let Some(rule) = theory.get_rule(rule_label) {
-            let mut step = ProofStep::new(
-                rule.label.clone(),
-                rule.rule_type,
-                rule.to_string(), // Rule struct doesn't have source text, approximation
-            );
+    if let Some(rule_label) = &conclusion.rule_label
+        && let Some(rule) = theory.get_rule(rule_label) {
+        let mut step = ProofStep::new(
+            rule.label.clone(),
+            rule.rule_type,
+            rule.to_string(), // Rule struct doesn't have source text, approximation
+        );
 
-            // Determine substitution by matching rule head against conclusion literal
-            // If rule has multiple heads, find the one that matches
-            let head_pattern = rule
-                .head
-                .iter()
-                .find(|h| match_literal(h, literal).is_some())
-                .unwrap_or(&rule.head[0]); // Fallback, shouldn't happen if logic correct
+        // Determine substitution by matching rule head against conclusion literal
+        // If rule has multiple heads, find the one that matches
+        let head_pattern = rule
+            .head
+            .iter()
+            .find(|h| match_literal(h, literal).is_some())
+            .unwrap_or(&rule.head[0]); // Fallback, shouldn't happen if logic correct
 
-            let subst = match_literal(head_pattern, literal).unwrap_or_default();
+        let subst = match_literal(head_pattern, literal).unwrap_or_default();
 
-            // Recursively build proofs for body, applying substitution
-            let mut body_proofs = Vec::new();
-            for body_lit in &rule.body {
-                let ground_body_lit = apply_substitution_to_literal(body_lit, &subst);
+        // Recursively build proofs for body, applying substitution
+        let mut body_proofs = Vec::new();
+        for body_lit in &rule.body {
+            let ground_body_lit = apply_substitution_to_literal(body_lit, &subst);
 
-                if let Some(body_expl) = explain(theory, &ground_body_lit) {
-                    if let Some(body_tree) = body_expl.proof_tree {
-                        body_proofs.push(body_tree);
-                    }
-                } else {
-                    // If exact ground literal not found, try to find a matching one
-                    // (Handle existential cases like matter_seen where body var isn't in head)
+            if let Some(body_expl) = explain(theory, &ground_body_lit) {
+                if let Some(body_tree) = body_expl.proof_tree {
+                    body_proofs.push(body_tree);
+                }
+            } else {
+                // If exact ground literal not found, try to find a matching one
+                // (Handle existential cases like matter_seen where body var isn't in head)
                     if let Some(matching_conc) = conclusions.iter().find(|c| {
                         c.conclusion_type.is_positive()
                             && match_literal(body_lit, &c.literal).is_some()
-                    }) {
-                        if let Some(body_expl) = explain(theory, &matching_conc.literal) {
-                            if let Some(body_tree) = body_expl.proof_tree {
-                                body_proofs.push(body_tree);
-                            }
-                        }
+                    })
+                        && let Some(body_expl) = explain(theory, &matching_conc.literal)
+                        && let Some(body_tree) = body_expl.proof_tree {
+                        body_proofs.push(body_tree);
                     }
-                }
             }
-            step.body_proofs = body_proofs;
-
-            // Annotations
-            // (Assuming rule has annotations or we mock them)
-            // step.annotations = ...
-
-            let proof_node = ProofNode::new(
-                literal.clone(),
-                match conclusion.conclusion_type {
-                    ConclusionType::DefinitelyProvable => DerivationType::Definite,
-                    _ => DerivationType::Defeasible,
-                },
-            )
-            .with_proof_step(step);
-
-            explanation.proof_tree = Some(proof_node);
         }
+        step.body_proofs = body_proofs;
+
+        // Annotations
+        // (Assuming rule has annotations or we mock them)
+        // step.annotations = ...
+
+        let proof_node = ProofNode::new(
+            literal.clone(),
+            match conclusion.conclusion_type {
+                ConclusionType::DefinitelyProvable => DerivationType::Definite,
+                _ => DerivationType::Defeasible,
+            },
+        )
+        .with_proof_step(step);
+
+        explanation.proof_tree = Some(proof_node);
     }
 
     Some(explanation)

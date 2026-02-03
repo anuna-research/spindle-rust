@@ -336,28 +336,31 @@ impl WhyNotResult {
             .flat_map(|b| b.missing_literals.iter())
             .collect()
     }
+}
 
+impl fmt::Display for WhyNotResult {
     /// Convert to human-readable string
-    pub fn to_string(&self) -> String {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.blocked_by.is_empty() {
-            return format!("{} is not provable: no rules can derive it", self.literal);
+            return write!(
+                f,
+                "{} is not provable: no rules can derive it",
+                self.literal
+            );
         }
 
-        let mut output = format!("{} is not provable:\n", self.literal);
+        writeln!(f, "{} is not provable:", self.literal)?;
 
         if let Some(ref rule) = self.would_derive {
-            output.push_str(&format!("  Would be derived by rule: {}\n", rule));
+            writeln!(f, "  Would be derived by rule: {}", rule)?;
         }
 
-        output.push_str("  Blocked by:\n");
+        writeln!(f, "  Blocked by:")?;
         for bc in &self.blocked_by {
-            output.push_str(&format!(
-                "    - Rule {}: {}\n      ({})\n",
-                bc.rule_label, bc.blocking_type, bc.explanation
-            ));
+            writeln!(f, "    - Rule {}: {}", bc.rule_label, bc.blocking_type)?;
+            writeln!(f, "      ({})", bc.explanation)?;
         }
-
-        output
+        Ok(())
     }
 }
 
@@ -495,29 +498,26 @@ impl AbductionResult {
     pub fn smallest_solution(&self) -> Option<&AbductionSolution> {
         self.solutions.iter().min_by_key(|s| s.size())
     }
+}
 
+impl fmt::Display for AbductionResult {
     /// Convert to human-readable string
-    pub fn to_string(&self) -> String {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.solutions.is_empty() {
-            return format!("No hypotheses found for {}", self.goal);
+            return write!(f, "No hypotheses found for {}", self.goal);
         }
 
-        let mut output = format!("Abduction solutions for {}:\n", self.goal);
+        writeln!(f, "Abduction solutions for {}:", self.goal)?;
 
         for (i, sol) in self.solutions.iter().enumerate() {
             if sol.is_already_provable() {
-                output.push_str(&format!("  {}. Already provable\n", i + 1));
+                writeln!(f, "  {}. Already provable", i + 1)?;
             } else {
                 let facts: Vec<_> = sol.facts.iter().map(|l| l.to_string()).collect();
-                output.push_str(&format!(
-                    "  {}. Add facts: {{{}}}\n",
-                    i + 1,
-                    facts.join(", ")
-                ));
+                writeln!(f, "  {}. Add facts: {{{}}}", i + 1, facts.join(", "))?;
             }
         }
-
-        output
+        Ok(())
     }
 }
 
@@ -535,7 +535,9 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Abductio
         .any(|c| c.literal == *goal && c.conclusion_type.is_positive());
 
     if is_provable {
-        result.solutions.push(AbductionSolution::new(HashSet::new()));
+        result
+            .solutions
+            .push(AbductionSolution::new(HashSet::new()));
         return result;
     }
 
@@ -659,7 +661,10 @@ mod tests {
 
         let result = what_if(&theory, hypotheticals, &Literal::simple("ready_review"));
         assert!(result.is_provable());
-        assert!(result.new_conclusions.iter().any(|l| l.name() == "ready_review"));
+        assert!(result
+            .new_conclusions
+            .iter()
+            .any(|l| l.name() == "ready_review"));
     }
 
     #[test]
@@ -669,7 +674,11 @@ mod tests {
 
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("p"))];
 
-        assert!(what_if_provable(&theory, hypotheticals, &Literal::simple("q")));
+        assert!(what_if_provable(
+            &theory,
+            hypotheticals,
+            &Literal::simple("q")
+        ));
     }
 
     #[test]
@@ -718,7 +727,10 @@ mod tests {
         theory.add_fact("~flies"); // Complement is proven
 
         let result = why_not(&theory, &Literal::simple("flies"));
-        assert!(result.blocked_by.iter().any(|b| b.blocking_type == BlockingType::Contradicted));
+        assert!(result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Contradicted));
     }
 
     #[test]

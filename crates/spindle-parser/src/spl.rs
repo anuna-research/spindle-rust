@@ -32,15 +32,14 @@
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
-    character::complete::{char, multispace0, multispace1, none_of},
-    combinator::{map, opt, value},
-    multi::{many0, separated_list1},
-    sequence::{delimited, preceded, terminated, tuple},
+    bytes::complete::take_while1,
+    character::complete::{char, multispace0},
+    multi::many0,
+    sequence::{delimited, preceded},
     IResult, Parser,
 };
 
-use spindle_core::{Literal, MetaValue, Rule, RuleType, Superiority, Theory};
+use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 
 use crate::ParseError;
 
@@ -387,37 +386,36 @@ fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
 
     // Process each property: (key "value") or (key ("v1" "v2"))
     for prop in &args[1..] {
-        if let Some(prop_list) = prop.as_list() {
-            if prop_list.len() >= 2 {
-                let key = prop_list[0]
-                    .as_atom()
-                    .ok_or_else(|| ParseError::ParserError {
-                        line: 1,
-                        message: "meta property key must be an atom".to_string(),
-                    })?;
+        if let Some(prop_list) = prop.as_list()
+            && prop_list.len() >= 2 {
+            let key = prop_list[0]
+                .as_atom()
+                .ok_or_else(|| ParseError::ParserError {
+                    line: 1,
+                    message: "meta property key must be an atom".to_string(),
+                })?;
 
-                // Check if value is a list or single value
-                let value = match &prop_list[1] {
-                    SExpr::Atom(s) => MetaValue::String(s.clone()),
-                    SExpr::List(items) => {
-                        // List of strings
-                        let strings: Result<Vec<String>, _> = items
-                            .iter()
-                            .map(|item| {
-                                item.as_atom().map(|s| s.to_string()).ok_or_else(|| {
-                                    ParseError::ParserError {
-                                        line: 1,
-                                        message: "meta list values must be atoms".to_string(),
-                                    }
-                                })
+            // Check if value is a list or single value
+            let value = match &prop_list[1] {
+                SExpr::Atom(s) => MetaValue::String(s.clone()),
+                SExpr::List(items) => {
+                    // List of strings
+                    let strings: Result<Vec<String>, _> = items
+                        .iter()
+                        .map(|item| {
+                            item.as_atom().map(|s| s.to_string()).ok_or_else(|| {
+                                ParseError::ParserError {
+                                    line: 1,
+                                    message: "meta list values must be atoms".to_string(),
+                                }
                             })
-                            .collect();
-                        MetaValue::List(strings?)
-                    }
-                };
+                        })
+                        .collect();
+                    MetaValue::List(strings?)
+                }
+            };
 
-                theory.add_meta(label, key, value);
-            }
+            theory.add_meta(label, key, value);
         }
     }
 

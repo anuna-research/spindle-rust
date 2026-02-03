@@ -20,9 +20,10 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 /// Represents a time point (can be a moment or infinity)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum TimePoint {
     /// Negative infinity (beginning of time)
+    #[default]
     NegInf,
     /// A specific moment in time (milliseconds since epoch)
     Moment(i64),
@@ -94,11 +95,7 @@ impl Hash for TimePoint {
     }
 }
 
-impl Default for TimePoint {
-    fn default() -> Self {
-        Self::NegInf
-    }
-}
+// impl Default for TimePoint removed since we derive it now
 
 impl fmt::Display for TimePoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -182,7 +182,7 @@ fn load_theory(file: &PathBuf) -> spindle_core::Theory {
     };
 
     // Auto-detect SPL vs DFL based on file extension or content
-    let is_spl = file.extension().map_or(false, |ext| ext == "spl")
+    let is_spl = file.extension().is_some_and(|ext| ext == "spl")
         || content.trim().starts_with("#lang")
         || content.trim().starts_with('(')
         || content.trim().starts_with(';');
@@ -213,12 +213,11 @@ fn parse_literal_arg(s: &str) -> Literal {
     if s.trim().starts_with('(') {
         // Wrap in (given ...) so the full parser can handle it
         let dummy_spl = format!("(given {})", s);
-        if let Ok(theory) = parse_spl_str(&dummy_spl) {
-            if let Some(fact) = theory.facts().next() {
-                // Return the literal from the first fact
-                if let Some(head) = fact.head.first() {
-                    return head.clone();
-                }
+        if let Ok(theory) = parse_spl_str(&dummy_spl)
+            && let Some(fact) = theory.facts().next() {
+            // Return the literal from the first fact
+            if let Some(head) = fact.head.first() {
+                return head.clone();
             }
         }
     }
@@ -381,7 +380,7 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool) {
         });
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
-        println!("{}", result.to_string());
+        println!("{}", result);
     }
 }
 
@@ -410,6 +409,6 @@ fn run_requires(file: &PathBuf, literal: &str, max: usize, json: bool) {
         });
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
-        println!("{}", result.to_string());
+        println!("{}", result);
     }
 }

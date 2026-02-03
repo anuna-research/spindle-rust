@@ -457,20 +457,19 @@ fn compute_partial_closure(
 
             // Trigger rules that have this literal in body
             for rule in indexed.rules_with_body_id(lit_id) {
-                if let Some(rem) = remaining.get_mut(rule.label.as_str()) {
-                    if *rem > 0 {
-                        *rem -= 1;
-                        if *rem == 0 {
-                            // Rule body now satisfied - add head to worklist
-                            for head_lit in &rule.head {
-                                let head_id = head_lit.literal_id();
-                                if lambda.contains(&head_id)
-                                    && !partial.contains(&head_id)
-                                    && !in_worklist.contains(&head_id)
-                                {
-                                    worklist.push_back(head_id);
-                                    in_worklist.insert(head_id);
-                                }
+                if let Some(rem) = remaining.get_mut(rule.label.as_str())
+                    && *rem > 0 {
+                    *rem -= 1;
+                    if *rem == 0 {
+                        // Rule body now satisfied - add head to worklist
+                        for head_lit in &rule.head {
+                            let head_id = head_lit.literal_id();
+                            if lambda.contains(&head_id)
+                                && !partial.contains(&head_id)
+                                && !in_worklist.contains(&head_id)
+                            {
+                                worklist.push_back(head_id);
+                                in_worklist.insert(head_id);
                             }
                         }
                     }
