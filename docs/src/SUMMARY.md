@@ -34,3 +34,4 @@
 # Internals
 
 - [Architecture](internals/architecture.md)
+- [Optimization Notes](internals/optimization-notes.md)
