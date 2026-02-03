@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use spindle_core::conclusion::ConclusionType;
-use spindle_core::explanation::Explanation;
+use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
 use spindle_core::query::{abduce, query, why_not, QueryStatus};
 use spindle_parser::spl::parse_spl as parse_spl_str;
@@ -322,41 +322,11 @@ fn run_query(file: &PathBuf, literal: &str, json: bool) {
     }
 }
 
-// NOTE: We need to implement `explain` manually since it's not exported by the crate
-fn explain_shim(theory: &spindle_core::Theory, literal: &Literal) -> Option<Explanation> {
-    use spindle_core::reason::reason;
-    // Basic shim that checks if provable and returns a dummy explanation for now
-    // In a real implementation, this would call into the explanation module's logic
-    // which seems to require `reason_with_explanations` or similar which isn't public?
-    // Wait, let's look at `explanation.rs` again.
-    // It has `Explanation::new` and structs, but no top-level `explain` function?
-    // The previous read showed `explain` function was MISSING from exports.
-    // Let's re-read the file to be sure.
-    // Ah, `explanation.rs` defines the structs but not the function itself.
-    // Let's implement a basic explanation generator here or admit we need to update core.
-
-    // For now, let's just return None to unblock compilation if we can't do it easily.
-    // Or better, let's look at how to construct one.
-
-    let conclusions = reason(theory);
-    for c in conclusions {
-        if c.literal == *literal && c.conclusion_type.is_positive() {
-            let expl = Explanation::new(c.conclusion_type, c.literal.clone());
-            // We can't easily build the proof tree without `reason_with_explanations`
-            // which might be missing.
-            // Let's just return this minimal explanation.
-            return Some(expl);
-        }
-    }
-    None
-}
-
 fn run_explain(file: &PathBuf, literal: &str, json: bool) {
     let theory = load_theory(file);
     let lit = parse_literal_arg(literal);
 
-    // Using our shim since `spindle_core::explanation::explain` doesn't exist
-    match explain_shim(&theory, &lit) {
+    match explain(&theory, &lit) {
         Some(explanation) => {
             if json {
                 println!(

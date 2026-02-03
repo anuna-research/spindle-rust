@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::conclusion::ConclusionType;
+use crate::grounding::{apply_substitution_to_literal, match_literal};
 use crate::literal::Literal;
 use crate::rule::RuleType;
 
@@ -34,7 +35,10 @@ impl Annotations {
     pub fn with_entries(entries: Vec<(&str, &str)>) -> Self {
         Self {
             id: None,
-            entries: entries.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            entries: entries
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         }
     }
 
@@ -424,6 +428,82 @@ impl Explanation {
     }
 }
 
+/// Explain why a conclusion holds (returns Proof Tree)
+pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Explanation> {
+    use crate::reason::reason;
+    let conclusions = reason(theory);
+
+    // Find the conclusion for the target literal
+    let conclusion = conclusions
+        .iter()
+        .find(|c| c.literal == *literal && c.conclusion_type.is_positive())?;
+
+    let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
+
+    if let Some(rule_label) = &conclusion.rule_label {
+        if let Some(rule) = theory.get_rule(rule_label) {
+            let mut step = ProofStep::new(
+                rule.label.clone(),
+                rule.rule_type,
+                rule.to_string(), // Rule struct doesn't have source text, approximation
+            );
+
+            // Determine substitution by matching rule head against conclusion literal
+            // If rule has multiple heads, find the one that matches
+            let head_pattern = rule
+                .head
+                .iter()
+                .find(|h| match_literal(h, literal).is_some())
+                .unwrap_or(&rule.head[0]); // Fallback, shouldn't happen if logic correct
+
+            let subst = match_literal(head_pattern, literal).unwrap_or_default();
+
+            // Recursively build proofs for body, applying substitution
+            let mut body_proofs = Vec::new();
+            for body_lit in &rule.body {
+                let ground_body_lit = apply_substitution_to_literal(body_lit, &subst);
+
+                if let Some(body_expl) = explain(theory, &ground_body_lit) {
+                    if let Some(body_tree) = body_expl.proof_tree {
+                        body_proofs.push(body_tree);
+                    }
+                } else {
+                    // If exact ground literal not found, try to find a matching one
+                    // (Handle existential cases like matter_seen where body var isn't in head)
+                    if let Some(matching_conc) = conclusions.iter().find(|c| {
+                        c.conclusion_type.is_positive()
+                            && match_literal(body_lit, &c.literal).is_some()
+                    }) {
+                        if let Some(body_expl) = explain(theory, &matching_conc.literal) {
+                            if let Some(body_tree) = body_expl.proof_tree {
+                                body_proofs.push(body_tree);
+                            }
+                        }
+                    }
+                }
+            }
+            step.body_proofs = body_proofs;
+
+            // Annotations
+            // (Assuming rule has annotations or we mock them)
+            // step.annotations = ...
+
+            let proof_node = ProofNode::new(
+                literal.clone(),
+                match conclusion.conclusion_type {
+                    ConclusionType::DefinitelyProvable => DerivationType::Definite,
+                    _ => DerivationType::Defeasible,
+                },
+            )
+            .with_proof_step(step);
+
+            explanation.proof_tree = Some(proof_node);
+        }
+    }
+
+    Some(explanation)
+}
+
 /// Convert proof node to natural language (recursive)
 fn proof_node_to_natural_language(node: &ProofNode, num: usize, indent: &str) -> String {
     let mut output = String::new();
@@ -541,7 +621,9 @@ mod tests {
         let mut annots = Annotations::new();
         assert!(annots.is_empty());
 
-        annots.entries.insert("description".to_string(), "A test".to_string());
+        annots
+            .entries
+            .insert("description".to_string(), "A test".to_string());
         assert!(!annots.is_empty());
         assert_eq!(annots.description(), Some("A test"));
     }
@@ -587,11 +669,12 @@ mod tests {
     #[test]
     fn test_explanation_natural_language() {
         let step = ProofStep::new("f1", RuleType::Fact, ">> bird");
-        let proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
-            .with_proof_step(step);
+        let proof =
+            ProofNode::new(Literal::simple("bird"), DerivationType::Definite).with_proof_step(step);
 
-        let explanation = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("bird"))
-            .with_proof(proof);
+        let explanation =
+            Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("bird"))
+                .with_proof(proof);
 
         let nl = explanation.to_natural_language();
         assert!(nl.contains("bird"));
@@ -617,10 +700,8 @@ mod tests {
 
     #[test]
     fn test_explanation_json() {
-        let explanation = Explanation::new(
-            ConclusionType::DefeasiblyProvable,
-            Literal::simple("flies"),
-        );
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"));
 
         let json = explanation.to_json();
         assert_eq!(json["conclusion_type"], "+d");
