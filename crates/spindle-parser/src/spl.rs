@@ -32,15 +32,14 @@
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
-    character::complete::{char, multispace0, multispace1, none_of},
-    combinator::{map, opt, value},
-    multi::{many0, separated_list1},
-    sequence::{delimited, preceded, terminated, tuple},
+    bytes::complete::take_while1,
+    character::complete::{char, multispace0},
+    multi::many0,
+    sequence::{delimited, preceded},
     IResult, Parser,
 };
 
-use spindle_core::{Literal, MetaValue, Rule, RuleType, Superiority, Theory};
+use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 
 use crate::ParseError;
 
@@ -72,7 +71,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     Ok(theory)
 }
 
-/// Remove semicolon comments and #lang directives from input
+/// Remove semicolon comments and #lang directives from input, respecting quotes
 fn remove_comments(input: &str) -> String {
     input
         .lines()
@@ -80,14 +79,34 @@ fn remove_comments(input: &str) -> String {
             let trimmed = line.trim();
             // Skip #lang directives (Racket-specific)
             if trimmed.starts_with("#lang") {
-                return "";
+                return "".to_string();
             }
-            // Remove ; comments
-            if let Some(pos) = line.find(';') {
-                &line[..pos]
-            } else {
-                line
+
+            let mut result = String::new();
+            let mut in_string = false;
+            let mut escaped = false;
+
+            for c in line.chars() {
+                if in_string {
+                    result.push(c);
+                    if escaped {
+                        escaped = false;
+                    } else if c == '\\' {
+                        escaped = true;
+                    } else if c == '"' {
+                        in_string = false;
+                    }
+                } else {
+                    if c == ';' {
+                        break; // Comment starts
+                    }
+                    result.push(c);
+                    if c == '"' {
+                        in_string = true;
+                    }
+                }
             }
+            result
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -249,11 +268,7 @@ fn process_rule(
         if let Some(label_str) = args[0].as_atom() {
             // Check if it looks like a label (not a keyword like "and")
             if label_str != "and" && label_str != "not" && !label_str.starts_with('(') {
-                (
-                    Some(label_str.to_string()),
-                    &args[1],
-                    &args[2],
-                )
+                (Some(label_str.to_string()), &args[1], &args[2])
             } else {
                 (None, &args[0], &args[1])
             }
@@ -334,12 +349,12 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                     let predicates: Result<Vec<String>, _> = items[1..]
                         .iter()
                         .map(|a| {
-                            a.as_atom()
-                                .map(|s| s.to_string())
-                                .ok_or_else(|| ParseError::ParserError {
+                            a.as_atom().map(|s| s.to_string()).ok_or_else(|| {
+                                ParseError::ParserError {
                                     line: 1,
                                     message: "Expected atom argument".to_string(),
-                                })
+                                }
+                            })
                         })
                         .collect();
                     Ok(Literal::new(
@@ -371,35 +386,36 @@ fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
 
     // Process each property: (key "value") or (key ("v1" "v2"))
     for prop in &args[1..] {
-        if let Some(prop_list) = prop.as_list() {
-            if prop_list.len() >= 2 {
-                let key = prop_list[0].as_atom().ok_or_else(|| ParseError::ParserError {
+        if let Some(prop_list) = prop.as_list()
+            && prop_list.len() >= 2 {
+            let key = prop_list[0]
+                .as_atom()
+                .ok_or_else(|| ParseError::ParserError {
                     line: 1,
                     message: "meta property key must be an atom".to_string(),
                 })?;
 
-                // Check if value is a list or single value
-                let value = match &prop_list[1] {
-                    SExpr::Atom(s) => MetaValue::String(s.clone()),
-                    SExpr::List(items) => {
-                        // List of strings
-                        let strings: Result<Vec<String>, _> = items
-                            .iter()
-                            .map(|item| {
-                                item.as_atom()
-                                    .map(|s| s.to_string())
-                                    .ok_or_else(|| ParseError::ParserError {
-                                        line: 1,
-                                        message: "meta list values must be atoms".to_string(),
-                                    })
+            // Check if value is a list or single value
+            let value = match &prop_list[1] {
+                SExpr::Atom(s) => MetaValue::String(s.clone()),
+                SExpr::List(items) => {
+                    // List of strings
+                    let strings: Result<Vec<String>, _> = items
+                        .iter()
+                        .map(|item| {
+                            item.as_atom().map(|s| s.to_string()).ok_or_else(|| {
+                                ParseError::ParserError {
+                                    line: 1,
+                                    message: "meta list values must be atoms".to_string(),
+                                }
                             })
-                            .collect();
-                        MetaValue::List(strings?)
-                    }
-                };
+                        })
+                        .collect();
+                    MetaValue::List(strings?)
+                }
+            };
 
-                theory.add_meta(label, key, value);
-            }
+            theory.add_meta(label, key, value);
         }
     }
 

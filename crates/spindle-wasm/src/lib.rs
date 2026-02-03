@@ -22,10 +22,9 @@
 //! // => ["+D bird", "+D penguin", "+d ~flies", ...]
 //! ```
 
-use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
-use spindle_core::conclusion::ConclusionType;
 use spindle_core::literal::Literal;
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
@@ -305,7 +304,9 @@ impl Spindle {
             head: Vec<String>,
         }
 
-        let rules: Vec<JsRule> = self.theory.rules()
+        let rules: Vec<JsRule> = self
+            .theory
+            .rules()
             .map(|r| JsRule {
                 label: r.label.clone(),
                 rule_type: format!("{:?}", r.rule_type),
@@ -381,7 +382,6 @@ impl Spindle {
 
         Ok(output.join("\n"))
     }
-
 }
 
 impl Default for Spindle {
@@ -400,7 +400,6 @@ fn parse_literal(s: &str) -> Literal {
         Literal::simple(s)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -421,5 +420,4 @@ mod tests {
         spindle.parse_dfl("f1: >> bird\nr1: bird => flies").unwrap();
         assert_eq!(spindle.rule_count(), 2);
     }
-
 }

@@ -192,10 +192,9 @@ pub fn intern(s: &str) -> SymbolId {
     // Fast path: check if already interned (read lock only)
     {
         let guard = INTERNER.read().unwrap();
-        if let Some(ref interner) = *guard {
-            if let Some(&id) = interner.map.get(s) {
-                return id;
-            }
+        if let Some(ref interner) = *guard
+            && let Some(&id) = interner.map.get(s) {
+            return id;
         }
     }
 

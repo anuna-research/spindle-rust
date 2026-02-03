@@ -64,6 +64,8 @@ pub struct Conclusion {
     pub conclusion_type: ConclusionType,
     /// The literal this conclusion is about
     pub literal: Literal,
+    /// The rule that derived this conclusion (if any)
+    pub rule_label: Option<String>,
 }
 
 impl Conclusion {
@@ -72,7 +74,14 @@ impl Conclusion {
         Self {
             conclusion_type,
             literal,
+            rule_label: None,
         }
+    }
+
+    /// Create with rule label
+    pub fn with_rule(mut self, label: impl Into<String>) -> Self {
+        self.rule_label = Some(label.into());
+        self
     }
 
     /// Create a definitely provable conclusion

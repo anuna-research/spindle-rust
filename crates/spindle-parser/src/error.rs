@@ -7,15 +7,30 @@ use thiserror::Error;
 pub enum ParseError {
     /// Lexer error
     #[error("lexer error at position {position}: {message}")]
-    LexerError { position: usize, message: String },
+    LexerError {
+        /// Position in the input string
+        position: usize,
+        /// Error message
+        message: String,
+    },
 
     /// Parser error
     #[error("parse error at line {line}: {message}")]
-    ParserError { line: usize, message: String },
+    ParserError {
+        /// Line number
+        line: usize,
+        /// Error message
+        message: String,
+    },
 
     /// Unexpected token
     #[error("unexpected token: expected {expected}, found {found}")]
-    UnexpectedToken { expected: String, found: String },
+    UnexpectedToken {
+        /// Expected token description
+        expected: String,
+        /// Found token description
+        found: String,
+    },
 
     /// IO error
     #[error("IO error: {0}")]
