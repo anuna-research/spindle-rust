@@ -192,4 +192,23 @@ r2 > r1
         assert_eq!(theory.rule_count(), 4);
         assert_eq!(theory.superiorities().len(), 1);
     }
+
+    #[test]
+    fn test_parse_error_invalid_line() {
+        // Line that can't be parsed as rule or superiority
+        let result = parse_dfl("this is not valid dfl syntax");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(format!("{:?}", err).contains("could not parse"));
+    }
+
+    #[test]
+    fn test_parse_error_invalid_line_with_valid() {
+        // Valid lines followed by invalid
+        let result = parse_dfl("f1: >> bird\ninvalid_line");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        // Should report line 2
+        assert!(format!("{:?}", err).contains("2"));
+    }
 }

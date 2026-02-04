@@ -1848,4 +1848,121 @@ mod tests {
         assert_eq!(escape_dot_label("with\\backslash"), "with\\\\backslash");
         assert_eq!(escape_dot_label("with\nnewline"), "with\\nnewline");
     }
+
+    // ==========================================================================
+    // explain() function tests
+    // ==========================================================================
+
+    #[test]
+    fn test_explain_simple_fact() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+
+        let result = explain(&theory, &Literal::simple("bird"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+        assert_eq!(explanation.conclusion_type, ConclusionType::DefinitelyProvable);
+        assert_eq!(explanation.literal.name(), "bird");
+    }
+
+    #[test]
+    fn test_explain_defeasible_chain() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+
+        let result = explain(&theory, &Literal::simple("flies"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+        assert_eq!(explanation.conclusion_type, ConclusionType::DefeasiblyProvable);
+        assert_eq!(explanation.literal.name(), "flies");
+        // Should have proof tree
+        assert!(explanation.proof_tree.is_some());
+    }
+
+    #[test]
+    fn test_explain_not_provable() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+
+        // Try to explain something that isn't provable
+        let result = explain(&theory, &Literal::simple("nonexistent"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_explain_strict_rule_chain() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q");
+        theory.add_strict_rule(&["q"], "r");
+
+        let result = explain(&theory, &Literal::simple("r"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+        assert_eq!(explanation.conclusion_type, ConclusionType::DefinitelyProvable);
+    }
+
+    #[test]
+    fn test_explain_negated_literal() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("~guilty");
+
+        let result = explain(&theory, &Literal::negated("guilty"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+        assert!(explanation.literal.is_negated());
+    }
+
+    #[test]
+    fn test_explain_with_body_proofs() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_defeasible_rule(&["a", "b"], "c");
+
+        let result = explain(&theory, &Literal::simple("c"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+        assert!(explanation.proof_tree.is_some());
+        let tree = explanation.proof_tree.unwrap();
+        // Should have proof step with body proofs
+        if let Some(step) = &tree.proof_step {
+            // Body proofs should have a and b
+            assert!(!step.body_proofs.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_explanation_with_blocked_builder() {
+        let blocked = BlockedProof::new(
+            Literal::simple("x"),
+            "r1",
+            BlockReason::Conflict,
+            "test",
+        );
+        let explanation = Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("x"))
+            .with_blocked(vec![blocked]);
+        assert_eq!(explanation.blocked_alternatives.len(), 1);
+    }
+
+    #[test]
+    fn test_explanation_with_conflicts_builder() {
+        let conflict = ConflictResolution::new("r1", "r2", ResolutionType::TeamDefeat);
+        let explanation = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("x"))
+            .with_conflicts(vec![conflict]);
+        assert_eq!(explanation.conflicts_resolved.len(), 1);
+    }
 }

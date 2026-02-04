@@ -1,6 +1,6 @@
 # Spindle-Rust
 
-[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](.)
+[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)](.)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 A Rust implementation of the [SPINdle](http://spindle.data61.csiro.au/) defeasible logic reasoning engine.
@@ -198,7 +198,7 @@ const abduce = spindle.abduce("flies", 3);
 
 ## Testing
 
-128 tests covering:
+773 tests covering:
 - Core reasoning (facts, rules, conflicts, superiority)
 - Semantic equivalence (standard vs scalable modes)
 - Edge cases (cycles, empty theories, defeaters)
