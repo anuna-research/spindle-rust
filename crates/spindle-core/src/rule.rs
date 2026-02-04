@@ -113,7 +113,12 @@ impl Rule {
 
     /// Create a fact (no body)
     pub fn fact(label: impl Into<String>, head: Literal) -> Self {
-        Self::new(label, RuleType::Fact, SmallVec::new(), smallvec::smallvec![head])
+        Self::new(
+            label,
+            RuleType::Fact,
+            SmallVec::new(),
+            smallvec::smallvec![head],
+        )
     }
 
     /// Create a strict rule
