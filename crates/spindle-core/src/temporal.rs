@@ -1290,4 +1290,23 @@ mod tests {
             "No three-way temporal overlap should exist"
         );
     }
+
+    #[test]
+    fn test_timepoint_cmp_edge_cases() {
+        use std::cmp::Ordering;
+
+        // Test NegInf == NegInf
+        assert_eq!(TimePoint::NegInf.cmp(&TimePoint::NegInf), Ordering::Equal);
+        assert_eq!(TimePoint::NegInf, TimePoint::NegInf);
+
+        // Test PosInf == PosInf
+        assert_eq!(TimePoint::PosInf.cmp(&TimePoint::PosInf), Ordering::Equal);
+        assert_eq!(TimePoint::PosInf, TimePoint::PosInf);
+
+        // Test ordering between infinities and moments
+        let moment = TimePoint::Moment(100);
+        assert!(TimePoint::NegInf < moment);
+        assert!(moment < TimePoint::PosInf);
+        assert!(TimePoint::NegInf < TimePoint::PosInf);
+    }
 }
