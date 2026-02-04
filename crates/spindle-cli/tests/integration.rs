@@ -1,5 +1,6 @@
 //! Integration tests for the spindle CLI
 
+use assert_cmd::cargo::cargo_bin_cmd;
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
@@ -8,14 +9,14 @@ use tempfile::TempDir;
 /// Helper to create a temp directory with a theory file
 fn setup_theory_file(content: &str, extension: &str) -> (TempDir, std::path::PathBuf) {
     let dir = TempDir::new().unwrap();
-    let file_path = dir.path().join(format!("theory.{}", extension));
+    let file_path = dir.path().join(format!("theory.{extension}"));
     fs::write(&file_path, content).unwrap();
     (dir, file_path)
 }
 
 /// Get the spindle command
 fn spindle() -> Command {
-    Command::cargo_bin("spindle").unwrap()
+    cargo_bin_cmd!("spindle").into()
 }
 
 // ============================================================================
@@ -516,18 +517,12 @@ r1: bird => flies
 
 #[test]
 fn test_invalid_subcommand() {
-    spindle()
-        .arg("invalid-command")
-        .assert()
-        .failure();
+    spindle().arg("invalid-command").assert().failure();
 }
 
 #[test]
 fn test_reason_missing_file_arg() {
-    spindle()
-        .arg("reason")
-        .assert()
-        .failure();
+    spindle().arg("reason").assert().failure();
 }
 
 #[test]
@@ -535,11 +530,7 @@ fn test_query_missing_literal_arg() {
     let content = "f1: >> bird";
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
-        .arg("query")
-        .arg(&path)
-        .assert()
-        .failure();
+    spindle().arg("query").arg(&path).assert().failure();
 }
 
 // ============================================================================
@@ -700,9 +691,5 @@ fn test_spl_prefer_rule() {
 "#;
     let (_dir, path) = setup_theory_file(content, "spl");
 
-    spindle()
-        .arg("reason")
-        .arg(&path)
-        .assert()
-        .success();
+    spindle().arg("reason").arg(&path).assert().success();
 }
