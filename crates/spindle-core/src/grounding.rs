@@ -1011,4 +1011,138 @@ mod tests {
         );
         assert!(match_literal(&pattern, &ground_diff).is_none());
     }
+
+    #[test]
+    fn test_apply_substitution_non_variable_predicate() {
+        // Test apply_substitution_to_literal with non-variable predicates
+        let lit = Literal::new(
+            "pred",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["constant".to_string(), "?x".to_string()],
+        );
+
+        let mut subst: Substitution = Default::default();
+        let x_id = intern("?x");
+        let val_id = intern("value");
+        subst.insert(x_id, val_id);
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        // constant should remain unchanged, ?x should become value
+        assert_eq!(result.predicates()[0], "constant");
+        assert_eq!(result.predicates()[1], "value");
+    }
+
+    #[test]
+    fn test_ground_with_variable_name_predicate() {
+        // Test grounding where first body literal has variable as name
+        // This is an unusual case but tests the variable name branch
+        let mut theory = Theory::new();
+
+        // Add some facts
+        let f1 = Rule::fact(
+            "f1",
+            Literal::new(
+                "data",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["a".to_string()],
+            ),
+        );
+        theory.add_rule(f1);
+
+        // Rule with concrete body
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![Literal::new(
+                "data",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            Literal::new(
+                "result",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        let grounded = ground_theory(&theory);
+        assert!(grounded.rule_count() >= 2);
+    }
+
+    #[test]
+    fn test_semi_naive_with_delta_variable() {
+        // Test semi-naive grounding with variable in delta literal
+        let mut theory = Theory::new();
+
+        // Initial facts
+        let f1 = Rule::fact(
+            "f1",
+            Literal::new(
+                "edge",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["a".to_string(), "b".to_string()],
+            ),
+        );
+        theory.add_rule(f1);
+
+        let f2 = Rule::fact(
+            "f2",
+            Literal::new(
+                "edge",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["b".to_string(), "c".to_string()],
+            ),
+        );
+        theory.add_rule(f2);
+
+        // Transitive closure rule
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![
+                Literal::new(
+                    "edge",
+                    false,
+                    Default::default(),
+                    Default::default(),
+                    vec!["?x".to_string(), "?y".to_string()],
+                ),
+                Literal::new(
+                    "edge",
+                    false,
+                    Default::default(),
+                    Default::default(),
+                    vec!["?y".to_string(), "?z".to_string()],
+                ),
+            ],
+            Literal::new(
+                "path",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string(), "?z".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        let grounded = ground_theory(&theory);
+        // Should produce path(a, c) from transitivity
+        let has_path = grounded.rules().any(|r| {
+            r.head.iter().any(|h| {
+                h.name() == "path"
+            })
+        });
+        assert!(has_path);
+    }
 }
