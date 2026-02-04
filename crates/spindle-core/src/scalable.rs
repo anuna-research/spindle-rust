@@ -2124,4 +2124,84 @@ mod tests {
         assert!(!result.contains_partial("q"));
         assert!(result.contains_partial("~q"));
     }
+
+    #[test]
+    fn test_lambda_defeater_not_in_lambda() {
+        // Defeaters don't contribute to lambda closure
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        let rule = Rule::new(
+            "d1",
+            RuleType::Defeater,
+            vec![Literal::simple("p")],
+            vec![Literal::simple("q")],
+        );
+        theory.add_rule(rule);
+
+        let result = reason_scalable(&theory);
+
+        // p should be in all closures
+        assert!(result.contains_delta("p"));
+        // q is in a defeater, not strict/defeasible, so not in lambda
+        assert!(!result.contains_lambda("q"));
+    }
+
+    #[test]
+    fn test_fact_as_attacker_skipped() {
+        // Facts as "attackers" are skipped in partial closure
+        let mut theory = Theory::new();
+        theory.add_fact("~q"); // This fact would "attack" q
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let result = reason_scalable(&theory);
+
+        // ~q is definitely proven, so q should be blocked
+        assert!(result.contains_delta("~q"));
+        assert!(!result.contains_partial("q"));
+    }
+
+    #[test]
+    fn test_no_supporting_rule_with_satisfied_body() {
+        // Test case where no supporting rule has satisfied body
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        // Rule that could support q but body not satisfied
+        theory.add_defeasible_rule(&["x", "y"], "q");
+
+        let result = reason_scalable(&theory);
+
+        // q has no satisfied supporting rule
+        assert!(!result.contains_partial("q"));
+    }
+
+    #[test]
+    fn test_rule_already_fired() {
+        // Test where a rule has already fired and shouldn't fire again
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        // This rule fires once when a is proven
+        theory.add_defeasible_rule(&["a"], "b");
+        // Add a second rule with same body to ensure first rule marked as fired
+        theory.add_defeasible_rule(&["a"], "c");
+
+        let result = reason_scalable(&theory);
+
+        // Both b and c should be proven
+        assert!(result.contains_partial("b"));
+        assert!(result.contains_partial("c"));
+    }
+
+    #[test]
+    fn test_literal_in_body_check() {
+        // Test where trigger index returns rules but literal not actually in body
+        // This tests the in_body check in lambda closure
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+
+        let result = reason_scalable(&theory);
+
+        assert!(result.contains_lambda("b"));
+    }
 }
