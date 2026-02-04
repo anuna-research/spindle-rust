@@ -31,12 +31,12 @@
 //! ```
 
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::take_while1,
     character::complete::{char, multispace0},
     multi::many0,
     sequence::{delimited, preceded},
-    IResult, Parser,
 };
 
 use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
@@ -387,7 +387,8 @@ fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
     // Process each property: (key "value") or (key ("v1" "v2"))
     for prop in &args[1..] {
         if let Some(prop_list) = prop.as_list()
-            && prop_list.len() >= 2 {
+            && prop_list.len() >= 2
+        {
             let key = prop_list[0]
                 .as_atom()
                 .ok_or_else(|| ParseError::ParserError {
@@ -594,10 +595,7 @@ mod tests {
         // Import with 'as' prefix for namespacing - not yet implemented
         // Expected syntax: (import "module.spl" as m)
         let result = parse_spl(r#"(import "module.spl" as m)"#);
-        assert!(
-            result.is_err(),
-            "Import with prefix is not yet implemented"
-        );
+        assert!(result.is_err(), "Import with prefix is not yet implemented");
     }
 
     #[test]
@@ -643,10 +641,7 @@ mod tests {
         // Prefix declaration for namespacing - not yet implemented
         // Expected syntax: (prefix name "uri")
         let result = parse_spl(r#"(prefix dc "http://purl.org/dc/terms/")"#);
-        assert!(
-            result.is_err(),
-            "Prefix declaration is not yet implemented"
-        );
+        assert!(result.is_err(), "Prefix declaration is not yet implemented");
         let err = result.unwrap_err();
         assert!(
             format!("{:?}", err).contains("prefix"),
@@ -659,10 +654,7 @@ mod tests {
         // Prefix with colon notation (RDF-style) - not yet implemented
         // Expected syntax: (prefix dc: "http://purl.org/dc/terms/")
         let result = parse_spl(r#"(prefix dc: "http://purl.org/dc/terms/")"#);
-        assert!(
-            result.is_err(),
-            "Prefix with colon is not yet implemented"
-        );
+        assert!(result.is_err(), "Prefix with colon is not yet implemented");
     }
 
     #[test]
@@ -699,10 +691,7 @@ mod tests {
         // Expected syntax: (claims source-id statement...)
         let input = r#"(claims agent:security (given vulnerability_detected))"#;
         let result = parse_spl(input);
-        assert!(
-            result.is_err(),
-            "Claims block is not yet implemented"
-        );
+        assert!(result.is_err(), "Claims block is not yet implemented");
         let err = result.unwrap_err();
         assert!(
             format!("{:?}", err).contains("claims"),
@@ -1055,7 +1044,10 @@ mod tests {
         // Identifiers with dots (namespace-like)
         // The parser supports dots in identifiers for namespace-like syntax
         let result = parse_spl("(given module.submodule.fact)");
-        assert!(result.is_ok(), "Dotted identifiers should parse successfully");
+        assert!(
+            result.is_ok(),
+            "Dotted identifiers should parse successfully"
+        );
         let theory = result.unwrap();
         let rule = theory.rules().next().unwrap();
         assert_eq!(rule.head_literal().name(), "module.submodule.fact");
@@ -1119,10 +1111,7 @@ mod tests {
         // Provide specific identifiers - not yet implemented
         // Expected syntax: (provide id1 id2 ...)
         let result = parse_spl("(provide bird flies)");
-        assert!(
-            result.is_err(),
-            "Provide is not yet implemented"
-        );
+        assert!(result.is_err(), "Provide is not yet implemented");
         let err = result.unwrap_err();
         assert!(
             format!("{:?}", err).contains("provide"),
@@ -1135,10 +1124,7 @@ mod tests {
         // Provide all exports - not yet implemented
         // Expected syntax: (provide all)
         let result = parse_spl("(provide all)");
-        assert!(
-            result.is_err(),
-            "Provide all is not yet implemented"
-        );
+        assert!(result.is_err(), "Provide all is not yet implemented");
     }
 
     #[test]
@@ -1309,7 +1295,7 @@ mod tests {
         let rule = theory.rules().next().unwrap();
         assert_eq!(rule.body.len(), 2);
         assert!(!rule.body[0].is_negated()); // bird
-        assert!(rule.body[1].is_negated());  // (not injured)
+        assert!(rule.body[1].is_negated()); // (not injured)
     }
 
     #[test]

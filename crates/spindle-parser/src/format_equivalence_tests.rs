@@ -167,10 +167,7 @@ fn test_conclusion_types_match() {
     dfl_sorted.sort();
     spl_sorted.sort();
 
-    assert_eq!(
-        dfl_sorted, spl_sorted,
-        "Definite conclusions should match"
-    );
+    assert_eq!(dfl_sorted, spl_sorted, "Definite conclusions should match");
 
     let dfl_defeasible: Vec<_> = dfl_conclusions
         .iter()

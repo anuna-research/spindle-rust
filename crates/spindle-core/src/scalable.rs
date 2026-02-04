@@ -79,10 +79,7 @@ impl ScalableResult {
                 ));
             }
             if !self.partial.contains(&lit_id) {
-                conclusions.push(Conclusion::new(
-                    ConclusionType::DefeasiblyNotProvable,
-                    lit,
-                ));
+                conclusions.push(Conclusion::new(ConclusionType::DefeasiblyNotProvable, lit));
             }
         }
 
@@ -237,7 +234,10 @@ fn compute_delta_closure(
 /// (2) There's a strict/defeasible rule with:
 ///     (a) All body literals in lambda
 ///     (b) Complement NOT in delta
-fn compute_lambda_closure(indexed: &IndexedTheory, delta: &HashSet<LiteralId>) -> HashSet<LiteralId> {
+fn compute_lambda_closure(
+    indexed: &IndexedTheory,
+    delta: &HashSet<LiteralId>,
+) -> HashSet<LiteralId> {
     let mut lambda: HashSet<LiteralId> = delta.clone();
     let mut worklist: VecDeque<LiteralId> = delta.iter().copied().collect();
 
@@ -330,8 +330,8 @@ fn compute_partial_closure(
     delta: &HashSet<LiteralId>,
     lambda: &HashSet<LiteralId>,
 ) -> HashSet<LiteralId> {
-    use std::collections::VecDeque;
     use rustc_hash::FxHashMap;
+    use std::collections::VecDeque;
 
     let mut partial: HashSet<LiteralId> = delta.clone();
 
@@ -340,7 +340,9 @@ fn compute_partial_closure(
     for rule in theory.rules() {
         if rule.rule_type == RuleType::Strict || rule.rule_type == RuleType::Defeasible {
             // Count body literals not yet in partial
-            let unsatisfied = rule.body.iter()
+            let unsatisfied = rule
+                .body
+                .iter()
                 .filter(|b| !partial.contains(&b.literal_id()))
                 .count();
             remaining.insert(&rule.label, unsatisfied);
@@ -360,14 +362,14 @@ fn compute_partial_closure(
     };
 
     // Helper: check if attack body is NOT fully in lambda (attack fails)
-    let attack_unsatisfied_lambda = |rule: &Rule| -> bool {
-        rule.body.iter().any(|b| !lambda.contains(&b.literal_id()))
-    };
+    let attack_unsatisfied_lambda =
+        |rule: &Rule| -> bool { rule.body.iter().any(|b| !lambda.contains(&b.literal_id())) };
 
     // Helper: can we defeat the attacker using superiority?
     let team_defeats = |lit_id: LiteralId, attacker: &Rule, partial: &HashSet<LiteralId>| -> bool {
         for defender in indexed.rules_with_head_id(lit_id) {
-            if (defender.rule_type == RuleType::Strict || defender.rule_type == RuleType::Defeasible)
+            if (defender.rule_type == RuleType::Strict
+                || defender.rule_type == RuleType::Defeasible)
                 && body_satisfied(defender, partial)
                 && theory.is_superior(&defender.label, &attacker.label)
             {
@@ -409,12 +411,10 @@ fn compute_partial_closure(
             return false;
         }
         // Need a supporting rule with satisfied body
-        let has_support = indexed.rules_with_head_id(lit_id)
-            .iter()
-            .any(|r| {
-                (r.rule_type == RuleType::Strict || r.rule_type == RuleType::Defeasible)
-                    && body_satisfied(r, partial)
-            });
+        let has_support = indexed.rules_with_head_id(lit_id).iter().any(|r| {
+            (r.rule_type == RuleType::Strict || r.rule_type == RuleType::Defeasible)
+                && body_satisfied(r, partial)
+        });
         if !has_support {
             return false;
         }
@@ -458,7 +458,8 @@ fn compute_partial_closure(
             // Trigger rules that have this literal in body
             for rule in indexed.rules_with_body_id(lit_id) {
                 if let Some(rem) = remaining.get_mut(rule.label.as_str())
-                    && *rem > 0 {
+                    && *rem > 0
+                {
                     *rem -= 1;
                     if *rem == 0 {
                         // Rule body now satisfied - add head to worklist
@@ -704,11 +705,7 @@ mod tests {
         let std_def = extract_defeasible_provable(&standard);
 
         for lit in &["a", "b", "c"] {
-            assert!(
-                std_def.contains(*lit),
-                "Standard: {} should be +d",
-                lit
-            );
+            assert!(std_def.contains(*lit), "Standard: {} should be +d", lit);
             assert!(
                 scalable.contains_partial(*lit),
                 "Scalable: {} should be +d",
@@ -814,10 +811,7 @@ mod tests {
         let std_def = extract_defeasible_provable(&standard);
 
         // Penguin wins - ~flies provable
-        assert!(
-            std_def.contains("~flies"),
-            "Standard: ~flies should be +d"
-        );
+        assert!(std_def.contains("~flies"), "Standard: ~flies should be +d");
         assert!(
             scalable.contains_partial("~flies"),
             "Scalable: ~flies should be +d"
@@ -845,11 +839,7 @@ mod tests {
         // All chain literals should be provable in both modes
         for i in 0..=10 {
             let lit = format!("l{}", i);
-            assert!(
-                std_def.contains(&lit),
-                "Standard: {} should be +d",
-                lit
-            );
+            assert!(std_def.contains(&lit), "Standard: {} should be +d", lit);
             assert!(
                 scalable.contains_partial(&lit),
                 "Scalable: {} should be +d",
@@ -1256,8 +1246,14 @@ mod tests {
         assert!(result.contains_delta("a"));
         assert!(result.contains_delta("b"));
         assert!(result.contains_delta("c"));
-        assert!(result.contains_delta("x"), "x should be in delta (via strict r1)");
-        assert!(result.contains_delta("y"), "y should be in delta (via strict r2)");
+        assert!(
+            result.contains_delta("x"),
+            "x should be in delta (via strict r1)"
+        );
+        assert!(
+            result.contains_delta("y"),
+            "y should be in delta (via strict r2)"
+        );
     }
 
     #[test]
@@ -1292,8 +1288,14 @@ mod tests {
         // Lambda should contain all: a, b, c, d
         assert!(result.contains_lambda("a"));
         assert!(result.contains_lambda("b"));
-        assert!(result.contains_lambda("c"), "c should be in lambda (via defeasible)");
-        assert!(result.contains_lambda("d"), "d should be in lambda (via defeasible chain)");
+        assert!(
+            result.contains_lambda("c"),
+            "c should be in lambda (via defeasible)"
+        );
+        assert!(
+            result.contains_lambda("d"),
+            "d should be in lambda (via defeasible chain)"
+        );
     }
 
     #[test]
@@ -1363,11 +1365,20 @@ mod tests {
         assert!(result.contains_delta("a"));
         assert!(result.contains_delta("b"));
         // y should be proven (r2 fires)
-        assert!(result.contains_delta("y"), "y should be in delta (r2 fires)");
+        assert!(
+            result.contains_delta("y"),
+            "y should be in delta (r2 fires)"
+        );
         // x should NOT be proven (c is missing)
-        assert!(!result.contains_delta("x"), "x should NOT be in delta (c missing)");
+        assert!(
+            !result.contains_delta("x"),
+            "x should NOT be in delta (c missing)"
+        );
         // z should NOT be proven (x is missing)
-        assert!(!result.contains_partial("z"), "z should NOT be in partial (x missing)");
+        assert!(
+            !result.contains_partial("z"),
+            "z should NOT be in partial (x missing)"
+        );
     }
 
     #[test]
@@ -1442,7 +1453,10 @@ mod tests {
 
         let result = reason_scalable(&theory);
 
-        assert!(result.contains_partial("c"), "c should be provable via multiple rules");
+        assert!(
+            result.contains_partial("c"),
+            "c should be provable via multiple rules"
+        );
     }
 
     // ==========================================================================
@@ -1525,7 +1539,11 @@ mod tests {
         let std_definite = extract_definite_provable(&standard);
 
         for lit in &["p", "q", "r"] {
-            assert!(std_definite.contains(*lit), "Standard: {} should be +D", lit);
+            assert!(
+                std_definite.contains(*lit),
+                "Standard: {} should be +D",
+                lit
+            );
             assert!(
                 scalable.contains_delta(*lit),
                 "Scalable: {} should be +D (in delta)",
@@ -1991,18 +2009,18 @@ mod tests {
         let conclusions = result.to_conclusions(&indexed);
 
         // Check all conclusion types are present
-        let has_def_provable = conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefinitelyProvable
-        });
-        let has_def_not_provable = conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefinitelyNotProvable
-        });
-        let has_defeas_provable = conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-        });
-        let has_defeas_not_provable = conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyNotProvable
-        });
+        let has_def_provable = conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable);
+        let has_def_not_provable = conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefinitelyNotProvable);
+        let has_defeas_provable = conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable);
+        let has_defeas_not_provable = conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyNotProvable);
 
         assert!(has_def_provable, "Should have +D conclusions");
         assert!(has_def_not_provable, "Should have -D conclusions");
@@ -2220,11 +2238,7 @@ mod tests {
         let std_def = extract_defeasible_provable(&standard);
 
         for lit in &["b"] {
-            assert!(
-                std_def.contains(*lit),
-                "Standard: {} should be +d",
-                lit
-            );
+            assert!(std_def.contains(*lit), "Standard: {} should be +d", lit);
         }
     }
 

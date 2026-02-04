@@ -41,20 +41,14 @@ impl IndexedTheory {
             // Index by head literals (using LiteralId for O(1) hashing)
             for head_lit in &rule.head {
                 let key = head_lit.literal_id();
-                head_index
-                    .entry(key)
-                    .or_default()
-                    .push(rule.label.clone());
+                head_index.entry(key).or_default().push(rule.label.clone());
                 literal_set.insert(key);
             }
 
             // Index by body literals (trigger index for semi-naive evaluation)
             for body_lit in &rule.body {
                 let key = body_lit.literal_id();
-                body_index
-                    .entry(key)
-                    .or_default()
-                    .push(rule.label.clone());
+                body_index.entry(key).or_default().push(rule.label.clone());
                 literal_set.insert(key);
             }
         }
@@ -286,7 +280,15 @@ mod tests {
         let lit = Literal::simple("any");
         assert!(indexed.rules_with_head(&lit).is_empty());
         assert!(indexed.rules_with_body(&lit).is_empty());
-        assert!(indexed.rule_labels_with_head_id(lit.literal_id()).is_empty());
-        assert!(indexed.rule_labels_with_body_id(lit.literal_id()).is_empty());
+        assert!(
+            indexed
+                .rule_labels_with_head_id(lit.literal_id())
+                .is_empty()
+        );
+        assert!(
+            indexed
+                .rule_labels_with_body_id(lit.literal_id())
+                .is_empty()
+        );
     }
 }

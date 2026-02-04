@@ -747,10 +747,22 @@ mod tests {
         let th = make_chain_theory();
 
         // All should be provable through the chain
-        assert_eq!(query(&th, &Literal::simple("a")).status, QueryStatus::Provable);
-        assert_eq!(query(&th, &Literal::simple("b")).status, QueryStatus::Provable);
-        assert_eq!(query(&th, &Literal::simple("c")).status, QueryStatus::Provable);
-        assert_eq!(query(&th, &Literal::simple("d")).status, QueryStatus::Provable);
+        assert_eq!(
+            query(&th, &Literal::simple("a")).status,
+            QueryStatus::Provable
+        );
+        assert_eq!(
+            query(&th, &Literal::simple("b")).status,
+            QueryStatus::Provable
+        );
+        assert_eq!(
+            query(&th, &Literal::simple("c")).status,
+            QueryStatus::Provable
+        );
+        assert_eq!(
+            query(&th, &Literal::simple("d")).status,
+            QueryStatus::Provable
+        );
     }
 
     #[test]
@@ -878,10 +890,12 @@ mod tests {
         theory.add_fact("~flies"); // Complement is proven
 
         let result = why_not(&theory, &Literal::simple("flies"));
-        assert!(result
-            .blocked_by
-            .iter()
-            .any(|b| b.blocking_type == BlockingType::Contradicted));
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_type == BlockingType::Contradicted)
+        );
     }
 
     #[test]
@@ -957,7 +971,10 @@ mod tests {
 
     #[test]
     fn test_blocking_type_display() {
-        assert_eq!(format!("{}", BlockingType::MissingPremise), "missing premise");
+        assert_eq!(
+            format!("{}", BlockingType::MissingPremise),
+            "missing premise"
+        );
         assert_eq!(format!("{}", BlockingType::Defeated), "defeated");
         assert_eq!(format!("{}", BlockingType::Contradicted), "contradicted");
     }
@@ -1100,7 +1117,10 @@ mod tests {
         if result.solutions.len() > 1 {
             let sizes: Vec<_> = result.solutions.iter().map(|s| s.size()).collect();
             for i in 1..sizes.len() {
-                assert!(sizes[i - 1] <= sizes[i], "Solutions should be sorted by size");
+                assert!(
+                    sizes[i - 1] <= sizes[i],
+                    "Solutions should be sorted by size"
+                );
             }
         }
     }
@@ -1244,10 +1264,12 @@ mod tests {
 
         let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
         assert!(result.is_provable());
-        assert!(result
-            .new_conclusions
-            .iter()
-            .any(|l| l.name() == "ready_review"));
+        assert!(
+            result
+                .new_conclusions
+                .iter()
+                .any(|l| l.name() == "ready_review")
+        );
     }
 
     #[test]
@@ -1483,10 +1505,7 @@ mod tests {
         let needed = requires(&th, &ready);
 
         // Use those as hypotheticals
-        let hypotheticals: Vec<_> = needed
-            .into_iter()
-            .map(HypotheticalClaim::new)
-            .collect();
+        let hypotheticals: Vec<_> = needed.into_iter().map(HypotheticalClaim::new).collect();
 
         // What-if should now prove the goal
         let result = what_if(&th, hypotheticals, &ready);

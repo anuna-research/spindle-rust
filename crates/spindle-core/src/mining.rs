@@ -505,11 +505,9 @@ impl AlphaMiner {
         unique
             .iter()
             .filter(|(a1, b1)| {
-                !unique.iter().any(|(a2, b2)| {
-                    (a1, b1) != (a2, b2)
-                        && a1.is_subset(a2)
-                        && b1.is_subset(b2)
-                })
+                !unique
+                    .iter()
+                    .any(|(a2, b2)| (a1, b1) != (a2, b2) && a1.is_subset(a2) && b1.is_subset(b2))
             })
             .cloned()
             .collect()
@@ -675,8 +673,7 @@ pub fn detect_conflicts(log: &EventLog, net: &PetriNet) -> Vec<Conflict> {
             .collect();
 
         if outgoing.len() > 1 {
-            let choice_activities: Vec<_> =
-                outgoing.iter().map(|t| t.activity.clone()).collect();
+            let choice_activities: Vec<_> = outgoing.iter().map(|t| t.activity.clone()).collect();
             let conflict = Conflict::new(choice_activities, ConflictType::Choice)
                 .with_evidence("source", "petri-net-structure");
             conflicts.push(conflict);
@@ -846,11 +843,7 @@ impl MiningResult {
 /// Mine DFL rules from an event log
 ///
 /// This is the main entry point for process mining.
-pub fn mine_rules(
-    log: &EventLog,
-    min_support: usize,
-    min_confidence: f64,
-) -> MiningResult {
+pub fn mine_rules(log: &EventLog, min_support: usize, min_confidence: f64) -> MiningResult {
     let footprint = Footprint::from_log(log);
     let mut miner = AlphaMiner::new();
     let petri_net = miner.mine(log);
@@ -922,8 +915,7 @@ mod tests {
         let mut bindings = HashMap::new();
         bindings.insert("entity".to_string(), "x".to_string());
 
-        let event = Event::new("2026-01-17T10:00:00Z", "started", bindings)
-            .with_actor("agent-1");
+        let event = Event::new("2026-01-17T10:00:00Z", "started", bindings).with_actor("agent-1");
 
         assert_eq!(event.activity, "started");
         assert_eq!(event.bindings.get("entity"), Some(&"x".to_string()));
@@ -1004,10 +996,7 @@ mod tests {
     #[test]
     fn test_footprint_with_parallel_activities() {
         // Given: Traces where a,b occur in varying order between start and end
-        let log = make_log_from_traces(&[
-            &["start", "a", "b", "end"],
-            &["start", "b", "a", "end"],
-        ]);
+        let log = make_log_from_traces(&[&["start", "a", "b", "end"], &["start", "b", "a", "end"]]);
 
         let fp = Footprint::from_log(&log);
         // a and b should be parallel (both orderings observed)
@@ -1044,11 +1033,24 @@ mod tests {
         let net = miner.mine(&log);
 
         // Then: Petri net has transitions for a, b, c
-        let activities: Vec<_> = net.transitions.iter().map(|t| t.activity.as_str()).collect();
+        let activities: Vec<_> = net
+            .transitions
+            .iter()
+            .map(|t| t.activity.as_str())
+            .collect();
 
-        assert!(activities.contains(&"a"), "Petri net should have transition for 'a'");
-        assert!(activities.contains(&"b"), "Petri net should have transition for 'b'");
-        assert!(activities.contains(&"c"), "Petri net should have transition for 'c'");
+        assert!(
+            activities.contains(&"a"),
+            "Petri net should have transition for 'a'"
+        );
+        assert!(
+            activities.contains(&"b"),
+            "Petri net should have transition for 'b'"
+        );
+        assert!(
+            activities.contains(&"c"),
+            "Petri net should have transition for 'c'"
+        );
     }
 
     #[test]
@@ -1084,7 +1086,11 @@ mod tests {
         let net = miner.mine(&log);
 
         // Then: Verify Petri net structure
-        let activities: Vec<_> = net.transitions.iter().map(|t| t.activity.as_str()).collect();
+        let activities: Vec<_> = net
+            .transitions
+            .iter()
+            .map(|t| t.activity.as_str())
+            .collect();
 
         assert!(
             activities.contains(&"start"),
@@ -1334,10 +1340,7 @@ mod tests {
 
     #[test]
     fn test_footprint_is_parallel() {
-        let log = make_log_from_traces(&[
-            &["a", "b"],
-            &["b", "a"],
-        ]);
+        let log = make_log_from_traces(&[&["a", "b"], &["b", "a"]]);
         let fp = Footprint::from_log(&log);
 
         assert!(fp.is_parallel("a", "b"));
@@ -1370,11 +1373,8 @@ mod tests {
 
     #[test]
     fn test_conflict_creation() {
-        let conflict = Conflict::new(
-            vec!["a".to_string(), "b".to_string()],
-            ConflictType::Mutex,
-        )
-        .with_evidence("source", "test");
+        let conflict = Conflict::new(vec!["a".to_string(), "b".to_string()], ConflictType::Mutex)
+            .with_evidence("source", "test");
 
         assert_eq!(conflict.activities, vec!["a", "b"]);
         assert_eq!(conflict.conflict_type, ConflictType::Mutex);
@@ -1383,11 +1383,7 @@ mod tests {
 
     #[test]
     fn test_learned_rule_creation() {
-        let rule = Rule::defeasible(
-            "r1",
-            vec![Literal::simple("a")],
-            Literal::simple("b"),
-        );
+        let rule = Rule::defeasible("r1", vec![Literal::simple("a")], Literal::simple("b"));
         let learned = LearnedRule::new(rule, 10, 0.8);
 
         assert_eq!(learned.support, 10);
@@ -1549,15 +1545,13 @@ mod tests {
     #[test]
     fn test_petri_net_to_dfl_filtering() {
         // Create log with low support relationship
-        let log = EventLog::new(vec![
-            Case::new(
-                "c1",
-                vec![
-                    Event::new("T1", "a", HashMap::new()),
-                    Event::new("T2", "b", HashMap::new()),
-                ],
-            ),
-        ]);
+        let log = EventLog::new(vec![Case::new(
+            "c1",
+            vec![
+                Event::new("T1", "a", HashMap::new()),
+                Event::new("T2", "b", HashMap::new()),
+            ],
+        )]);
 
         // With high min_support, no rules should pass
         let rules = petri_net_to_dfl(&log, 100, 0.0);
@@ -1617,10 +1611,7 @@ mod tests {
 
     #[test]
     fn test_conflict_type_choice() {
-        let conflict = Conflict::new(
-            vec!["a".to_string(), "b".to_string()],
-            ConflictType::Choice,
-        );
+        let conflict = Conflict::new(vec!["a".to_string(), "b".to_string()], ConflictType::Choice);
         assert_eq!(conflict.conflict_type, ConflictType::Choice);
     }
 
@@ -1685,10 +1676,7 @@ mod tests {
     #[should_panic(expected = "a->b should be causality")]
     fn test_assert_msg_footprint_causality() {
         // Create a log where a and b are parallel, not causal
-        let log = make_log_from_traces(&[
-            &["a", "b"],
-            &["b", "a"],
-        ]);
+        let log = make_log_from_traces(&[&["a", "b"], &["b", "a"]]);
 
         let fp = Footprint::from_log(&log);
         assert_eq!(

@@ -193,7 +193,8 @@ pub fn intern(s: &str) -> SymbolId {
     {
         let guard = INTERNER.read().unwrap();
         if let Some(ref interner) = *guard
-            && let Some(&id) = interner.map.get(s) {
+            && let Some(&id) = interner.map.get(s)
+        {
             return id;
         }
     }

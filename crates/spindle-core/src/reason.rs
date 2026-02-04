@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
-use crate::intern::{resolve, LiteralId};
+use crate::intern::{LiteralId, resolve};
 use crate::literal::Literal;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -224,10 +224,12 @@ mod tests {
 
         let conclusions = reason(&theory);
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "bird"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "bird")
+        );
     }
 
     #[test]
@@ -237,11 +239,13 @@ mod tests {
 
         let conclusions = reason(&theory);
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "guilty"
-                && c.literal.negation));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "guilty"
+                    && c.literal.negation)
+        );
     }
 
     #[test]
@@ -252,10 +256,12 @@ mod tests {
 
         let conclusions = reason(&theory);
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "animal"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "animal")
+        );
     }
 
     #[test]
@@ -266,10 +272,12 @@ mod tests {
 
         let conclusions = reason(&theory);
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "flies"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies")
+        );
     }
 
     #[test]
@@ -326,11 +334,13 @@ mod tests {
         let conclusions = reason(&theory);
 
         // ~flies should be defeasibly provable (penguins don't fly)
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "flies"
-                && c.literal.negation));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies"
+                    && c.literal.negation)
+        );
     }
 
     #[test]
@@ -752,7 +762,10 @@ mod tests {
                 && !c.literal.negation
         });
 
-        assert!(has_q, "q should be provable when attacker's body is unsatisfied");
+        assert!(
+            has_q,
+            "q should be provable when attacker's body is unsatisfied"
+        );
     }
 
     #[test]
@@ -928,10 +941,10 @@ mod tests {
         let conclusions = reason(&theory);
 
         assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefinitelyNotProvable
-                    && c.literal.name() == "q"),
+            conclusions.iter().any(
+                |c| c.conclusion_type == ConclusionType::DefinitelyNotProvable
+                    && c.literal.name() == "q"
+            ),
             "q should be definitely NOT provable (no strict rule)"
         );
     }
@@ -946,10 +959,10 @@ mod tests {
         let conclusions = reason(&theory);
 
         assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyNotProvable
-                    && c.literal.name() == "q"),
+            conclusions.iter().any(
+                |c| c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+                    && c.literal.name() == "q"
+            ),
             "q should be defeasibly NOT provable when body unsatisfied"
         );
     }

@@ -26,7 +26,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::intern::{resolve, SymbolId};
+use crate::intern::{SymbolId, resolve};
 
 #[cfg(test)]
 use crate::intern::intern;
@@ -326,7 +326,8 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
     let mut all_generated_rules: Vec<Rule> = ground_rules.into_iter().cloned().collect();
     let mut instance_counter = 0;
     // Use interned SymbolIds for instance tracking (minimal allocation)
-    let mut known_instances: FxHashSet<(RuleLabel, Vec<(SymbolId, SymbolId)>)> = FxHashSet::default();
+    let mut known_instances: FxHashSet<(RuleLabel, Vec<(SymbolId, SymbolId)>)> =
+        FxHashSet::default();
 
     // Iterate until fixpoint
     let mut facts_new = facts_list.clone();
@@ -340,7 +341,8 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
         let mut new_rules_this_round: Vec<Rule> = Vec::new();
 
         // Build delta index (using interned types)
-        let mut delta_index: FxHashMap<(SymbolId, bool, usize), Vec<Literal>> = FxHashMap::default();
+        let mut delta_index: FxHashMap<(SymbolId, bool, usize), Vec<Literal>> =
+            FxHashMap::default();
         for lit in &facts_new {
             delta_index
                 .entry(fact_index_key(lit))
@@ -538,10 +540,9 @@ mod tests {
         // Check that grounded rule exists
         let has_grounded = grounded.rules().any(|r| {
             r.label.starts_with("r1_")
-                && r.head.iter().any(|h| {
-                    h.name() == "ancestor"
-                        && h.predicates() == vec!["alice", "bob"]
-                })
+                && r.head
+                    .iter()
+                    .any(|h| h.name() == "ancestor" && h.predicates() == vec!["alice", "bob"])
         });
         assert!(has_grounded);
     }
@@ -612,21 +613,24 @@ mod tests {
                     .iter()
                     .any(|h| h.name() == "r" && h.predicates() == vec!["a"])
         });
-        assert!(has_r2_grounded, "Grounding should produce r2 instance q(a) => r(a)");
+        assert!(
+            has_r2_grounded,
+            "Grounding should produce r2 instance q(a) => r(a)"
+        );
     }
 
     #[test]
     fn test_match_literal_negation_mismatch() {
         let pattern = Literal::new(
             "flies",
-            false,  // positive
+            false, // positive
             Default::default(),
             Default::default(),
             vec![],
         );
         let ground = Literal::new(
             "flies",
-            true,  // negated
+            true, // negated
             Default::default(),
             Default::default(),
             vec![],
@@ -675,13 +679,7 @@ mod tests {
 
     #[test]
     fn test_literal_has_variables_name() {
-        let lit = Literal::new(
-            "?x",
-            false,
-            Default::default(),
-            Default::default(),
-            vec![],
-        );
+        let lit = Literal::new("?x", false, Default::default(), Default::default(), vec![]);
         assert!(literal_has_variables(&lit));
     }
 
@@ -768,7 +766,10 @@ mod tests {
         s2.insert(intern("?x"), intern("bob")); // Conflict!
 
         let merged = merge_substitutions(&s1, &s2);
-        assert!(merged.is_none(), "Conflicting substitutions should not merge");
+        assert!(
+            merged.is_none(),
+            "Conflicting substitutions should not merge"
+        );
     }
 
     #[test]
@@ -904,12 +905,14 @@ mod tests {
 
         // Should have grandparent(alice, carol)
         let has_grandparent = grounded.rules().any(|r| {
-            r.head.iter().any(|h| {
-                h.name() == "grandparent"
-                    && h.predicates() == vec!["alice", "carol"]
-            })
+            r.head
+                .iter()
+                .any(|h| h.name() == "grandparent" && h.predicates() == vec!["alice", "carol"])
         });
-        assert!(has_grandparent, "Should ground to grandparent(alice, carol)");
+        assert!(
+            has_grandparent,
+            "Should ground to grandparent(alice, carol)"
+        );
     }
 
     #[test]
@@ -1138,11 +1141,9 @@ mod tests {
 
         let grounded = ground_theory(&theory);
         // Should produce path(a, c) from transitivity
-        let has_path = grounded.rules().any(|r| {
-            r.head.iter().any(|h| {
-                h.name() == "path"
-            })
-        });
+        let has_path = grounded
+            .rules()
+            .any(|r| r.head.iter().any(|h| h.name() == "path"));
         assert!(has_path);
     }
 

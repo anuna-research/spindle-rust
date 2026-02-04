@@ -578,7 +578,8 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Expl
     let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
     if let Some(rule_label) = &conclusion.rule_label
-        && let Some(rule) = theory.get_rule(rule_label) {
+        && let Some(rule) = theory.get_rule(rule_label)
+    {
         let mut step = ProofStep::new(
             rule.label.clone(),
             rule.rule_type,
@@ -607,14 +608,13 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Expl
             } else {
                 // If exact ground literal not found, try to find a matching one
                 // (Handle existential cases like matter_seen where body var isn't in head)
-                    if let Some(matching_conc) = conclusions.iter().find(|c| {
-                        c.conclusion_type.is_positive()
-                            && match_literal(body_lit, &c.literal).is_some()
-                    })
-                        && let Some(body_expl) = explain(theory, &matching_conc.literal)
-                        && let Some(body_tree) = body_expl.proof_tree {
-                        body_proofs.push(body_tree);
-                    }
+                if let Some(matching_conc) = conclusions.iter().find(|c| {
+                    c.conclusion_type.is_positive() && match_literal(body_lit, &c.literal).is_some()
+                }) && let Some(body_expl) = explain(theory, &matching_conc.literal)
+                    && let Some(body_tree) = body_expl.proof_tree
+                {
+                    body_proofs.push(body_tree);
+                }
             }
         }
         step.body_proofs = body_proofs;
@@ -847,16 +847,12 @@ fn escape_dot_label(s: &str) -> String {
 }
 
 /// Render a proof node to DOT format, returning the node ID
-fn render_proof_node_to_dot(
-    node: &ProofNode,
-    output: &mut String,
-    counter: &mut usize,
-) -> usize {
+fn render_proof_node_to_dot(node: &ProofNode, output: &mut String, counter: &mut usize) -> usize {
     *counter += 1;
     let node_id = *counter;
 
     let color = match node.derivation_type {
-        DerivationType::Definite => "#cce5ff", // Light blue
+        DerivationType::Definite => "#cce5ff",   // Light blue
         DerivationType::Defeasible => "#d4edda", // Light green
     };
 
@@ -871,9 +867,7 @@ fn render_proof_node_to_dot(
             RuleType::Defeater => "defeater",
         };
         let escaped_label = escape_dot_label(&step.rule_label);
-        format!(
-            "{escaped_literal}\\n[{rule_type_str}: {escaped_label}]"
-        )
+        format!("{escaped_literal}\\n[{rule_type_str}: {escaped_label}]")
     } else {
         escaped_literal
     };
@@ -959,8 +953,8 @@ mod tests {
     #[test]
     fn test_proof_step_with_annotations() {
         let annots = Annotations::with_entries(vec![("source", "expert-knowledge")]);
-        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
-            .with_annotations(annots);
+        let step =
+            ProofStep::new("r1", RuleType::Defeasible, "bird => flies").with_annotations(annots);
 
         assert_eq!(step.annotations.source(), Some("expert-knowledge"));
     }
@@ -1007,7 +1001,10 @@ mod tests {
     #[test]
     fn test_resolution_type_display() {
         assert_eq!(ResolutionType::Superiority.to_string(), "superiority");
-        assert_eq!(ResolutionType::DefinitePriority.to_string(), "definite priority");
+        assert_eq!(
+            ResolutionType::DefinitePriority.to_string(),
+            "definite priority"
+        );
         assert_eq!(ResolutionType::TeamDefeat.to_string(), "team defeat");
     }
 
@@ -1061,8 +1058,8 @@ mod tests {
             ("description", "Birds typically fly"),
             ("source", "ornithology-textbook"),
         ]);
-        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
-            .with_annotations(annots);
+        let step =
+            ProofStep::new("r1", RuleType::Defeasible, "bird => flies").with_annotations(annots);
         let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
             .with_proof_step(step);
 
@@ -1101,9 +1098,11 @@ mod tests {
         )
         .with_blocking_rule("r2");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_blocked(vec![blocked]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_blocked(vec![blocked]);
 
         let nl = explanation.to_natural_language();
         assert!(nl.contains("Blocked Alternatives"));
@@ -1114,8 +1113,10 @@ mod tests {
 
     #[test]
     fn test_natural_language_no_derivation() {
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("flies"));
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyNotProvable,
+            Literal::simple("flies"),
+        );
 
         let nl = explanation.to_natural_language();
         assert!(nl.contains("-d")); // Not provable symbol
@@ -1126,16 +1127,29 @@ mod tests {
     fn test_natural_language_conclusion_type_explanations() {
         // Test all conclusion type explanations
         let exp_dp = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("p"));
-        assert!(exp_dp.to_natural_language().contains("strict rules and facts"));
+        assert!(
+            exp_dp
+                .to_natural_language()
+                .contains("strict rules and facts")
+        );
 
         let exp_dnp = Explanation::new(ConclusionType::DefinitelyNotProvable, Literal::simple("p"));
-        assert!(exp_dnp.to_natural_language().contains("cannot be proven using strict rules"));
+        assert!(
+            exp_dnp
+                .to_natural_language()
+                .contains("cannot be proven using strict rules")
+        );
 
         let exp_dfp = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("p"));
         assert!(exp_dfp.to_natural_language().contains("defeasible rules"));
 
-        let exp_dfnp = Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("p"));
-        assert!(exp_dfnp.to_natural_language().contains("could not be proven defeasibly"));
+        let exp_dfnp =
+            Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("p"));
+        assert!(
+            exp_dfnp
+                .to_natural_language()
+                .contains("could not be proven defeasibly")
+        );
     }
 
     // ==========================================================================
@@ -1180,9 +1194,11 @@ mod tests {
         )
         .with_blocking_rule("r2");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_blocked(vec![blocked]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_blocked(vec![blocked]);
 
         let json = explanation.to_json();
         assert!(json["blocked_alternatives"].is_array());
@@ -1196,15 +1212,20 @@ mod tests {
         let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority)
             .with_superiority("sup1");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_conflicts(vec![conflict]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_conflicts(vec![conflict]);
 
         let json = explanation.to_json();
         assert!(json["conflicts_resolved"].is_array());
         assert_eq!(json["conflicts_resolved"][0]["winning_rule"], "r2");
         assert_eq!(json["conflicts_resolved"][0]["losing_rule"], "r1");
-        assert_eq!(json["conflicts_resolved"][0]["resolution_type"], "superiority");
+        assert_eq!(
+            json["conflicts_resolved"][0]["resolution_type"],
+            "superiority"
+        );
         assert_eq!(json["conflicts_resolved"][0]["superiority_label"], "sup1");
     }
 
@@ -1221,10 +1242,19 @@ mod tests {
 
         // Verify @context exists and has required namespaces
         assert!(jsonld["@context"].is_object());
-        assert_eq!(jsonld["@context"]["spindle"], "https://spindle.dev/ontology#");
+        assert_eq!(
+            jsonld["@context"]["spindle"],
+            "https://spindle.dev/ontology#"
+        );
         assert_eq!(jsonld["@context"]["prov"], "http://www.w3.org/ns/prov#");
-        assert_eq!(jsonld["@context"]["rdfs"], "http://www.w3.org/2000/01/rdf-schema#");
-        assert_eq!(jsonld["@context"]["xsd"], "http://www.w3.org/2001/XMLSchema#");
+        assert_eq!(
+            jsonld["@context"]["rdfs"],
+            "http://www.w3.org/2000/01/rdf-schema#"
+        );
+        assert_eq!(
+            jsonld["@context"]["xsd"],
+            "http://www.w3.org/2001/XMLSchema#"
+        );
     }
 
     #[test]
@@ -1265,7 +1295,10 @@ mod tests {
 
         // Verify proof step
         assert!(jsonld["proofTree"]["proofStep"].is_object());
-        assert_eq!(jsonld["proofTree"]["proofStep"]["@type"], "spindle:ProofStep");
+        assert_eq!(
+            jsonld["proofTree"]["proofStep"]["@type"],
+            "spindle:ProofStep"
+        );
         assert_eq!(jsonld["proofTree"]["proofStep"]["ruleLabel"], "r1");
         assert_eq!(jsonld["proofTree"]["proofStep"]["ruleType"], "defeasible");
     }
@@ -1279,8 +1312,8 @@ mod tests {
         ]);
         annots.id = Some("https://example.org/rules/r1".to_string());
 
-        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
-            .with_annotations(annots);
+        let step =
+            ProofStep::new("r1", RuleType::Defeasible, "bird => flies").with_annotations(annots);
         let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
             .with_proof_step(step);
 
@@ -1343,9 +1376,11 @@ mod tests {
         )
         .with_blocking_rule("r2");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_blocked(vec![blocked]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_blocked(vec![blocked]);
 
         let jsonld = explanation.to_jsonld();
 
@@ -1364,9 +1399,11 @@ mod tests {
         let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority)
             .with_superiority("sup1");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_conflicts(vec![conflict]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_conflicts(vec![conflict]);
 
         let jsonld = explanation.to_jsonld();
 
@@ -1387,28 +1424,40 @@ mod tests {
             .with_proof_step(fact_step);
         let exp1 = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("p"))
             .with_proof(fact_proof);
-        assert_eq!(exp1.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "fact");
+        assert_eq!(
+            exp1.to_jsonld()["proofTree"]["proofStep"]["ruleType"],
+            "fact"
+        );
 
         let strict_step = ProofStep::new("s1", RuleType::Strict, "p -> q");
         let strict_proof = ProofNode::new(Literal::simple("q"), DerivationType::Definite)
             .with_proof_step(strict_step);
         let exp2 = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("q"))
             .with_proof(strict_proof);
-        assert_eq!(exp2.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "strict");
+        assert_eq!(
+            exp2.to_jsonld()["proofTree"]["proofStep"]["ruleType"],
+            "strict"
+        );
 
         let def_step = ProofStep::new("r1", RuleType::Defeasible, "p => r");
         let def_proof = ProofNode::new(Literal::simple("r"), DerivationType::Defeasible)
             .with_proof_step(def_step);
         let exp3 = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("r"))
             .with_proof(def_proof);
-        assert_eq!(exp3.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "defeasible");
+        assert_eq!(
+            exp3.to_jsonld()["proofTree"]["proofStep"]["ruleType"],
+            "defeasible"
+        );
 
         let defeater_step = ProofStep::new("d1", RuleType::Defeater, "p ~> s");
         let defeater_proof = ProofNode::new(Literal::simple("s"), DerivationType::Defeasible)
             .with_proof_step(defeater_step);
         let exp4 = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("s"))
             .with_proof(defeater_proof);
-        assert_eq!(exp4.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "defeater");
+        assert_eq!(
+            exp4.to_jsonld()["proofTree"]["proofStep"]["ruleType"],
+            "defeater"
+        );
     }
 
     // ==========================================================================
@@ -1465,8 +1514,8 @@ mod tests {
     #[test]
     fn test_dot_definite_derivation_color() {
         let step = ProofStep::new("f1", RuleType::Fact, ">> bird");
-        let proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
-            .with_proof_step(step);
+        let proof =
+            ProofNode::new(Literal::simple("bird"), DerivationType::Definite).with_proof_step(step);
 
         let explanation =
             Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("bird"))
@@ -1511,9 +1560,11 @@ mod tests {
             "Blocked by r2",
         );
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_blocked(vec![blocked]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_blocked(vec![blocked]);
 
         let dot = explanation.to_dot();
 
@@ -1531,9 +1582,11 @@ mod tests {
     fn test_dot_with_conflict_resolutions() {
         let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority);
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_conflicts(vec![conflict]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_conflicts(vec![conflict]);
 
         let dot = explanation.to_dot();
 
@@ -1570,9 +1623,11 @@ mod tests {
         let proof = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
             .with_proof_step(step);
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_proof(proof);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_proof(proof);
 
         let dot = explanation.to_dot();
 
@@ -1593,9 +1648,8 @@ mod tests {
 
         let not_flies_step = ProofStep::new("r2", RuleType::Defeasible, "penguin => ~flies")
             .with_body_proofs(vec![bird_proof.clone()]);
-        let not_flies_proof =
-            ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
-                .with_proof_step(not_flies_step);
+        let not_flies_proof = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
+            .with_proof_step(not_flies_step);
 
         let blocked = BlockedProof::new(
             Literal::simple("flies"),
@@ -1607,11 +1661,13 @@ mod tests {
         let conflict =
             ConflictResolution::new("r2", "r1", ResolutionType::Superiority).with_superiority("s1");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_proof(not_flies_proof)
-                .with_blocked(vec![blocked])
-                .with_conflicts(vec![conflict]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_proof(not_flies_proof)
+        .with_blocked(vec![blocked])
+        .with_conflicts(vec![conflict]);
 
         let dot = explanation.to_dot();
 
@@ -1624,7 +1680,11 @@ mod tests {
 
         // Verify edges exist (at least some -> notation)
         let edge_count = dot.matches("->").count();
-        assert!(edge_count >= 2, "Expected at least 2 edges, found {}", edge_count);
+        assert!(
+            edge_count >= 2,
+            "Expected at least 2 edges, found {}",
+            edge_count
+        );
     }
 
     #[test]
@@ -1642,9 +1702,11 @@ mod tests {
             "Blocked by defeater d1",
         );
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_blocked(vec![blocked1, blocked2]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_blocked(vec![blocked1, blocked2]);
 
         let dot = explanation.to_dot();
 
@@ -1660,9 +1722,11 @@ mod tests {
         let conflict1 = ConflictResolution::new("r2", "r1", ResolutionType::Superiority);
         let conflict2 = ConflictResolution::new("r4", "r3", ResolutionType::TeamDefeat);
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_conflicts(vec![conflict1, conflict2]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_conflicts(vec![conflict1, conflict2]);
 
         let dot = explanation.to_dot();
 
@@ -1688,11 +1752,17 @@ mod tests {
 
         // Check JSON preserves rule label
         let json = explanation.to_json();
-        assert_eq!(json["proof_tree"]["proof_step"]["rule_label"], "bird_flies_rule");
+        assert_eq!(
+            json["proof_tree"]["proof_step"]["rule_label"],
+            "bird_flies_rule"
+        );
 
         // Check JSON-LD preserves rule label
         let jsonld = explanation.to_jsonld();
-        assert_eq!(jsonld["proofTree"]["proofStep"]["ruleLabel"], "bird_flies_rule");
+        assert_eq!(
+            jsonld["proofTree"]["proofStep"]["ruleLabel"],
+            "bird_flies_rule"
+        );
 
         // Check natural language mentions rule label
         let nl = explanation.to_natural_language();
@@ -1714,9 +1784,11 @@ mod tests {
         let proof = ProofNode::new(Literal::simple("liable"), DerivationType::Defeasible)
             .with_proof_step(step);
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("liable"))
-                .with_proof(proof);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::simple("liable"),
+        )
+        .with_proof(proof);
 
         // Natural language should show source
         let nl = explanation.to_natural_language();
@@ -1744,9 +1816,11 @@ mod tests {
         let proof = ProofNode::new(Literal::simple("diagnosis"), DerivationType::Defeasible)
             .with_proof_step(step);
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("diagnosis"))
-                .with_proof(proof);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::simple("diagnosis"),
+        )
+        .with_proof(proof);
 
         // Verify all annotations in JSON-LD
         let jsonld = explanation.to_jsonld();
@@ -1754,7 +1828,10 @@ mod tests {
 
         assert_eq!(step_jsonld["@id"], "urn:guideline:med-123");
         assert_eq!(step_jsonld["wasAttributedTo"], "expert-opinion");
-        assert_eq!(step_jsonld["rdfs:comment"], "Standard medical practice guideline");
+        assert_eq!(
+            step_jsonld["rdfs:comment"],
+            "Standard medical practice guideline"
+        );
         assert_eq!(step_jsonld["spindle:confidence"], "0.85");
 
         // Verify in natural language
@@ -1773,23 +1850,39 @@ mod tests {
         )
         .with_blocking_rule("penguin_no_fly");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_blocked(vec![blocked]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_blocked(vec![blocked]);
 
         // JSON preserves all info
         let json = explanation.to_json();
-        assert_eq!(json["blocked_alternatives"][0]["rule_label"], "bird_flies_rule");
-        assert_eq!(json["blocked_alternatives"][0]["blocking_rule"], "penguin_no_fly");
-        assert!(json["blocked_alternatives"][0]["explanation"]
-            .as_str()
-            .unwrap()
-            .contains("penguin exception"));
+        assert_eq!(
+            json["blocked_alternatives"][0]["rule_label"],
+            "bird_flies_rule"
+        );
+        assert_eq!(
+            json["blocked_alternatives"][0]["blocking_rule"],
+            "penguin_no_fly"
+        );
+        assert!(
+            json["blocked_alternatives"][0]["explanation"]
+                .as_str()
+                .unwrap()
+                .contains("penguin exception")
+        );
 
         // JSON-LD preserves all info
         let jsonld = explanation.to_jsonld();
-        assert_eq!(jsonld["blockedAlternatives"][0]["ruleLabel"], "bird_flies_rule");
-        assert_eq!(jsonld["blockedAlternatives"][0]["blockedBy"], "penguin_no_fly");
+        assert_eq!(
+            jsonld["blockedAlternatives"][0]["ruleLabel"],
+            "bird_flies_rule"
+        );
+        assert_eq!(
+            jsonld["blockedAlternatives"][0]["blockedBy"],
+            "penguin_no_fly"
+        );
 
         // Natural language preserves all info
         let nl = explanation.to_natural_language();
@@ -1806,14 +1899,22 @@ mod tests {
         )
         .with_superiority("penguin_beats_bird_sup");
 
-        let explanation =
-            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
-                .with_conflicts(vec![conflict]);
+        let explanation = Explanation::new(
+            ConclusionType::DefeasiblyProvable,
+            Literal::negated("flies"),
+        )
+        .with_conflicts(vec![conflict]);
 
         // JSON preserves all info
         let json = explanation.to_json();
-        assert_eq!(json["conflicts_resolved"][0]["winning_rule"], "specific_penguin_rule");
-        assert_eq!(json["conflicts_resolved"][0]["losing_rule"], "general_bird_rule");
+        assert_eq!(
+            json["conflicts_resolved"][0]["winning_rule"],
+            "specific_penguin_rule"
+        );
+        assert_eq!(
+            json["conflicts_resolved"][0]["losing_rule"],
+            "general_bird_rule"
+        );
         assert_eq!(
             json["conflicts_resolved"][0]["superiority_label"],
             "penguin_beats_bird_sup"
@@ -1821,8 +1922,14 @@ mod tests {
 
         // JSON-LD preserves all info
         let jsonld = explanation.to_jsonld();
-        assert_eq!(jsonld["conflictsResolved"][0]["winningRule"], "specific_penguin_rule");
-        assert_eq!(jsonld["conflictsResolved"][0]["losingRule"], "general_bird_rule");
+        assert_eq!(
+            jsonld["conflictsResolved"][0]["winningRule"],
+            "specific_penguin_rule"
+        );
+        assert_eq!(
+            jsonld["conflictsResolved"][0]["losingRule"],
+            "general_bird_rule"
+        );
         assert_eq!(
             jsonld["conflictsResolved"][0]["superiorityLabel"],
             "penguin_beats_bird_sup"
@@ -1838,8 +1945,14 @@ mod tests {
     fn test_escape_dot_label() {
         assert_eq!(escape_dot_label("simple"), "simple");
         assert_eq!(escape_dot_label("with\"quotes"), "with\\\"quotes");
-        assert_eq!(escape_dot_label("with<angle>brackets"), "with\\<angle\\>brackets");
-        assert_eq!(escape_dot_label("with{curly}braces"), "with\\{curly\\}braces");
+        assert_eq!(
+            escape_dot_label("with<angle>brackets"),
+            "with\\<angle\\>brackets"
+        );
+        assert_eq!(
+            escape_dot_label("with{curly}braces"),
+            "with\\{curly\\}braces"
+        );
         assert_eq!(escape_dot_label("with\\backslash"), "with\\\\backslash");
         assert_eq!(escape_dot_label("with\nnewline"), "with\\nnewline");
     }
@@ -1858,7 +1971,10 @@ mod tests {
         let result = explain(&theory, &Literal::simple("bird"));
         assert!(result.is_some());
         let explanation = result.unwrap();
-        assert_eq!(explanation.conclusion_type, ConclusionType::DefinitelyProvable);
+        assert_eq!(
+            explanation.conclusion_type,
+            ConclusionType::DefinitelyProvable
+        );
         assert_eq!(explanation.literal.name(), "bird");
     }
 
@@ -1873,7 +1989,10 @@ mod tests {
         let result = explain(&theory, &Literal::simple("flies"));
         assert!(result.is_some());
         let explanation = result.unwrap();
-        assert_eq!(explanation.conclusion_type, ConclusionType::DefeasiblyProvable);
+        assert_eq!(
+            explanation.conclusion_type,
+            ConclusionType::DefeasiblyProvable
+        );
         assert_eq!(explanation.literal.name(), "flies");
         // Should have proof tree
         assert!(explanation.proof_tree.is_some());
@@ -1903,7 +2022,10 @@ mod tests {
         let result = explain(&theory, &Literal::simple("r"));
         assert!(result.is_some());
         let explanation = result.unwrap();
-        assert_eq!(explanation.conclusion_type, ConclusionType::DefinitelyProvable);
+        assert_eq!(
+            explanation.conclusion_type,
+            ConclusionType::DefinitelyProvable
+        );
     }
 
     #[test]
@@ -1942,22 +2064,19 @@ mod tests {
 
     #[test]
     fn test_explanation_with_blocked_builder() {
-        let blocked = BlockedProof::new(
-            Literal::simple("x"),
-            "r1",
-            BlockReason::Conflict,
-            "test",
-        );
-        let explanation = Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("x"))
-            .with_blocked(vec![blocked]);
+        let blocked = BlockedProof::new(Literal::simple("x"), "r1", BlockReason::Conflict, "test");
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("x"))
+                .with_blocked(vec![blocked]);
         assert_eq!(explanation.blocked_alternatives.len(), 1);
     }
 
     #[test]
     fn test_explanation_with_conflicts_builder() {
         let conflict = ConflictResolution::new("r1", "r2", ResolutionType::TeamDefeat);
-        let explanation = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("x"))
-            .with_conflicts(vec![conflict]);
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("x"))
+                .with_conflicts(vec![conflict]);
         assert_eq!(explanation.conflicts_resolved.len(), 1);
     }
 
@@ -2049,8 +2168,8 @@ mod tests {
             annotations: Default::default(),
         };
 
-        let node = ProofNode::new(Literal::simple("q"), DerivationType::Defeasible)
-            .with_proof_step(step);
+        let node =
+            ProofNode::new(Literal::simple("q"), DerivationType::Defeasible).with_proof_step(step);
 
         let json = proof_node_to_json(&node);
         assert_eq!(json["proof_step"]["rule_type"], "defeater");

@@ -101,18 +101,12 @@ impl TriggerIndex {
 
     /// Add a trigger: when `literal` is proven, `rule` might fire.
     pub fn add_body_trigger(&mut self, literal: LiteralId, rule: RuleLabel) {
-        self.body_triggers
-            .entry(literal)
-            .or_default()
-            .push(rule);
+        self.body_triggers.entry(literal).or_default().push(rule);
     }
 
     /// Add a head trigger: `rule` produces `literal`.
     pub fn add_head_trigger(&mut self, literal: LiteralId, rule: RuleLabel) {
-        self.head_triggers
-            .entry(literal)
-            .or_default()
-            .push(rule);
+        self.head_triggers.entry(literal).or_default().push(rule);
     }
 
     /// Get rules triggered by proving a literal (rules with this in body).
@@ -200,7 +194,8 @@ impl RuleWorklist {
     pub fn enqueue(&mut self, label: RuleLabel) {
         if !self.in_queue.contains(&label)
             && let Some(state) = self.states.get_mut(&label)
-            && !state.fired {
+            && !state.fired
+        {
             state.in_worklist = true;
             self.in_queue.insert(label.clone());
             self.queue.push_back(label);
@@ -230,10 +225,7 @@ impl RuleWorklist {
 
     /// Check if a rule has fired.
     pub fn has_fired(&self, label: &RuleLabel) -> bool {
-        self.states
-            .get(label)
-            .map(|s| s.fired)
-            .unwrap_or(false)
+        self.states.get(label).map(|s| s.fired).unwrap_or(false)
     }
 
     /// Check if worklist is empty.
@@ -250,8 +242,8 @@ impl RuleWorklist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::intern::intern;
     use crate::intern::LiteralId;
+    use crate::intern::intern;
 
     fn lit(name: &str) -> LiteralId {
         LiteralId::positive(intern(name))
@@ -306,7 +298,7 @@ mod tests {
     fn test_worklist_fired() {
         let mut worklist = RuleWorklist::new();
 
-        worklist.init_rule("r1".to_string(), 0);  // Empty body
+        worklist.init_rule("r1".to_string(), 0); // Empty body
         worklist.enqueue("r1".to_string());
 
         let label = worklist.pop().unwrap();

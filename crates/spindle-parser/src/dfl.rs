@@ -27,13 +27,13 @@
 //! ```
 
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_while1},
     character::complete::{char, space0},
     combinator::{map, opt},
     multi::separated_list0,
     sequence::{delimited, terminated},
-    IResult, Parser,
 };
 
 use spindle_core::{Literal, Rule, RuleType, Superiority, Theory};

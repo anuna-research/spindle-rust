@@ -102,8 +102,7 @@ impl Theory {
     pub fn add_superiority(&mut self, superior: &str, inferior: &str) {
         self.superiorities
             .push(Superiority::new(superior, inferior));
-        self.sup_index
-            .add(superior.to_owned(), inferior.to_owned());
+        self.sup_index.add(superior.to_owned(), inferior.to_owned());
     }
 
     /// Get a rule by label
@@ -123,7 +122,9 @@ impl Theory {
 
     /// Get rules by type
     pub fn rules_by_type(&self, rule_type: RuleType) -> impl Iterator<Item = &Rule> {
-        self.rules.values().filter(move |r| r.rule_type == rule_type)
+        self.rules
+            .values()
+            .filter(move |r| r.rule_type == rule_type)
     }
 
     /// Get all superiority relations

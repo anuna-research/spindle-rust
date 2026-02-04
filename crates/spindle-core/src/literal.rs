@@ -12,7 +12,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use crate::intern::{intern, resolve, LiteralId, SymbolId};
+use crate::intern::{LiteralId, SymbolId, intern, resolve};
 use crate::mode::Mode;
 use crate::temporal::Temporal;
 
@@ -370,13 +370,7 @@ mod tests {
         let simple = Literal::simple("bird");
         assert!(!simple.is_modal());
 
-        let modal = Literal::new(
-            "pay",
-            false,
-            Mode::obligation(),
-            Temporal::empty(),
-            vec![],
-        );
+        let modal = Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]);
         assert!(modal.is_modal());
     }
 
@@ -412,13 +406,7 @@ mod tests {
 
     #[test]
     fn test_display_with_mode() {
-        let modal = Literal::new(
-            "pay",
-            false,
-            Mode::obligation(),
-            Temporal::empty(),
-            vec![],
-        );
+        let modal = Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]);
         assert_eq!(format!("{}", modal), "[O]pay");
     }
 

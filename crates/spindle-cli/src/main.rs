@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
-use spindle_core::query::{abduce, query, why_not, QueryStatus};
+use spindle_core::query::{QueryStatus, abduce, query, why_not};
 use spindle_parser::spl::parse_spl as parse_spl_str;
 use spindle_parser::{parse_dfl, parse_spl};
 
@@ -217,7 +217,8 @@ fn parse_literal_arg(s: &str) -> Literal {
         // Wrap in (given ...) so the full parser can handle it
         let dummy_spl = format!("(given {s})");
         if let Ok(theory) = parse_spl_str(&dummy_spl)
-            && let Some(fact) = theory.facts().next() {
+            && let Some(fact) = theory.facts().next()
+        {
             // Return the literal from the first fact
             if let Some(head) = fact.head.first() {
                 return head.clone();

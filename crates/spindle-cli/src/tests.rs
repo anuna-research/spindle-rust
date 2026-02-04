@@ -9,14 +9,13 @@
 //! - Integration with reasoning engine
 //! - Error handling for invalid queries
 
+use spindle_core::Theory;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::literal::Literal;
 use spindle_core::query::{
-    abduce, query, what_if, what_if_provable, why_not, BlockingType, HypotheticalClaim,
-    QueryStatus,
+    BlockingType, HypotheticalClaim, QueryStatus, abduce, query, what_if, what_if_provable, why_not,
 };
 use spindle_core::rule::{Rule, RuleType};
-use spindle_core::Theory;
 use spindle_parser::parse_spl;
 use std::fs;
 use tempfile::TempDir;
@@ -607,7 +606,10 @@ fn test_conclusion_type_symbol_defeasibly_not_provable() {
 
 #[test]
 fn test_blocking_type_display_missing_premise() {
-    assert_eq!(format!("{}", BlockingType::MissingPremise), "missing premise");
+    assert_eq!(
+        format!("{}", BlockingType::MissingPremise),
+        "missing premise"
+    );
 }
 
 #[test]

@@ -90,10 +90,7 @@ impl SuperiorityIndex {
     /// This is O(N) where N is the number of superiority relations.
     pub fn build(superiorities: &[Superiority]) -> Self {
         let mut index = Self {
-            pairs: FxHashSet::with_capacity_and_hasher(
-                superiorities.len(),
-                Default::default(),
-            ),
+            pairs: FxHashSet::with_capacity_and_hasher(superiorities.len(), Default::default()),
             inferiors: FxHashMap::default(),
             superiors: FxHashMap::default(),
         };
@@ -117,10 +114,7 @@ impl SuperiorityIndex {
             .push(inferior.clone());
 
         // Add to reverse index (inferior -> superior)
-        self.superiors
-            .entry(inferior)
-            .or_default()
-            .push(superior);
+        self.superiors.entry(inferior).or_default().push(superior);
     }
 
     /// Check if `superior` is superior to `inferior`.
@@ -128,7 +122,8 @@ impl SuperiorityIndex {
     /// This is O(1) average case.
     #[inline]
     pub fn is_superior(&self, superior: &str, inferior: &str) -> bool {
-        self.pairs.contains(&(superior.to_owned(), inferior.to_owned()))
+        self.pairs
+            .contains(&(superior.to_owned(), inferior.to_owned()))
     }
 
     /// Check if `superior` is superior to `inferior` (owned version).
@@ -144,7 +139,10 @@ impl SuperiorityIndex {
     /// Returns an empty slice if `rule` has no inferiors.
     #[inline]
     pub fn inferiors_of(&self, rule: &str) -> &[RuleLabel] {
-        self.inferiors.get(rule).map(|v| v.as_slice()).unwrap_or(&[])
+        self.inferiors
+            .get(rule)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Get all rules that are superior to `rule` (rules that beat it).
@@ -152,7 +150,10 @@ impl SuperiorityIndex {
     /// Returns an empty slice if `rule` has no superiors.
     #[inline]
     pub fn superiors_of(&self, rule: &str) -> &[RuleLabel] {
-        self.superiors.get(rule).map(|v| v.as_slice()).unwrap_or(&[])
+        self.superiors
+            .get(rule)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Check if there are any superiority relations defined.
@@ -208,10 +209,7 @@ mod tests {
 
     #[test]
     fn test_index_is_superior() {
-        let sups = vec![
-            Superiority::new("r2", "r1"),
-            Superiority::new("r3", "r2"),
-        ];
+        let sups = vec![Superiority::new("r2", "r1"), Superiority::new("r3", "r2")];
         let index = SuperiorityIndex::build(&sups);
 
         // Direct superiorities
@@ -228,10 +226,7 @@ mod tests {
 
     #[test]
     fn test_index_inferiors_of() {
-        let sups = vec![
-            Superiority::new("r3", "r1"),
-            Superiority::new("r3", "r2"),
-        ];
+        let sups = vec![Superiority::new("r3", "r1"), Superiority::new("r3", "r2")];
         let index = SuperiorityIndex::build(&sups);
 
         let inf = index.inferiors_of("r3");
@@ -245,10 +240,7 @@ mod tests {
 
     #[test]
     fn test_index_superiors_of() {
-        let sups = vec![
-            Superiority::new("r2", "r1"),
-            Superiority::new("r3", "r1"),
-        ];
+        let sups = vec![Superiority::new("r2", "r1"), Superiority::new("r3", "r1")];
         let index = SuperiorityIndex::build(&sups);
 
         let sup = index.superiors_of("r1");
@@ -283,10 +275,7 @@ mod tests {
 
     #[test]
     fn test_index_iter() {
-        let sups = vec![
-            Superiority::new("r2", "r1"),
-            Superiority::new("r3", "r1"),
-        ];
+        let sups = vec![Superiority::new("r2", "r1"), Superiority::new("r3", "r1")];
         let index = SuperiorityIndex::build(&sups);
 
         let pairs: Vec<_> = index.iter().collect();

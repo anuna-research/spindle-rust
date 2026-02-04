@@ -9,14 +9,14 @@
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
+use spindle_core::explanation::explain;
+use spindle_core::grounding::ground_theory;
+use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
+use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
-use spindle_core::grounding::ground_theory;
-use spindle_core::query::{what_if, why_not, abduce, HypotheticalClaim};
-use spindle_core::explanation::explain;
 use spindle_core::temporal::Temporal;
-use spindle_core::mode::Mode;
 
 /// Create a wide theory with N independent rule groups
 fn create_wide_theory(n: usize) -> Theory {
@@ -67,7 +67,13 @@ fn create_grounding_theory(n_entities: usize) -> Theory {
     for i in 0..n_entities {
         theory.add_rule(Rule::fact(
             format!("f_person_{}", i),
-            Literal::new("person", false, Mode::empty(), Temporal::empty(), vec![format!("e{}", i)]),
+            Literal::new(
+                "person",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![format!("e{}", i)],
+            ),
         ));
     }
 
@@ -76,7 +82,13 @@ fn create_grounding_theory(n_entities: usize) -> Theory {
             if i != j && (i + j) % 3 == 0 {
                 theory.add_rule(Rule::fact(
                     format!("f_knows_{}_{}", i, j),
-                    Literal::new("knows", false, Mode::empty(), Temporal::empty(), vec![format!("e{}", i), format!("e{}", j)]),
+                    Literal::new(
+                        "knows",
+                        false,
+                        Mode::empty(),
+                        Temporal::empty(),
+                        vec![format!("e{}", i), format!("e{}", j)],
+                    ),
                 ));
             }
         }
@@ -85,10 +97,28 @@ fn create_grounding_theory(n_entities: usize) -> Theory {
     theory.add_rule(Rule::defeasible(
         "r_connected",
         vec![
-            Literal::new("person", false, Mode::empty(), Temporal::empty(), vec!["?x".to_string()]),
-            Literal::new("knows", false, Mode::empty(), Temporal::empty(), vec!["?x".to_string(), "?y".to_string()]),
+            Literal::new(
+                "person",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec!["?x".to_string()],
+            ),
+            Literal::new(
+                "knows",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec!["?x".to_string(), "?y".to_string()],
+            ),
         ],
-        Literal::new("connected", false, Mode::empty(), Temporal::empty(), vec!["?x".to_string(), "?y".to_string()]),
+        Literal::new(
+            "connected",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["?x".to_string(), "?y".to_string()],
+        ),
     ));
 
     theory

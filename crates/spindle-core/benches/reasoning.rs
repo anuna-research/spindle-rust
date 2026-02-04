@@ -18,19 +18,19 @@
 //! - Explanation generation
 //! - Parser performance (DFL and SPL formats)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use std::time::Duration;
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use spindle_core::explanation::explain;
 use spindle_core::grounding::ground_theory;
+use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
-use spindle_core::query::{abduce, what_if, why_not, HypotheticalClaim};
+use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
-use spindle_core::mode::Mode;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::trust::{Source, TrustDerivationNode, TrustPolicy};
 use spindle_parser::{parse_dfl, parse_spl};
 use std::collections::HashSet;
+use std::time::Duration;
 
 // =============================================================================
 // THEORY GENERATORS
@@ -134,7 +134,13 @@ fn create_grounding_theory(n_entities: usize, n_rules: usize) -> Theory {
     for i in 0..n_entities {
         theory.add_rule(Rule::fact(
             format!("f_person_{}", i),
-            Literal::new("person", false, Mode::empty(), Temporal::empty(), vec![format!("entity{}", i)]),
+            Literal::new(
+                "person",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![format!("entity{}", i)],
+            ),
         ));
     }
 
@@ -162,7 +168,13 @@ fn create_grounding_theory(n_entities: usize, n_rules: usize) -> Theory {
         theory.add_rule(Rule::defeasible(
             format!("r_connected_{}", i),
             vec![
-                Literal::new("person", false, Mode::empty(), Temporal::empty(), vec!["?x".to_string()]),
+                Literal::new(
+                    "person",
+                    false,
+                    Mode::empty(),
+                    Temporal::empty(),
+                    vec!["?x".to_string()],
+                ),
                 Literal::new(
                     "knows",
                     false,
@@ -277,9 +289,7 @@ fn bench_literal_operations(c: &mut Criterion) {
     let lit = Literal::simple("test_literal_name");
     let neg_lit = Literal::negated("test_literal_name");
 
-    group.bench_function("literal_id", |b| {
-        b.iter(|| black_box(lit.literal_id()))
-    });
+    group.bench_function("literal_id", |b| b.iter(|| black_box(lit.literal_id())));
 
     group.bench_function("literal_id_negated", |b| {
         b.iter(|| black_box(neg_lit.literal_id()))
@@ -409,11 +419,9 @@ fn bench_reason_scalable(c: &mut Criterion) {
     for size in [100, 250, 500].iter() {
         let theory = create_wide_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
-        group.bench_with_input(
-            BenchmarkId::new("scalable", size),
-            &theory,
-            |b, theory| b.iter(|| black_box(reason_scalable(theory))),
-        );
+        group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
+            b.iter(|| black_box(reason_scalable(theory)))
+        });
     }
 
     group.finish();
@@ -427,17 +435,13 @@ fn bench_standard_vs_scalable(c: &mut Criterion) {
         let theory = create_wide_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
 
-        group.bench_with_input(
-            BenchmarkId::new("standard", size),
-            &theory,
-            |b, theory| b.iter(|| black_box(reason(theory))),
-        );
+        group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
+            b.iter(|| black_box(reason(theory)))
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("scalable", size),
-            &theory,
-            |b, theory| b.iter(|| black_box(reason_scalable(theory))),
-        );
+        group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
+            b.iter(|| black_box(reason_scalable(theory)))
+        });
     }
 
     group.finish();
@@ -455,17 +459,13 @@ fn bench_scaling(c: &mut Criterion) {
         let theory = create_wide_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
 
-        group.bench_with_input(
-            BenchmarkId::new("standard", size),
-            &theory,
-            |b, theory| b.iter(|| black_box(reason(theory))),
-        );
+        group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
+            b.iter(|| black_box(reason(theory)))
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("scalable", size),
-            &theory,
-            |b, theory| b.iter(|| black_box(reason_scalable(theory))),
-        );
+        group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
+            b.iter(|| black_box(reason_scalable(theory)))
+        });
     }
 
     group.finish();
@@ -486,17 +486,13 @@ fn bench_temporal_relations(c: &mut Criterion) {
     let t1 = Temporal::from_bounds(0, 100);
     let t2 = Temporal::from_bounds(50, 150);
 
-    group.bench_function("relation_check", |b| {
-        b.iter(|| black_box(t1.relation(&t2)))
-    });
+    group.bench_function("relation_check", |b| b.iter(|| black_box(t1.relation(&t2))));
 
     group.bench_function("intersection", |b| {
         b.iter(|| black_box(t1.intersection(&t2)))
     });
 
-    group.bench_function("intersects", |b| {
-        b.iter(|| black_box(t1.intersects(&t2)))
-    });
+    group.bench_function("intersects", |b| b.iter(|| black_box(t1.intersects(&t2))));
 
     group.bench_function("active_at", |b| {
         let point = TimePoint::from_millis(75);
@@ -589,11 +585,9 @@ fn bench_trust(c: &mut Criterion) {
     for depth in [3, 5, 10].iter() {
         let tree = build_trust_tree(*depth);
 
-        group.bench_with_input(
-            BenchmarkId::new("weakest_link", depth),
-            &tree,
-            |b, tree| b.iter(|| black_box(tree.weakest_link_trust())),
-        );
+        group.bench_with_input(BenchmarkId::new("weakest_link", depth), &tree, |b, tree| {
+            b.iter(|| black_box(tree.weakest_link_trust()))
+        });
     }
 
     group.finish();
@@ -602,11 +596,8 @@ fn bench_trust(c: &mut Criterion) {
 /// Build a trust derivation tree of given depth
 fn build_trust_tree(depth: usize) -> TrustDerivationNode {
     fn build_level(depth: usize, trust: f64) -> TrustDerivationNode {
-        let node = TrustDerivationNode::new(
-            Literal::simple(format!("level{}", depth)),
-            trust,
-        )
-        .with_source(Source::new(format!("source{}", depth)));
+        let node = TrustDerivationNode::new(Literal::simple(format!("level{}", depth)), trust)
+            .with_source(Source::new(format!("source{}", depth)));
 
         if depth == 0 {
             node
@@ -664,9 +655,7 @@ fn bench_query_operators(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("abduce", max_solutions),
             max_solutions,
-            |b, max| {
-                b.iter(|| black_box(abduce(&theory, &Literal::simple("can_merge"), *max)))
-            },
+            |b, max| b.iter(|| black_box(abduce(&theory, &Literal::simple("can_merge"), *max))),
         );
     }
 
@@ -716,13 +705,9 @@ fn bench_explanation(c: &mut Criterion) {
             b.iter(|| black_box(exp.to_natural_language()))
         });
 
-        group.bench_function("to_json", |b| {
-            b.iter(|| black_box(exp.to_json()))
-        });
+        group.bench_function("to_json", |b| b.iter(|| black_box(exp.to_json())));
 
-        group.bench_function("to_dot", |b| {
-            b.iter(|| black_box(exp.to_dot()))
-        });
+        group.bench_function("to_dot", |b| b.iter(|| black_box(exp.to_dot())));
     }
 
     group.finish();
@@ -777,9 +762,6 @@ criterion_group!(
 );
 
 // Large-scale benchmarks - run with: cargo bench -- "scaling"
-criterion_group!(
-    scaling_benches,
-    bench_scaling,
-);
+criterion_group!(scaling_benches, bench_scaling,);
 
 criterion_main!(quick_benches, scaling_benches);

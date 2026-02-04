@@ -33,12 +33,12 @@
 #![warn(missing_docs)]
 
 pub mod dfl;
-pub mod spl;
 pub mod error;
+pub mod spl;
 
 pub use dfl::parse_dfl;
-pub use spl::parse_spl;
 pub use error::ParseError;
+pub use spl::parse_spl;
 
 #[cfg(test)]
 mod format_equivalence_tests;

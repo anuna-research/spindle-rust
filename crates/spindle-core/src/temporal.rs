@@ -630,7 +630,10 @@ mod tests {
         let d = Temporal::from_bounds(5, 15);
 
         assert!(a.overlaps(&d), "A should overlap D");
-        assert!(!d.overlaps(&a), "D should not overlap A (it's overlapped-by)");
+        assert!(
+            !d.overlaps(&a),
+            "D should not overlap A (it's overlapped-by)"
+        );
         assert_eq!(a.relation(&d), AllenRelation::Overlaps);
     }
 
@@ -778,8 +781,14 @@ mod tests {
         assert_eq!(AllenRelation::After.inverse(), AllenRelation::Before);
         assert_eq!(AllenRelation::Meets.inverse(), AllenRelation::MetBy);
         assert_eq!(AllenRelation::MetBy.inverse(), AllenRelation::Meets);
-        assert_eq!(AllenRelation::Overlaps.inverse(), AllenRelation::OverlappedBy);
-        assert_eq!(AllenRelation::OverlappedBy.inverse(), AllenRelation::Overlaps);
+        assert_eq!(
+            AllenRelation::Overlaps.inverse(),
+            AllenRelation::OverlappedBy
+        );
+        assert_eq!(
+            AllenRelation::OverlappedBy.inverse(),
+            AllenRelation::Overlaps
+        );
         assert_eq!(AllenRelation::Starts.inverse(), AllenRelation::StartedBy);
         assert_eq!(AllenRelation::StartedBy.inverse(), AllenRelation::Starts);
         assert_eq!(AllenRelation::During.inverse(), AllenRelation::Contains);
@@ -810,8 +819,14 @@ mod tests {
         let inf = Temporal::new(TimePoint::NegInf, TimePoint::PosInf);
         let a = Temporal::from_bounds(0, 10);
 
-        assert!(a.during(&inf), "Finite interval should be during infinite interval");
-        assert!(inf.contains(&a), "Infinite interval should contain finite interval");
+        assert!(
+            a.during(&inf),
+            "Finite interval should be during infinite interval"
+        );
+        assert!(
+            inf.contains(&a),
+            "Infinite interval should contain finite interval"
+        );
     }
 
     // =========================================================================
@@ -846,8 +861,14 @@ mod tests {
         let inf = Temporal::new(TimePoint::NegInf, TimePoint::PosInf);
 
         assert!(inf.active_at_millis(0), "0 is within infinite interval");
-        assert!(inf.active_at_millis(1000000), "Any time is within infinite interval");
-        assert!(inf.active_at_millis(-1000000), "Negative time is within infinite interval");
+        assert!(
+            inf.active_at_millis(1000000),
+            "Any time is within infinite interval"
+        );
+        assert!(
+            inf.active_at_millis(-1000000),
+            "Negative time is within infinite interval"
+        );
     }
 
     #[test]
@@ -856,8 +877,14 @@ mod tests {
 
         assert!(t.past_at(TimePoint::Moment(15)), "interval ended before 15");
         assert!(!t.past_at(TimePoint::Moment(8)), "8 is during interval");
-        assert!(!t.past_at(TimePoint::Moment(3)), "3 is before interval started");
-        assert!(!t.past_at(TimePoint::Moment(10)), "10 is at boundary, not past");
+        assert!(
+            !t.past_at(TimePoint::Moment(3)),
+            "3 is before interval started"
+        );
+        assert!(
+            !t.past_at(TimePoint::Moment(10)),
+            "10 is at boundary, not past"
+        );
     }
 
     #[test]
@@ -867,7 +894,10 @@ mod tests {
         assert!(t.future_at(TimePoint::Moment(3)), "interval starts after 3");
         assert!(!t.future_at(TimePoint::Moment(8)), "8 is during interval");
         assert!(!t.future_at(TimePoint::Moment(15)), "15 is after interval");
-        assert!(!t.future_at(TimePoint::Moment(5)), "5 is at boundary, not future");
+        assert!(
+            !t.future_at(TimePoint::Moment(5)),
+            "5 is at boundary, not future"
+        );
     }
 
     #[test]
@@ -884,9 +914,15 @@ mod tests {
         // Future tests
         assert!(t.future_at(TimePoint::Moment(5)), "interval is future at 5");
         assert!(t.future_at(TimePoint::Moment(9)), "interval is future at 9");
-        assert!(!t.future_at(TimePoint::Moment(10)), "boundary is not future");
+        assert!(
+            !t.future_at(TimePoint::Moment(10)),
+            "boundary is not future"
+        );
         assert!(!t.future_at(TimePoint::Moment(15)), "middle is not future");
-        assert!(!t.future_at(TimePoint::Moment(25)), "after end is not future");
+        assert!(
+            !t.future_at(TimePoint::Moment(25)),
+            "after end is not future"
+        );
     }
 
     // =========================================================================
@@ -1059,7 +1095,10 @@ mod tests {
         let t2 = Temporal::from_bounds(20, 30);
 
         let result = Temporal::intersection_list(&[t1, t2]);
-        assert!(result.is_none(), "Non-overlapping intervals should return None");
+        assert!(
+            result.is_none(),
+            "Non-overlapping intervals should return None"
+        );
     }
 
     #[test]
@@ -1082,7 +1121,10 @@ mod tests {
         let t3 = Temporal::from_bounds(20, 30);
 
         assert!(t1.intersects(&t2), "Overlapping intervals should intersect");
-        assert!(!t1.intersects(&t3), "Disjoint intervals should not intersect");
+        assert!(
+            !t1.intersects(&t3),
+            "Disjoint intervals should not intersect"
+        );
     }
 
     #[test]
@@ -1270,7 +1312,10 @@ mod tests {
         let a = Temporal::from_bounds(0, 10);
         let b = Temporal::from_bounds(20, 30);
 
-        assert!(!a.intersects(&b), "Non-overlapping intervals should not intersect");
+        assert!(
+            !a.intersects(&b),
+            "Non-overlapping intervals should not intersect"
+        );
         assert!(
             a.intersection(&b).is_none(),
             "Intersection should be None for non-overlapping"

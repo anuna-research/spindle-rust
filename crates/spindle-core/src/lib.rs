@@ -40,36 +40,38 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod conclusion;
+pub mod error;
+pub mod explanation;
+pub mod grounding;
+pub mod index;
 pub mod intern;
 pub mod literal;
-pub mod mode;
-pub mod temporal;
-pub mod rule;
-pub mod superiority;
-pub mod theory;
-pub mod conclusion;
-pub mod index;
-pub mod reason;
-pub mod scalable;
-pub mod grounding;
-pub mod worklist;
-pub mod explanation;
-pub mod trust;
-pub mod query;
-pub mod error;
 pub mod mining;
+pub mod mode;
+pub mod query;
+pub mod reason;
+pub mod rule;
+pub mod scalable;
+pub mod superiority;
+pub mod temporal;
+pub mod theory;
+pub mod trust;
+pub mod worklist;
 
 /// Prelude module for convenient imports
 pub mod prelude {
-    pub use crate::intern::{intern, resolve, intern_literal, resolve_literal, SymbolId, LiteralId};
+    pub use crate::conclusion::{Conclusion, ConclusionType};
+    pub use crate::error::{Result, SpindleError};
+    pub use crate::intern::{
+        LiteralId, SymbolId, intern, intern_literal, resolve, resolve_literal,
+    };
     pub use crate::literal::{Literal, LiteralName};
     pub use crate::mode::Mode;
-    pub use crate::temporal::Temporal;
-    pub use crate::rule::{Rule, RuleType, RuleLabel};
+    pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
+    pub use crate::temporal::Temporal;
     pub use crate::theory::{Meta, MetaValue, Theory};
-    pub use crate::conclusion::{Conclusion, ConclusionType};
-    pub use crate::error::{SpindleError, Result};
 }
 
 pub use prelude::*;

@@ -10,8 +10,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use crate::literal::Literal;
 use crate::conclusion::ConclusionType;
+use crate::literal::Literal;
 
 /// Trust value in range [0.0, 1.0]
 pub type TrustValue = f64;
@@ -214,7 +214,10 @@ impl TrustPolicy {
 
     /// Get trust for a source
     pub fn get_trust(&self, source: &str) -> TrustValue {
-        self.trust_map.get(source).copied().unwrap_or(self.default_trust)
+        self.trust_map
+            .get(source)
+            .copied()
+            .unwrap_or(self.default_trust)
     }
 
     /// Check if a value is above a named threshold
@@ -309,14 +312,8 @@ impl TrustExplanation {
     pub fn to_natural_language(&self) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!(
-            "Trust Explanation for \"{}\"\n",
-            self.goal
-        ));
-        output.push_str(&format!(
-            "Final trust degree: {:.2}\n\n",
-            self.final_degree
-        ));
+        output.push_str(&format!("Trust Explanation for \"{}\"\n", self.goal));
+        output.push_str(&format!("Final trust degree: {:.2}\n\n", self.final_degree));
 
         if let Some(ref tree) = self.derivation_tree {
             output.push_str("Derivation tree:\n");
@@ -354,7 +351,9 @@ impl TrustExplanation {
 fn derivation_node_to_string(node: &TrustDerivationNode, num: usize, indent: &str) -> String {
     let mut output = String::new();
 
-    let source_str = node.source.as_ref()
+    let source_str = node
+        .source
+        .as_ref()
         .map(|s| format!(" [source: {s}]"))
         .unwrap_or_default();
 
@@ -425,12 +424,10 @@ mod tests {
 
     #[test]
     fn test_sourced_conclusion() {
-        let sc = SourcedConclusion::new(
-            Literal::simple("flies"),
-            ConclusionType::DefeasiblyProvable,
-        )
-        .with_source(Source::new("alice"))
-        .with_derivation("r1");
+        let sc =
+            SourcedConclusion::new(Literal::simple("flies"), ConclusionType::DefeasiblyProvable)
+                .with_source(Source::new("alice"))
+                .with_derivation("r1");
 
         assert_eq!(sc.sources.len(), 1);
         assert_eq!(sc.derivation, vec!["r1"]);
@@ -452,10 +449,8 @@ mod tests {
     #[test]
     fn test_derived_conclusions_inherit_sources() {
         // Conclusion inherits sources from premises and rules
-        let mut sc = SourcedConclusion::new(
-            Literal::simple("ready"),
-            ConclusionType::DefeasiblyProvable,
-        );
+        let mut sc =
+            SourcedConclusion::new(Literal::simple("ready"), ConclusionType::DefeasiblyProvable);
 
         // Add sources from premise and rule
         sc = sc
@@ -579,8 +574,7 @@ mod tests {
 
     #[test]
     fn test_trust_policy_boundary_values() {
-        let policy = TrustPolicy::new(0.5)
-            .with_threshold("exact", 0.7);
+        let policy = TrustPolicy::new(0.5).with_threshold("exact", 0.7);
 
         // Exactly at threshold should be considered "above" (>=)
         assert_eq!(policy.is_above_threshold(0.7, "exact"), Some(true));
@@ -649,10 +643,10 @@ mod tests {
         // Chain: a (0.9) -> b (0.7) -> c
         // Weakest link is 0.7
         let leaf_a = TrustDerivationNode::new(Literal::simple("a"), 0.9);
-        let node_b = TrustDerivationNode::new(Literal::simple("b"), 0.7)
-            .with_children(vec![leaf_a]);
-        let root_c = TrustDerivationNode::new(Literal::simple("c"), 0.8)
-            .with_children(vec![node_b]);
+        let node_b =
+            TrustDerivationNode::new(Literal::simple("b"), 0.7).with_children(vec![leaf_a]);
+        let root_c =
+            TrustDerivationNode::new(Literal::simple("c"), 0.8).with_children(vec![node_b]);
 
         assert_eq!(root_c.weakest_link_trust(), 0.7);
     }
@@ -663,8 +657,8 @@ mod tests {
         // Weakest link is 0.5
         let leaf_a = TrustDerivationNode::new(Literal::simple("a"), 0.9)
             .with_source(Source::new("agent:hightrust"));
-        let node_b = TrustDerivationNode::new(Literal::simple("b"), 0.9)
-            .with_children(vec![leaf_a]);
+        let node_b =
+            TrustDerivationNode::new(Literal::simple("b"), 0.9).with_children(vec![leaf_a]);
         let root_c = TrustDerivationNode::new(Literal::simple("c"), 0.5)
             .with_source(Source::new("agent:lowtrust"))
             .with_children(vec![node_b]);
@@ -682,10 +676,10 @@ mod tests {
         // leaf1(0.95)  leaf2(0.7)
         let leaf1 = TrustDerivationNode::new(Literal::simple("leaf1"), 0.95);
         let leaf2 = TrustDerivationNode::new(Literal::simple("leaf2"), 0.7);
-        let branch1 = TrustDerivationNode::new(Literal::simple("branch1"), 0.9)
-            .with_children(vec![leaf1]);
-        let branch2 = TrustDerivationNode::new(Literal::simple("branch2"), 0.6)
-            .with_children(vec![leaf2]);
+        let branch1 =
+            TrustDerivationNode::new(Literal::simple("branch1"), 0.9).with_children(vec![leaf1]);
+        let branch2 =
+            TrustDerivationNode::new(Literal::simple("branch2"), 0.6).with_children(vec![leaf2]);
         let root = TrustDerivationNode::new(Literal::simple("root"), 0.8)
             .with_children(vec![branch1, branch2]);
 
@@ -750,7 +744,10 @@ mod tests {
         let dim = DiminisherInfo::new("weak_defeater", 0.5, 0.9);
 
         assert!(!dim.full_defeat);
-        assert!(dim.resulting_degree() > 0.0, "Should still have positive degree");
+        assert!(
+            dim.resulting_degree() > 0.0,
+            "Should still have positive degree"
+        );
         assert!(dim.resulting_degree() < 0.9, "Degree should be reduced");
     }
 
@@ -816,7 +813,9 @@ mod tests {
             .with_trust("agent:coder", 0.9);
 
         // Security perspective trusts security team more
-        assert!(policy_security.get_trust("agent:security") > policy_security.get_trust("agent:coder"));
+        assert!(
+            policy_security.get_trust("agent:security") > policy_security.get_trust("agent:coder")
+        );
 
         // Coder perspective trusts coders more
         assert!(policy_coder.get_trust("agent:coder") > policy_coder.get_trust("agent:security"));
@@ -825,19 +824,23 @@ mod tests {
     #[test]
     fn test_perspectives_affect_threshold_evaluation() {
         // Same conclusion degree, different threshold policies
-        let high_threshold = TrustPolicy::new(0.5)
-            .with_threshold("action", 0.8);
+        let high_threshold = TrustPolicy::new(0.5).with_threshold("action", 0.8);
 
-        let low_threshold = TrustPolicy::new(0.5)
-            .with_threshold("action", 0.6);
+        let low_threshold = TrustPolicy::new(0.5).with_threshold("action", 0.6);
 
         let conclusion_degree = 0.7;
 
         // High threshold: below action
-        assert_eq!(high_threshold.is_above_threshold(conclusion_degree, "action"), Some(false));
+        assert_eq!(
+            high_threshold.is_above_threshold(conclusion_degree, "action"),
+            Some(false)
+        );
 
         // Low threshold: above action
-        assert_eq!(low_threshold.is_above_threshold(conclusion_degree, "action"), Some(true));
+        assert_eq!(
+            low_threshold.is_above_threshold(conclusion_degree, "action"),
+            Some(true)
+        );
     }
 
     #[test]
@@ -855,7 +858,10 @@ mod tests {
         let degree = 0.75;
 
         // Conservative: above warn, below action
-        assert_eq!(conservative.is_above_threshold(degree, "action"), Some(false));
+        assert_eq!(
+            conservative.is_above_threshold(degree, "action"),
+            Some(false)
+        );
         assert_eq!(conservative.is_above_threshold(degree, "warn"), Some(true));
 
         // Permissive: above both
@@ -895,8 +901,7 @@ mod tests {
         let tree = TrustDerivationNode::new(Literal::simple("flies"), 0.8)
             .with_source(Source::new("expert"));
 
-        let explanation = TrustExplanation::new(Literal::simple("flies"), 0.8)
-            .with_tree(tree);
+        let explanation = TrustExplanation::new(Literal::simple("flies"), 0.8).with_tree(tree);
 
         let nl = explanation.to_natural_language();
         assert!(nl.contains("flies"));
@@ -908,11 +913,9 @@ mod tests {
     fn test_trust_explanation_includes_derivation_tree() {
         let child = TrustDerivationNode::new(Literal::simple("a"), 0.9)
             .with_source(Source::new("agent:coder"));
-        let root = TrustDerivationNode::new(Literal::simple("b"), 0.8)
-            .with_children(vec![child]);
+        let root = TrustDerivationNode::new(Literal::simple("b"), 0.8).with_children(vec![child]);
 
-        let explanation = TrustExplanation::new(Literal::simple("b"), 0.8)
-            .with_tree(root);
+        let explanation = TrustExplanation::new(Literal::simple("b"), 0.8).with_tree(root);
 
         assert!(explanation.derivation_tree.is_some());
     }
@@ -922,8 +925,8 @@ mod tests {
         let dim1 = DiminisherInfo::new("d1", 0.4, 0.9);
         let dim2 = DiminisherInfo::new("d2", 0.3, 0.9).as_full_defeat();
 
-        let explanation = TrustExplanation::new(Literal::simple("goal"), 0.0)
-            .with_diminishers(vec![dim1, dim2]);
+        let explanation =
+            TrustExplanation::new(Literal::simple("goal"), 0.0).with_diminishers(vec![dim1, dim2]);
 
         let nl = explanation.to_natural_language();
         assert!(nl.contains("d1"));
@@ -945,11 +948,11 @@ mod tests {
     fn test_trust_explanation_natural_language_format() {
         let leaf = TrustDerivationNode::new(Literal::simple("premise"), 0.9)
             .with_source(Source::with_label("src1", "Source One"));
-        let root = TrustDerivationNode::new(Literal::simple("conclusion"), 0.85)
-            .with_children(vec![leaf]);
+        let root =
+            TrustDerivationNode::new(Literal::simple("conclusion"), 0.85).with_children(vec![leaf]);
 
-        let explanation = TrustExplanation::new(Literal::simple("conclusion"), 0.85)
-            .with_tree(root);
+        let explanation =
+            TrustExplanation::new(Literal::simple("conclusion"), 0.85).with_tree(root);
 
         let nl = explanation.to_natural_language();
 
@@ -973,11 +976,8 @@ mod tests {
         let mut current = TrustDerivationNode::new(Literal::simple("level5"), 0.95);
         for i in (1..5).rev() {
             let trust = 0.8 + (i as f64 * 0.02); // 0.82, 0.84, 0.86, 0.88
-            current = TrustDerivationNode::new(
-                Literal::simple(format!("level{}", i)),
-                trust,
-            )
-            .with_children(vec![current]);
+            current = TrustDerivationNode::new(Literal::simple(format!("level{}", i)), trust)
+                .with_children(vec![current]);
         }
 
         // Minimum should be approximately 0.82 (from level1)
@@ -987,10 +987,8 @@ mod tests {
 
     #[test]
     fn test_sources_collected_across_derivation() {
-        let mut sc = SourcedConclusion::new(
-            Literal::simple("final"),
-            ConclusionType::DefeasiblyProvable,
-        );
+        let mut sc =
+            SourcedConclusion::new(Literal::simple("final"), ConclusionType::DefeasiblyProvable);
 
         // Add multiple sources from different parts of derivation
         let sources = vec![
@@ -1069,16 +1067,21 @@ mod tests {
             0.0,
         );
 
-        assert_eq!(defeasible.conclusion_type, ConclusionType::DefeasiblyProvable);
+        assert_eq!(
+            defeasible.conclusion_type,
+            ConclusionType::DefeasiblyProvable
+        );
         assert_eq!(definite.conclusion_type, ConclusionType::DefinitelyProvable);
-        assert_eq!(not_defeasible.conclusion_type, ConclusionType::DefeasiblyNotProvable);
+        assert_eq!(
+            not_defeasible.conclusion_type,
+            ConclusionType::DefeasiblyNotProvable
+        );
     }
 
     #[test]
     fn test_trust_value_precision() {
         // Ensure trust values maintain precision
-        let policy = TrustPolicy::new(0.123456789)
-            .with_trust("precise", 0.987654321);
+        let policy = TrustPolicy::new(0.123456789).with_trust("precise", 0.987654321);
 
         assert!((policy.default_trust - 0.123456789).abs() < 1e-10);
         assert!((policy.get_trust("precise") - 0.987654321).abs() < 1e-10);
