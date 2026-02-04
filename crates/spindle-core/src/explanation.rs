@@ -426,6 +426,145 @@ impl Explanation {
                 .collect::<Vec<_>>(),
         })
     }
+
+    /// Convert to JSON-LD representation with semantic annotations
+    ///
+    /// Returns a JSON-LD document with:
+    /// - @context: Defines vocabulary (spindle, prov, rdfs namespaces)
+    /// - @type: "spindle:Explanation"
+    /// - Semantic annotations for provenance tracking
+    pub fn to_jsonld(&self) -> serde_json::Value {
+        let context = serde_json::json!({
+            "spindle": "https://spindle.dev/ontology#",
+            "prov": "http://www.w3.org/ns/prov#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "xsd": "http://www.w3.org/2001/XMLSchema#",
+            "conclusionType": "spindle:conclusionType",
+            "literal": "spindle:literal",
+            "proofTree": "spindle:proofTree",
+            "derivationType": "spindle:derivationType",
+            "ruleLabel": "spindle:ruleLabel",
+            "ruleType": "spindle:ruleType",
+            "blockedAlternatives": "spindle:blockedAlternatives",
+            "conflictsResolved": "spindle:conflictsResolved",
+            "winningRule": "spindle:winningRule",
+            "losingRule": "spindle:losingRule",
+            "resolutionType": "spindle:resolutionType",
+            "blockReason": "spindle:blockReason",
+            "wasGeneratedBy": "prov:wasGeneratedBy",
+            "wasAttributedTo": "prov:wasAttributedTo"
+        });
+
+        let mut doc = serde_json::json!({
+            "@context": context,
+            "@type": "spindle:Explanation",
+            "conclusionType": self.conclusion_type.symbol(),
+            "literal": self.literal.to_string(),
+        });
+
+        // Add proof tree with semantic annotations
+        if let Some(ref proof) = self.proof_tree {
+            doc["proofTree"] = proof_node_to_jsonld(proof);
+        }
+
+        // Add blocked alternatives
+        if !self.blocked_alternatives.is_empty() {
+            doc["blockedAlternatives"] = self
+                .blocked_alternatives
+                .iter()
+                .map(blocked_proof_to_jsonld)
+                .collect::<Vec<_>>()
+                .into();
+        }
+
+        // Add conflict resolutions
+        if !self.conflicts_resolved.is_empty() {
+            doc["conflictsResolved"] = self
+                .conflicts_resolved
+                .iter()
+                .map(conflict_to_jsonld)
+                .collect::<Vec<_>>()
+                .into();
+        }
+
+        doc
+    }
+
+    /// Convert to DOT graph format for visualization
+    ///
+    /// Generates a DOT language representation that can be rendered
+    /// with Graphviz or similar tools. The graph shows:
+    /// - Proof nodes as boxes (blue for definite, green for defeasible)
+    /// - Rule applications as edges
+    /// - Blocked alternatives as red dashed nodes
+    /// - Conflict resolutions as orange diamond nodes
+    pub fn to_dot(&self) -> String {
+        let mut output = String::new();
+        let mut node_counter = 0;
+
+        output.push_str("digraph Explanation {\n");
+        output.push_str("  rankdir=BT;\n"); // Bottom-to-top layout
+        output.push_str("  node [fontname=\"Helvetica\"];\n");
+        output.push_str("  edge [fontname=\"Helvetica\"];\n\n");
+
+        // Title node
+        let escaped_literal = escape_dot_label(&self.literal.to_string());
+        output.push_str(&format!(
+            "  title [label=\"{} {}\" shape=plaintext fontsize=14 fontcolor=black];\n\n",
+            self.conclusion_type, escaped_literal
+        ));
+
+        // Render proof tree
+        if let Some(ref proof) = self.proof_tree {
+            let root_id = render_proof_node_to_dot(proof, &mut output, &mut node_counter);
+            output.push_str(&format!("  title -> n{} [style=invis];\n", root_id));
+        }
+
+        // Render blocked alternatives
+        if !self.blocked_alternatives.is_empty() {
+            output.push_str("\n  // Blocked alternatives\n");
+            output.push_str("  subgraph cluster_blocked {\n");
+            output.push_str("    label=\"Blocked Alternatives\";\n");
+            output.push_str("    style=dashed;\n");
+            output.push_str("    color=red;\n");
+
+            for blocked in &self.blocked_alternatives {
+                node_counter += 1;
+                let escaped_lit = escape_dot_label(&blocked.literal.to_string());
+                let escaped_rule = escape_dot_label(&blocked.rule_label);
+                let escaped_reason = escape_dot_label(&blocked.reason.to_string());
+                output.push_str(&format!(
+                    "    b{} [label=\"{}\\n(rule: {})\\nblocked: {}\" shape=box style=\"dashed,filled\" fillcolor=\"#ffcccc\"];\n",
+                    node_counter, escaped_lit, escaped_rule, escaped_reason
+                ));
+            }
+            output.push_str("  }\n");
+        }
+
+        // Render conflict resolutions
+        if !self.conflicts_resolved.is_empty() {
+            output.push_str("\n  // Conflict resolutions\n");
+            output.push_str("  subgraph cluster_conflicts {\n");
+            output.push_str("    label=\"Conflict Resolutions\";\n");
+            output.push_str("    style=dashed;\n");
+            output.push_str("    color=orange;\n");
+
+            for conflict in &self.conflicts_resolved {
+                node_counter += 1;
+                let escaped_winner = escape_dot_label(&conflict.winning_rule);
+                let escaped_loser = escape_dot_label(&conflict.losing_rule);
+                let escaped_resolution = escape_dot_label(&conflict.resolution_type.to_string());
+                output.push_str(&format!(
+                    "    c{} [label=\"{} > {}\\n({})\" shape=diamond style=filled fillcolor=\"#ffe0b3\"];\n",
+                    node_counter, escaped_winner, escaped_loser, escaped_resolution
+                ));
+            }
+            output.push_str("  }\n");
+        }
+
+        output.push_str("}\n");
+        output
+    }
 }
 
 /// Explain why a conclusion holds (returns Proof Tree)
@@ -609,9 +748,166 @@ fn conflict_to_json(conflict: &ConflictResolution) -> serde_json::Value {
     })
 }
 
+/// Convert proof node to JSON-LD with semantic annotations
+fn proof_node_to_jsonld(node: &ProofNode) -> serde_json::Value {
+    let mut json = serde_json::json!({
+        "@type": "spindle:ProofNode",
+        "literal": node.literal.to_string(),
+        "derivationType": match node.derivation_type {
+            DerivationType::Definite => "definite",
+            DerivationType::Defeasible => "defeasible",
+        },
+    });
+
+    if let Some(ref step) = node.proof_step {
+        let mut step_json = serde_json::json!({
+            "@type": "spindle:ProofStep",
+            "ruleLabel": step.rule_label,
+            "ruleType": match step.rule_type {
+                RuleType::Fact => "fact",
+                RuleType::Strict => "strict",
+                RuleType::Defeasible => "defeasible",
+                RuleType::Defeater => "defeater",
+            },
+            "ruleText": step.rule_text,
+        });
+
+        // Add annotations with provenance
+        if !step.annotations.is_empty() {
+            if let Some(source) = step.annotations.source() {
+                step_json["wasAttributedTo"] = serde_json::json!(source);
+            }
+            if let Some(desc) = step.annotations.description() {
+                step_json["rdfs:comment"] = serde_json::json!(desc);
+            }
+            if let Some(conf) = step.annotations.confidence() {
+                step_json["spindle:confidence"] = serde_json::json!(conf);
+            }
+            if let Some(id) = &step.annotations.id {
+                step_json["@id"] = serde_json::json!(id);
+            }
+        }
+
+        // Recursively add body proofs
+        if !step.body_proofs.is_empty() {
+            step_json["bodyProofs"] = step
+                .body_proofs
+                .iter()
+                .map(proof_node_to_jsonld)
+                .collect::<Vec<_>>()
+                .into();
+        }
+
+        json["proofStep"] = step_json;
+    }
+
+    json
+}
+
+/// Convert blocked proof to JSON-LD
+fn blocked_proof_to_jsonld(blocked: &BlockedProof) -> serde_json::Value {
+    let mut json = serde_json::json!({
+        "@type": "spindle:BlockedProof",
+        "literal": blocked.literal.to_string(),
+        "ruleLabel": blocked.rule_label,
+        "blockReason": blocked.reason.to_string(),
+        "rdfs:comment": blocked.explanation,
+    });
+
+    if let Some(ref blocking) = blocked.blocking_rule {
+        json["blockedBy"] = serde_json::json!(blocking);
+    }
+
+    json
+}
+
+/// Convert conflict resolution to JSON-LD
+fn conflict_to_jsonld(conflict: &ConflictResolution) -> serde_json::Value {
+    let mut json = serde_json::json!({
+        "@type": "spindle:ConflictResolution",
+        "winningRule": conflict.winning_rule,
+        "losingRule": conflict.losing_rule,
+        "resolutionType": conflict.resolution_type.to_string(),
+    });
+
+    if let Some(ref sup) = conflict.superiority_label {
+        json["superiorityLabel"] = serde_json::json!(sup);
+    }
+
+    json
+}
+
+/// Escape special characters for DOT labels
+fn escape_dot_label(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('<', "\\<")
+        .replace('>', "\\>")
+        .replace('{', "\\{")
+        .replace('}', "\\}")
+}
+
+/// Render a proof node to DOT format, returning the node ID
+fn render_proof_node_to_dot(
+    node: &ProofNode,
+    output: &mut String,
+    counter: &mut usize,
+) -> usize {
+    *counter += 1;
+    let node_id = *counter;
+
+    let color = match node.derivation_type {
+        DerivationType::Definite => "#cce5ff", // Light blue
+        DerivationType::Defeasible => "#d4edda", // Light green
+    };
+
+    let escaped_literal = escape_dot_label(&node.literal.to_string());
+
+    // Create node label
+    let label = if let Some(ref step) = node.proof_step {
+        let rule_type_str = match step.rule_type {
+            RuleType::Fact => "fact",
+            RuleType::Strict => "strict",
+            RuleType::Defeasible => "defeasible",
+            RuleType::Defeater => "defeater",
+        };
+        let escaped_label = escape_dot_label(&step.rule_label);
+        format!(
+            "{}\\n[{}: {}]",
+            escaped_literal, rule_type_str, escaped_label
+        )
+    } else {
+        escaped_literal
+    };
+
+    output.push_str(&format!(
+        "  n{} [label=\"{}\" shape=box style=filled fillcolor=\"{}\"];\n",
+        node_id, label, color
+    ));
+
+    // Render body proofs and add edges
+    if let Some(ref step) = node.proof_step {
+        for body_proof in &step.body_proofs {
+            let child_id = render_proof_node_to_dot(body_proof, output, counter);
+            let escaped_rule = escape_dot_label(&step.rule_label);
+            output.push_str(&format!(
+                "  n{} -> n{} [label=\"{}\"];\n",
+                child_id, node_id, escaped_rule
+            ));
+        }
+    }
+
+    node_id
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ==========================================================================
+    // Basic struct tests
+    // ==========================================================================
 
     #[test]
     fn test_annotations() {
@@ -626,10 +922,52 @@ mod tests {
     }
 
     #[test]
+    fn test_annotations_with_entries() {
+        let annots = Annotations::with_entries(vec![
+            ("source", "legal-code-section-1"),
+            ("confidence", "0.95"),
+            ("dc:description", "Test description"),
+        ]);
+
+        assert!(!annots.is_empty());
+        assert_eq!(annots.source(), Some("legal-code-section-1"));
+        assert_eq!(annots.confidence(), Some("0.95"));
+        // dc:description should be found via get_any fallback
+        assert_eq!(annots.description(), Some("Test description"));
+    }
+
+    #[test]
+    fn test_annotations_id() {
+        let mut annots = Annotations::new();
+        annots.id = Some("https://example.org/rule/r1".to_string());
+        assert!(!annots.is_empty());
+        assert_eq!(annots.id, Some("https://example.org/rule/r1".to_string()));
+    }
+
+    #[test]
     fn test_proof_step() {
         let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies");
         assert_eq!(step.rule_label, "r1");
         assert_eq!(step.rule_type, RuleType::Defeasible);
+    }
+
+    #[test]
+    fn test_proof_step_with_body_proofs() {
+        let body_node = ProofNode::new(Literal::simple("bird"), DerivationType::Definite);
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_body_proofs(vec![body_node]);
+
+        assert_eq!(step.body_proofs.len(), 1);
+        assert_eq!(step.body_proofs[0].literal.name(), "bird");
+    }
+
+    #[test]
+    fn test_proof_step_with_annotations() {
+        let annots = Annotations::with_entries(vec![("source", "expert-knowledge")]);
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_annotations(annots);
+
+        assert_eq!(step.annotations.source(), Some("expert-knowledge"));
     }
 
     #[test]
@@ -654,6 +992,14 @@ mod tests {
     }
 
     #[test]
+    fn test_block_reason_display() {
+        assert_eq!(BlockReason::Superiority.to_string(), "superiority");
+        assert_eq!(BlockReason::Defeater.to_string(), "defeater");
+        assert_eq!(BlockReason::Conflict.to_string(), "conflict");
+        assert_eq!(BlockReason::BodyUnprovable.to_string(), "body unprovable");
+    }
+
+    #[test]
     fn test_conflict_resolution() {
         let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority)
             .with_superiority("sup1");
@@ -662,6 +1008,17 @@ mod tests {
         assert_eq!(conflict.losing_rule, "r1");
         assert_eq!(conflict.superiority_label, Some("sup1".to_string()));
     }
+
+    #[test]
+    fn test_resolution_type_display() {
+        assert_eq!(ResolutionType::Superiority.to_string(), "superiority");
+        assert_eq!(ResolutionType::DefinitePriority.to_string(), "definite priority");
+        assert_eq!(ResolutionType::TeamDefeat.to_string(), "team defeat");
+    }
+
+    // ==========================================================================
+    // Natural language output tests
+    // ==========================================================================
 
     #[test]
     fn test_explanation_natural_language() {
@@ -677,6 +1034,50 @@ mod tests {
         assert!(nl.contains("bird"));
         assert!(nl.contains("+D")); // Uses symbol
         assert!(nl.contains("fact"));
+    }
+
+    #[test]
+    fn test_natural_language_defeasible_derivation() {
+        let body_step = ProofStep::new("f1", RuleType::Fact, ">> bird");
+        let body_proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
+            .with_proof_step(body_step);
+
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_body_proofs(vec![body_proof]);
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("flies"));
+        assert!(nl.contains("+d")); // Defeasibly provable symbol
+        assert!(nl.contains("derived defeasibly"));
+        assert!(nl.contains("defeasible rule"));
+        assert!(nl.contains("Prerequisites"));
+        assert!(nl.contains("bird"));
+    }
+
+    #[test]
+    fn test_natural_language_with_annotations() {
+        let annots = Annotations::with_entries(vec![
+            ("description", "Birds typically fly"),
+            ("source", "ornithology-textbook"),
+        ]);
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_annotations(annots);
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("Description: Birds typically fly"));
+        assert!(nl.contains("Source: ornithology-textbook"));
     }
 
     #[test]
@@ -696,6 +1097,57 @@ mod tests {
     }
 
     #[test]
+    fn test_natural_language_with_blocked_alternatives() {
+        let blocked = BlockedProof::new(
+            Literal::simple("flies"),
+            "r1",
+            BlockReason::Superiority,
+            "Rule r2 is superior and concludes ~flies",
+        )
+        .with_blocking_rule("r2");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_blocked(vec![blocked]);
+
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("Blocked Alternatives"));
+        assert!(nl.contains("r1"));
+        assert!(nl.contains("superiority"));
+        assert!(nl.contains("Rule r2 is superior"));
+    }
+
+    #[test]
+    fn test_natural_language_no_derivation() {
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("flies"));
+
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("-d")); // Not provable symbol
+        assert!(nl.contains("could not be proven defeasibly"));
+    }
+
+    #[test]
+    fn test_natural_language_conclusion_type_explanations() {
+        // Test all conclusion type explanations
+        let exp_dp = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("p"));
+        assert!(exp_dp.to_natural_language().contains("strict rules and facts"));
+
+        let exp_dnp = Explanation::new(ConclusionType::DefinitelyNotProvable, Literal::simple("p"));
+        assert!(exp_dnp.to_natural_language().contains("cannot be proven using strict rules"));
+
+        let exp_dfp = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("p"));
+        assert!(exp_dfp.to_natural_language().contains("defeasible rules"));
+
+        let exp_dfnp = Explanation::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("p"));
+        assert!(exp_dfnp.to_natural_language().contains("could not be proven defeasibly"));
+    }
+
+    // ==========================================================================
+    // JSON output tests
+    // ==========================================================================
+
+    #[test]
     fn test_explanation_json() {
         let explanation =
             Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"));
@@ -703,5 +1155,697 @@ mod tests {
         let json = explanation.to_json();
         assert_eq!(json["conclusion_type"], "+d");
         assert_eq!(json["literal"], "flies");
+    }
+
+    #[test]
+    fn test_json_with_proof_tree() {
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies");
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let json = explanation.to_json();
+        assert!(json["proof_tree"].is_object());
+        assert_eq!(json["proof_tree"]["literal"], "flies");
+        assert_eq!(json["proof_tree"]["derivation_type"], "defeasible");
+        assert_eq!(json["proof_tree"]["proof_step"]["rule_label"], "r1");
+        assert_eq!(json["proof_tree"]["proof_step"]["rule_type"], "defeasible");
+    }
+
+    #[test]
+    fn test_json_with_blocked_alternatives() {
+        let blocked = BlockedProof::new(
+            Literal::simple("flies"),
+            "r1",
+            BlockReason::Superiority,
+            "Blocked by r2",
+        )
+        .with_blocking_rule("r2");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_blocked(vec![blocked]);
+
+        let json = explanation.to_json();
+        assert!(json["blocked_alternatives"].is_array());
+        assert_eq!(json["blocked_alternatives"][0]["rule_label"], "r1");
+        assert_eq!(json["blocked_alternatives"][0]["reason"], "superiority");
+        assert_eq!(json["blocked_alternatives"][0]["blocking_rule"], "r2");
+    }
+
+    #[test]
+    fn test_json_with_conflicts() {
+        let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority)
+            .with_superiority("sup1");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_conflicts(vec![conflict]);
+
+        let json = explanation.to_json();
+        assert!(json["conflicts_resolved"].is_array());
+        assert_eq!(json["conflicts_resolved"][0]["winning_rule"], "r2");
+        assert_eq!(json["conflicts_resolved"][0]["losing_rule"], "r1");
+        assert_eq!(json["conflicts_resolved"][0]["resolution_type"], "superiority");
+        assert_eq!(json["conflicts_resolved"][0]["superiority_label"], "sup1");
+    }
+
+    // ==========================================================================
+    // JSON-LD output tests
+    // ==========================================================================
+
+    #[test]
+    fn test_jsonld_context() {
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"));
+
+        let jsonld = explanation.to_jsonld();
+
+        // Verify @context exists and has required namespaces
+        assert!(jsonld["@context"].is_object());
+        assert_eq!(jsonld["@context"]["spindle"], "https://spindle.dev/ontology#");
+        assert_eq!(jsonld["@context"]["prov"], "http://www.w3.org/ns/prov#");
+        assert_eq!(jsonld["@context"]["rdfs"], "http://www.w3.org/2000/01/rdf-schema#");
+        assert_eq!(jsonld["@context"]["xsd"], "http://www.w3.org/2001/XMLSchema#");
+    }
+
+    #[test]
+    fn test_jsonld_type() {
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"));
+
+        let jsonld = explanation.to_jsonld();
+        assert_eq!(jsonld["@type"], "spindle:Explanation");
+    }
+
+    #[test]
+    fn test_jsonld_basic_fields() {
+        let explanation =
+            Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("bird"));
+
+        let jsonld = explanation.to_jsonld();
+        assert_eq!(jsonld["conclusionType"], "+D");
+        assert_eq!(jsonld["literal"], "bird");
+    }
+
+    #[test]
+    fn test_jsonld_with_proof_tree() {
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies");
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let jsonld = explanation.to_jsonld();
+
+        assert!(jsonld["proofTree"].is_object());
+        assert_eq!(jsonld["proofTree"]["@type"], "spindle:ProofNode");
+        assert_eq!(jsonld["proofTree"]["literal"], "flies");
+        assert_eq!(jsonld["proofTree"]["derivationType"], "defeasible");
+
+        // Verify proof step
+        assert!(jsonld["proofTree"]["proofStep"].is_object());
+        assert_eq!(jsonld["proofTree"]["proofStep"]["@type"], "spindle:ProofStep");
+        assert_eq!(jsonld["proofTree"]["proofStep"]["ruleLabel"], "r1");
+        assert_eq!(jsonld["proofTree"]["proofStep"]["ruleType"], "defeasible");
+    }
+
+    #[test]
+    fn test_jsonld_with_annotations_provenance() {
+        let mut annots = Annotations::with_entries(vec![
+            ("source", "expert-dr-smith"),
+            ("description", "Birds typically fly"),
+            ("confidence", "0.9"),
+        ]);
+        annots.id = Some("https://example.org/rules/r1".to_string());
+
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_annotations(annots);
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let jsonld = explanation.to_jsonld();
+        let proof_step = &jsonld["proofTree"]["proofStep"];
+
+        // Verify provenance annotations
+        assert_eq!(proof_step["wasAttributedTo"], "expert-dr-smith");
+        assert_eq!(proof_step["rdfs:comment"], "Birds typically fly");
+        assert_eq!(proof_step["spindle:confidence"], "0.9");
+        assert_eq!(proof_step["@id"], "https://example.org/rules/r1");
+    }
+
+    #[test]
+    fn test_jsonld_with_nested_body_proofs() {
+        // Create a two-level proof: flies <- bird <- penguin
+        let penguin_step = ProofStep::new("f1", RuleType::Fact, ">> penguin");
+        let penguin_proof = ProofNode::new(Literal::simple("penguin"), DerivationType::Definite)
+            .with_proof_step(penguin_step);
+
+        let bird_step = ProofStep::new("s1", RuleType::Strict, "penguin -> bird")
+            .with_body_proofs(vec![penguin_proof]);
+        let bird_proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
+            .with_proof_step(bird_step);
+
+        let flies_step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_body_proofs(vec![bird_proof]);
+        let flies_proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(flies_step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(flies_proof);
+
+        let jsonld = explanation.to_jsonld();
+
+        // Navigate to nested proofs
+        let body_proofs = &jsonld["proofTree"]["proofStep"]["bodyProofs"];
+        assert!(body_proofs.is_array());
+        assert_eq!(body_proofs[0]["literal"], "bird");
+        assert_eq!(body_proofs[0]["@type"], "spindle:ProofNode");
+
+        // Even deeper nesting
+        let nested_body = &body_proofs[0]["proofStep"]["bodyProofs"];
+        assert!(nested_body.is_array());
+        assert_eq!(nested_body[0]["literal"], "penguin");
+    }
+
+    #[test]
+    fn test_jsonld_with_blocked_alternatives() {
+        let blocked = BlockedProof::new(
+            Literal::simple("flies"),
+            "r1",
+            BlockReason::Superiority,
+            "Blocked by superior rule r2",
+        )
+        .with_blocking_rule("r2");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_blocked(vec![blocked]);
+
+        let jsonld = explanation.to_jsonld();
+
+        assert!(jsonld["blockedAlternatives"].is_array());
+        let blocked_alt = &jsonld["blockedAlternatives"][0];
+        assert_eq!(blocked_alt["@type"], "spindle:BlockedProof");
+        assert_eq!(blocked_alt["literal"], "flies");
+        assert_eq!(blocked_alt["ruleLabel"], "r1");
+        assert_eq!(blocked_alt["blockReason"], "superiority");
+        assert_eq!(blocked_alt["rdfs:comment"], "Blocked by superior rule r2");
+        assert_eq!(blocked_alt["blockedBy"], "r2");
+    }
+
+    #[test]
+    fn test_jsonld_with_conflict_resolutions() {
+        let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority)
+            .with_superiority("sup1");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_conflicts(vec![conflict]);
+
+        let jsonld = explanation.to_jsonld();
+
+        assert!(jsonld["conflictsResolved"].is_array());
+        let resolved = &jsonld["conflictsResolved"][0];
+        assert_eq!(resolved["@type"], "spindle:ConflictResolution");
+        assert_eq!(resolved["winningRule"], "r2");
+        assert_eq!(resolved["losingRule"], "r1");
+        assert_eq!(resolved["resolutionType"], "superiority");
+        assert_eq!(resolved["superiorityLabel"], "sup1");
+    }
+
+    #[test]
+    fn test_jsonld_all_rule_types() {
+        // Test that all rule types are properly serialized
+        let fact_step = ProofStep::new("f1", RuleType::Fact, ">> p");
+        let fact_proof = ProofNode::new(Literal::simple("p"), DerivationType::Definite)
+            .with_proof_step(fact_step);
+        let exp1 = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("p"))
+            .with_proof(fact_proof);
+        assert_eq!(exp1.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "fact");
+
+        let strict_step = ProofStep::new("s1", RuleType::Strict, "p -> q");
+        let strict_proof = ProofNode::new(Literal::simple("q"), DerivationType::Definite)
+            .with_proof_step(strict_step);
+        let exp2 = Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("q"))
+            .with_proof(strict_proof);
+        assert_eq!(exp2.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "strict");
+
+        let def_step = ProofStep::new("r1", RuleType::Defeasible, "p => r");
+        let def_proof = ProofNode::new(Literal::simple("r"), DerivationType::Defeasible)
+            .with_proof_step(def_step);
+        let exp3 = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("r"))
+            .with_proof(def_proof);
+        assert_eq!(exp3.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "defeasible");
+
+        let defeater_step = ProofStep::new("d1", RuleType::Defeater, "p ~> s");
+        let defeater_proof = ProofNode::new(Literal::simple("s"), DerivationType::Defeasible)
+            .with_proof_step(defeater_step);
+        let exp4 = Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("s"))
+            .with_proof(defeater_proof);
+        assert_eq!(exp4.to_jsonld()["proofTree"]["proofStep"]["ruleType"], "defeater");
+    }
+
+    // ==========================================================================
+    // DOT graph output tests
+    // ==========================================================================
+
+    #[test]
+    fn test_dot_basic_structure() {
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"));
+
+        let dot = explanation.to_dot();
+
+        // Check basic DOT structure
+        assert!(dot.starts_with("digraph Explanation {"));
+        assert!(dot.ends_with("}\n"));
+        assert!(dot.contains("rankdir=BT")); // Bottom-to-top layout
+        assert!(dot.contains("node [fontname=\"Helvetica\"]"));
+    }
+
+    #[test]
+    fn test_dot_title_node() {
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"));
+
+        let dot = explanation.to_dot();
+
+        // Title should contain conclusion type and literal
+        assert!(dot.contains("title [label=\"+d flies\""));
+        assert!(dot.contains("shape=plaintext"));
+    }
+
+    #[test]
+    fn test_dot_with_proof_node() {
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies");
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let dot = explanation.to_dot();
+
+        // Should have a node for the literal
+        assert!(dot.contains("flies"));
+        assert!(dot.contains("[defeasible: r1]"));
+        assert!(dot.contains("shape=box"));
+        assert!(dot.contains("style=filled"));
+        // Green color for defeasible
+        assert!(dot.contains("#d4edda"));
+    }
+
+    #[test]
+    fn test_dot_definite_derivation_color() {
+        let step = ProofStep::new("f1", RuleType::Fact, ">> bird");
+        let proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefinitelyProvable, Literal::simple("bird"))
+                .with_proof(proof);
+
+        let dot = explanation.to_dot();
+
+        // Blue color for definite
+        assert!(dot.contains("#cce5ff"));
+    }
+
+    #[test]
+    fn test_dot_with_body_proofs() {
+        let body_step = ProofStep::new("f1", RuleType::Fact, ">> bird");
+        let body_proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
+            .with_proof_step(body_step);
+
+        let step = ProofStep::new("r1", RuleType::Defeasible, "bird => flies")
+            .with_body_proofs(vec![body_proof]);
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let dot = explanation.to_dot();
+
+        // Should have edge between nodes
+        assert!(dot.contains("->")); // Edge notation
+        assert!(dot.contains("[label=\"r1\"]")); // Edge label
+        assert!(dot.contains("bird"));
+        assert!(dot.contains("flies"));
+    }
+
+    #[test]
+    fn test_dot_with_blocked_alternatives() {
+        let blocked = BlockedProof::new(
+            Literal::simple("flies"),
+            "r1",
+            BlockReason::Superiority,
+            "Blocked by r2",
+        );
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_blocked(vec![blocked]);
+
+        let dot = explanation.to_dot();
+
+        // Check blocked alternatives cluster
+        assert!(dot.contains("subgraph cluster_blocked"));
+        assert!(dot.contains("label=\"Blocked Alternatives\""));
+        assert!(dot.contains("style=dashed"));
+        assert!(dot.contains("color=red"));
+        assert!(dot.contains("#ffcccc")); // Light red fill
+        assert!(dot.contains("blocked: superiority"));
+        assert!(dot.contains("(rule: r1)"));
+    }
+
+    #[test]
+    fn test_dot_with_conflict_resolutions() {
+        let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_conflicts(vec![conflict]);
+
+        let dot = explanation.to_dot();
+
+        // Check conflicts cluster
+        assert!(dot.contains("subgraph cluster_conflicts"));
+        assert!(dot.contains("label=\"Conflict Resolutions\""));
+        assert!(dot.contains("color=orange"));
+        assert!(dot.contains("shape=diamond")); // Conflict nodes are diamonds
+        assert!(dot.contains("#ffe0b3")); // Orange fill
+        assert!(dot.contains("r2 > r1"));
+        assert!(dot.contains("(superiority)"));
+    }
+
+    #[test]
+    fn test_dot_escaping_special_characters() {
+        // Test that special characters in labels are properly escaped
+        let step = ProofStep::new("r<1>", RuleType::Defeasible, "bird \"tweety\" => flies");
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        let dot = explanation.to_dot();
+
+        // Special characters should be escaped
+        assert!(dot.contains("r\\<1\\>")); // Escaped < and >
+    }
+
+    #[test]
+    fn test_dot_with_negated_literal() {
+        let step = ProofStep::new("r2", RuleType::Defeasible, "penguin => ~flies");
+        let proof = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_proof(proof);
+
+        let dot = explanation.to_dot();
+
+        assert!(dot.contains("~flies"));
+    }
+
+    #[test]
+    fn test_dot_complex_proof_tree() {
+        // Create a more complex proof tree with multiple levels
+        let penguin_step = ProofStep::new("f1", RuleType::Fact, ">> penguin");
+        let penguin_proof = ProofNode::new(Literal::simple("penguin"), DerivationType::Definite)
+            .with_proof_step(penguin_step);
+
+        let bird_step = ProofStep::new("s1", RuleType::Strict, "penguin -> bird")
+            .with_body_proofs(vec![penguin_proof]);
+        let bird_proof = ProofNode::new(Literal::simple("bird"), DerivationType::Definite)
+            .with_proof_step(bird_step);
+
+        let not_flies_step = ProofStep::new("r2", RuleType::Defeasible, "penguin => ~flies")
+            .with_body_proofs(vec![bird_proof.clone()]);
+        let not_flies_proof =
+            ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
+                .with_proof_step(not_flies_step);
+
+        let blocked = BlockedProof::new(
+            Literal::simple("flies"),
+            "r1",
+            BlockReason::Superiority,
+            "r2 > r1 via superiority",
+        );
+
+        let conflict =
+            ConflictResolution::new("r2", "r1", ResolutionType::Superiority).with_superiority("s1");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_proof(not_flies_proof)
+                .with_blocked(vec![blocked])
+                .with_conflicts(vec![conflict]);
+
+        let dot = explanation.to_dot();
+
+        // Verify all components are present
+        assert!(dot.contains("penguin"));
+        assert!(dot.contains("bird"));
+        assert!(dot.contains("~flies"));
+        assert!(dot.contains("cluster_blocked"));
+        assert!(dot.contains("cluster_conflicts"));
+
+        // Verify edges exist (at least some -> notation)
+        let edge_count = dot.matches("->").count();
+        assert!(edge_count >= 2, "Expected at least 2 edges, found {}", edge_count);
+    }
+
+    #[test]
+    fn test_dot_multiple_blocked_alternatives() {
+        let blocked1 = BlockedProof::new(
+            Literal::simple("flies"),
+            "r1",
+            BlockReason::Superiority,
+            "Blocked by r2",
+        );
+        let blocked2 = BlockedProof::new(
+            Literal::simple("flies"),
+            "r3",
+            BlockReason::Defeater,
+            "Blocked by defeater d1",
+        );
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_blocked(vec![blocked1, blocked2]);
+
+        let dot = explanation.to_dot();
+
+        // Both blocked alternatives should be present
+        assert!(dot.contains("(rule: r1)"));
+        assert!(dot.contains("(rule: r3)"));
+        assert!(dot.contains("blocked: superiority"));
+        assert!(dot.contains("blocked: defeater"));
+    }
+
+    #[test]
+    fn test_dot_multiple_conflict_resolutions() {
+        let conflict1 = ConflictResolution::new("r2", "r1", ResolutionType::Superiority);
+        let conflict2 = ConflictResolution::new("r4", "r3", ResolutionType::TeamDefeat);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_conflicts(vec![conflict1, conflict2]);
+
+        let dot = explanation.to_dot();
+
+        assert!(dot.contains("r2 > r1"));
+        assert!(dot.contains("r4 > r3"));
+        assert!(dot.contains("(superiority)"));
+        assert!(dot.contains("(team defeat)"));
+    }
+
+    // ==========================================================================
+    // Annotation preservation tests
+    // ==========================================================================
+
+    #[test]
+    fn test_annotation_preservation_rule_labels() {
+        let step = ProofStep::new("bird_flies_rule", RuleType::Defeasible, "bird => flies");
+        let proof = ProofNode::new(Literal::simple("flies"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("flies"))
+                .with_proof(proof);
+
+        // Check JSON preserves rule label
+        let json = explanation.to_json();
+        assert_eq!(json["proof_tree"]["proof_step"]["rule_label"], "bird_flies_rule");
+
+        // Check JSON-LD preserves rule label
+        let jsonld = explanation.to_jsonld();
+        assert_eq!(jsonld["proofTree"]["proofStep"]["ruleLabel"], "bird_flies_rule");
+
+        // Check natural language mentions rule label
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("bird_flies_rule"));
+
+        // Check DOT preserves rule label
+        let dot = explanation.to_dot();
+        assert!(dot.contains("bird_flies_rule"));
+    }
+
+    #[test]
+    fn test_annotation_preservation_source_tracking() {
+        let annots = Annotations::with_entries(vec![
+            ("source", "legal-statute-42-usc-1983"),
+            ("dc:source", "Civil Rights Act"),
+        ]);
+        let step = ProofStep::new("r1", RuleType::Defeasible, "violation => liable")
+            .with_annotations(annots);
+        let proof = ProofNode::new(Literal::simple("liable"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("liable"))
+                .with_proof(proof);
+
+        // Natural language should show source
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("Source: legal-statute-42-usc-1983"));
+
+        // JSON-LD should have provenance annotation
+        let jsonld = explanation.to_jsonld();
+        assert_eq!(
+            jsonld["proofTree"]["proofStep"]["wasAttributedTo"],
+            "legal-statute-42-usc-1983"
+        );
+    }
+
+    #[test]
+    fn test_annotation_preservation_multiple_annotations() {
+        let mut annots = Annotations::with_entries(vec![
+            ("source", "expert-opinion"),
+            ("description", "Standard medical practice guideline"),
+            ("confidence", "0.85"),
+        ]);
+        annots.id = Some("urn:guideline:med-123".to_string());
+
+        let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom => diagnosis")
+            .with_annotations(annots);
+        let proof = ProofNode::new(Literal::simple("diagnosis"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::simple("diagnosis"))
+                .with_proof(proof);
+
+        // Verify all annotations in JSON-LD
+        let jsonld = explanation.to_jsonld();
+        let step_jsonld = &jsonld["proofTree"]["proofStep"];
+
+        assert_eq!(step_jsonld["@id"], "urn:guideline:med-123");
+        assert_eq!(step_jsonld["wasAttributedTo"], "expert-opinion");
+        assert_eq!(step_jsonld["rdfs:comment"], "Standard medical practice guideline");
+        assert_eq!(step_jsonld["spindle:confidence"], "0.85");
+
+        // Verify in natural language
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("Source: expert-opinion"));
+        assert!(nl.contains("Description: Standard medical practice guideline"));
+    }
+
+    #[test]
+    fn test_annotation_preservation_blocked_proof_info() {
+        let blocked = BlockedProof::new(
+            Literal::simple("flies"),
+            "bird_flies_rule",
+            BlockReason::Superiority,
+            "The penguin exception rule (penguin_no_fly) is superior",
+        )
+        .with_blocking_rule("penguin_no_fly");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_blocked(vec![blocked]);
+
+        // JSON preserves all info
+        let json = explanation.to_json();
+        assert_eq!(json["blocked_alternatives"][0]["rule_label"], "bird_flies_rule");
+        assert_eq!(json["blocked_alternatives"][0]["blocking_rule"], "penguin_no_fly");
+        assert!(json["blocked_alternatives"][0]["explanation"]
+            .as_str()
+            .unwrap()
+            .contains("penguin exception"));
+
+        // JSON-LD preserves all info
+        let jsonld = explanation.to_jsonld();
+        assert_eq!(jsonld["blockedAlternatives"][0]["ruleLabel"], "bird_flies_rule");
+        assert_eq!(jsonld["blockedAlternatives"][0]["blockedBy"], "penguin_no_fly");
+
+        // Natural language preserves all info
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("bird_flies_rule"));
+        assert!(nl.contains("penguin exception"));
+    }
+
+    #[test]
+    fn test_annotation_preservation_conflict_info() {
+        let conflict = ConflictResolution::new(
+            "specific_penguin_rule",
+            "general_bird_rule",
+            ResolutionType::Superiority,
+        )
+        .with_superiority("penguin_beats_bird_sup");
+
+        let explanation =
+            Explanation::new(ConclusionType::DefeasiblyProvable, Literal::negated("flies"))
+                .with_conflicts(vec![conflict]);
+
+        // JSON preserves all info
+        let json = explanation.to_json();
+        assert_eq!(json["conflicts_resolved"][0]["winning_rule"], "specific_penguin_rule");
+        assert_eq!(json["conflicts_resolved"][0]["losing_rule"], "general_bird_rule");
+        assert_eq!(
+            json["conflicts_resolved"][0]["superiority_label"],
+            "penguin_beats_bird_sup"
+        );
+
+        // JSON-LD preserves all info
+        let jsonld = explanation.to_jsonld();
+        assert_eq!(jsonld["conflictsResolved"][0]["winningRule"], "specific_penguin_rule");
+        assert_eq!(jsonld["conflictsResolved"][0]["losingRule"], "general_bird_rule");
+        assert_eq!(
+            jsonld["conflictsResolved"][0]["superiorityLabel"],
+            "penguin_beats_bird_sup"
+        );
+
+        // Natural language preserves all info
+        let nl = explanation.to_natural_language();
+        assert!(nl.contains("specific_penguin_rule"));
+        assert!(nl.contains("general_bird_rule"));
+    }
+
+    #[test]
+    fn test_escape_dot_label() {
+        assert_eq!(escape_dot_label("simple"), "simple");
+        assert_eq!(escape_dot_label("with\"quotes"), "with\\\"quotes");
+        assert_eq!(escape_dot_label("with<angle>brackets"), "with\\<angle\\>brackets");
+        assert_eq!(escape_dot_label("with{curly}braces"), "with\\{curly\\}braces");
+        assert_eq!(escape_dot_label("with\\backslash"), "with\\\\backslash");
+        assert_eq!(escape_dot_label("with\nnewline"), "with\\nnewline");
     }
 }

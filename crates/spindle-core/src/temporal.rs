@@ -565,4 +565,729 @@ mod tests {
         assert_eq!(AllenRelation::Meets.inverse(), AllenRelation::MetBy);
         assert_eq!(AllenRelation::Equals.inverse(), AllenRelation::Equals);
     }
+
+    // =========================================================================
+    // ALLEN INTERVAL ALGEBRA - COMPREHENSIVE TESTS FOR ALL 13 RELATIONS
+    // Ported from spindle-racket/tests/temporal-allen-tests.rkt
+    // =========================================================================
+
+    /// Test intervals used throughout Allen relation tests:
+    /// A = [0, 10]
+    /// B = [15, 25]  (after A with gap)
+    /// C = [10, 20]  (meets A)
+    /// D = [5, 15]   (overlaps A)
+    /// E = [0, 5]    (starts A)
+    /// F = [2, 10]   (finishes A)
+    /// G = [3, 7]    (during A)
+    /// H = [0, 10]   (equals A)
+
+    #[test]
+    fn test_allen_before_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let b = Temporal::from_bounds(15, 25);
+
+        assert!(a.before(&b), "A should be before B");
+        assert!(!b.before(&a), "B should not be before A");
+        assert!(!a.before(&a), "A should not be before itself");
+        assert_eq!(a.relation(&b), AllenRelation::Before);
+    }
+
+    #[test]
+    fn test_allen_after_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let b = Temporal::from_bounds(15, 25);
+
+        assert!(b.after(&a), "B should be after A");
+        assert!(!a.after(&b), "A should not be after B");
+        assert!(!a.after(&a), "A should not be after itself");
+        assert_eq!(b.relation(&a), AllenRelation::After);
+    }
+
+    #[test]
+    fn test_allen_meets_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let c = Temporal::from_bounds(10, 20);
+
+        assert!(a.meets(&c), "A should meet C");
+        assert!(!c.meets(&a), "C should not meet A");
+        assert!(!a.meets(&a), "A should not meet itself");
+        assert_eq!(a.relation(&c), AllenRelation::Meets);
+    }
+
+    #[test]
+    fn test_allen_met_by_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let c = Temporal::from_bounds(10, 20);
+
+        assert!(c.met_by(&a), "C should be met by A");
+        assert!(!a.met_by(&c), "A should not be met by C");
+        assert_eq!(c.relation(&a), AllenRelation::MetBy);
+    }
+
+    #[test]
+    fn test_allen_overlaps_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let d = Temporal::from_bounds(5, 15);
+
+        assert!(a.overlaps(&d), "A should overlap D");
+        assert!(!d.overlaps(&a), "D should not overlap A (it's overlapped-by)");
+        assert_eq!(a.relation(&d), AllenRelation::Overlaps);
+    }
+
+    #[test]
+    fn test_allen_overlapped_by_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let d = Temporal::from_bounds(5, 15);
+
+        assert!(d.overlapped_by(&a), "D should be overlapped by A");
+        assert!(!a.overlapped_by(&d), "A should not be overlapped by D");
+        assert_eq!(d.relation(&a), AllenRelation::OverlappedBy);
+    }
+
+    #[test]
+    fn test_allen_starts_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let e = Temporal::from_bounds(0, 5);
+
+        assert!(e.starts(&a), "E should start A");
+        assert!(!a.starts(&e), "A should not start E");
+        assert_eq!(e.relation(&a), AllenRelation::Starts);
+    }
+
+    #[test]
+    fn test_allen_started_by_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let e = Temporal::from_bounds(0, 5);
+
+        assert!(a.started_by(&e), "A should be started by E");
+        assert!(!e.started_by(&a), "E should not be started by A");
+        assert_eq!(a.relation(&e), AllenRelation::StartedBy);
+    }
+
+    #[test]
+    fn test_allen_during_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let g = Temporal::from_bounds(3, 7);
+
+        assert!(g.during(&a), "G should be during A");
+        assert!(!a.during(&g), "A should not be during G");
+        assert_eq!(g.relation(&a), AllenRelation::During);
+    }
+
+    #[test]
+    fn test_allen_contains_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let g = Temporal::from_bounds(3, 7);
+
+        assert!(a.contains(&g), "A should contain G");
+        assert!(!g.contains(&a), "G should not contain A");
+        assert_eq!(a.relation(&g), AllenRelation::Contains);
+    }
+
+    #[test]
+    fn test_allen_finishes_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let f = Temporal::from_bounds(2, 10);
+
+        assert!(f.finishes(&a), "F should finish A");
+        assert!(!a.finishes(&f), "A should not finish F");
+        assert_eq!(f.relation(&a), AllenRelation::Finishes);
+    }
+
+    #[test]
+    fn test_allen_finished_by_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let f = Temporal::from_bounds(2, 10);
+
+        assert!(a.finished_by(&f), "A should be finished by F");
+        assert!(!f.finished_by(&a), "F should not be finished by A");
+        assert_eq!(a.relation(&f), AllenRelation::FinishedBy);
+    }
+
+    #[test]
+    fn test_allen_equals_comprehensive() {
+        let a = Temporal::from_bounds(0, 10);
+        let h = Temporal::from_bounds(0, 10);
+
+        assert!(a.equals(&h), "A should equal H");
+        assert!(h.equals(&a), "H should equal A");
+        assert!(a.equals(&a), "A should equal itself");
+        assert_eq!(a.relation(&h), AllenRelation::Equals);
+    }
+
+    #[test]
+    fn test_allen_relation_returns_correct_symbol() {
+        let a = Temporal::from_bounds(0, 10);
+        let b = Temporal::from_bounds(15, 25);
+        let c = Temporal::from_bounds(10, 20);
+        let d = Temporal::from_bounds(5, 15);
+        let e = Temporal::from_bounds(0, 5);
+        let f = Temporal::from_bounds(2, 10);
+        let g = Temporal::from_bounds(3, 7);
+        let h = Temporal::from_bounds(0, 10);
+
+        assert_eq!(a.relation(&b), AllenRelation::Before);
+        assert_eq!(b.relation(&a), AllenRelation::After);
+        assert_eq!(a.relation(&c), AllenRelation::Meets);
+        assert_eq!(c.relation(&a), AllenRelation::MetBy);
+        assert_eq!(a.relation(&d), AllenRelation::Overlaps);
+        assert_eq!(d.relation(&a), AllenRelation::OverlappedBy);
+        assert_eq!(e.relation(&a), AllenRelation::Starts);
+        assert_eq!(a.relation(&e), AllenRelation::StartedBy);
+        assert_eq!(g.relation(&a), AllenRelation::During);
+        assert_eq!(a.relation(&g), AllenRelation::Contains);
+        assert_eq!(f.relation(&a), AllenRelation::Finishes);
+        assert_eq!(a.relation(&f), AllenRelation::FinishedBy);
+        assert_eq!(a.relation(&h), AllenRelation::Equals);
+    }
+
+    #[test]
+    fn test_allen_mutual_exclusivity() {
+        // Exactly one Allen relation should hold between any two intervals
+        let a = Temporal::from_bounds(0, 10);
+        let b = Temporal::from_bounds(5, 15);
+
+        let relations = vec![
+            a.before(&b),
+            a.after(&b),
+            a.meets(&b),
+            a.met_by(&b),
+            a.overlaps(&b),
+            a.overlapped_by(&b),
+            a.starts(&b),
+            a.started_by(&b),
+            a.during(&b),
+            a.contains(&b),
+            a.finishes(&b),
+            a.finished_by(&b),
+            a.equals(&b),
+        ];
+
+        let true_count = relations.iter().filter(|&&r| r).count();
+        assert_eq!(
+            true_count, 1,
+            "Exactly one Allen relation should hold, got {}",
+            true_count
+        );
+    }
+
+    #[test]
+    fn test_allen_all_relation_inverses() {
+        // Test all inverse pairs
+        assert_eq!(AllenRelation::Before.inverse(), AllenRelation::After);
+        assert_eq!(AllenRelation::After.inverse(), AllenRelation::Before);
+        assert_eq!(AllenRelation::Meets.inverse(), AllenRelation::MetBy);
+        assert_eq!(AllenRelation::MetBy.inverse(), AllenRelation::Meets);
+        assert_eq!(AllenRelation::Overlaps.inverse(), AllenRelation::OverlappedBy);
+        assert_eq!(AllenRelation::OverlappedBy.inverse(), AllenRelation::Overlaps);
+        assert_eq!(AllenRelation::Starts.inverse(), AllenRelation::StartedBy);
+        assert_eq!(AllenRelation::StartedBy.inverse(), AllenRelation::Starts);
+        assert_eq!(AllenRelation::During.inverse(), AllenRelation::Contains);
+        assert_eq!(AllenRelation::Contains.inverse(), AllenRelation::During);
+        assert_eq!(AllenRelation::Finishes.inverse(), AllenRelation::FinishedBy);
+        assert_eq!(AllenRelation::FinishedBy.inverse(), AllenRelation::Finishes);
+        assert_eq!(AllenRelation::Equals.inverse(), AllenRelation::Equals);
+    }
+
+    // =========================================================================
+    // POINT INTERVALS (EDGE CASES)
+    // =========================================================================
+
+    #[test]
+    fn test_point_intervals() {
+        let p1 = Temporal::from_bounds(5, 5);
+        let p2 = Temporal::from_bounds(5, 5);
+        let p3 = Temporal::from_bounds(10, 10);
+        let p4 = Temporal::from_bounds(5, 10); // interval that P1 meets
+
+        assert!(p1.equals(&p2), "Equal point intervals should be equal");
+        assert!(p1.before(&p3), "[5,5] should be before [10,10]");
+        assert!(p1.meets(&p4), "[5,5] should meet [5,10]");
+    }
+
+    #[test]
+    fn test_infinite_intervals() {
+        let inf = Temporal::new(TimePoint::NegInf, TimePoint::PosInf);
+        let a = Temporal::from_bounds(0, 10);
+
+        assert!(a.during(&inf), "Finite interval should be during infinite interval");
+        assert!(inf.contains(&a), "Infinite interval should contain finite interval");
+    }
+
+    // =========================================================================
+    // TEMPORAL STATE TRACKING - ACTIVE_AT, PAST_AT, FUTURE_AT
+    // Ported from spindle-racket/tests/temporal-allen-tests.rkt
+    // =========================================================================
+
+    #[test]
+    fn test_active_at_basic() {
+        let t = Temporal::from_bounds(0, 10);
+
+        assert!(t.active_at_millis(5), "5 is within [0,10]");
+        assert!(t.active_at_millis(0), "0 is at start boundary");
+        assert!(t.active_at_millis(10), "10 is at end boundary");
+        assert!(!t.active_at_millis(15), "15 is after interval");
+        assert!(!t.active_at_millis(-5), "-5 is before interval");
+    }
+
+    #[test]
+    fn test_active_at_with_timepoint() {
+        let t = Temporal::from_bounds(5, 15);
+
+        assert!(t.active_at(TimePoint::Moment(10)), "10 is within interval");
+        assert!(t.active_at(TimePoint::Moment(5)), "5 is at start boundary");
+        assert!(t.active_at(TimePoint::Moment(15)), "15 is at end boundary");
+        assert!(!t.active_at(TimePoint::Moment(0)), "0 is before interval");
+        assert!(!t.active_at(TimePoint::Moment(20)), "20 is after interval");
+    }
+
+    #[test]
+    fn test_active_at_with_infinite_interval() {
+        let inf = Temporal::new(TimePoint::NegInf, TimePoint::PosInf);
+
+        assert!(inf.active_at_millis(0), "0 is within infinite interval");
+        assert!(inf.active_at_millis(1000000), "Any time is within infinite interval");
+        assert!(inf.active_at_millis(-1000000), "Negative time is within infinite interval");
+    }
+
+    #[test]
+    fn test_past_at_basic() {
+        let t = Temporal::from_bounds(5, 10);
+
+        assert!(t.past_at(TimePoint::Moment(15)), "interval ended before 15");
+        assert!(!t.past_at(TimePoint::Moment(8)), "8 is during interval");
+        assert!(!t.past_at(TimePoint::Moment(3)), "3 is before interval started");
+        assert!(!t.past_at(TimePoint::Moment(10)), "10 is at boundary, not past");
+    }
+
+    #[test]
+    fn test_future_at_basic() {
+        let t = Temporal::from_bounds(5, 10);
+
+        assert!(t.future_at(TimePoint::Moment(3)), "interval starts after 3");
+        assert!(!t.future_at(TimePoint::Moment(8)), "8 is during interval");
+        assert!(!t.future_at(TimePoint::Moment(15)), "15 is after interval");
+        assert!(!t.future_at(TimePoint::Moment(5)), "5 is at boundary, not future");
+    }
+
+    #[test]
+    fn test_past_future_comprehensive() {
+        let t = Temporal::from_bounds(10, 20);
+
+        // Past tests
+        assert!(t.past_at(TimePoint::Moment(25)), "interval is past at 25");
+        assert!(t.past_at(TimePoint::Moment(21)), "interval is past at 21");
+        assert!(!t.past_at(TimePoint::Moment(20)), "boundary is not past");
+        assert!(!t.past_at(TimePoint::Moment(15)), "middle is not past");
+        assert!(!t.past_at(TimePoint::Moment(5)), "before start is not past");
+
+        // Future tests
+        assert!(t.future_at(TimePoint::Moment(5)), "interval is future at 5");
+        assert!(t.future_at(TimePoint::Moment(9)), "interval is future at 9");
+        assert!(!t.future_at(TimePoint::Moment(10)), "boundary is not future");
+        assert!(!t.future_at(TimePoint::Moment(15)), "middle is not future");
+        assert!(!t.future_at(TimePoint::Moment(25)), "after end is not future");
+    }
+
+    // =========================================================================
+    // MOMENT/INSTANT SYNTAX - TIMEPOINT TESTS
+    // Ported from spindle-racket/tests/moment-temporal-tests.rkt
+    // =========================================================================
+
+    #[test]
+    fn test_timepoint_from_millis() {
+        let tp = TimePoint::from_millis(1000);
+        assert!(tp.is_finite());
+        assert!(!tp.is_neg_inf());
+        assert!(!tp.is_pos_inf());
+
+        if let TimePoint::Moment(v) = tp {
+            assert_eq!(v, 1000);
+        } else {
+            panic!("Expected Moment variant");
+        }
+    }
+
+    #[test]
+    fn test_timepoint_infinity() {
+        let neg = TimePoint::NegInf;
+        let pos = TimePoint::PosInf;
+
+        assert!(neg.is_neg_inf());
+        assert!(!neg.is_pos_inf());
+        assert!(!neg.is_finite());
+
+        assert!(pos.is_pos_inf());
+        assert!(!pos.is_neg_inf());
+        assert!(!pos.is_finite());
+    }
+
+    #[test]
+    fn test_timepoint_ordering() {
+        let neg_inf = TimePoint::NegInf;
+        let pos_inf = TimePoint::PosInf;
+        let m1 = TimePoint::Moment(0);
+        let m2 = TimePoint::Moment(100);
+        let m3 = TimePoint::Moment(-100);
+
+        // NegInf is less than everything else
+        assert!(neg_inf < m3);
+        assert!(neg_inf < m1);
+        assert!(neg_inf < m2);
+        assert!(neg_inf < pos_inf);
+
+        // PosInf is greater than everything else
+        assert!(pos_inf > m3);
+        assert!(pos_inf > m1);
+        assert!(pos_inf > m2);
+        assert!(pos_inf > neg_inf);
+
+        // Moments compare by value
+        assert!(m3 < m1);
+        assert!(m1 < m2);
+        assert!(m3 < m2);
+    }
+
+    #[test]
+    fn test_timepoint_equality() {
+        assert_eq!(TimePoint::NegInf, TimePoint::NegInf);
+        assert_eq!(TimePoint::PosInf, TimePoint::PosInf);
+        assert_eq!(TimePoint::Moment(42), TimePoint::Moment(42));
+
+        assert_ne!(TimePoint::NegInf, TimePoint::PosInf);
+        assert_ne!(TimePoint::Moment(1), TimePoint::Moment(2));
+        assert_ne!(TimePoint::Moment(0), TimePoint::NegInf);
+    }
+
+    #[test]
+    fn test_timepoint_display() {
+        assert_eq!(format!("{}", TimePoint::NegInf), "-inf");
+        assert_eq!(format!("{}", TimePoint::PosInf), "+inf");
+        assert_eq!(format!("{}", TimePoint::Moment(42)), "42");
+        assert_eq!(format!("{}", TimePoint::Moment(-100)), "-100");
+    }
+
+    #[test]
+    fn test_timepoint_default() {
+        let tp: TimePoint = Default::default();
+        assert!(tp.is_neg_inf());
+    }
+
+    #[test]
+    fn test_timepoint_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(TimePoint::Moment(1));
+        set.insert(TimePoint::Moment(2));
+        set.insert(TimePoint::NegInf);
+        set.insert(TimePoint::PosInf);
+
+        assert!(set.contains(&TimePoint::Moment(1)));
+        assert!(set.contains(&TimePoint::Moment(2)));
+        assert!(set.contains(&TimePoint::NegInf));
+        assert!(set.contains(&TimePoint::PosInf));
+        assert!(!set.contains(&TimePoint::Moment(3)));
+    }
+
+    // =========================================================================
+    // TEMPORAL WINDOW PROPAGATION - INTERSECTION TESTS
+    // Ported from spindle-racket/tests/spindle-temporal-tests.rkt
+    // =========================================================================
+
+    #[test]
+    fn test_intersection_overlapping() {
+        let t1 = Temporal::from_bounds(0, 20);
+        let t2 = Temporal::from_bounds(10, 30);
+        let intersection = t1.intersection(&t2).unwrap();
+
+        assert_eq!(intersection.start, TimePoint::Moment(10));
+        assert_eq!(intersection.end, TimePoint::Moment(20));
+    }
+
+    #[test]
+    fn test_intersection_three_way() {
+        let t1 = Temporal::from_bounds(0, 100);
+        let t2 = Temporal::from_bounds(20, 80);
+        let t3 = Temporal::from_bounds(40, 60);
+
+        let intersection = Temporal::intersection_list(&[t1, t2, t3]).unwrap();
+
+        assert_eq!(intersection.start, TimePoint::Moment(40));
+        assert_eq!(intersection.end, TimePoint::Moment(60));
+    }
+
+    #[test]
+    fn test_intersection_adjacent_intervals() {
+        let t1 = Temporal::from_bounds(0, 10);
+        let t2 = Temporal::from_bounds(10, 20);
+
+        // With weak overlap semantics, [0,10] and [10,20] overlap at point 10
+        let intersection = t1.intersection(&t2).unwrap();
+        assert_eq!(intersection.start, TimePoint::Moment(10));
+        assert_eq!(intersection.end, TimePoint::Moment(10));
+    }
+
+    #[test]
+    fn test_intersection_universal_with_finite() {
+        let t_universal = Temporal::new(TimePoint::NegInf, TimePoint::PosInf);
+        let t_finite = Temporal::from_bounds(10, 20);
+
+        let intersection = t_universal.intersection(&t_finite).unwrap();
+        assert_eq!(intersection.start, TimePoint::Moment(10));
+        assert_eq!(intersection.end, TimePoint::Moment(20));
+    }
+
+    #[test]
+    fn test_intersection_list_empty() {
+        let result = Temporal::intersection_list(&[]).unwrap();
+        assert!(result.is_empty(), "Empty list should return EMPTY_TEMPORAL");
+    }
+
+    #[test]
+    fn test_intersection_list_single() {
+        let t = Temporal::from_bounds(5, 15);
+        let result = Temporal::intersection_list(&[t.clone()]).unwrap();
+
+        assert_eq!(result.start, TimePoint::Moment(5));
+        assert_eq!(result.end, TimePoint::Moment(15));
+    }
+
+    #[test]
+    fn test_intersection_list_non_overlapping() {
+        let t1 = Temporal::from_bounds(0, 10);
+        let t2 = Temporal::from_bounds(20, 30);
+
+        let result = Temporal::intersection_list(&[t1, t2]);
+        assert!(result.is_none(), "Non-overlapping intervals should return None");
+    }
+
+    #[test]
+    fn test_intersection_list_chain_failure() {
+        let t1 = Temporal::from_bounds(0, 10);
+        let t2 = Temporal::from_bounds(5, 15);
+        let t3 = Temporal::from_bounds(20, 30);
+
+        let result = Temporal::intersection_list(&[t1, t2, t3]);
+        assert!(
+            result.is_none(),
+            "Should fail when third interval doesn't overlap"
+        );
+    }
+
+    #[test]
+    fn test_intersects_basic() {
+        let t1 = Temporal::from_bounds(0, 10);
+        let t2 = Temporal::from_bounds(5, 15);
+        let t3 = Temporal::from_bounds(20, 30);
+
+        assert!(t1.intersects(&t2), "Overlapping intervals should intersect");
+        assert!(!t1.intersects(&t3), "Disjoint intervals should not intersect");
+    }
+
+    #[test]
+    fn test_intersects_touching_boundaries() {
+        let t1 = Temporal::from_bounds(0, 10);
+        let t2 = Temporal::from_bounds(10, 20);
+
+        assert!(
+            t1.intersects(&t2),
+            "Touching boundaries should intersect (weak inequality)"
+        );
+    }
+
+    // =========================================================================
+    // TEMPORAL EDGE CASES
+    // =========================================================================
+
+    #[test]
+    fn test_half_infinite_temporals() {
+        let t1 = Temporal::new(TimePoint::NegInf, TimePoint::Moment(15));
+        let t2 = Temporal::new(TimePoint::Moment(10), TimePoint::PosInf);
+
+        let intersection = t1.intersection(&t2).unwrap();
+        assert_eq!(intersection.start, TimePoint::Moment(10));
+        assert_eq!(intersection.end, TimePoint::Moment(15));
+    }
+
+    #[test]
+    fn test_negative_time_values() {
+        let t1 = Temporal::from_bounds(-100, -50);
+        let t2 = Temporal::from_bounds(-75, -25);
+
+        let intersection = t1.intersection(&t2).unwrap();
+        assert_eq!(intersection.start, TimePoint::Moment(-75));
+        assert_eq!(intersection.end, TimePoint::Moment(-50));
+    }
+
+    #[test]
+    fn test_large_time_values() {
+        let t1 = Temporal::from_bounds(1_000_000, 2_000_000);
+        let t2 = Temporal::from_bounds(1_500_000, 2_500_000);
+
+        let intersection = t1.intersection(&t2).unwrap();
+        assert_eq!(intersection.start, TimePoint::Moment(1_500_000));
+        assert_eq!(intersection.end, TimePoint::Moment(2_000_000));
+    }
+
+    #[test]
+    fn test_point_interval_overlap() {
+        let point = Temporal::from_bounds(5, 5);
+        let interval = Temporal::from_bounds(0, 10);
+
+        assert!(
+            point.intersects(&interval),
+            "Point should intersect with interval containing it"
+        );
+
+        let intersection = point.intersection(&interval).unwrap();
+        assert_eq!(intersection.start, TimePoint::Moment(5));
+        assert_eq!(intersection.end, TimePoint::Moment(5));
+    }
+
+    // =========================================================================
+    // TEMPORAL DISPLAY AND FORMATTING
+    // =========================================================================
+
+    #[test]
+    fn test_temporal_display() {
+        let t1 = Temporal::from_bounds(5, 10);
+        assert_eq!(format!("{}", t1), "[5,10]");
+
+        let t2 = Temporal::empty();
+        assert_eq!(format!("{}", t2), ""); // Empty temporal displays as empty string
+
+        let t3 = Temporal::new(TimePoint::NegInf, TimePoint::Moment(10));
+        assert_eq!(format!("{}", t3), "[-inf,10]");
+
+        let t4 = Temporal::new(TimePoint::Moment(5), TimePoint::PosInf);
+        assert_eq!(format!("{}", t4), "[5,+inf]");
+    }
+
+    #[test]
+    fn test_allen_relation_display() {
+        assert_eq!(format!("{}", AllenRelation::Before), "before");
+        assert_eq!(format!("{}", AllenRelation::After), "after");
+        assert_eq!(format!("{}", AllenRelation::Meets), "meets");
+        assert_eq!(format!("{}", AllenRelation::MetBy), "met-by");
+        assert_eq!(format!("{}", AllenRelation::Overlaps), "overlaps");
+        assert_eq!(format!("{}", AllenRelation::OverlappedBy), "overlapped-by");
+        assert_eq!(format!("{}", AllenRelation::Contains), "contains");
+        assert_eq!(format!("{}", AllenRelation::During), "during");
+        assert_eq!(format!("{}", AllenRelation::Starts), "starts");
+        assert_eq!(format!("{}", AllenRelation::StartedBy), "started-by");
+        assert_eq!(format!("{}", AllenRelation::Finishes), "finishes");
+        assert_eq!(format!("{}", AllenRelation::FinishedBy), "finished-by");
+        assert_eq!(format!("{}", AllenRelation::Equals), "equals");
+    }
+
+    // =========================================================================
+    // TEMPORAL CONSTRUCTION AND PROPERTIES
+    // =========================================================================
+
+    #[test]
+    fn test_temporal_new() {
+        let t = Temporal::new(TimePoint::Moment(5), TimePoint::Moment(10));
+        assert_eq!(t.start, TimePoint::Moment(5));
+        assert_eq!(t.end, TimePoint::Moment(10));
+        assert!(t.has_info());
+        assert!(!t.is_empty());
+    }
+
+    #[test]
+    fn test_temporal_empty_constant() {
+        let t = EMPTY_TEMPORAL;
+        assert!(t.is_empty());
+        assert!(!t.has_info());
+        assert_eq!(t.start, TimePoint::NegInf);
+        assert_eq!(t.end, TimePoint::PosInf);
+    }
+
+    #[test]
+    fn test_temporal_default() {
+        // Default derives from TimePoint::default() which is NegInf
+        // So default Temporal is [NegInf, NegInf], not the empty temporal [NegInf, PosInf]
+        let t: Temporal = Default::default();
+        assert_eq!(t.start, TimePoint::NegInf);
+        assert_eq!(t.end, TimePoint::NegInf);
+        // Use Temporal::empty() to get the unbounded interval
+        let empty = Temporal::empty();
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn test_temporal_clone_and_eq() {
+        let t1 = Temporal::from_bounds(5, 10);
+        let t2 = t1.clone();
+
+        assert_eq!(t1, t2);
+        assert_eq!(t1.start, t2.start);
+        assert_eq!(t1.end, t2.end);
+    }
+
+    #[test]
+    fn test_temporal_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(Temporal::from_bounds(0, 10));
+        set.insert(Temporal::from_bounds(5, 15));
+        set.insert(Temporal::empty());
+
+        assert!(set.contains(&Temporal::from_bounds(0, 10)));
+        assert!(set.contains(&Temporal::from_bounds(5, 15)));
+        assert!(set.contains(&Temporal::empty()));
+        assert!(!set.contains(&Temporal::from_bounds(0, 5)));
+    }
+
+    // =========================================================================
+    // OVERLAP RELATIONSHIP TO ALLEN RELATIONS
+    // =========================================================================
+
+    #[test]
+    fn test_overlap_relationship_to_allen() {
+        // temporal.intersects() uses weak inequality (<= <=), so:
+        // - It returns true for: meets, met-by, overlaps, overlapped-by, starts,
+        //   started-by, during, contains, finishes, finished-by, equals
+        // - It returns false only for: before, after (disjoint with gap)
+        let a = Temporal::from_bounds(0, 10);
+        let b = Temporal::from_bounds(15, 25); // before (with gap)
+        let c = Temporal::from_bounds(10, 20); // meets (touching)
+        let d = Temporal::from_bounds(5, 15); // overlaps
+
+        assert!(!a.intersects(&b), "before => no overlap (gap exists)");
+        assert!(a.intersects(&c), "meets => overlap (touching boundary)");
+        assert!(a.intersects(&d), "overlaps => overlap");
+    }
+
+    // =========================================================================
+    // TEST NON-OVERLAPPING TEMPORALS BLOCK RULE FIRING (TEST-021 scenario)
+    // =========================================================================
+
+    #[test]
+    fn test_non_overlapping_temporals_no_intersection() {
+        // Simulates TEST-021: a@[0,10], b@[20,30] should have no intersection
+        let a = Temporal::from_bounds(0, 10);
+        let b = Temporal::from_bounds(20, 30);
+
+        assert!(!a.intersects(&b), "Non-overlapping intervals should not intersect");
+        assert!(
+            a.intersection(&b).is_none(),
+            "Intersection should be None for non-overlapping"
+        );
+    }
+
+    #[test]
+    fn test_three_body_no_overlap() {
+        // a@[0,20], b@[10,30], c@[25,40] - no three-way overlap
+        let a = Temporal::from_bounds(0, 20);
+        let b = Temporal::from_bounds(10, 30);
+        let c = Temporal::from_bounds(25, 40);
+
+        let result = Temporal::intersection_list(&[a, b, c]);
+        assert!(
+            result.is_none(),
+            "No three-way temporal overlap should exist"
+        );
+    }
 }
