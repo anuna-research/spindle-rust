@@ -213,4 +213,80 @@ mod tests {
         let triggered_by_b = indexed.rule_labels_with_body_id(b.literal_id());
         assert_eq!(triggered_by_b.len(), 2); // r2 (b => c) and r3 (a, b => d)
     }
+
+    // =========================================================================
+    // ADDITIONAL COVERAGE TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_rule_labels_with_head_id() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+
+        let indexed = IndexedTheory::build(theory);
+
+        let a = Literal::simple("a");
+        let b = Literal::simple("b");
+
+        // 'a' is head of fact
+        let head_labels_a = indexed.rule_labels_with_head_id(a.literal_id());
+        assert!(!head_labels_a.is_empty());
+
+        // 'b' is head of rule
+        let head_labels_b = indexed.rule_labels_with_head_id(b.literal_id());
+        assert!(!head_labels_b.is_empty());
+
+        // nonexistent literal returns empty
+        let nonexistent = Literal::simple("nonexistent");
+        let head_labels_none = indexed.rule_labels_with_head_id(nonexistent.literal_id());
+        assert!(head_labels_none.is_empty());
+    }
+
+    #[test]
+    fn test_all_literal_ids() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+
+        let indexed = IndexedTheory::build(theory);
+
+        // Should have a, b, c
+        let all_ids: Vec<_> = indexed.all_literal_ids().collect();
+        assert_eq!(all_ids.len(), 3);
+    }
+
+    #[test]
+    fn test_contains_literal_not_found() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+
+        let indexed = IndexedTheory::build(theory);
+
+        let nonexistent = Literal::simple("nonexistent");
+        assert!(!indexed.contains_literal(&nonexistent));
+        assert!(!indexed.contains_literal_id(nonexistent.literal_id()));
+    }
+
+    #[test]
+    fn test_theory_accessor() {
+        let mut theory = Theory::new();
+        theory.add_fact("test");
+
+        let indexed = IndexedTheory::build(theory);
+        assert_eq!(indexed.theory().rule_count(), 1);
+    }
+
+    #[test]
+    fn test_empty_theory_index() {
+        let theory = Theory::new();
+        let indexed = IndexedTheory::build(theory);
+
+        let lit = Literal::simple("any");
+        assert!(indexed.rules_with_head(&lit).is_empty());
+        assert!(indexed.rules_with_body(&lit).is_empty());
+        assert!(indexed.rule_labels_with_head_id(lit.literal_id()).is_empty());
+        assert!(indexed.rule_labels_with_body_id(lit.literal_id()).is_empty());
+    }
 }

@@ -753,4 +753,262 @@ mod tests {
         // Should return essentially the same theory
         assert_eq!(grounded.rule_count(), theory.rule_count());
     }
+
+    // =========================================================================
+    // ADDITIONAL COVERAGE TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_merge_substitutions_conflict() {
+        // Test merge_substitutions with conflicting bindings
+        let mut s1 = Substitution::default();
+        s1.insert(intern("?x"), intern("alice"));
+
+        let mut s2 = Substitution::default();
+        s2.insert(intern("?x"), intern("bob")); // Conflict!
+
+        let merged = merge_substitutions(&s1, &s2);
+        assert!(merged.is_none(), "Conflicting substitutions should not merge");
+    }
+
+    #[test]
+    fn test_merge_substitutions_compatible() {
+        // Test merge_substitutions with compatible bindings
+        let mut s1 = Substitution::default();
+        s1.insert(intern("?x"), intern("alice"));
+
+        let mut s2 = Substitution::default();
+        s2.insert(intern("?y"), intern("bob"));
+
+        let merged = merge_substitutions(&s1, &s2).unwrap();
+        assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_substitutions_same_value() {
+        // Test merge where same key has same value (should succeed)
+        let mut s1 = Substitution::default();
+        s1.insert(intern("?x"), intern("alice"));
+
+        let mut s2 = Substitution::default();
+        s2.insert(intern("?x"), intern("alice")); // Same value
+
+        let merged = merge_substitutions(&s1, &s2).unwrap();
+        assert_eq!(merged.len(), 1);
+    }
+
+    #[test]
+    fn test_match_literal_variable_name() {
+        // Match literal where the predicate name itself is a variable
+        let pattern = Literal::new(
+            "?rel",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["alice".to_string(), "bob".to_string()],
+        );
+        let ground = Literal::new(
+            "parent",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["alice".to_string(), "bob".to_string()],
+        );
+
+        let subst = match_literal(&pattern, &ground).unwrap();
+        let rel_id = intern("?rel");
+        let parent_id = intern("parent");
+        assert_eq!(subst.get(&rel_id), Some(&parent_id));
+    }
+
+    #[test]
+    fn test_apply_substitution_variable_name() {
+        // Apply substitution to a literal with variable name
+        let lit = Literal::new(
+            "?rel",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["?x".to_string()],
+        );
+        let mut subst = Substitution::default();
+        subst.insert(intern("?rel"), intern("parent"));
+        subst.insert(intern("?x"), intern("alice"));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(result.name(), "parent");
+        assert_eq!(result.predicates(), vec!["alice"]);
+    }
+
+    #[test]
+    fn test_ground_theory_multi_body_rule() {
+        // Test grounding with multi-body rules
+        let mut theory = Theory::new();
+
+        // parent(alice, bob)
+        let f1 = Rule::fact(
+            "f1",
+            Literal::new(
+                "parent",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["alice".to_string(), "bob".to_string()],
+            ),
+        );
+        theory.add_rule(f1);
+
+        // parent(bob, carol)
+        let f2 = Rule::fact(
+            "f2",
+            Literal::new(
+                "parent",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["bob".to_string(), "carol".to_string()],
+            ),
+        );
+        theory.add_rule(f2);
+
+        // parent(?x, ?y), parent(?y, ?z) => grandparent(?x, ?z)
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![
+                Literal::new(
+                    "parent",
+                    false,
+                    Default::default(),
+                    Default::default(),
+                    vec!["?x".to_string(), "?y".to_string()],
+                ),
+                Literal::new(
+                    "parent",
+                    false,
+                    Default::default(),
+                    Default::default(),
+                    vec!["?y".to_string(), "?z".to_string()],
+                ),
+            ],
+            Literal::new(
+                "grandparent",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string(), "?z".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        let grounded = ground_theory(&theory);
+
+        // Should have grandparent(alice, carol)
+        let has_grandparent = grounded.rules().any(|r| {
+            r.head.iter().any(|h| {
+                h.name() == "grandparent"
+                    && h.predicates() == vec!["alice", "carol"]
+            })
+        });
+        assert!(has_grandparent, "Should ground to grandparent(alice, carol)");
+    }
+
+    #[test]
+    fn test_ground_theory_with_limit_exceeded() {
+        // Test that grounding respects iteration limit
+        let mut theory = Theory::new();
+
+        // Create a recursive-ish pattern
+        let f1 = Rule::fact(
+            "f1",
+            Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["a".to_string()],
+            ),
+        );
+        theory.add_rule(f1);
+
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            Literal::new(
+                "q",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        // Ground with limit of 1
+        let grounded = ground_theory_with_limit(&theory, 1);
+        // Should still produce results
+        assert!(grounded.rule_count() >= 1);
+    }
+
+    #[test]
+    fn test_has_variables_in_head() {
+        // Test has_variables when only head has variables
+        let rule = Rule::defeasible(
+            "r1",
+            vec![Literal::simple("bird")],
+            Literal::new(
+                "flies",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            ),
+        );
+        assert!(has_variables(&rule));
+    }
+
+    #[test]
+    fn test_ground_theory_empty() {
+        // Ground an empty theory
+        let theory = Theory::new();
+        let grounded = ground_theory(&theory);
+        assert_eq!(grounded.rule_count(), 0);
+    }
+
+    #[test]
+    fn test_match_literal_same_variable_twice() {
+        // Pattern where same variable appears twice must match same value
+        let pattern = Literal::new(
+            "equal",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["?x".to_string(), "?x".to_string()],
+        );
+
+        // Ground literal with same value
+        let ground_same = Literal::new(
+            "equal",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["a".to_string(), "a".to_string()],
+        );
+        assert!(match_literal(&pattern, &ground_same).is_some());
+
+        // Ground literal with different values
+        let ground_diff = Literal::new(
+            "equal",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["a".to_string(), "b".to_string()],
+        );
+        assert!(match_literal(&pattern, &ground_diff).is_none());
+    }
 }

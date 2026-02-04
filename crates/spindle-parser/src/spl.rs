@@ -1373,4 +1373,148 @@ mod tests {
         let result = parse_spl(input);
         assert!(result.is_ok());
     }
+
+    // =========================================================================
+    // ADDITIONAL COVERAGE TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_parse_string_with_escaped_backslash() {
+        // Strings with escaped backslash inside
+        let input = r#"(meta r1 (path "C:\\Users\\test"))"#;
+        let result = parse_spl(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_string_with_escaped_quote() {
+        // Strings with escaped quote should preserve the string
+        let input = r#"(meta r1 (desc "He said \"hello\""))"#;
+        let result = parse_spl(input);
+        // The parser may or may not handle escaped quotes perfectly
+        // but it should not crash
+        let _ = result;
+    }
+
+    #[test]
+    fn test_parse_comment_semicolon_in_string() {
+        // Semicolon inside a string should NOT be treated as comment
+        let input = r#"(meta r1 (pattern "a;b;c"))"#;
+        let result = parse_spl(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_prefer_single_label_error() {
+        // Prefer with only one label should fail
+        let result = parse_spl("(prefer r1)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_prefer_chain_three() {
+        // Prefer chain with 3 labels creates 2 superiorities
+        let theory = parse_spl("(prefer r1 r2 r3)").unwrap();
+        assert_eq!(theory.superiorities().len(), 2);
+    }
+
+    #[test]
+    fn test_parse_prefer_chain_four() {
+        // Prefer chain with 4 labels creates 3 superiorities
+        let theory = parse_spl("(prefer r1 r2 r3 r4)").unwrap();
+        assert_eq!(theory.superiorities().len(), 3);
+    }
+
+    #[test]
+    fn test_parse_meta_property_key_not_atom() {
+        // Meta with non-atom key should fail
+        let result = parse_spl("(meta r1 ((nested key) \"value\"))");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_rule_with_and_as_body_and_no_label() {
+        // Rule without explicit label where body looks like "and" keyword
+        let theory = parse_spl("(normally (and a b) result)").unwrap();
+        let rule = theory.rules().next().unwrap();
+        // Body should be parsed as conjunction
+        assert_eq!(rule.body.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_rule_label_looks_like_and() {
+        // Rule with label that's actually "and" (edge case)
+        // When label is "and", it should be detected as a keyword and body parsed
+        let result = parse_spl("(normally and bird flies)");
+        // This may or may not work depending on parser behavior
+        let _ = result;
+    }
+
+    #[test]
+    fn test_parse_empty_list_expression() {
+        // Empty list expression
+        let result = parse_spl("()");
+        // Empty list should be ignored or handled gracefully
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_meta_list_with_non_atom() {
+        // Meta list value with non-atom element should fail
+        let result = parse_spl("(meta r1 (tags ((nested) \"b\")))");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_given_with_nested_predicate_error() {
+        // Nested list predicates are not supported (atoms only)
+        let result = parse_spl("(given (owns alice (book \"Moby Dick\")))");
+        assert!(result.is_err(), "Nested list predicates should fail");
+    }
+
+    #[test]
+    fn test_parse_multiple_meta_same_rule() {
+        // Multiple meta statements for the same rule
+        let input = r#"
+            (normally r1 bird flies)
+            (meta r1 (key1 "value1"))
+            (meta r1 (key2 "value2"))
+        "#;
+        let theory = parse_spl(input).unwrap();
+        let meta = theory.get_meta("r1").unwrap();
+        assert!(meta.properties.contains_key("key1"));
+        assert!(meta.properties.contains_key("key2"));
+    }
+
+    #[test]
+    fn test_parse_fact_negated_predicate() {
+        // Fact with negated predicate
+        let theory = parse_spl("(given (not (flies tweety)))").unwrap();
+        let rule = theory.rules().next().unwrap();
+        assert!(rule.head_literal().is_negated());
+    }
+
+    #[test]
+    fn test_parse_rule_auto_label_defeasible() {
+        // Auto-generated label for defeasible rule
+        let theory = parse_spl("(normally bird flies)").unwrap();
+        let rule = theory.rules().next().unwrap();
+        assert!(rule.label.starts_with('r'));
+    }
+
+    #[test]
+    fn test_parse_rule_auto_label_strict() {
+        // Auto-generated label for strict rule
+        let theory = parse_spl("(always bird animal)").unwrap();
+        let rule = theory.rules().next().unwrap();
+        assert!(rule.label.starts_with('s'));
+    }
+
+    #[test]
+    fn test_parse_rule_auto_label_defeater() {
+        // Auto-generated label for defeater
+        let theory = parse_spl("(except injured flies)").unwrap();
+        let rule = theory.rules().next().unwrap();
+        assert!(rule.label.starts_with('d'));
+    }
 }

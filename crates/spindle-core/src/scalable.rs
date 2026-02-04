@@ -1973,4 +1973,155 @@ mod tests {
         assert!(result.contains_delta("p"));
         assert!(result.contains_delta("~p"));
     }
+
+    // ==========================================================================
+    // to_conclusions() COVERAGE TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_to_conclusions_all_types() {
+        // Test that to_conclusions generates all four conclusion types
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["x"], "y"); // x not proven, so y unprovable
+
+        let result = reason_scalable(&theory);
+        let indexed = IndexedTheory::build(theory.clone());
+        let conclusions = result.to_conclusions(&indexed);
+
+        // Check all conclusion types are present
+        let has_def_provable = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefinitelyProvable
+        });
+        let has_def_not_provable = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefinitelyNotProvable
+        });
+        let has_defeas_provable = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+        });
+        let has_defeas_not_provable = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+        });
+
+        assert!(has_def_provable, "Should have +D conclusions");
+        assert!(has_def_not_provable, "Should have -D conclusions");
+        assert!(has_defeas_provable, "Should have +d conclusions");
+        assert!(has_defeas_not_provable, "Should have -d conclusions");
+    }
+
+    #[test]
+    fn test_to_conclusions_partial_not_in_delta() {
+        // Test the path where partial contains items not in delta
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b"); // b in partial but not delta
+
+        let result = reason_scalable(&theory);
+        let indexed = IndexedTheory::build(theory.clone());
+        let conclusions = result.to_conclusions(&indexed);
+
+        // b should be +d but not +D
+        let b_defeasibly = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.canonical_name() == "b"
+        });
+        let b_definitely = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.canonical_name() == "b"
+        });
+
+        assert!(b_defeasibly, "b should be defeasibly provable");
+        assert!(!b_definitely, "b should NOT be definitely provable");
+    }
+
+    #[test]
+    fn test_contains_methods() {
+        // Test all three contains_* helper methods
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+
+        let result = reason_scalable(&theory);
+
+        // Test contains_delta
+        assert!(result.contains_delta("a"));
+        assert!(!result.contains_delta("b")); // b is defeasible only
+        assert!(!result.contains_delta("nonexistent"));
+
+        // Test contains_lambda
+        assert!(result.contains_lambda("a"));
+        assert!(result.contains_lambda("b"));
+        assert!(!result.contains_lambda("nonexistent"));
+
+        // Test contains_partial
+        assert!(result.contains_partial("a"));
+        assert!(result.contains_partial("b"));
+        assert!(!result.contains_partial("nonexistent"));
+    }
+
+    #[test]
+    fn test_contains_negated_literals() {
+        // Test contains_* methods with negated literals
+        let mut theory = Theory::new();
+        theory.add_fact("~guilty");
+        theory.add_defeasible_rule(&["~guilty"], "innocent");
+
+        let result = reason_scalable(&theory);
+
+        assert!(result.contains_delta("~guilty"));
+        assert!(result.contains_lambda("~guilty"));
+        assert!(result.contains_partial("~guilty"));
+        assert!(result.contains_partial("innocent"));
+    }
+
+    #[test]
+    fn test_empty_body_defeasible_rule() {
+        // Empty body defeasible rule (covered in lambda closure)
+        let mut theory = Theory::new();
+        let rule = Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("auto")],
+        );
+        theory.add_rule(rule);
+
+        let result = reason_scalable(&theory);
+
+        // auto should be in lambda and partial (empty body fires immediately)
+        assert!(result.contains_lambda("auto"));
+        assert!(result.contains_partial("auto"));
+    }
+
+    #[test]
+    fn test_lambda_body_check() {
+        // Test the path where we verify literal is actually in rule body
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_defeasible_rule(&["a"], "x");
+        theory.add_defeasible_rule(&["b"], "y");
+
+        let result = reason_scalable(&theory);
+
+        // Both x and y should be in lambda
+        assert!(result.contains_lambda("x"));
+        assert!(result.contains_lambda("y"));
+    }
+
+    #[test]
+    fn test_partial_blocked_by_delta_complement() {
+        // Test the blocked_by_delta path in partial closure
+        let mut theory = Theory::new();
+        theory.add_fact("~q"); // ~q definitely proven
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let result = reason_scalable(&theory);
+
+        // q should not be in partial (blocked by ~q in delta)
+        assert!(!result.contains_partial("q"));
+        assert!(result.contains_partial("~q"));
+    }
 }
