@@ -517,7 +517,7 @@ impl Explanation {
         // Render proof tree
         if let Some(ref proof) = self.proof_tree {
             let root_id = render_proof_node_to_dot(proof, &mut output, &mut node_counter);
-            output.push_str(&format!("  title -> n{} [style=invis];\n", root_id));
+            output.push_str(&format!("  title -> n{root_id} [style=invis];\n"));
         }
 
         // Render blocked alternatives
@@ -534,8 +534,7 @@ impl Explanation {
                 let escaped_rule = escape_dot_label(&blocked.rule_label);
                 let escaped_reason = escape_dot_label(&blocked.reason.to_string());
                 output.push_str(&format!(
-                    "    b{} [label=\"{}\\n(rule: {})\\nblocked: {}\" shape=box style=\"dashed,filled\" fillcolor=\"#ffcccc\"];\n",
-                    node_counter, escaped_lit, escaped_rule, escaped_reason
+                    "    b{node_counter} [label=\"{escaped_lit}\\n(rule: {escaped_rule})\\nblocked: {escaped_reason}\" shape=box style=\"dashed,filled\" fillcolor=\"#ffcccc\"];\n"
                 ));
             }
             output.push_str("  }\n");
@@ -555,8 +554,7 @@ impl Explanation {
                 let escaped_loser = escape_dot_label(&conflict.losing_rule);
                 let escaped_resolution = escape_dot_label(&conflict.resolution_type.to_string());
                 output.push_str(&format!(
-                    "    c{} [label=\"{} > {}\\n({})\" shape=diamond style=filled fillcolor=\"#ffe0b3\"];\n",
-                    node_counter, escaped_winner, escaped_loser, escaped_resolution
+                    "    c{node_counter} [label=\"{escaped_winner} > {escaped_loser}\\n({escaped_resolution})\" shape=diamond style=filled fillcolor=\"#ffe0b3\"];\n"
                 ));
             }
             output.push_str("  }\n");
@@ -669,18 +667,18 @@ fn proof_node_to_natural_language(node: &ProofNode, num: usize, indent: &str) ->
 
         // Annotations
         if let Some(desc) = step.annotations.description() {
-            output.push_str(&format!("{}   Description: {}\n", indent, desc));
+            output.push_str(&format!("{indent}   Description: {desc}\n"));
         }
         if let Some(source) = step.annotations.source() {
-            output.push_str(&format!("{}   Source: {}\n", indent, source));
+            output.push_str(&format!("{indent}   Source: {source}\n"));
         }
 
         // Body proofs (prerequisites)
         if !step.body_proofs.is_empty() {
-            output.push_str(&format!("{}   Prerequisites:\n", indent));
+            output.push_str(&format!("{indent}   Prerequisites:\n"));
             for (i, bp) in step.body_proofs.iter().enumerate() {
                 let sub_num = format!("{}.{}", num, i + 1);
-                let sub_indent = format!("{}     ", indent);
+                let sub_indent = format!("{indent}     ");
                 output.push_str(&proof_node_to_natural_language(
                     bp,
                     sub_num.parse().unwrap_or(1),
@@ -874,16 +872,14 @@ fn render_proof_node_to_dot(
         };
         let escaped_label = escape_dot_label(&step.rule_label);
         format!(
-            "{}\\n[{}: {}]",
-            escaped_literal, rule_type_str, escaped_label
+            "{escaped_literal}\\n[{rule_type_str}: {escaped_label}]"
         )
     } else {
         escaped_literal
     };
 
     output.push_str(&format!(
-        "  n{} [label=\"{}\" shape=box style=filled fillcolor=\"{}\"];\n",
-        node_id, label, color
+        "  n{node_id} [label=\"{label}\" shape=box style=filled fillcolor=\"{color}\"];\n"
     ));
 
     // Render body proofs and add edges
@@ -892,8 +888,7 @@ fn render_proof_node_to_dot(
             let child_id = render_proof_node_to_dot(body_proof, output, counter);
             let escaped_rule = escape_dot_label(&step.rule_label);
             output.push_str(&format!(
-                "  n{} -> n{} [label=\"{}\"];\n",
-                child_id, node_id, escaped_rule
+                "  n{child_id} -> n{node_id} [label=\"{escaped_rule}\"];\n"
             ));
         }
     }

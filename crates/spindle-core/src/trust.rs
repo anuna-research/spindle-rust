@@ -355,7 +355,7 @@ fn derivation_node_to_string(node: &TrustDerivationNode, num: usize, indent: &st
     let mut output = String::new();
 
     let source_str = node.source.as_ref()
-        .map(|s| format!(" [source: {}]", s))
+        .map(|s| format!(" [source: {s}]"))
         .unwrap_or_default();
 
     output.push_str(&format!(
@@ -364,7 +364,7 @@ fn derivation_node_to_string(node: &TrustDerivationNode, num: usize, indent: &st
     ));
 
     for (i, child) in node.children.iter().enumerate() {
-        let sub_indent = format!("{}   ", indent);
+        let sub_indent = format!("{indent}   ");
         output.push_str(&derivation_node_to_string(child, i + 1, &sub_indent));
     }
 

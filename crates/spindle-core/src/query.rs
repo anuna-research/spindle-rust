@@ -285,7 +285,7 @@ impl BlockingCondition {
             rule_label: rule_label.into(),
             missing_literals: Vec::new(),
             blocking_rule: Some(by.clone()),
-            explanation: format!("Defeated by rule {}", by),
+            explanation: format!("Defeated by rule {by}"),
         }
     }
 
@@ -297,7 +297,7 @@ impl BlockingCondition {
             rule_label: rule_label.into(),
             missing_literals: Vec::new(),
             blocking_rule: Some(by.clone()),
-            explanation: format!("Contradicted by {}", by),
+            explanation: format!("Contradicted by {by}"),
         }
     }
 }
@@ -352,7 +352,7 @@ impl fmt::Display for WhyNotResult {
         writeln!(f, "{} is not provable:", self.literal)?;
 
         if let Some(ref rule) = self.would_derive {
-            writeln!(f, "  Would be derived by rule: {}", rule)?;
+            writeln!(f, "  Would be derived by rule: {rule}")?;
         }
 
         writeln!(f, "  Blocked by:")?;
@@ -422,7 +422,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> WhyNotResult {
                 rule_label: String::new(),
                 missing_literals: Vec::new(),
                 blocking_rule: None,
-                explanation: format!("Complement {} is proven", complement),
+                explanation: format!("Complement {complement} is proven"),
             });
         }
     }

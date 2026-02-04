@@ -792,7 +792,7 @@ pub fn petri_net_to_dfl(
 
         if support >= min_support && confidence >= min_confidence {
             rule_counter += 1;
-            let label = format!("r_mined_{}", rule_counter);
+            let label = format!("r_mined_{rule_counter}");
 
             // Create rule: a => b (if a then typically b)
             let body = vec![Literal::simple(&a)];
@@ -893,7 +893,7 @@ pub fn make_log_from_traces(traces: &[&[&str]]) -> EventLog {
     let cases: Vec<Case> = traces
         .iter()
         .enumerate()
-        .map(|(i, trace)| make_sequential_trace(&format!("case-{}", i), trace))
+        .map(|(i, trace)| make_sequential_trace(&format!("case-{i}"), trace))
         .collect();
     EventLog::new(cases)
 }

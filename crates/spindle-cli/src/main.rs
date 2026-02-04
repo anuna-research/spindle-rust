@@ -179,7 +179,7 @@ fn load_theory(file: &PathBuf) -> spindle_core::Theory {
     let content = match fs::read_to_string(file) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error reading file: {}", e);
+            eprintln!("Error reading file: {e}");
             std::process::exit(1);
         }
     };
@@ -194,7 +194,7 @@ fn load_theory(file: &PathBuf) -> spindle_core::Theory {
         match parse_spl(&content) {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("SPL parse error: {}", e);
+                eprintln!("SPL parse error: {e}");
                 std::process::exit(1);
             }
         }
@@ -202,7 +202,7 @@ fn load_theory(file: &PathBuf) -> spindle_core::Theory {
         match parse_dfl(&content) {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("DFL parse error: {}", e);
+                eprintln!("DFL parse error: {e}");
                 std::process::exit(1);
             }
         }
@@ -215,7 +215,7 @@ fn parse_literal_arg(s: &str) -> Literal {
     // e.g. (gap_instance "..." ...)
     if s.trim().starts_with('(') {
         // Wrap in (given ...) so the full parser can handle it
-        let dummy_spl = format!("(given {})", s);
+        let dummy_spl = format!("(given {s})");
         if let Ok(theory) = parse_spl_str(&dummy_spl)
             && let Some(fact) = theory.facts().next() {
             // Return the literal from the first fact
@@ -288,10 +288,10 @@ fn run_stats(file: &PathBuf) {
 
     println!("Theory Statistics:");
     println!("  Total rules: {}", theory.rule_count());
-    println!("    Facts:      {}", facts);
-    println!("    Strict:     {}", strict);
-    println!("    Defeasible: {}", defeasible);
-    println!("    Defeaters:  {}", defeaters);
+    println!("    Facts:      {facts}");
+    println!("    Strict:     {strict}");
+    println!("    Defeasible: {defeasible}");
+    println!("    Defeaters:  {defeaters}");
     println!("  Superiorities: {}", theory.superiorities().len());
 }
 
@@ -349,7 +349,7 @@ fn run_explain(file: &PathBuf, literal: &str, json: bool) {
                     })
                 );
             } else {
-                println!("{} is not provable.", lit);
+                println!("{lit} is not provable.");
                 println!("Use 'spindle why-not' to see why.");
             }
             std::process::exit(1);
@@ -383,7 +383,7 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool) {
         });
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
-        println!("{}", result);
+        println!("{result}");
     }
 }
 
@@ -412,6 +412,6 @@ fn run_requires(file: &PathBuf, literal: &str, max: usize, json: bool) {
         });
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
-        println!("{}", result);
+        println!("{result}");
     }
 }

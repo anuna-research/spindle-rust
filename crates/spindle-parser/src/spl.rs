@@ -53,7 +53,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     // Parse all top-level expressions
     let (remaining, exprs) = parse_expressions(&cleaned).map_err(|e| ParseError::ParserError {
         line: 1,
-        message: format!("SPL parse error: {:?}", e),
+        message: format!("SPL parse error: {e:?}"),
     })?;
 
     if !remaining.trim().is_empty() {
@@ -199,7 +199,7 @@ fn process_expr(theory: &mut Theory, expr: &SExpr) -> Result<(), ParseError> {
         "#lang" => Ok(()), // Ignore #lang directive
         _ => Err(ParseError::ParserError {
             line: 1,
-            message: format!("Unknown keyword: {}", keyword),
+            message: format!("Unknown keyword: {keyword}"),
         }),
     }
 }
@@ -459,7 +459,7 @@ trait TheoryLabelExt {
 impl TheoryLabelExt for Theory {
     fn next_fact_label(&mut self) -> String {
         let count = self.facts().count() + 1;
-        format!("f{}", count)
+        format!("f{count}")
     }
 
     fn next_rule_label(&mut self, rule_type: RuleType) -> String {
@@ -470,7 +470,7 @@ impl TheoryLabelExt for Theory {
             RuleType::Defeater => "d",
         };
         let count = self.rules_by_type(rule_type).count() + 1;
-        format!("{}{}", prefix, count)
+        format!("{prefix}{count}")
     }
 }
 

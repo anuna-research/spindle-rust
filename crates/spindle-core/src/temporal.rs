@@ -102,7 +102,7 @@ impl fmt::Display for TimePoint {
         match self {
             TimePoint::NegInf => write!(f, "-inf"),
             TimePoint::PosInf => write!(f, "+inf"),
-            TimePoint::Moment(v) => write!(f, "{}", v),
+            TimePoint::Moment(v) => write!(f, "{v}"),
         }
     }
 }
@@ -440,7 +440,7 @@ impl fmt::Display for AllenRelation {
             AllenRelation::FinishedBy => "finished-by",
             AllenRelation::Equals => "equals",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

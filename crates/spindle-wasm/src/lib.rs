@@ -370,13 +370,13 @@ impl Spindle {
         for (label, meta) in self.theory.metadata() {
             for (key, value) in &meta.properties {
                 let value_str = match value {
-                    MetaValue::String(s) => format!("\"{}\"", s),
+                    MetaValue::String(s) => format!("\"{s}\""),
                     MetaValue::List(items) => {
-                        let quoted: Vec<_> = items.iter().map(|s| format!("\"{}\"", s)).collect();
+                        let quoted: Vec<_> = items.iter().map(|s| format!("\"{s}\"")).collect();
                         format!("({})", quoted.join(" "))
                     }
                 };
-                output.push(format!("META {} {} {}", label, key, value_str));
+                output.push(format!("META {label} {key} {value_str}"));
             }
         }
 

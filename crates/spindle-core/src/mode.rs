@@ -64,9 +64,9 @@ impl fmt::Display for Mode {
         match &self.name {
             Some(name) => {
                 if self.negation {
-                    write!(f, "[-{}]", name)
+                    write!(f, "[-{name}]")
                 } else {
-                    write!(f, "[{}]", name)
+                    write!(f, "[{name}]")
                 }
             }
             None => Ok(()),

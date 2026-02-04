@@ -333,7 +333,7 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
 
     for iteration in 0..max_iterations {
         if iteration >= max_iterations {
-            panic!("Max iterations ({}) reached, possible infinite loop", max_iterations);
+            panic!("Max iterations ({max_iterations}) reached, possible infinite loop");
         }
 
         let mut new_facts_this_round: Vec<Literal> = Vec::new();
