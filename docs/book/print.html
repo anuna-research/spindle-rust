@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-d083aef9.js";
+            window.path_to_searchindex_js = "searchindex-e5c005ae.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-49723f55.js"></script>
+        <script src="toc-d17d2526.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -3578,6 +3578,119 @@ worklist: VecDeque`LiteralId`
 <li><code>wasm-bindgen</code> - Rust/JavaScript interop</li>
 <li><code>serde</code> - JSON serialization</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="optimization-notes"><a class="header" href="#optimization-notes">Optimization Notes</a></h1>
+<p>This document records optimization attempts and findings for future reference.</p>
+<h2 id="lattice-based-memoization-february-2026"><a class="header" href="#lattice-based-memoization-february-2026">Lattice-Based Memoization (February 2026)</a></h2>
+<h3 id="motivation"><a class="header" href="#motivation">Motivation</a></h3>
+<p>The <code>is_blocked_by_superior</code> function in <code>reason.rs</code> checks if a defeasible rule is blocked by attacking rules. The hypothesis was that:</p>
+<ol>
+<li>Multiple rules deriving the same head would check the same attackers</li>
+<li>Caching attacker status could avoid repeated O(body_size) checks</li>
+<li>A lattice-based approach (inspired by Ascent) could formalize memoization</li>
+</ol>
+<h3 id="approaches-tried"><a class="header" href="#approaches-tried">Approaches Tried</a></h3>
+<h4 id="1-proofstatus-lattice-with-memoization"><a class="header" href="#1-proofstatus-lattice-with-memoization">1. ProofStatus Lattice with Memoization</a></h4>
+<p>Created a <code>ProofStatus</code> enum representing lattice positions:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum ProofStatus {
+    Unknown,           // ⊥
+    BlockedByDelta,    // Terminal false
+    NotInLambda,       // Terminal false
+    NoSupport,         // Pending
+    HasSupport,        // Pending
+    AllAttacksDefeated,// Ready to prove
+    ProvedInPartial,   // ⊤
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Result</strong>: Correct semantically, but added 5-15% overhead due to HashMap operations.</p>
+<h4 id="2-blockedbychecker-with-conservative-invalidation"><a class="header" href="#2-blockedbychecker-with-conservative-invalidation">2. BlockedByChecker with Conservative Invalidation</a></h4>
+<p>Cached active attackers per complement literal, clearing cache when <code>proven</code> set grew.</p>
+<p><strong>Result</strong>: Cache was cleared too often, providing no benefit.</p>
+<h4 id="3-incremental-invalidation"><a class="header" href="#3-incremental-invalidation">3. Incremental Invalidation</a></h4>
+<p>Tracked <code>pending_body_literals</code> for each cache entry, only invalidating when relevant literals were proven.</p>
+<p><strong>Result</strong>: Reduced unnecessary invalidation, but overhead still exceeded savings. Cloning the <code>proven</code> HashSet for snapshot tracking was expensive.</p>
+<h4 id="4-lazy-attacker-tracking"><a class="header" href="#4-lazy-attacker-tracking">4. Lazy Attacker Tracking</a></h4>
+<p>Tracked attacker activation incrementally (like rule body counters), avoiding body satisfaction checks entirely.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct LazyAttackerTracker {
+    attacker_remaining: FxHashMap&lt;String, usize&gt;,
+    active_attackers: FxHashMap&lt;LiteralId, Vec&lt;String&gt;&gt;,
+    attacker_heads: FxHashMap&lt;String, LiteralId&gt;,
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Result</strong>: 10-80% slower due to HashMap operations and string allocations.</p>
+<h3 id="benchmark-results"><a class="header" href="#benchmark-results">Benchmark Results</a></h3>
+<pre><code>multi_target_blocked (M targets × N defenders):
+  5x10:   standard ~44µs,  lazy ~53µs (+20%),  memoized ~51µs (+16%)
+  10x10:  standard ~88µs,  lazy ~100µs (+14%), memoized ~106µs (+20%)
+  20x10:  standard ~164µs, lazy ~299µs (+82%), memoized ~228µs (+39%)
+  10x20:  standard ~180µs, lazy ~215µs (+19%), memoized ~230µs (+28%)
+</code></pre>
+<h3 id="why-all-approaches-failed"><a class="header" href="#why-all-approaches-failed">Why All Approaches Failed</a></h3>
+<p>The original <code>is_blocked_by_superior</code> is already well-optimized:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>for attacker in attacking_rules {           // O(1) lookup via IndexedTheory
+    let satisfied = attacker.body.iter()    // Small vector (~1-3 elements)
+        .all(|b| proven.contains(&amp;b));      // O(1) HashSet lookup
+    // Superiority check is O(1) via SuperiorityIndex
+}
+<span class="boring">}</span></code></pre>
+<p>Key factors:</p>
+<ol>
+<li><strong>Operation is already cheap</strong> - Small vectors, O(1) lookups</li>
+<li><strong>Single-pass algorithm</strong> - Each literal checked once, no reuse opportunity</li>
+<li><strong>Cache overhead exceeds savings</strong> - HashMap ops, allocations, tracking state</li>
+</ol>
+<h3 id="when-memoization-would-help"><a class="header" href="#when-memoization-would-help">When Memoization Would Help</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Scenario</th><th>Single-Pass</th><th>Would Benefit</th></tr>
+</thead>
+<tbody>
+<tr><td>Batch reasoning</td><td>❌ No reuse</td><td>N/A</td></tr>
+<tr><td>Interactive queries</td><td>N/A</td><td>✅ Repeated queries</td></tr>
+<tr><td>Incremental reasoning</td><td>❌ Rebuild</td><td>✅ Cache across runs</td></tr>
+<tr><td>Explanation generation</td><td>N/A</td><td>✅ Re-queries same literals</td></tr>
+<tr><td>What-if analysis</td><td>❌ Fresh run</td><td>✅ Partial cache hits</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="existing-optimizations-already-effective"><a class="header" href="#existing-optimizations-already-effective">Existing Optimizations (Already Effective)</a></h3>
+<ol>
+<li><strong>LiteralId</strong> - 4-byte interned identifier, O(1) comparison</li>
+<li><strong>SuperiorityIndex</strong> - O(1) superiority lookup</li>
+<li><strong>IndexedTheory</strong> - O(1) rule lookup by head/body</li>
+<li><strong>HashSet<literalid></literalid></strong> - 4 bytes per entry vs ~24 for String</li>
+</ol>
+<h3 id="alternative-optimizations-not-tried"><a class="header" href="#alternative-optimizations-not-tried">Alternative Optimizations (Not Tried)</a></h3>
+<p>If future profiling shows <code>is_blocked_by_superior</code> as a bottleneck:</p>
+<ol>
+<li><strong>Bit vectors</strong> - Replace HashSet with bit vector for proven literals</li>
+<li><strong>Arena allocation</strong> - Pre-allocate rules in contiguous memory</li>
+<li><strong>Rule ordering</strong> - Process rules in topological order</li>
+<li><strong>SIMD body checks</strong> - Vectorize body satisfaction for large bodies</li>
+</ol>
+<h3 id="lessons-learned"><a class="header" href="#lessons-learned">Lessons Learned</a></h3>
+<ol>
+<li><strong>Profile before optimizing</strong> - The target operation was already efficient</li>
+<li><strong>Single-pass algorithms resist caching</strong> - No repeated queries means no cache hits</li>
+<li><strong>Cache overhead matters</strong> - HashMap operations can exceed saved computation</li>
+<li><strong>Simple code is often fastest</strong> - Direct iteration beats fancy data structures</li>
+</ol>
+<h3 id="code-location"><a class="header" href="#code-location">Code Location</a></h3>
+<p>The experimental code is on branch <code>feature/lattice-proof-memoization</code>:</p>
+<pre><code>8af967a feat(lattice): add lattice-based proof status memoization
+9dd60e0 feat(lattice): add BlockedByChecker for is_blocked_by_superior
+33e9923 perf(lattice): implement incremental cache invalidation
+241d5e9 bench: add memoization comparison benchmarks
+270aa98 experiment: add reason_lazy with lazy attacker tracking
+</code></pre>
+<p>The lattice module (<code>lattice.rs</code>) and memoized/lazy functions remain available for reference but are not used in production.</p>
 
                     </main>
 

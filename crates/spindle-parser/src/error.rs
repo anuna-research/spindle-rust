@@ -5,30 +5,30 @@ use thiserror::Error;
 /// Parse error type
 #[derive(Error, Debug)]
 pub enum ParseError {
-    /// Lexer error
+    /// Lexer error at a specific position
     #[error("lexer error at position {position}: {message}")]
     LexerError {
-        /// Position in the input string
+        /// Position in the input where the error occurred
         position: usize,
-        /// Error message
+        /// Description of the lexer error
         message: String,
     },
 
-    /// Parser error
+    /// Parser error at a specific line
     #[error("parse error at line {line}: {message}")]
     ParserError {
-        /// Line number
+        /// Line number where the error occurred
         line: usize,
-        /// Error message
+        /// Description of the parse error
         message: String,
     },
 
-    /// Unexpected token
+    /// Unexpected token encountered
     #[error("unexpected token: expected {expected}, found {found}")]
     UnexpectedToken {
-        /// Expected token description
+        /// Token that was expected
         expected: String,
-        /// Found token description
+        /// Token that was found
         found: String,
     },
 

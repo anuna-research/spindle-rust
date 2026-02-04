@@ -575,11 +575,9 @@ mod tests {
 
         let conclusions = reason(&theory);
 
-        // Should terminate without infinite loop
-        assert!(
-            conclusions.len() >= 0,
-            "Should handle circular dependencies without infinite loop"
-        );
+        // Should terminate without infinite loop - the fact that we reach this assertion
+        // means the function terminated successfully
+        let _ = conclusions;
     }
 
     #[test]
