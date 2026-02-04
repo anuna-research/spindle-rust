@@ -10,9 +10,9 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["Spindle Contributors"]
+authors = ["Hugo O'Connor", "David Factor", "Spindle Contributors"]
 license = "LGPL-3.0-or-later"
-repository = "https://github.com/anthropics/spindle-rust"
+repository = "https://codeberg.org/anuna/spindle-rust"
 description = "Defeasible logic reasoning engine - Rust port of SPINdle"
 keywords = ["defeasible-logic", "reasoning", "non-monotonic", "logic"]
 categories = ["science", "algorithms"]
