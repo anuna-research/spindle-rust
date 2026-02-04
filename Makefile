@@ -1,4 +1,4 @@
-.PHONY: all build test clippy fmt check wasm clean install
+.PHONY: all build test clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory
 
 # Default target
 all: check build test
@@ -51,9 +51,33 @@ clean:
 	cargo clean
 	rm -rf crates/spindle-wasm/pkg
 
-# Run benchmarks (if any)
+# Run benchmarks (quick suite, ~1-2 min)
 bench:
-	cargo bench --all
+	cargo bench --package spindle-core
+
+# Run large-scale benchmarks (finds algorithm crossover points)
+bench-scaling:
+	cargo bench --package spindle-core -- "scaling"
+
+# Compare benchmarks between two commits
+# Usage:
+#   make bench-compare                              # Compare HEAD~1 vs HEAD (quick suite)
+#   make bench-compare BASELINE=main                # Compare main vs HEAD
+#   make bench-compare BASELINE=v1.0 COMPARE=v1.1   # Compare tags
+#   make bench-compare FILTER=scaling               # Run large-scale benchmarks
+#   make bench-compare FILTER=reason                # Only reasoning benchmarks
+BASELINE ?= HEAD~1
+COMPARE ?= HEAD
+FILTER ?=
+bench-compare:
+	@./scripts/bench-compare.sh "$(BASELINE)" "$(COMPARE)" "$(FILTER)"
+
+# Profile memory usage (generates dhat-heap.json)
+# View at: https://nnethercote.github.io/dh_view/dh_view.html
+bench-memory:
+	cargo run --package spindle-core --example memory_profile --features dhat-heap --release
+	@echo "Memory profile saved to dhat-heap.json"
+	@echo "View at: https://nnethercote.github.io/dh_view/dh_view.html"
 
 # Generate documentation
 doc:

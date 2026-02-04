@@ -12,14 +12,18 @@ indexmap.workspace = true
 rustc-hash.workspace = true
 serde = { workspace = true, optional = true }
 serde_json.workspace = true
+dhat = { version = "0.3.3", optional = true }
 
 [features]
 default = []
 serde = ["dep:serde", "indexmap/serde"]
+dhat-heap = ["dep:dhat"]
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
+dhat = "0.3.3"
+spindle-parser = { path = "../spindle-parser" }
 
 [[bench]]
 name = "reasoning"
