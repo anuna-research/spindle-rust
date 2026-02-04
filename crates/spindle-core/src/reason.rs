@@ -48,11 +48,12 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
         FxHashSet::with_capacity_and_hasher(literal_count, Default::default());
 
     // Track rule body satisfaction - pre-allocate for all rules
+    // Use &str keys borrowed from theory to avoid string cloning
     let rule_count = theory.rule_count();
-    let mut body_remaining: FxHashMap<String, usize> =
+    let mut body_remaining: FxHashMap<&str, usize> =
         FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
     for rule in theory.rules() {
-        body_remaining.insert(rule.label.clone(), rule.body.len());
+        body_remaining.insert(&rule.label, rule.body.len());
     }
 
     // Worklist for forward chaining - pre-allocate for estimated work
@@ -76,7 +77,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     while let Some(lit) = worklist.pop_front() {
         // Find rules where this literal appears in body
         for rule in indexed.rules_with_body(&lit) {
-            let remaining = body_remaining.get_mut(&rule.label).unwrap();
+            let remaining = body_remaining.get_mut(rule.label.as_str()).unwrap();
             if *remaining > 0 {
                 *remaining -= 1;
 
