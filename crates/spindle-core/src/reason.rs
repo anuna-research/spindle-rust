@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
-use crate::intern::{interned_count, LiteralId, resolve};
+use crate::intern::{LiteralId, interned_count, resolve};
 use crate::literal::Literal;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -207,7 +207,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
 
 /// Check if a rule is blocked by a superior rule or defeater for the complement
 fn is_blocked_by_superior(
-    indexed: &IndexedTheory,
+    indexed: &IndexedTheory<'_>,
     theory: &Theory,
     rule: &crate::rule::Rule,
     proven: &LiteralBitSet,

@@ -50,7 +50,7 @@ pub struct ScalableResult {
 
 impl ScalableResult {
     /// Convert to conclusions list
-    pub fn to_conclusions(&self, indexed: &IndexedTheory) -> Vec<Conclusion> {
+    pub fn to_conclusions(&self, indexed: &IndexedTheory<'_>) -> Vec<Conclusion> {
         // Pre-allocate: delta + partial (excluding delta) + delta again + 2*all_literals
         let lit_count = indexed.all_literal_ids().count();
         let estimated = self.delta.len() * 2 + self.partial.len() + lit_count * 2;
@@ -183,7 +183,7 @@ pub fn reason_scalable(theory: &Theory) -> ScalableResult {
 /// 3. When a strict rule's counter reaches 0, inject its head
 /// 4. Continue until fixpoint
 fn compute_delta_closure(
-    indexed: &IndexedTheory,
+    indexed: &IndexedTheory<'_>,
     states: &mut FxHashMap<RuleLabel, RuleState>,
 ) -> FxHashSet<LiteralId> {
     let mut delta: FxHashSet<LiteralId> = FxHashSet::default();
@@ -242,7 +242,7 @@ fn compute_delta_closure(
 ///     (a) All body literals in lambda
 ///     (b) Complement NOT in delta
 fn compute_lambda_closure(
-    indexed: &IndexedTheory,
+    indexed: &IndexedTheory<'_>,
     delta: &FxHashSet<LiteralId>,
 ) -> FxHashSet<LiteralId> {
     let mut lambda: FxHashSet<LiteralId> = delta.clone();
@@ -332,7 +332,7 @@ fn compute_lambda_closure(
 ///         - Body not fully in lambda (can't attack), OR
 ///         - Defeated by a superior supporting rule
 fn compute_partial_closure(
-    indexed: &IndexedTheory,
+    indexed: &IndexedTheory<'_>,
     theory: &Theory,
     delta: &FxHashSet<LiteralId>,
     lambda: &FxHashSet<LiteralId>,
@@ -372,18 +372,19 @@ fn compute_partial_closure(
         |rule: &Rule| -> bool { rule.body.iter().any(|b| !lambda.contains(&b.literal_id())) };
 
     // Helper: can we defeat the attacker using superiority?
-    let team_defeats = |lit_id: LiteralId, attacker: &Rule, partial: &FxHashSet<LiteralId>| -> bool {
-        for defender in indexed.rules_with_head_id(lit_id) {
-            if (defender.rule_type == RuleType::Strict
-                || defender.rule_type == RuleType::Defeasible)
-                && body_satisfied(defender, partial)
-                && theory.is_superior(&defender.label, &attacker.label)
-            {
-                return true;
+    let team_defeats =
+        |lit_id: LiteralId, attacker: &Rule, partial: &FxHashSet<LiteralId>| -> bool {
+            for defender in indexed.rules_with_head_id(lit_id) {
+                if (defender.rule_type == RuleType::Strict
+                    || defender.rule_type == RuleType::Defeasible)
+                    && body_satisfied(defender, partial)
+                    && theory.is_superior(&defender.label, &attacker.label)
+                {
+                    return true;
+                }
             }
-        }
-        false
-    };
+            false
+        };
 
     // Helper: all attacks defeated?
     let all_attacks_defeated = |lit_id: LiteralId, partial: &FxHashSet<LiteralId>| -> bool {

@@ -67,7 +67,7 @@ impl<'a> IndexedTheory<'a> {
 
     /// Get the underlying theory
     pub fn theory(&self) -> &Theory {
-        &self.theory
+        self.theory
     }
 
     /// Get rules with the given literal in the head.
