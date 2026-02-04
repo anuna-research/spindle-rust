@@ -198,7 +198,7 @@ const abduce = spindle.abduce("flies", 3);
 
 ## Testing
 
-773 tests covering:
+782 tests covering:
 - Core reasoning (facts, rules, conflicts, superiority)
 - Semantic equivalence (standard vs scalable modes)
 - Edge cases (cycles, empty theories, defeaters)
