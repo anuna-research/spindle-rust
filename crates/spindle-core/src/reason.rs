@@ -32,21 +32,31 @@ fn id_to_literal(id: LiteralId) -> Literal {
 /// Perform defeasible reasoning on a theory
 pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     let indexed = IndexedTheory::build(theory.clone());
-    let mut conclusions = Vec::new();
+
+    // Pre-allocate conclusions vector: estimate 2 conclusions per rule (positive)
+    // plus 2 per literal (negative conclusions at the end)
+    let estimated_size = theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
+    let mut conclusions = Vec::with_capacity(estimated_size);
 
     // Track what we've proven using LiteralId (4-byte Copy type)
     // This avoids String allocations in the hot reasoning loop
-    let mut definite_proven: FxHashSet<LiteralId> = FxHashSet::default();
-    let mut defeasible_proven: FxHashSet<LiteralId> = FxHashSet::default();
+    // Pre-allocate with estimated number of literals
+    let literal_count = indexed.all_literal_ids().count();
+    let mut definite_proven: FxHashSet<LiteralId> =
+        FxHashSet::with_capacity_and_hasher(literal_count, Default::default());
+    let mut defeasible_proven: FxHashSet<LiteralId> =
+        FxHashSet::with_capacity_and_hasher(literal_count, Default::default());
 
-    // Track rule body satisfaction
-    let mut body_remaining: FxHashMap<String, usize> = FxHashMap::default();
+    // Track rule body satisfaction - pre-allocate for all rules
+    let rule_count = theory.rule_count();
+    let mut body_remaining: FxHashMap<String, usize> =
+        FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
     for rule in theory.rules() {
         body_remaining.insert(rule.label.clone(), rule.body.len());
     }
 
-    // Worklist for forward chaining
-    let mut worklist: VecDeque<Literal> = VecDeque::new();
+    // Worklist for forward chaining - pre-allocate for estimated work
+    let mut worklist: VecDeque<Literal> = VecDeque::with_capacity(rule_count);
 
     // Phase 1: Initialize with facts
     for fact in theory.facts() {

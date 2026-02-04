@@ -51,7 +51,10 @@ pub struct ScalableResult {
 impl ScalableResult {
     /// Convert to conclusions list
     pub fn to_conclusions(&self, indexed: &IndexedTheory) -> Vec<Conclusion> {
-        let mut conclusions = Vec::new();
+        // Pre-allocate: delta + partial (excluding delta) + delta again + 2*all_literals
+        let lit_count = indexed.all_literal_ids().count();
+        let estimated = self.delta.len() * 2 + self.partial.len() + lit_count * 2;
+        let mut conclusions = Vec::with_capacity(estimated);
 
         for &lit_id in &self.delta {
             let lit = id_to_literal(lit_id);
@@ -141,9 +144,11 @@ struct RuleState {
 /// Perform scalable DL(d||) reasoning on a theory
 pub fn reason_scalable(theory: &Theory) -> ScalableResult {
     let indexed = IndexedTheory::build(theory.clone());
+    let rule_count = theory.rule_count();
 
-    // Initialize rule states
-    let mut states: FxHashMap<RuleLabel, RuleState> = FxHashMap::default();
+    // Initialize rule states with pre-allocated capacity
+    let mut states: FxHashMap<RuleLabel, RuleState> =
+        FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
     for rule in theory.rules() {
         states.insert(
             rule.label.clone(),
