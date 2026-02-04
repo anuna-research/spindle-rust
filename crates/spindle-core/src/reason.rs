@@ -7,7 +7,9 @@
 //! Uses `LiteralId` (4-byte Copy type) instead of `String` for HashSet
 //! keys, eliminating heap allocations in the hot reasoning loop.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
@@ -34,11 +36,11 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
 
     // Track what we've proven using LiteralId (4-byte Copy type)
     // This avoids String allocations in the hot reasoning loop
-    let mut definite_proven: HashSet<LiteralId> = HashSet::new();
-    let mut defeasible_proven: HashSet<LiteralId> = HashSet::new();
+    let mut definite_proven: FxHashSet<LiteralId> = FxHashSet::default();
+    let mut defeasible_proven: FxHashSet<LiteralId> = FxHashSet::default();
 
     // Track rule body satisfaction
-    let mut body_remaining: HashMap<String, usize> = HashMap::new();
+    let mut body_remaining: FxHashMap<String, usize> = FxHashMap::default();
     for rule in theory.rules() {
         body_remaining.insert(rule.label.clone(), rule.body.len());
     }
@@ -156,7 +158,7 @@ fn is_blocked_by_superior(
     indexed: &IndexedTheory,
     theory: &Theory,
     rule: &crate::rule::Rule,
-    proven: &HashSet<LiteralId>,
+    proven: &FxHashSet<LiteralId>,
 ) -> bool {
     let head_lit = rule.head_literal();
     let complement = head_lit.complement();
