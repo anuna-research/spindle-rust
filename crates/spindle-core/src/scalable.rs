@@ -143,7 +143,7 @@ struct RuleState {
 
 /// Perform scalable DL(d||) reasoning on a theory
 pub fn reason_scalable(theory: &Theory) -> ScalableResult {
-    let indexed = IndexedTheory::build(theory.clone());
+    let indexed = IndexedTheory::build(theory);
     let rule_count = theory.rule_count();
 
     // Initialize rule states with pre-allocated capacity
@@ -2011,7 +2011,7 @@ mod tests {
         theory.add_defeasible_rule(&["x"], "y"); // x not proven, so y unprovable
 
         let result = reason_scalable(&theory);
-        let indexed = IndexedTheory::build(theory.clone());
+        let indexed = IndexedTheory::build(&theory);
         let conclusions = result.to_conclusions(&indexed);
 
         // Check all conclusion types are present
@@ -2042,7 +2042,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "b"); // b in partial but not delta
 
         let result = reason_scalable(&theory);
-        let indexed = IndexedTheory::build(theory.clone());
+        let indexed = IndexedTheory::build(&theory);
         let conclusions = result.to_conclusions(&indexed);
 
         // b should be +d but not +D

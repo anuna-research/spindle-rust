@@ -242,7 +242,7 @@ fn run_reason(file: &PathBuf, scalable: bool, positive_only: bool) {
 
     let conclusions = if scalable {
         let result = spindle_core::scalable::reason_scalable(&theory);
-        let indexed = spindle_core::index::IndexedTheory::build(theory.clone());
+        let indexed = spindle_core::index::IndexedTheory::build(&theory);
         result.to_conclusions(&indexed)
     } else {
         theory.reason()

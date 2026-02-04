@@ -31,7 +31,7 @@ fn id_to_literal(id: LiteralId) -> Literal {
 
 /// Perform defeasible reasoning on a theory
 pub fn reason(theory: &Theory) -> Vec<Conclusion> {
-    let indexed = IndexedTheory::build(theory.clone());
+    let indexed = IndexedTheory::build(theory);
 
     // Pre-allocate conclusions vector: estimate 2 conclusions per rule (positive)
     // plus 2 per literal (negative conclusions at the end)
