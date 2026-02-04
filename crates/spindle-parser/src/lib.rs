@@ -39,3 +39,6 @@ pub mod error;
 pub use dfl::parse_dfl;
 pub use spl::parse_spl;
 pub use error::ParseError;
+
+#[cfg(test)]
+mod format_equivalence_tests;

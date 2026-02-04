@@ -57,6 +57,7 @@ pub mod explanation;
 pub mod trust;
 pub mod query;
 pub mod error;
+pub mod mining;
 
 /// Prelude module for convenient imports
 pub mod prelude {
