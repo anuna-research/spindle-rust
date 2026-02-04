@@ -1,0 +1,281 @@
+; Test Porting Plan: spindle-racket -> spindle-rust
+; Uses hence for defeasible logic-based task planning
+;
+; Current state: spindle-rust has 159 tests (core: 141, parser: 16, wasm: 2)
+; Target: Port ~181 tests from spindle-racket organized by priority
+
+;; ============================================================
+;; PHASE 1: CORE DEFEASIBLE LOGIC GAPS (Critical Priority)
+;; ============================================================
+
+; Task: Port format equivalence tests (DFL vs SPL)
+(given task-format-equiv)
+(given no-deps-format-equiv)
+(meta task-format-equiv
+  (description "Port 10 format equivalence tests from test-format-equivalence.rkt")
+  (source "../spindle-racket/tests/test-format-equivalence.rkt")
+  (tests "simple-fact, multiple-facts, strict-rule, defeasible-rule, negated-conclusion, superiority, defeater, rule-chain, multiple-superiorities, complex-penguin"))
+
+; Task: Port missing explanation tests
+(given task-explanation-gaps)
+(given no-deps-explanation-gaps)
+(meta task-explanation-gaps
+  (description "Port missing explanation tests from explanation-tests.rkt")
+  (source "../spindle-racket/tests/explanation-tests.rkt")
+  (tests "json-ld-output, dot-graph-output, annotation-preservation, natural-language-generation"))
+
+;; ============================================================
+;; PHASE 2: TEMPORAL REASONING (High Priority)
+;; ============================================================
+
+; Task: Port Allen interval algebra tests
+(given task-temporal-allen)
+(given no-deps-temporal-allen)
+(meta task-temporal-allen
+  (description "Port 13 Allen interval relation tests from temporal-allen-tests.rkt")
+  (source "../spindle-racket/tests/temporal-allen-tests.rkt")
+  (tests "before, after, meets, met-by, overlaps, overlapped-by, starts, started-by, finishes, finished-by, during, contains, equals"))
+
+; Task: Port temporal status-table tests
+(given task-temporal-status)
+(given depends-temporal-status-on-allen)
+(meta task-temporal-status
+  (description "Port TEST-021/022 temporal status-table tests")
+  (source "../spindle-racket/tests/spindle-temporal-tests.rkt")
+  (tests "temporal-compatibility, temporal-window-propagation"))
+
+; Task: Port moment syntax tests
+(given task-temporal-moment)
+(given depends-temporal-moment-on-allen)
+(meta task-temporal-moment
+  (description "Port moment syntax integration tests")
+  (source "../spindle-racket/tests/moment-temporal-tests.rkt")
+  (tests "moment-syntax-integration, allen-with-moments, time-point-queries"))
+
+;; ============================================================
+;; PHASE 3: QUERY OPERATORS (Medium-High Priority)
+;; ============================================================
+
+; Task: Port query operator tests
+(given task-query-ops)
+(given no-deps-query-ops)
+(meta task-query-ops
+  (description "Port query operator tests")
+  (source "../spindle-racket/tests/query/")
+  (tests "query-basic, query-literal, status-op, get-conclusions"))
+
+; Task: Port why-not tests
+(given task-why-not)
+(given depends-why-not-on-query-ops)
+(meta task-why-not
+  (description "Port why-not operator tests")
+  (source "../spindle-racket/tests/query/why-not.rkt")
+  (tests "blocker-detection, missing-prerequisites"))
+
+; Task: Port abduction tests
+(given task-abduction)
+(given depends-abduction-on-query-ops)
+(meta task-abduction
+  (description "Port abduction/requires tests")
+  (source "../spindle-racket/tests/query/abduction-test.rkt")
+  (tests "minimal-solutions, solution-enumeration, goal-satisfaction"))
+
+; Task: Port what-if tests
+(given task-what-if)
+(given depends-what-if-on-query-ops)
+(meta task-what-if
+  (description "Port what-if reasoning tests")
+  (source "../spindle-racket/tests/query/what-if.rkt")
+  (tests "hypothetical-reasoning, assumption-based-proofs"))
+
+; Task: Port CLI query tests
+(given task-cli-query)
+(given depends-cli-query-on-query-ops)
+(meta task-cli-query
+  (description "Port CLI query tests (export, diff)")
+  (source "../spindle-racket/tests/query/cli-test.rkt")
+  (tests "export-json, export-csv, diff-comparison"))
+
+;; ============================================================
+;; PHASE 4: SCALABLE LOGIC DL(d||) (Medium Priority)
+;; ============================================================
+
+; Task: Port scalable closure tests
+(given task-scalable-closure)
+(given no-deps-scalable-closure)
+(meta task-scalable-closure
+  (description "Port TEST-001 to TEST-005 scalable closure tests")
+  (source "../spindle-racket/tests/scalable-closure-tests.rkt")
+  (tests "delta-closure, lambda-closure, partial-closure, tweety-triangle"))
+
+; Task: Port scalable API tests
+(given task-scalable-api)
+(given depends-scalable-api-on-closure)
+(meta task-scalable-api
+  (description "Port scalable API mode selection tests")
+  (source "../spindle-racket/tests/scalable-api-tests.rkt")
+  (tests "backward-compat, mode-selection, grounding-prereq"))
+
+; Task: Port scalable injection tests
+(given task-scalable-injection)
+(given depends-scalable-injection-on-closure)
+(meta task-scalable-injection
+  (description "Port TEST-006, TEST-016-019 injection tests")
+  (source "../spindle-racket/tests/scalable-injection-tests.rkt")
+  (tests "injection-propagation, counter-activation, bidirectional-indexing"))
+
+; Task: Port scalable semantic equivalence tests
+(given task-scalable-semantic)
+(given depends-scalable-semantic-on-closure)
+(meta task-scalable-semantic
+  (description "Port DL(d) vs DL(d||) semantic equivalence tests")
+  (source "../spindle-racket/tests/scalable-semantic-tests.rkt")
+  (tests "semantic-equivalence-random-theories"))
+
+; Task: Port scalable stateless tests
+(given task-scalable-stateless)
+(given depends-scalable-stateless-on-api)
+(meta task-scalable-stateless
+  (description "Port TEST-020 statelessness verification tests")
+  (source "../spindle-racket/tests/scalable-stateless-tests.rkt")
+  (tests "mutation-safety, concurrent-safety, determinism"))
+
+;; ============================================================
+;; PHASE 5: DOMAIN-SPECIFIC (Lower Priority)
+;; ============================================================
+
+; Task: Port trust reasoning tests
+(given task-trust-reason)
+(given no-deps-trust-reason)
+(meta task-trust-reason
+  (description "Port trust-weighted reasoning tests (REQ-005)")
+  (source "../spindle-racket/tests/trust-reason-tests.rkt")
+  (tests "trust-policy-extraction, trust-aggregation, diminisher-calculations"))
+
+; Task: Port source identity tests
+(given task-source-identity)
+(given depends-source-identity-on-trust)
+(meta task-source-identity
+  (description "Port claims block parsing tests (REQ-005 Phase 1)")
+  (source "../spindle-racket/tests/source-identity-tests.rkt")
+  (tests "claims-block-parsing, source-timestamp-extraction"))
+
+; Task: Port import tests
+(given task-imports)
+(given no-deps-imports)
+(meta task-imports
+  (description "Port module import tests")
+  (source "../spindle-racket/tests/import-tests.rkt")
+  (tests "import-declaration, import-prefix, multiple-imports, uri-format"))
+
+; Task: Port process mining tests
+(given task-mining)
+(given no-deps-mining)
+(meta task-mining
+  (description "Port process mining tests (TEST-001 to TEST-009)")
+  (source "../spindle-racket/tests/mining-tests.rkt")
+  (tests "event-structure, footprint-matrix, alpha-algorithm, dfl-conversion"))
+
+;; ============================================================
+;; READINESS RULES
+;; ============================================================
+
+; Phase 1 tasks are ready immediately
+(normally r-ready-format-equiv
+  (and task-format-equiv no-deps-format-equiv)
+  ready-format-equiv)
+
+(normally r-ready-explanation-gaps
+  (and task-explanation-gaps no-deps-explanation-gaps)
+  ready-explanation-gaps)
+
+; Phase 2: Temporal tasks
+(normally r-ready-temporal-allen
+  (and task-temporal-allen no-deps-temporal-allen)
+  ready-temporal-allen)
+
+(normally r-ready-temporal-status
+  (and task-temporal-status completed-temporal-allen)
+  ready-temporal-status)
+
+(normally r-ready-temporal-moment
+  (and task-temporal-moment completed-temporal-allen)
+  ready-temporal-moment)
+
+; Phase 3: Query operator tasks
+(normally r-ready-query-ops
+  (and task-query-ops no-deps-query-ops)
+  ready-query-ops)
+
+(normally r-ready-why-not
+  (and task-why-not completed-query-ops)
+  ready-why-not)
+
+(normally r-ready-abduction
+  (and task-abduction completed-query-ops)
+  ready-abduction)
+
+(normally r-ready-what-if
+  (and task-what-if completed-query-ops)
+  ready-what-if)
+
+(normally r-ready-cli-query
+  (and task-cli-query completed-query-ops)
+  ready-cli-query)
+
+; Phase 4: Scalable logic tasks
+(normally r-ready-scalable-closure
+  (and task-scalable-closure no-deps-scalable-closure)
+  ready-scalable-closure)
+
+(normally r-ready-scalable-api
+  (and task-scalable-api completed-scalable-closure)
+  ready-scalable-api)
+
+(normally r-ready-scalable-injection
+  (and task-scalable-injection completed-scalable-closure)
+  ready-scalable-injection)
+
+(normally r-ready-scalable-semantic
+  (and task-scalable-semantic completed-scalable-closure)
+  ready-scalable-semantic)
+
+(normally r-ready-scalable-stateless
+  (and task-scalable-stateless completed-scalable-api)
+  ready-scalable-stateless)
+
+; Phase 5: Domain-specific tasks
+(normally r-ready-trust-reason
+  (and task-trust-reason no-deps-trust-reason)
+  ready-trust-reason)
+
+(normally r-ready-source-identity
+  (and task-source-identity completed-trust-reason)
+  ready-source-identity)
+
+(normally r-ready-imports
+  (and task-imports no-deps-imports)
+  ready-imports)
+
+(normally r-ready-mining
+  (and task-mining no-deps-mining)
+  ready-mining)
+
+;; ============================================================
+;; PRIORITY ORDERING (Superiority Relations)
+;; ============================================================
+
+; Phase 1 is highest priority
+(prefer r-ready-format-equiv r-ready-temporal-allen)
+(prefer r-ready-explanation-gaps r-ready-temporal-allen)
+
+; Phase 2 beats Phase 3
+(prefer r-ready-temporal-allen r-ready-query-ops)
+
+; Phase 3 beats Phase 4
+(prefer r-ready-query-ops r-ready-scalable-closure)
+
+; Phase 4 beats Phase 5
+(prefer r-ready-scalable-closure r-ready-trust-reason)
+(prefer r-ready-scalable-closure r-ready-imports)
+(prefer r-ready-scalable-closure r-ready-mining)

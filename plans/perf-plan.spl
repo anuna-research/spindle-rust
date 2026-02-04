@@ -1,0 +1,504 @@
+; Performance Optimization Plan for spindle-rust
+; Addresses: String allocations, linear scans, algorithm inefficiency, grounding
+;
+; Use: hence next perf-plan.spl
+;      hence complete perf-plan.spl <task-name>
+
+;; =============================================================================
+;; PHASE 0: FOUNDATION - STRING INTERNING INFRASTRUCTURE
+;; =============================================================================
+
+(given task-design-interner)
+(meta task-design-interner
+  (description "Design string interner API: intern(), resolve(), LiteralId type")
+  (phase "0-foundation")
+  (priority "critical")
+  (file "spindle-core/src/intern.rs")
+  (notes "Consider lasso, string-interner, or custom impl"))
+
+(given task-impl-interner)
+(meta task-impl-interner
+  (description "Implement thread-safe string interner with global registry")
+  (phase "0-foundation")
+  (priority "critical")
+  (file "spindle-core/src/intern.rs")
+  (notes "Use RwLock or dashmap for concurrent access"))
+
+(given task-literal-id-type)
+(meta task-literal-id-type
+  (description "Create LiteralId newtype wrapping u32 with Copy trait")
+  (phase "0-foundation")
+  (priority "critical")
+  (file "spindle-core/src/literal.rs")
+  (notes "Must be Copy for zero-cost passing in hot loops"))
+
+(given no-deps-design-interner)
+
+;; =============================================================================
+;; PHASE 1: REFACTOR LITERAL REPRESENTATION
+;; =============================================================================
+
+(given task-refactor-literal-struct)
+(meta task-refactor-literal-struct
+  (description "Replace String name with LiteralId in Literal struct")
+  (phase "1-literal-refactor")
+  (priority "critical")
+  (file "spindle-core/src/literal.rs")
+  (impact "Eliminates heap allocation per literal"))
+
+(given task-refactor-canonical-name)
+(meta task-refactor-canonical-name
+  (description "Change canonical_name() to return LiteralId or Cow<str>")
+  (phase "1-literal-refactor")
+  (priority "critical")
+  (file "spindle-core/src/literal.rs")
+  (notes "Current impl allocates on every call for negation"))
+
+(given task-update-literal-to-key)
+(meta task-update-literal-to-key
+  (description "Remove literal_to_key/key_to_literal conversions in scalable.rs")
+  (phase "1-literal-refactor")
+  (priority "high")
+  (file "spindle-core/src/scalable.rs")
+  (notes "Use LiteralId directly as HashSet keys"))
+
+(given task-update-hashsets)
+(meta task-update-hashsets
+  (description "Change HashSet<String> to HashSet<LiteralId> in closures")
+  (phase "1-literal-refactor")
+  (priority "high")
+  (files "spindle-core/src/scalable.rs,spindle-core/src/reason.rs")
+  (notes "Delta, Lambda, Partial closures all affected"))
+
+;; =============================================================================
+;; PHASE 2: INDEX SUPERIORITY RELATIONS
+;; =============================================================================
+
+(given task-design-superiority-index)
+(meta task-design-superiority-index
+  (description "Design indexed superiority structure using HashMap")
+  (phase "2-superiority-index")
+  (priority "critical")
+  (file "spindle-core/src/theory.rs")
+  (notes "HashMap<(RuleLabel, RuleLabel), bool> or HashSet"))
+
+(given task-impl-superiority-index)
+(meta task-impl-superiority-index
+  (description "Implement SuperiorityIndex with O(1) lookup")
+  (phase "2-superiority-index")
+  (priority "critical")
+  (file "spindle-core/src/theory.rs")
+  (notes "Build index during theory construction"))
+
+(given task-add-reverse-superiority)
+(meta task-add-reverse-superiority
+  (description "Add reverse lookup: which rules are inferior to R?")
+  (phase "2-superiority-index")
+  (priority "medium")
+  (file "spindle-core/src/theory.rs")
+  (notes "Speeds up team_defeats conflict resolution"))
+
+(given task-update-is-blocked)
+(meta task-update-is-blocked
+  (description "Refactor is_blocked_by_superior to use indexed lookup")
+  (phase "2-superiority-index")
+  (priority "critical")
+  (file "spindle-core/src/reason.rs")
+  (notes "Remove iter().any() linear scan"))
+
+(given task-update-team-defeats)
+(meta task-update-team-defeats
+  (description "Refactor team_defeats to use indexed superiority")
+  (phase "2-superiority-index")
+  (priority "critical")
+  (file "spindle-core/src/scalable.rs")
+  (notes "Remove O(R*S) complexity"))
+
+;; =============================================================================
+;; PHASE 3: SEMI-NAIVE EVALUATION FOR PARTIAL CLOSURE
+;; =============================================================================
+
+(given task-design-worklist)
+(meta task-design-worklist
+  (description "Design worklist data structure for triggered rules")
+  (phase "3-semi-naive")
+  (priority "high")
+  (file "spindle-core/src/scalable.rs")
+  (notes "Track which rules need re-evaluation"))
+
+(given task-impl-trigger-index)
+(meta task-impl-trigger-index
+  (description "Build index: literal -> rules with literal in body")
+  (phase "3-semi-naive")
+  (priority "high")
+  (file "spindle-core/src/theory.rs")
+  (notes "Enables efficient rule triggering on new conclusions"))
+
+(given task-refactor-partial-closure)
+(meta task-refactor-partial-closure
+  (description "Rewrite compute_partial_closure with semi-naive evaluation")
+  (phase "3-semi-naive")
+  (priority "high")
+  (file "spindle-core/src/scalable.rs")
+  (notes "Only evaluate rules triggered by new conclusions"))
+
+(given task-optimize-can-prove)
+(meta task-optimize-can-prove
+  (description "Optimize can_prove to cache intermediate results")
+  (phase "3-semi-naive")
+  (priority "medium")
+  (file "spindle-core/src/scalable.rs")
+  (notes "Avoid redundant body satisfaction checks"))
+
+;; =============================================================================
+;; PHASE 4: GROUNDING OPTIMIZATIONS
+;; =============================================================================
+
+(given task-reduce-rule-cloning)
+(meta task-reduce-rule-cloning
+  (description "Refactor apply_substitution_to_rule to minimize cloning")
+  (phase "4-grounding")
+  (priority "high")
+  (file "spindle-core/src/grounding.rs")
+  (notes "Use Cow or arena allocation for ground instances"))
+
+(given task-optimize-seen-set)
+(meta task-optimize-seen-set
+  (description "Replace Vec<(String, String)> keys with interned tuples")
+  (phase "4-grounding")
+  (priority "high")
+  (file "spindle-core/src/grounding.rs")
+  (notes "Use (LiteralId, LiteralId) for O(1) hashing"))
+
+(given task-impl-substitution-cache)
+(meta task-impl-substitution-cache
+  (description "Cache substitution results to avoid recomputation")
+  (phase "4-grounding")
+  (priority "medium")
+  (file "spindle-core/src/grounding.rs")
+  (notes "Memoize ground instance generation"))
+
+;; =============================================================================
+;; PHASE 5: BENCHMARKING AND VALIDATION
+;; =============================================================================
+
+(given task-create-benchmarks)
+(meta task-create-benchmarks
+  (description "Create criterion benchmarks for hot paths")
+  (phase "5-benchmarks")
+  (priority "high")
+  (file "bench/")
+  (notes "Measure before/after for each optimization"))
+
+(given task-profile-baseline)
+(meta task-profile-baseline
+  (description "Profile current implementation to establish baseline")
+  (phase "5-benchmarks")
+  (priority "high")
+  (notes "Use cargo flamegraph or samply"))
+
+(given task-regression-tests)
+(meta task-regression-tests
+  (description "Ensure all existing tests pass after refactoring")
+  (phase "5-benchmarks")
+  (priority "critical")
+  (notes "No behavior changes, only performance"))
+
+;; =============================================================================
+;; READINESS RULES
+;; =============================================================================
+
+;; Phase 0: Foundation
+(normally r-ready-design-interner
+  (and task-design-interner no-deps-design-interner)
+  ready-design-interner)
+
+(normally r-ready-impl-interner
+  (and task-impl-interner completed-design-interner)
+  ready-impl-interner)
+
+(normally r-ready-literal-id
+  (and task-literal-id-type completed-impl-interner)
+  ready-literal-id-type)
+
+;; Phase 1: Literal Refactor (depends on Phase 0)
+(normally r-ready-refactor-literal
+  (and task-refactor-literal-struct completed-literal-id-type)
+  ready-refactor-literal-struct)
+
+(normally r-ready-refactor-canonical
+  (and task-refactor-canonical-name completed-refactor-literal-struct)
+  ready-refactor-canonical-name)
+
+(normally r-ready-update-literal-to-key
+  (and task-update-literal-to-key completed-refactor-canonical-name)
+  ready-update-literal-to-key)
+
+(normally r-ready-update-hashsets
+  (and task-update-hashsets completed-update-literal-to-key)
+  ready-update-hashsets)
+
+;; Phase 2: Superiority Index (can run in parallel with Phase 1 after interner)
+(normally r-ready-design-sup-index
+  (and task-design-superiority-index completed-impl-interner)
+  ready-design-superiority-index)
+
+(normally r-ready-impl-sup-index
+  (and task-impl-superiority-index completed-design-superiority-index)
+  ready-impl-superiority-index)
+
+(normally r-ready-reverse-sup
+  (and task-add-reverse-superiority completed-impl-superiority-index)
+  ready-add-reverse-superiority)
+
+(normally r-ready-update-is-blocked
+  (and task-update-is-blocked completed-impl-superiority-index)
+  ready-update-is-blocked)
+
+(normally r-ready-update-team-defeats
+  (and task-update-team-defeats completed-update-is-blocked completed-add-reverse-superiority)
+  ready-update-team-defeats)
+
+;; Phase 3: Semi-Naive (depends on literal refactor)
+(normally r-ready-design-worklist
+  (and task-design-worklist completed-update-hashsets)
+  ready-design-worklist)
+
+(normally r-ready-impl-trigger-index
+  (and task-impl-trigger-index completed-design-worklist)
+  ready-impl-trigger-index)
+
+(normally r-ready-refactor-partial
+  (and task-refactor-partial-closure completed-impl-trigger-index completed-update-team-defeats)
+  ready-refactor-partial-closure)
+
+(normally r-ready-optimize-can-prove
+  (and task-optimize-can-prove completed-refactor-partial-closure)
+  ready-optimize-can-prove)
+
+;; Phase 4: Grounding (depends on interner)
+(normally r-ready-reduce-cloning
+  (and task-reduce-rule-cloning completed-literal-id-type)
+  ready-reduce-rule-cloning)
+
+(normally r-ready-optimize-seen
+  (and task-optimize-seen-set completed-reduce-rule-cloning)
+  ready-optimize-seen-set)
+
+(normally r-ready-impl-subst-cache
+  (and task-impl-substitution-cache completed-optimize-seen-set)
+  ready-impl-substitution-cache)
+
+;; Phase 5: Benchmarks (can start early for baseline)
+(normally r-ready-benchmarks
+  (and task-create-benchmarks no-deps-design-interner)
+  ready-create-benchmarks)
+
+(normally r-ready-profile
+  (and task-profile-baseline completed-create-benchmarks)
+  ready-profile-baseline)
+
+(normally r-ready-regression
+  (and task-regression-tests
+       completed-update-hashsets
+       completed-update-team-defeats
+       completed-optimize-can-prove
+       completed-impl-substitution-cache)
+  ready-regression-tests)
+
+;; =============================================================================
+;; CONFLICT RESOLUTION: PRIORITIES
+;; =============================================================================
+
+;; Foundation must come first
+(prefer r-ready-design-interner r-ready-benchmarks)
+
+;; Literal refactor takes priority over grounding
+(prefer r-ready-refactor-literal r-ready-reduce-cloning)
+
+;; Superiority index can run in parallel but doesn't block literal work
+(prefer r-ready-refactor-canonical r-ready-design-sup-index)
+
+;; =============================================================================
+;; COMPLETION MARKERS
+;; =============================================================================
+; Mark tasks complete via:
+; hence complete perf-plan.spl design-interner
+; hence complete perf-plan.spl impl-interner
+; etc.
+
+(claims agent:system
+  :at "2026-20-20T22:30:12Z"
+  (given claimed-design-interner))
+
+(claims agent:claude
+  :at "2026-20-20T22:70:52Z"
+  (given completed-design-interner))
+
+(claims agent:claude
+  :at "2026-20-20T22:80:80Z"
+  (given claimed-impl-interner))
+
+(claims agent:claude
+  :at "2026-20-20T22:80:90Z"
+  (given completed-impl-interner))
+
+(claims agent:claude
+  :at "2026-20-20T22:80:28Z"
+  (given claimed-literal-id-type))
+
+(claims agent:claude
+  :at "2026-20-20T22:80:28Z"
+  (given completed-literal-id-type))
+
+(claims agent:claude
+  :at "2026-20-20T22:80:42Z"
+  (given claimed-design-superiority-index))
+
+(claims agent:claude
+  :at "2026-20-20T22:90:37Z"
+  (given completed-design-superiority-index))
+
+(claims agent:claude
+  :at "2026-20-20T22:10:10Z"
+  (given claimed-impl-superiority-index))
+
+(claims agent:claude
+  :at "2026-20-20T22:11:20Z"
+  (given completed-impl-superiority-index))
+
+(claims agent:claude
+  :at "2026-20-20T22:18:16Z"
+  (given claimed-update-is-blocked))
+
+(claims agent:claude
+  :at "2026-20-20T22:18:17Z"
+  (given completed-update-is-blocked))
+
+(claims agent:claude
+  :at "2026-20-20T22:18:24Z"
+  (given claimed-add-reverse-superiority))
+
+(claims agent:claude
+  :at "2026-20-20T22:18:24Z"
+  (given completed-add-reverse-superiority))
+
+(claims agent:claude
+  :at "2026-20-20T22:18:55Z"
+  (given claimed-update-team-defeats))
+
+(claims agent:claude
+  :at "2026-20-20T22:18:56Z"
+  (given completed-update-team-defeats))
+
+(claims agent:claude
+  :at "2026-20-20T22:19:49Z"
+  (given claimed-refactor-literal-struct))
+
+(claims agent:claude
+  :at "2026-20-20T22:23:56Z"
+  (given completed-refactor-literal-struct))
+
+(claims agent:claude
+  :at "2026-20-20T22:24:57Z"
+  (given claimed-update-hashsets))
+
+(claims agent:claude
+  :at "2026-20-20T22:28:56Z"
+  (given completed-update-hashsets))
+
+(claims agent:claude
+  :at "2026-20-20T22:28:57Z"
+  (given claimed-update-literal-to-key))
+
+(claims agent:claude
+  :at "2026-20-20T22:28:57Z"
+  (given completed-update-literal-to-key))
+
+(claims agent:claude
+  :at "2026-20-20T22:29:90Z"
+  (given claimed-refactor-canonical-name))
+
+(claims agent:claude
+  :at "2026-20-20T22:29:90Z"
+  (given completed-refactor-canonical-name))
+
+(claims agent:claude
+  :at "2026-20-20T22:30:41Z"
+  (given claimed-reduce-rule-cloning))
+
+(claims agent:claude
+  :at "2026-20-20T22:34:34Z"
+  (given completed-reduce-rule-cloning))
+
+(claims agent:claude
+  :at "2026-20-20T22:34:52Z"
+  (given claimed-optimize-seen-set))
+
+(claims agent:claude
+  :at "2026-20-20T22:34:53Z"
+  (given completed-optimize-seen-set))
+
+(claims agent:claude
+  :at "2026-20-20T22:35:10Z"
+  (given claimed-create-benchmarks))
+
+(claims agent:claude
+  :at "2026-20-20T22:39:32Z"
+  (given completed-create-benchmarks))
+
+(claims agent:claude
+  :at "2026-20-20T22:39:45Z"
+  (given claimed-profile-baseline))
+
+(claims agent:claude
+  :at "2026-20-20T22:43:52Z"
+  (given completed-profile-baseline))
+
+(claims agent:claude
+  :at "2026-20-20T22:44:31Z"
+  (given claimed-design-worklist))
+
+(claims agent:claude
+  :at "2026-20-20T22:46:30Z"
+  (given completed-design-worklist))
+
+(claims agent:claude
+  :at "2026-20-20T22:47:35Z"
+  (given claimed-impl-trigger-index))
+
+(claims agent:claude
+  :at "2026-20-20T22:49:46Z"
+  (given completed-impl-trigger-index))
+
+(claims agent:claude
+  :at "2026-20-20T22:50:14Z"
+  (given claimed-refactor-partial-closure))
+
+(claims agent:claude
+  :at "2026-20-20T22:51:15Z"
+  (given completed-refactor-partial-closure))
+
+(claims agent:claude
+  :at "2026-20-20T22:51:43Z"
+  (given claimed-optimize-can-prove))
+
+(claims agent:claude
+  :at "2026-20-20T22:53:20Z"
+  (given completed-optimize-can-prove))
+
+(claims agent:claude
+  :at "2026-20-20T22:53:16Z"
+  (given claimed-impl-substitution-cache))
+
+(claims agent:claude
+  :at "2026-20-20T22:53:30Z"
+  (given completed-impl-substitution-cache))
+
+(claims agent:claude
+  :at "2026-20-20T22:53:44Z"
+  (given claimed-regression-tests))
+
+(claims agent:claude
+  :at "2026-20-20T22:53:59Z"
+  (given completed-regression-tests))

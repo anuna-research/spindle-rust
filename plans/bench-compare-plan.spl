@@ -1,0 +1,173 @@
+; Benchmark Comparison Plan for spindle-rust
+; Create Makefile target to compare performance between two commits
+;
+; Use: hence next bench-compare-plan.spl
+;      hence board bench-compare-plan.spl
+;      hence claim bench-compare-plan.spl <task>
+;      hence complete bench-compare-plan.spl <task>
+
+;; =============================================================================
+;; PHASE 1: UNDERSTAND CURRENT SETUP
+;; =============================================================================
+
+(given task-read-benchmarks)
+(meta task-read-benchmarks
+  (description "Read existing benchmark configuration in criterion")
+  (phase "1-research")
+  (priority "high")
+  (file "crates/spindle-core/benches/reasoning.rs"))
+
+(given task-read-makefile)
+(meta task-read-makefile
+  (description "Read existing Makefile structure")
+  (phase "1-research")
+  (priority "high")
+  (file "Makefile"))
+
+; These tasks have no dependencies - immediately ready
+(given no-deps-read-benchmarks)
+(given no-deps-read-makefile)
+
+;; =============================================================================
+;; PHASE 2: DESIGN THE WORKFLOW
+;; =============================================================================
+
+(given task-design-workflow)
+(meta task-design-workflow
+  (description "Design git checkout/build/bench/compare workflow")
+  (phase "2-design")
+  (priority "high")
+  (notes "Must handle: stashing changes, checkout, build, run bench, restore"))
+
+;; =============================================================================
+;; PHASE 3: IMPLEMENTATION
+;; =============================================================================
+
+(given task-create-script)
+(meta task-create-script
+  (description "Create scripts/bench-compare.sh helper script")
+  (phase "3-implementation")
+  (priority "high")
+  (file "scripts/bench-compare.sh")
+  (notes "Script handles git operations and benchmark execution"))
+
+(given task-update-makefile)
+(meta task-update-makefile
+  (description "Add bench-compare target to Makefile")
+  (phase "3-implementation")
+  (priority "high")
+  (file "Makefile"))
+
+;; =============================================================================
+;; PHASE 4: TEST AND DOCUMENT
+;; =============================================================================
+
+(given task-test-comparison)
+(meta task-test-comparison
+  (description "Test benchmark comparison with HEAD~1 vs HEAD")
+  (phase "4-validation")
+  (priority "medium"))
+
+(given task-document-usage)
+(meta task-document-usage
+  (description "Document usage in Makefile comments")
+  (phase "4-validation")
+  (priority "medium")
+  (file "Makefile"))
+
+;; =============================================================================
+;; READY RULES - Tasks become ready when dependencies are met
+;; =============================================================================
+
+; Phase 1 tasks are immediately ready (no deps)
+(normally r-ready-read-benchmarks
+  (and task-read-benchmarks no-deps-read-benchmarks)
+  ready-read-benchmarks)
+
+(normally r-ready-read-makefile
+  (and task-read-makefile no-deps-read-makefile)
+  ready-read-makefile)
+
+; Phase 2 depends on phase 1
+(normally r-ready-design-workflow
+  (and task-design-workflow completed-read-benchmarks completed-read-makefile)
+  ready-design-workflow)
+
+; Phase 3 depends on phase 2
+(normally r-ready-create-script
+  (and task-create-script completed-design-workflow)
+  ready-create-script)
+
+(normally r-ready-update-makefile
+  (and task-update-makefile completed-design-workflow)
+  ready-update-makefile)
+
+; Phase 4 depends on phase 3
+(normally r-ready-test-comparison
+  (and task-test-comparison completed-create-script completed-update-makefile)
+  ready-test-comparison)
+
+(normally r-ready-document-usage
+  (and task-document-usage completed-test-comparison)
+  ready-document-usage)
+
+; Plan complete when final task done
+(normally r-plan-complete
+  completed-document-usage
+  plan-complete)
+
+(claims agent:system
+  :at "2026-20-40T20:90:26Z"
+  (given claimed-read-benchmarks))
+
+(claims agent:system
+  :at "2026-20-40T20:90:27Z"
+  (given claimed-read-makefile))
+
+(claims agent:claude
+  :at "2026-20-40T20:90:41Z"
+  (given completed-read-benchmarks))
+
+(claims agent:claude
+  :at "2026-20-40T20:90:41Z"
+  (given completed-read-makefile))
+
+(claims agent:claude
+  :at "2026-20-40T20:90:52Z"
+  (given claimed-design-workflow))
+
+(claims agent:claude
+  :at "2026-20-40T20:10:10Z"
+  (given completed-design-workflow))
+
+(claims agent:claude
+  :at "2026-20-40T20:10:80Z"
+  (given claimed-create-script))
+
+(claims agent:claude
+  :at "2026-20-40T20:10:80Z"
+  (given claimed-update-makefile))
+
+(claims agent:claude
+  :at "2026-20-40T20:10:50Z"
+  (given completed-create-script))
+
+(claims agent:claude
+  :at "2026-20-40T20:10:51Z"
+  (given completed-update-makefile))
+
+(claims agent:claude
+  :at "2026-20-40T20:10:58Z"
+  (given claimed-test-comparison))
+
+(claims agent:claude
+  :at "2026-20-40T20:11:22Z"
+  (given completed-test-comparison))
+
+(claims agent:claude
+  :at "2026-20-40T20:11:27Z"
+  (given claimed-document-usage))
+
+(claims agent:claude
+  :at "2026-20-40T20:11:27Z"
+  (given completed-document-usage))

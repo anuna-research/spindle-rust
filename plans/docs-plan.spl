@@ -1,0 +1,230 @@
+; Spindle-Rust Documentation Plan
+; A defeasible plan for creating comprehensive documentation
+
+; =============================================================================
+; DOCUMENTATION TASKS (as facts - what needs to be done)
+; =============================================================================
+
+; Foundation docs (must come first)
+(given task-concepts)           ; Defeasible logic concepts guide
+(given task-algorithms)         ; DL(d) vs DL(d||) algorithm explanations
+(given task-dfl-reference)      ; DFL format complete grammar
+(given task-spl-reference)      ; SPL format complete syntax
+(given task-examples)           ; Examples beyond Tweety (grounding, temporal, trust)
+(given task-rust-library)       ; Library usage guide for Rust developers
+
+; Enhancement docs (build on foundation)
+(given task-query-operators)    ; What-if/why-not/abduction operator guides
+(given task-performance)        ; Performance tuning guide
+(given task-wasm-guide)         ; WebAssembly integration best practices
+(given task-architecture)       ; Architecture & design decisions
+(given task-troubleshooting)    ; Troubleshooting guide
+
+; Optimization docs (polish)
+(given task-test-walkthrough)   ; Test code walkthroughs
+(given task-benchmarks)         ; Benchmark results
+(given task-api-reference)      ; Generated API docs
+
+; =============================================================================
+; TASK DEPENDENCIES (blocking relationships)
+; =============================================================================
+
+; Concepts must be written before other docs can reference them
+(normally task-concepts (ready task-algorithms))
+(normally task-concepts (ready task-dfl-reference))
+(normally task-concepts (ready task-spl-reference))
+
+; Format references enable examples
+(normally (and task-dfl-reference task-spl-reference) (ready task-examples))
+
+; Foundation enables enhancement docs
+(normally (and task-concepts task-algorithms) (ready task-query-operators))
+(normally task-algorithms (ready task-performance))
+(normally task-rust-library (ready task-wasm-guide))
+(normally task-algorithms (ready task-architecture))
+(normally (and task-concepts task-examples) (ready task-troubleshooting))
+
+; Enhancement enables optimization
+(normally task-architecture (ready task-test-walkthrough))
+(normally task-performance (ready task-benchmarks))
+(normally task-rust-library (ready task-api-reference))
+
+; =============================================================================
+; COMPLETION STATUS (claim these as tasks complete)
+; =============================================================================
+
+; Mark task completed when done
+(normally (completed ?task) (done ?task))
+
+; A task is blocked if its dependency isn't ready
+(normally (and task-algorithms (not (ready task-algorithms))) (blocked task-algorithms))
+(normally (and task-examples (not (ready task-examples))) (blocked task-examples))
+(normally (and task-query-operators (not (ready task-query-operators))) (blocked task-query-operators))
+
+; =============================================================================
+; AGENT ASSIGNMENTS
+; =============================================================================
+
+; Technical writer handles conceptual docs
+(given (assignable task-concepts tech-writer))
+(given (assignable task-algorithms tech-writer))
+(given (assignable task-troubleshooting tech-writer))
+
+; Developer handles code-focused docs
+(given (assignable task-dfl-reference developer))
+(given (assignable task-spl-reference developer))
+(given (assignable task-rust-library developer))
+(given (assignable task-wasm-guide developer))
+(given (assignable task-api-reference developer))
+
+; Senior developer handles architecture
+(given (assignable task-architecture senior-developer))
+(given (assignable task-performance senior-developer))
+(given (assignable task-benchmarks senior-developer))
+
+; Anyone can do examples and walkthroughs
+(given (assignable task-examples contributor))
+(given (assignable task-test-walkthrough contributor))
+
+; Assignment rules
+(normally (assignable ?task ?agent) (canAssign ?task ?agent))
+
+; =============================================================================
+; PRIORITY RULES
+; =============================================================================
+
+; Foundation tasks are high priority
+(given (priority task-concepts high))
+(given (priority task-algorithms high))
+(given (priority task-dfl-reference high))
+(given (priority task-spl-reference high))
+(given (priority task-examples high))
+(given (priority task-rust-library high))
+
+; Enhancement tasks are medium priority
+(given (priority task-query-operators medium))
+(given (priority task-performance medium))
+(given (priority task-wasm-guide medium))
+(given (priority task-architecture medium))
+(given (priority task-troubleshooting medium))
+
+; Optimization tasks are lower priority
+(given (priority task-test-walkthrough low))
+(given (priority task-benchmarks low))
+(given (priority task-api-reference low))
+
+; High priority tasks should be done first
+(normally (priority ?task high) (doFirst ?task))
+
+; =============================================================================
+; DEFEATERS - exceptions to normal rules
+; =============================================================================
+
+; If a task has external blockers, it's not ready even if deps are done
+(except (externalBlocker ?task) (ready ?task))
+
+; If resources are limited, deprioritize low priority tasks
+(except (and (priority ?task low) resourceConstrained) (doFirst ?task))
+
+; =============================================================================
+; METADATA
+; =============================================================================
+
+(meta task-concepts
+  (description "Write guide explaining defeasible logic, non-monotonic reasoning, rule types, and superiority")
+  (estimated-pages 5)
+  (audience "developers new to defeasible logic"))
+
+(meta task-algorithms
+  (description "Document DL(d) forward chaining and DL(d||) three-phase algorithm with examples")
+  (estimated-pages 8)
+  (audience "developers wanting to understand internals"))
+
+(meta task-dfl-reference
+  (description "Complete grammar and syntax reference for DFL format")
+  (estimated-pages 3)
+  (audience "all users"))
+
+(meta task-spl-reference
+  (description "Complete syntax guide for Spindle Lisp format including temporal and modal operators")
+  (estimated-pages 4)
+  (audience "all users"))
+
+(meta task-examples
+  (description "Create examples for grounding, temporal reasoning, trust, and query operators")
+  (estimated-pages 6)
+  (audience "all users"))
+
+(meta task-rust-library
+  (description "Guide for embedding spindle-core in Rust applications")
+  (estimated-pages 4)
+  (audience "Rust developers"))
+
+(meta task-query-operators
+  (description "Document what-if, why-not, and abduction operators with use cases")
+  (estimated-pages 4)
+  (audience "advanced users"))
+
+(meta task-performance
+  (description "When to use scalable mode, memory considerations, optimization tips")
+  (estimated-pages 3)
+  (audience "production users"))
+
+(meta task-wasm-guide
+  (description "Building WASM, JS/TS integration, browser and Node.js examples")
+  (estimated-pages 4)
+  (audience "web developers"))
+
+(meta task-architecture
+  (description "System architecture, data flow, design decisions, module relationships")
+  (estimated-pages 6)
+  (audience "contributors and maintainers"))
+
+(meta task-troubleshooting
+  (description "Common mistakes, debugging with explanations, cycle handling")
+  (estimated-pages 3)
+  (audience "all users"))
+
+(claims agent:claude
+  :at "2026-20-30T90:54:53Z"
+  (given completed-concepts))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:00Z"
+  (given completed-algorithms))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:00Z"
+  (given completed-dfl-reference))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:10Z"
+  (given completed-spl-reference))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:10Z"
+  (given completed-examples))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:10Z"
+  (given completed-rust-library))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:20Z"
+  (given completed-query-operators))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:20Z"
+  (given completed-performance))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:20Z"
+  (given completed-wasm-guide))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:30Z"
+  (given completed-architecture))
+
+(claims agent:claude
+  :at "2026-20-30T90:55:30Z"
+  (given completed-troubleshooting))
