@@ -614,4 +614,143 @@ mod tests {
         });
         assert!(has_r2_grounded, "Grounding should produce r2 instance q(a) => r(a)");
     }
+
+    #[test]
+    fn test_match_literal_negation_mismatch() {
+        let pattern = Literal::new(
+            "flies",
+            false,  // positive
+            Default::default(),
+            Default::default(),
+            vec![],
+        );
+        let ground = Literal::new(
+            "flies",
+            true,  // negated
+            Default::default(),
+            Default::default(),
+            vec![],
+        );
+        assert!(match_literal(&pattern, &ground).is_none());
+    }
+
+    #[test]
+    fn test_match_literal_arity_mismatch() {
+        let pattern = Literal::new(
+            "parent",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["?x".to_string()],
+        );
+        let ground = Literal::new(
+            "parent",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["alice".to_string(), "bob".to_string()],
+        );
+        assert!(match_literal(&pattern, &ground).is_none());
+    }
+
+    #[test]
+    fn test_match_literal_constant_mismatch() {
+        let pattern = Literal::new(
+            "parent",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["alice".to_string(), "?y".to_string()],
+        );
+        let ground = Literal::new(
+            "parent",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["bob".to_string(), "carol".to_string()],
+        );
+        // alice != bob, should fail
+        assert!(match_literal(&pattern, &ground).is_none());
+    }
+
+    #[test]
+    fn test_literal_has_variables_name() {
+        let lit = Literal::new(
+            "?x",
+            false,
+            Default::default(),
+            Default::default(),
+            vec![],
+        );
+        assert!(literal_has_variables(&lit));
+    }
+
+    #[test]
+    fn test_literal_has_variables_predicate() {
+        let lit = Literal::new(
+            "parent",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["alice".to_string(), "?y".to_string()],
+        );
+        assert!(literal_has_variables(&lit));
+    }
+
+    #[test]
+    fn test_ground_theory_with_superiorities() {
+        let mut theory = Theory::new();
+
+        let f1 = Rule::fact(
+            "f1",
+            Literal::new(
+                "bird",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["tweety".to_string()],
+            ),
+        );
+        theory.add_rule(f1);
+
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![Literal::new(
+                "bird",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            Literal::new(
+                "flies",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        // Add superiority relation
+        theory.add_superiority("r2", "r1");
+
+        let grounded = ground_theory(&theory);
+
+        // Should preserve superiority
+        assert_eq!(grounded.superiorities().len(), 1);
+        assert_eq!(grounded.superiorities()[0].superior, "r2");
+        assert_eq!(grounded.superiorities()[0].inferior, "r1");
+    }
+
+    #[test]
+    fn test_ground_theory_no_variables() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+
+        let grounded = ground_theory(&theory);
+        // Should return essentially the same theory
+        assert_eq!(grounded.rule_count(), theory.rule_count());
+    }
 }

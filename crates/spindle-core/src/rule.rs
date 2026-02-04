@@ -162,6 +162,38 @@ mod tests {
     }
 
     #[test]
+    fn test_rule_type_is_definite() {
+        assert!(RuleType::Fact.is_definite());
+        assert!(RuleType::Strict.is_definite());
+        assert!(!RuleType::Defeasible.is_definite());
+        assert!(!RuleType::Defeater.is_definite());
+    }
+
+    #[test]
+    fn test_rule_type_is_defeasible() {
+        assert!(!RuleType::Fact.is_defeasible());
+        assert!(!RuleType::Strict.is_defeasible());
+        assert!(RuleType::Defeasible.is_defeasible());
+        assert!(!RuleType::Defeater.is_defeasible());
+    }
+
+    #[test]
+    fn test_rule_type_is_defeater() {
+        assert!(!RuleType::Fact.is_defeater());
+        assert!(!RuleType::Strict.is_defeater());
+        assert!(!RuleType::Defeasible.is_defeater());
+        assert!(RuleType::Defeater.is_defeater());
+    }
+
+    #[test]
+    fn test_rule_type_display() {
+        assert_eq!(format!("{}", RuleType::Fact), ">>");
+        assert_eq!(format!("{}", RuleType::Strict), "->");
+        assert_eq!(format!("{}", RuleType::Defeasible), "=>");
+        assert_eq!(format!("{}", RuleType::Defeater), "~>");
+    }
+
+    #[test]
     fn test_fact_creation() {
         let fact = Rule::fact("f1", Literal::simple("bird"));
         assert!(fact.is_fact());
@@ -182,6 +214,27 @@ mod tests {
     }
 
     #[test]
+    fn test_strict_rule() {
+        let rule = Rule::strict(
+            "s1",
+            vec![Literal::simple("mammal")],
+            Literal::simple("animal"),
+        );
+        assert_eq!(rule.rule_type, RuleType::Strict);
+        assert!(!rule.has_empty_body());
+    }
+
+    #[test]
+    fn test_defeater_rule() {
+        let rule = Rule::defeater(
+            "d1",
+            vec![Literal::simple("penguin")],
+            Literal::negated("flies"),
+        );
+        assert_eq!(rule.rule_type, RuleType::Defeater);
+    }
+
+    #[test]
     fn test_rule_display() {
         let rule = Rule::defeasible(
             "r1",
@@ -189,5 +242,11 @@ mod tests {
             Literal::simple("flies"),
         );
         assert_eq!(format!("{}", rule), "r1: bird => flies");
+    }
+
+    #[test]
+    fn test_rule_display_fact() {
+        let fact = Rule::fact("f1", Literal::simple("bird"));
+        assert_eq!(format!("{}", fact), "f1: >> bird");
     }
 }

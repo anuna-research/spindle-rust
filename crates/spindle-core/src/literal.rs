@@ -268,6 +268,7 @@ impl fmt::Display for Literal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::temporal::TimePoint;
 
     #[test]
     fn test_simple_literal() {
@@ -353,5 +354,97 @@ mod tests {
 
         let preds = lit.predicates();
         assert_eq!(preds, vec!["alice", "bob"]);
+    }
+
+    #[test]
+    fn test_is_positive() {
+        let pos = Literal::simple("bird");
+        let neg = Literal::negated("bird");
+
+        assert!(pos.is_positive());
+        assert!(!neg.is_positive());
+    }
+
+    #[test]
+    fn test_is_modal() {
+        let simple = Literal::simple("bird");
+        assert!(!simple.is_modal());
+
+        let modal = Literal::new(
+            "pay",
+            false,
+            Mode::obligation(),
+            Temporal::empty(),
+            vec![],
+        );
+        assert!(modal.is_modal());
+    }
+
+    #[test]
+    fn test_is_temporal() {
+        let simple = Literal::simple("bird");
+        assert!(!simple.is_temporal());
+
+        let temporal = Literal::new(
+            "valid",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(2024), TimePoint::Moment(2025)),
+            vec![],
+        );
+        assert!(temporal.is_temporal());
+    }
+
+    #[test]
+    fn test_is_predicate() {
+        let simple = Literal::simple("bird");
+        assert!(!simple.is_predicate());
+
+        let pred = Literal::new(
+            "parent",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["alice".to_string()],
+        );
+        assert!(pred.is_predicate());
+    }
+
+    #[test]
+    fn test_display_with_mode() {
+        let modal = Literal::new(
+            "pay",
+            false,
+            Mode::obligation(),
+            Temporal::empty(),
+            vec![],
+        );
+        assert_eq!(format!("{}", modal), "[O]pay");
+    }
+
+    #[test]
+    fn test_display_with_predicates() {
+        let pred = Literal::new(
+            "parent",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["alice".to_string(), "bob".to_string()],
+        );
+        assert_eq!(format!("{}", pred), "parent(alice, bob)");
+    }
+
+    #[test]
+    fn test_display_with_temporal() {
+        let temporal = Literal::new(
+            "valid",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(2024), TimePoint::Moment(2025)),
+            vec![],
+        );
+        let display = format!("{}", temporal);
+        assert!(display.contains("valid"));
+        assert!(display.contains("["));
     }
 }

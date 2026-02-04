@@ -531,4 +531,59 @@ mod tests {
         let after = interned_count();
         assert!(after >= before); // May be equal if already interned in another test
     }
+
+    #[test]
+    fn test_symbol_id_from_raw_and_as_raw() {
+        let id = intern("raw_test");
+        let raw = id.as_raw();
+        let restored = SymbolId::from_raw(raw);
+        assert_eq!(id, restored);
+        assert_eq!(resolve(restored), "raw_test");
+    }
+
+    #[test]
+    fn test_symbol_id_debug() {
+        let id = intern("debug_test");
+        let debug_str = format!("{:?}", id);
+        assert!(debug_str.contains("SymbolId"));
+        assert!(debug_str.contains("debug_test"));
+    }
+
+    #[test]
+    fn test_symbol_id_display() {
+        let id = intern("display_test");
+        let display_str = format!("{}", id);
+        assert_eq!(display_str, "display_test");
+    }
+
+    #[test]
+    fn test_literal_id_as_raw_and_from_raw() {
+        let lit = intern_literal("~raw_lit_test");
+        let raw = lit.as_raw();
+        let restored = LiteralId::from_raw(raw);
+        assert_eq!(lit, restored);
+        assert!(restored.is_negated());
+    }
+
+    #[test]
+    fn test_literal_id_is_empty() {
+        let empty = LiteralId::EMPTY;
+        assert!(empty.is_empty());
+
+        let non_empty = intern_literal("not_empty");
+        assert!(!non_empty.is_empty());
+    }
+
+    #[test]
+    fn test_literal_id_debug() {
+        let pos = intern_literal("debug_lit");
+        let neg = intern_literal("~debug_lit");
+
+        let pos_debug = format!("{:?}", pos);
+        let neg_debug = format!("{:?}", neg);
+
+        assert!(pos_debug.contains("LiteralId"));
+        assert!(pos_debug.contains("debug_lit"));
+        assert!(neg_debug.contains("~"));
+    }
 }

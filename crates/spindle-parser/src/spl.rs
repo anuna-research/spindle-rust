@@ -1319,4 +1319,58 @@ mod tests {
         let rule = theory.rules().next().unwrap();
         assert_eq!(rule.body.len(), 5);
     }
+
+    // =========================================================================
+    // ERROR HANDLING TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_parse_error_unclosed_paren() {
+        // Unclosed parenthesis should fail
+        let result = parse_spl("(given bird");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_error_invalid_keyword() {
+        // Unknown keyword should fail
+        let result = parse_spl("(unknown bird)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_error_empty_given() {
+        // Empty given should fail
+        let result = parse_spl("(given)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_error_rule_missing_head() {
+        // Rule without enough arguments should fail
+        let result = parse_spl("(normally)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_error_empty_not() {
+        // Empty not should fail
+        let result = parse_spl("(normally r1 (not) flies)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_error_meta_no_label() {
+        // Meta without label should fail
+        let result = parse_spl("(meta)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_inline_comments_end_of_line() {
+        // Inline comments at end of line should be stripped
+        let input = "(given bird) ; this is a comment";
+        let result = parse_spl(input);
+        assert!(result.is_ok());
+    }
 }

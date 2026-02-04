@@ -271,6 +271,19 @@ mod tests {
     }
 
     #[test]
+    fn test_trigger_index_head_triggers() {
+        let mut index = TriggerIndex::new();
+
+        index.add_head_trigger(lit("flies"), "r1".to_string());
+        index.add_head_trigger(lit("flies"), "r2".to_string());
+        index.add_head_trigger(lit("swims"), "r3".to_string());
+
+        assert_eq!(index.rules_producing(lit("flies")).len(), 2);
+        assert_eq!(index.rules_producing(lit("swims")).len(), 1);
+        assert_eq!(index.rules_producing(lit("unknown")).len(), 0);
+    }
+
+    #[test]
     fn test_worklist_basic() {
         let mut worklist = RuleWorklist::new();
 
@@ -302,5 +315,54 @@ mod tests {
         // Can't fire again
         worklist.enqueue("r1".to_string());
         assert!(worklist.pop().is_none());
+    }
+
+    #[test]
+    fn test_worklist_has_fired() {
+        let mut worklist = RuleWorklist::new();
+
+        worklist.init_rule("r1".to_string(), 0);
+        assert!(!worklist.has_fired(&"r1".to_string()));
+
+        worklist.enqueue("r1".to_string());
+        let label = worklist.pop().unwrap();
+        worklist.mark_fired(&label);
+
+        assert!(worklist.has_fired(&"r1".to_string()));
+        // Unknown rule returns false
+        assert!(!worklist.has_fired(&"unknown".to_string()));
+    }
+
+    #[test]
+    fn test_worklist_state() {
+        let mut worklist = RuleWorklist::new();
+
+        worklist.init_rule("r1".to_string(), 2);
+
+        let state = worklist.state(&"r1".to_string());
+        assert!(state.is_some());
+        let s = state.unwrap();
+        assert_eq!(s.remaining, 2);
+        assert!(!s.in_worklist);
+        assert!(!s.fired);
+
+        // Unknown rule returns None
+        assert!(worklist.state(&"unknown".to_string()).is_none());
+    }
+
+    #[test]
+    fn test_worklist_decrement_unknown_rule() {
+        let mut worklist = RuleWorklist::new();
+        // Decrementing unknown rule returns false
+        assert!(!worklist.decrement(&"unknown".to_string()));
+    }
+
+    #[test]
+    fn test_rule_state_is_ready() {
+        let state = RuleState::new(0);
+        assert!(state.is_ready());
+
+        let state2 = RuleState::new(1);
+        assert!(!state2.is_ready());
     }
 }

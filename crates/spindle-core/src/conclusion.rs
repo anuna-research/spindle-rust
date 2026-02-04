@@ -124,8 +124,43 @@ mod tests {
     }
 
     #[test]
+    fn test_conclusion_type_is_definite() {
+        assert!(ConclusionType::DefinitelyProvable.is_definite());
+        assert!(ConclusionType::DefinitelyNotProvable.is_definite());
+        assert!(!ConclusionType::DefeasiblyProvable.is_definite());
+        assert!(!ConclusionType::DefeasiblyNotProvable.is_definite());
+    }
+
+    #[test]
     fn test_conclusion_display() {
         let c = Conclusion::definitely_provable(Literal::simple("bird"));
         assert_eq!(format!("{}", c), "+D bird");
+    }
+
+    #[test]
+    fn test_conclusion_is_positive() {
+        let c1 = Conclusion::definitely_provable(Literal::simple("bird"));
+        assert!(c1.is_positive());
+
+        let c2 = Conclusion::defeasibly_provable(Literal::simple("flies"));
+        assert!(c2.is_positive());
+
+        let c3 = Conclusion::new(ConclusionType::DefinitelyNotProvable, Literal::simple("x"));
+        assert!(!c3.is_positive());
+
+        let c4 = Conclusion::new(ConclusionType::DefeasiblyNotProvable, Literal::simple("y"));
+        assert!(!c4.is_positive());
+    }
+
+    #[test]
+    fn test_conclusion_is_definite() {
+        let c1 = Conclusion::definitely_provable(Literal::simple("bird"));
+        assert!(c1.is_definite());
+
+        let c2 = Conclusion::defeasibly_provable(Literal::simple("flies"));
+        assert!(!c2.is_definite());
+
+        let c3 = Conclusion::new(ConclusionType::DefinitelyNotProvable, Literal::simple("x"));
+        assert!(c3.is_definite());
     }
 }

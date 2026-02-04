@@ -221,6 +221,15 @@ mod tests {
     }
 
     #[test]
+    fn test_add_fact_negated_with_dash() {
+        let mut theory = Theory::new();
+        theory.add_fact("-bird");
+        let facts: Vec<_> = theory.facts().collect();
+        assert_eq!(facts.len(), 1);
+        assert!(facts[0].head_literal().is_negated());
+    }
+
+    #[test]
     fn test_add_rules() {
         let mut theory = Theory::new();
         theory.add_fact("bird");
@@ -233,5 +242,52 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_superiority("r2", "r1");
         assert_eq!(theory.superiorities().len(), 1);
+    }
+
+    #[test]
+    fn test_sup_index() {
+        let mut theory = Theory::new();
+        theory.add_superiority("r2", "r1");
+        assert!(theory.sup_index().is_superior("r2", "r1"));
+        assert!(!theory.sup_index().is_superior("r1", "r2"));
+    }
+
+    #[test]
+    fn test_add_meta_string() {
+        let mut theory = Theory::new();
+        theory.add_meta_string("r1", "description", "test rule");
+        let meta = theory.get_meta("r1").unwrap();
+        assert_eq!(
+            meta.properties.get("description"),
+            Some(&MetaValue::String("test rule".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_add_meta_list() {
+        let mut theory = Theory::new();
+        theory.add_meta_list("r1", "tags", vec!["a".to_string(), "b".to_string()]);
+        let meta = theory.get_meta("r1").unwrap();
+        assert_eq!(
+            meta.properties.get("tags"),
+            Some(&MetaValue::List(vec!["a".to_string(), "b".to_string()]))
+        );
+    }
+
+    #[test]
+    fn test_metadata() {
+        let mut theory = Theory::new();
+        theory.add_meta_string("r1", "key", "value");
+        let all_meta = theory.metadata();
+        assert!(all_meta.contains_key("r1"));
+    }
+
+    #[test]
+    fn test_reason() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+        let conclusions = theory.reason();
+        assert!(!conclusions.is_empty());
     }
 }

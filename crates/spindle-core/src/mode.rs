@@ -73,3 +73,75 @@ impl fmt::Display for Mode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mode_empty() {
+        let mode = Mode::empty();
+        assert!(mode.is_empty());
+        assert!(mode.name.is_none());
+        assert!(!mode.negation);
+    }
+
+    #[test]
+    fn test_mode_new() {
+        let mode = Mode::new("X");
+        assert!(!mode.is_empty());
+        assert_eq!(mode.name, Some("X".to_string()));
+        assert!(!mode.negation);
+    }
+
+    #[test]
+    fn test_mode_obligation() {
+        let mode = Mode::obligation();
+        assert_eq!(mode.name, Some("O".to_string()));
+        assert!(!mode.negation);
+    }
+
+    #[test]
+    fn test_mode_permission() {
+        let mode = Mode::permission();
+        assert_eq!(mode.name, Some("P".to_string()));
+        assert!(!mode.negation);
+    }
+
+    #[test]
+    fn test_mode_forbidden() {
+        let mode = Mode::forbidden();
+        assert_eq!(mode.name, Some("F".to_string()));
+        assert!(!mode.negation);
+    }
+
+    #[test]
+    fn test_mode_complement() {
+        let mode = Mode::obligation();
+        let complement = mode.complement();
+        assert_eq!(complement.name, Some("O".to_string()));
+        assert!(complement.negation);
+
+        // Complement of complement returns to original negation
+        let double = complement.complement();
+        assert!(!double.negation);
+    }
+
+    #[test]
+    fn test_mode_display_with_name() {
+        let mode = Mode::obligation();
+        assert_eq!(format!("{}", mode), "[O]");
+    }
+
+    #[test]
+    fn test_mode_display_negated() {
+        let mode = Mode::obligation().complement();
+        assert_eq!(format!("{}", mode), "[-O]");
+    }
+
+    #[test]
+    fn test_mode_display_empty() {
+        let mode = Mode::empty();
+        assert_eq!(format!("{}", mode), "");
+    }
+}

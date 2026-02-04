@@ -420,4 +420,141 @@ mod tests {
         spindle.parse_dfl("f1: >> bird\nr1: bird => flies").unwrap();
         assert_eq!(spindle.rule_count(), 2);
     }
+
+    #[test]
+    fn test_parse_spl() {
+        let mut spindle = Spindle::new();
+        spindle
+            .parse_spl("(given bird)\n(normally bird flies)")
+            .unwrap();
+        assert_eq!(spindle.rule_count(), 2);
+    }
+
+    #[test]
+    fn test_add_strict_rule() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("mammal");
+        let label = spindle.add_strict_rule(vec!["mammal".to_string()], "animal");
+        assert!(!label.is_empty());
+        assert_eq!(spindle.rule_count(), 2);
+    }
+
+    #[test]
+    fn test_add_defeater() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_fact("penguin");
+        spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        let label = spindle.add_defeater(vec!["penguin".to_string()], "~flies");
+        assert!(!label.is_empty());
+        assert_eq!(spindle.rule_count(), 4);
+    }
+
+    #[test]
+    fn test_add_superiority() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_fact("penguin");
+        let r1 = spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        let r2 = spindle.add_defeasible_rule(vec!["penguin".to_string()], "~flies");
+        spindle.add_superiority(&r2, &r1);
+        assert_eq!(spindle.rule_count(), 4);
+    }
+
+    #[test]
+    fn test_get_positive_conclusions() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        let conclusions = spindle.get_positive_conclusions();
+        assert!(!conclusions.is_empty());
+        assert!(conclusions.iter().any(|c| c.contains("bird")));
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        assert_eq!(spindle.rule_count(), 1);
+        spindle.clear();
+        assert_eq!(spindle.rule_count(), 0);
+    }
+
+    #[test]
+    fn test_reason_dfl() {
+        let mut spindle = Spindle::new();
+        let result = spindle
+            .reason_dfl("f1: >> bird\nr1: bird => flies")
+            .unwrap();
+        assert!(result.contains("bird"));
+        assert!(result.contains("flies"));
+    }
+
+    #[test]
+    fn test_reason_spl() {
+        let mut spindle = Spindle::new();
+        let result = spindle
+            .reason_spl("(given bird)\n(normally bird flies)")
+            .unwrap();
+        assert!(result.contains("bird"));
+        assert!(result.contains("flies"));
+    }
+
+    #[test]
+    fn test_reason_spl_with_meta() {
+        let mut spindle = Spindle::new();
+        let result = spindle
+            .reason_spl(
+                r#"(given bird)
+(normally r1 bird flies)
+(meta r1 (description "Birds fly"))"#,
+            )
+            .unwrap();
+        assert!(result.contains("bird"));
+        assert!(result.contains("META"));
+        assert!(result.contains("description"));
+    }
+
+    #[test]
+    fn test_reason_spl_with_list_meta() {
+        let mut spindle = Spindle::new();
+        let result = spindle
+            .reason_spl(
+                r#"(given bird)
+(normally r1 bird flies)
+(meta r1 (tags ("a" "b")))"#,
+            )
+            .unwrap();
+        assert!(result.contains("bird"));
+    }
+
+    #[test]
+    fn test_parse_literal_tilde() {
+        let lit = parse_literal("~flies");
+        assert!(lit.negation);
+        assert_eq!(lit.name(), "flies");
+    }
+
+    #[test]
+    fn test_parse_literal_dash() {
+        let lit = parse_literal("-flies");
+        assert!(lit.negation);
+        assert_eq!(lit.name(), "flies");
+    }
+
+    #[test]
+    fn test_parse_literal_positive() {
+        let lit = parse_literal("bird");
+        assert!(!lit.negation);
+        assert_eq!(lit.name(), "bird");
+    }
+
+    #[test]
+    fn test_default() {
+        let spindle = Spindle::default();
+        assert_eq!(spindle.rule_count(), 0);
+    }
+
+    // Note: Error handling tests for parse_dfl_error and parse_spl_error
+    // require WASM runtime since JsError is WASM-specific
 }

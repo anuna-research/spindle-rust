@@ -269,4 +269,27 @@ mod tests {
         assert!(!index.is_superior("r1", "r2"));
         assert_eq!(index.len(), 1);
     }
+
+    #[test]
+    fn test_index_is_superior_owned() {
+        let sups = vec![Superiority::new("r2", "r1")];
+        let index = SuperiorityIndex::build(&sups);
+
+        let r2 = "r2".to_string();
+        let r1 = "r1".to_string();
+        assert!(index.is_superior_owned(&r2, &r1));
+        assert!(!index.is_superior_owned(&r1, &r2));
+    }
+
+    #[test]
+    fn test_index_iter() {
+        let sups = vec![
+            Superiority::new("r2", "r1"),
+            Superiority::new("r3", "r1"),
+        ];
+        let index = SuperiorityIndex::build(&sups);
+
+        let pairs: Vec<_> = index.iter().collect();
+        assert_eq!(pairs.len(), 2);
+    }
 }

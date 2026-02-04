@@ -1,6 +1,6 @@
 # Spindle-Rust
 
-[![Coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)](.)
+[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)](.)
 
 A Rust implementation of the [SPINdle](http://spindle.data61.csiro.au/) defeasible logic reasoning engine.
 
