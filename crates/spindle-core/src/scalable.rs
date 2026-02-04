@@ -2204,4 +2204,186 @@ mod tests {
 
         assert!(result.contains_lambda("b"));
     }
+
+    // ==========================================================================
+    // ASSERTION MESSAGE COVERAGE TESTS
+    // ==========================================================================
+
+    #[test]
+    #[should_panic(expected = "should be +d")]
+    fn test_assert_msg_semantic_defeasible() {
+        let mut theory = Theory::new();
+        // No facts - nothing will be provable
+        theory.add_defeasible_rule(&["a"], "b");
+
+        let standard = reason(&theory);
+        let std_def = extract_defeasible_provable(&standard);
+
+        for lit in &["b"] {
+            assert!(
+                std_def.contains(*lit),
+                "Standard: {} should be +d",
+                lit
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "should be +D")]
+    fn test_assert_msg_semantic_definite() {
+        let mut theory = Theory::new();
+        // No facts - nothing will be provable
+        theory.add_strict_rule(&["p"], "q");
+
+        let standard = reason(&theory);
+        let std_definite = extract_definite_provable(&standard);
+
+        for lit in &["q"] {
+            assert!(
+                std_definite.contains(*lit),
+                "Standard: {} should be +D",
+                lit
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Scalable: r should be +d")]
+    fn test_assert_msg_scalable_mixed_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q");
+        // Rule that can't fire (missing "q" prerequisite creates scenario)
+        theory.add_defeasible_rule(&["missing"], "r");
+
+        let scalable = reason_scalable(&theory);
+
+        assert!(scalable.contains_partial("r"), "Scalable: r should be +d");
+    }
+
+    // ==========================================================================
+    // EDGE CASE TESTS FOR CLOSURE COMPUTATION
+    // ==========================================================================
+
+    #[test]
+    fn test_can_prove_literal_in_delta() {
+        // Test line 405: literal already in delta returns true early
+        let mut theory = Theory::new();
+        theory.add_fact("p"); // p is in delta
+        theory.add_strict_rule(&["p"], "q"); // q will be in delta too
+
+        let result = reason_scalable(&theory);
+
+        // Both p and q should be in delta
+        assert!(result.contains_delta("p"));
+        assert!(result.contains_delta("q"));
+        // And therefore also in partial
+        assert!(result.contains_partial("p"));
+        assert!(result.contains_partial("q"));
+    }
+
+    #[test]
+    fn test_can_prove_blocked_by_delta() {
+        // Test line 409: complement in delta blocks the literal
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q"); // q is definitely provable
+        theory.add_defeasible_rule(&["p"], "~q"); // ~q should be blocked
+
+        let result = reason_scalable(&theory);
+
+        // q is in delta (strict rule)
+        assert!(result.contains_delta("q"));
+        // ~q should NOT be in partial (blocked by q in delta)
+        assert!(!result.contains_partial("~q"));
+    }
+
+    #[test]
+    fn test_can_prove_no_supporting_rule() {
+        // Test line 419: no supporting rule with satisfied body
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        // Rule for q requires missing fact
+        theory.add_defeasible_rule(&["missing"], "q");
+
+        let result = reason_scalable(&theory);
+
+        // q should not be provable (no rule can fire)
+        assert!(!result.contains_partial("q"));
+        assert!(!result.contains_lambda("q"));
+    }
+
+    #[test]
+    fn test_lambda_skips_fired_rules() {
+        // Test line 275: rule already fired should be skipped
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        // Two rules with same body - both should fire, but only once each
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["a"], "c");
+
+        let result = reason_scalable(&theory);
+
+        // Both b and c should be in lambda (rules fired once each)
+        assert!(result.contains_lambda("b"));
+        assert!(result.contains_lambda("c"));
+    }
+
+    #[test]
+    fn test_lambda_skips_defeaters() {
+        // Test line 280: defeaters don't contribute to lambda
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        // Defeater should not add q to lambda
+        let rule = crate::rule::Rule::new(
+            "d1".to_string(),
+            crate::rule::RuleType::Defeater,
+            vec![Literal::simple("p")],
+            vec![Literal::simple("q")],
+        );
+        theory.add_rule(rule);
+
+        let result = reason_scalable(&theory);
+
+        // q should NOT be in lambda (defeaters don't prove)
+        assert!(!result.contains_lambda("q"));
+    }
+
+    #[test]
+    fn test_partial_with_conflicting_rules_no_superiority() {
+        // Test complex conflict without superiority
+        let mut theory = Theory::new();
+        theory.add_fact("trigger");
+        theory.add_defeasible_rule(&["trigger"], "result");
+        theory.add_defeasible_rule(&["trigger"], "~result");
+        // No superiority - conflict should block both
+
+        let result = reason_scalable(&theory);
+
+        // Both should be in lambda (potential conclusions)
+        assert!(result.contains_lambda("result"));
+        assert!(result.contains_lambda("~result"));
+        // Neither should be in partial (conflict blocks both)
+        assert!(!result.contains_partial("result"));
+        assert!(!result.contains_partial("~result"));
+    }
+
+    #[test]
+    fn test_partial_with_chain_and_conflict() {
+        // Test where a chain leads to a conflict
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+        theory.add_defeasible_rule(&["a"], "~c"); // Conflicts with chain result
+
+        let result = reason_scalable(&theory);
+
+        // a and b should be partial (no conflict)
+        assert!(result.contains_partial("a"));
+        assert!(result.contains_partial("b"));
+        // c and ~c conflict - neither should be partial
+        assert!(!result.contains_partial("c"));
+        assert!(!result.contains_partial("~c"));
+    }
 }

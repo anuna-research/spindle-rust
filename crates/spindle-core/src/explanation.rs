@@ -1965,4 +1965,99 @@ mod tests {
             .with_conflicts(vec![conflict]);
         assert_eq!(explanation.conflicts_resolved.len(), 1);
     }
+
+    #[test]
+    fn test_dot_output_with_strict_rule() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_strict_rule(&["a"], "b");
+
+        let result = explain(&theory, &Literal::simple("b"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+
+        // Convert to DOT format
+        let dot = explanation.to_dot();
+        assert!(dot.contains("strict"));
+        assert!(dot.contains("digraph"));
+    }
+
+    #[test]
+    fn test_dot_output_with_body_proofs() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("x");
+        theory.add_fact("y");
+        theory.add_defeasible_rule(&["x", "y"], "z");
+
+        let result = explain(&theory, &Literal::simple("z"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+
+        // Should have body proofs shown as edges in DOT
+        let dot = explanation.to_dot();
+        assert!(dot.contains("->"));
+    }
+
+    #[test]
+    fn test_json_output_with_strict_rule() {
+        use crate::theory::Theory;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q");
+
+        let result = explain(&theory, &Literal::simple("q"));
+        assert!(result.is_some());
+        let explanation = result.unwrap();
+
+        let json = explanation.to_json();
+        // Proof tree should exist
+        assert!(json.get("proof_tree").is_some());
+    }
+
+    #[test]
+    fn test_blocked_proof_with_blocking_rule() {
+        let blocked = BlockedProof::new(
+            Literal::simple("x"),
+            "r1",
+            BlockReason::Superiority,
+            "blocked by superior rule",
+        )
+        .with_blocking_rule("r2");
+
+        assert_eq!(blocked.blocking_rule, Some("r2".to_string()));
+
+        // Test JSON-LD output includes blocking rule
+        let jsonld = blocked_proof_to_jsonld(&blocked);
+        assert_eq!(jsonld["blockedBy"], "r2");
+    }
+
+    #[test]
+    fn test_rule_type_name_all_types() {
+        assert_eq!(rule_type_name(RuleType::Fact), "fact");
+        assert_eq!(rule_type_name(RuleType::Strict), "strict rule");
+        assert_eq!(rule_type_name(RuleType::Defeasible), "defeasible rule");
+        assert_eq!(rule_type_name(RuleType::Defeater), "defeater");
+    }
+
+    #[test]
+    fn test_proof_node_to_json_with_defeater() {
+        let step = ProofStep {
+            rule_label: "d1".to_string(),
+            rule_type: RuleType::Defeater,
+            rule_text: "d1: p ~> q".to_string(),
+            body_proofs: vec![],
+            annotations: Default::default(),
+        };
+
+        let node = ProofNode::new(Literal::simple("q"), DerivationType::Defeasible)
+            .with_proof_step(step);
+
+        let json = proof_node_to_json(&node);
+        assert_eq!(json["proof_step"]["rule_type"], "defeater");
+    }
 }

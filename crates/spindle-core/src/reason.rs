@@ -806,4 +806,183 @@ mod tests {
         // This documents the behavior - use facts instead
         let _ = conclusions;
     }
+
+    // ==========================================================================
+    // ASSERTION MESSAGE COVERAGE TESTS
+    // These tests verify assertion messages by intentionally triggering failures
+    // ==========================================================================
+
+    #[test]
+    #[should_panic(expected = "s should be defeasibly provable when all antecedents are satisfied")]
+    fn test_assert_msg_multiple_body_literals() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        // Intentionally missing q and r facts
+        theory.add_defeasible_rule(&["p", "q", "r"], "s");
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "s"),
+            "s should be defeasibly provable when all antecedents are satisfied"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "r should not be provable without q")]
+    fn test_assert_msg_unsatisfied_rule_body() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_fact("q"); // Adding q so r IS provable
+        theory.add_defeasible_rule(&["p", "q"], "r");
+
+        let conclusions = reason(&theory);
+
+        // This will fail because r IS provable (we added q)
+        assert!(
+            !conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "r"),
+            "r should not be provable without q"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "flies should be defeasibly provable via superior rule")]
+    fn test_assert_msg_superiority_resolves_conflict() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["bird"], "~flies");
+
+        // Wrong direction - r2 beats r1, so ~flies wins instead of flies
+        theory.add_superiority(&r2, &r1);
+
+        let conclusions = reason(&theory);
+
+        // This fails because r2 > r1 means ~flies wins, not flies
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies"
+                    && !c.literal.negation),
+            "flies should be defeasibly provable via superior rule"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "c should be definitely provable via strict rule")]
+    fn test_assert_msg_strict_beats_defeasible() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        // Missing fact "b"
+        theory.add_strict_rule(&["a", "b"], "c");
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "c"
+                    && !c.literal.negation),
+            "c should be definitely provable via strict rule"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "should be defeasibly provable via chain")]
+    fn test_assert_msg_forward_chaining() {
+        let mut theory = Theory::new();
+        // No facts - chain won't fire
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+
+        let conclusions = reason(&theory);
+
+        for lit_name in &["b", "c"] {
+            assert!(
+                conclusions
+                    .iter()
+                    .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                        && c.literal.name() == *lit_name),
+                "{} should be defeasibly provable via chain",
+                lit_name
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "q should be definitely NOT provable")]
+    fn test_assert_msg_negative_definite() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_strict_rule(&["p"], "q"); // Adding strict rule so q IS provable
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyNotProvable
+                    && c.literal.name() == "q"),
+            "q should be definitely NOT provable (no strict rule)"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "q should be defeasibly NOT provable when body unsatisfied")]
+    fn test_assert_msg_negative_defeasible() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q"); // Adding rule so q IS provable
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+                    && c.literal.name() == "q"),
+            "q should be defeasibly NOT provable when body unsatisfied"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Empty theory should produce no positive conclusions")]
+    fn test_assert_msg_empty_theory() {
+        let mut theory = Theory::new();
+        theory.add_fact("x"); // Not empty
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            conclusions.iter().all(|c| !c.conclusion_type.is_positive()),
+            "Empty theory should produce no positive conclusions"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Self-referential rule without initial fact should not prove p")]
+    fn test_assert_msg_self_reference() {
+        let mut theory = Theory::new();
+        theory.add_fact("p"); // Adding initial fact so it IS provable
+        theory.add_defeasible_rule(&["p"], "p");
+
+        let conclusions = reason(&theory);
+
+        assert!(
+            !conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"),
+            "Self-referential rule without initial fact should not prove p"
+        );
+    }
 }

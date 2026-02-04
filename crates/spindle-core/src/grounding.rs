@@ -1145,4 +1145,125 @@ mod tests {
         });
         assert!(has_path);
     }
+
+    #[test]
+    fn test_match_body_with_variable_first_literal() {
+        // Test when first literal in body is a variable (triggers line 200)
+        let mut theory = Theory::new();
+
+        // Add facts with predicates
+        theory.add_rule(Rule::new(
+            "f1".to_string(),
+            RuleType::Fact,
+            vec![],
+            vec![Literal::new(
+                "item",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["apple".to_string()],
+            )],
+        ));
+        theory.add_rule(Rule::new(
+            "f2".to_string(),
+            RuleType::Fact,
+            vec![],
+            vec![Literal::new(
+                "item",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["banana".to_string()],
+            )],
+        ));
+
+        // Rule where first body literal is a predicate with variable
+        let rule = Rule::new(
+            "r1".to_string(),
+            RuleType::Defeasible,
+            vec![Literal::new(
+                "item",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            vec![Literal::new(
+                "edible",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+        );
+        theory.add_rule(rule);
+
+        let grounded = ground_theory(&theory);
+        // Should produce edible(apple) and edible(banana)
+        let edible_count = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "edible"))
+            .count();
+        assert!(edible_count >= 2);
+    }
+
+    #[test]
+    fn test_semi_naive_with_variable_delta_literal() {
+        // Test semi-naive iteration with variable in delta position (line 251)
+        let mut theory = Theory::new();
+
+        // Initial facts
+        theory.add_rule(Rule::new(
+            "f1".to_string(),
+            RuleType::Fact,
+            vec![],
+            vec![Literal::new(
+                "node",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["a".to_string()],
+            )],
+        ));
+        theory.add_rule(Rule::new(
+            "f2".to_string(),
+            RuleType::Fact,
+            vec![],
+            vec![Literal::new(
+                "node",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["b".to_string()],
+            )],
+        ));
+
+        // Rule that needs delta iteration
+        let rule = Rule::new(
+            "r1".to_string(),
+            RuleType::Defeasible,
+            vec![Literal::new(
+                "node",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            vec![Literal::new(
+                "visited",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+        );
+        theory.add_rule(rule);
+
+        let grounded = ground_theory(&theory);
+        let visited_rules = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "visited"))
+            .count();
+        assert!(visited_rules >= 2);
+    }
 }

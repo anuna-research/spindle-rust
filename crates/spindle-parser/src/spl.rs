@@ -1726,4 +1726,59 @@ mod tests {
         // This test documents the current behavior
         assert!(meta.properties.contains_key("note"));
     }
+
+    #[test]
+    fn test_parse_error_keyword_not_atom() {
+        // First element of list is not an atom (nested list as keyword)
+        let result = parse_spl("((nested) bird)");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(format!("{:?}", err).contains("Expected keyword"));
+    }
+
+    #[test]
+    fn test_parse_error_flat_predicate_name_not_atom() {
+        // Flat predicate with non-atom as first arg (predicate name)
+        let result = parse_spl("(given (nested) arg1 arg2)");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(format!("{:?}", err).contains("Expected predicate name"));
+    }
+
+    #[test]
+    fn test_parse_rule_with_list_first_arg() {
+        // Rule where first arg (potential label) is a list
+        // (normally (body) head) - body is a list, not a label
+        let theory = parse_spl("(normally (bird) flies)").unwrap();
+        let rule = theory.rules().next().unwrap();
+        assert_eq!(rule.body.len(), 1);
+        assert_eq!(rule.body[0].name(), "bird");
+    }
+
+    #[test]
+    fn test_parse_error_literal_first_not_atom() {
+        // Literal list where first element is a nested list
+        let result = parse_spl("(given ((nested) arg))");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(format!("{:?}", err).contains("Expected atom in literal"));
+    }
+
+    #[test]
+    fn test_parse_error_literal_empty_list() {
+        // Empty list in literal position
+        let result = parse_spl("(normally r1 bird ())");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(format!("{:?}", err).contains("Empty list is not a valid literal"));
+    }
+
+    #[test]
+    fn test_parse_meta_property_not_list() {
+        // Meta property that's not a list (just an atom)
+        let input = r#"(meta r1 standalone)"#;
+        // Standalone atom property should be ignored (not cause error)
+        let result = parse_spl(input);
+        assert!(result.is_ok());
+    }
 }

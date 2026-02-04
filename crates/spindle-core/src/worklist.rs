@@ -365,4 +365,44 @@ mod tests {
         let state2 = RuleState::new(1);
         assert!(!state2.is_ready());
     }
+
+    #[test]
+    fn test_pop_with_remaining_zero_not_fired() {
+        let mut worklist = RuleWorklist::new();
+
+        // Initialize with empty body (remaining = 0)
+        worklist.init_rule("r1".to_string(), 0);
+        worklist.enqueue("r1".to_string());
+
+        // Pop should return the rule since remaining=0 and not fired
+        let result = worklist.pop();
+        assert_eq!(result, Some("r1".to_string()));
+    }
+
+    #[test]
+    fn test_pop_skips_rule_with_remaining_not_zero() {
+        let mut worklist = RuleWorklist::new();
+
+        // Rule with remaining > 0 should be skipped by pop
+        worklist.init_rule("r1".to_string(), 1);
+        worklist.enqueue("r1".to_string());
+
+        // Pop should return None since remaining != 0
+        let result = worklist.pop();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_pop_skips_fired_rule() {
+        let mut worklist = RuleWorklist::new();
+
+        worklist.init_rule("r1".to_string(), 0);
+        // Mark as fired before enqueueing
+        worklist.mark_fired(&"r1".to_string());
+        worklist.enqueue("r1".to_string());
+
+        // Pop should skip fired rule
+        let result = worklist.pop();
+        assert!(result.is_none());
+    }
 }

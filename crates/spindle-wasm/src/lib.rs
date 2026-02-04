@@ -555,6 +555,133 @@ mod tests {
         assert_eq!(spindle.rule_count(), 0);
     }
 
-    // Note: Error handling tests for parse_dfl_error and parse_spl_error
-    // require WASM runtime since JsError is WASM-specific
+    // ==========================================================================
+    // EXTENDED COVERAGE TESTS (native-compatible)
+    // These tests use functions that don't return JsValue
+    // ==========================================================================
+
+    #[test]
+    fn test_reason_dfl_with_complex_theory() {
+        let mut spindle = Spindle::new();
+        let result = spindle
+            .reason_dfl(
+                r#"
+                f1: >> bird
+                f2: >> penguin
+                r1: bird => flies
+                r2: penguin => ~flies
+                r2 > r1
+                "#,
+            )
+            .unwrap();
+        assert!(result.contains("bird"));
+        assert!(result.contains("penguin"));
+    }
+
+    #[test]
+    fn test_reason_spl_with_complex_theory() {
+        let mut spindle = Spindle::new();
+        let result = spindle
+            .reason_spl(
+                r#"
+                (given bird)
+                (given penguin)
+                (normally r1 bird flies)
+                (normally r2 penguin (not flies))
+                (prefer r2 r1)
+                "#,
+            )
+            .unwrap();
+        assert!(result.contains("bird"));
+        assert!(result.contains("penguin"));
+    }
+
+    #[test]
+    fn test_chain_reasoning() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("a");
+        spindle.add_defeasible_rule(vec!["a".to_string()], "b");
+        spindle.add_defeasible_rule(vec!["b".to_string()], "c");
+        spindle.add_defeasible_rule(vec!["c".to_string()], "d");
+
+        let conclusions = spindle.get_positive_conclusions();
+        assert!(conclusions.iter().any(|c| c.contains(" a")));
+        assert!(conclusions.iter().any(|c| c.contains(" b")));
+        assert!(conclusions.iter().any(|c| c.contains(" c")));
+        assert!(conclusions.iter().any(|c| c.contains(" d")));
+    }
+
+    #[test]
+    fn test_strict_rule_chain() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("premise");
+        spindle.add_strict_rule(vec!["premise".to_string()], "intermediate");
+        spindle.add_strict_rule(vec!["intermediate".to_string()], "conclusion");
+
+        let conclusions = spindle.get_positive_conclusions();
+        assert!(conclusions.iter().any(|c| c.contains("premise")));
+        assert!(conclusions.iter().any(|c| c.contains("intermediate")));
+        assert!(conclusions.iter().any(|c| c.contains("conclusion")));
+    }
+
+    #[test]
+    fn test_defeater_blocks() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_fact("injured");
+        spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        spindle.add_defeater(vec!["injured".to_string()], "~flies");
+
+        let conclusions = spindle.get_positive_conclusions();
+        assert!(conclusions.iter().any(|c| c.contains("bird")));
+        assert!(conclusions.iter().any(|c| c.contains("injured")));
+    }
+
+    #[test]
+    fn test_penguin_example_extended() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_fact("penguin");
+        let r1 = spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        let r2 = spindle.add_defeasible_rule(vec!["penguin".to_string()], "~flies");
+        spindle.add_superiority(&r2, &r1);
+
+        let conclusions = spindle.get_positive_conclusions();
+        assert!(conclusions.iter().any(|c| c.contains("bird")));
+        assert!(conclusions.iter().any(|c| c.contains("penguin")));
+        assert!(conclusions.iter().any(|c| c.contains("~flies")));
+    }
+
+    // Note: parse error tests require WASM target due to JsError
+    // See tests/wasm.rs for WASM-specific error handling tests
+
+    #[test]
+    fn test_workflow_without_jsvalue() {
+        let mut spindle = Spindle::new();
+
+        // Parse theory
+        spindle
+            .parse_dfl(
+                r#"
+            f1: >> expert
+            f2: >> novice
+            r1: expert => reliable
+            r2: novice => ~reliable
+            r1 > r2
+            "#,
+            )
+            .unwrap();
+
+        // Reason using get_positive_conclusions (returns Vec<String>, not JsValue)
+        let conclusions = spindle.get_positive_conclusions();
+        assert!(!conclusions.is_empty());
+
+        // Clear and verify
+        spindle.clear();
+        assert_eq!(spindle.rule_count(), 0);
+    }
+
+    // Note: Tests that call reason(), reason_scalable(), query(), what_if(),
+    // why_not(), abduce(), or get_rules() require WASM target because they
+    // return JsValue. Run these with: wasm-pack test --node
 }

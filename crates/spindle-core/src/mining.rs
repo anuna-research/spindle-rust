@@ -1656,4 +1656,72 @@ mod tests {
         let rel = fp.relation("a", "nonexistent");
         assert_eq!(rel, Relation::Unrelated);
     }
+
+    // ==========================================================================
+    // ASSERTION MESSAGE COVERAGE TESTS
+    // ==========================================================================
+
+    #[test]
+    #[should_panic(expected = "Expected Place variant")]
+    fn test_assert_msg_arc_node_place_expected() {
+        let trans_node = ArcNode::Transition("t1".to_string());
+        match trans_node {
+            ArcNode::Place(id) => assert_eq!(id, "p1"),
+            _ => panic!("Expected Place variant"),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected Transition variant")]
+    fn test_assert_msg_arc_node_transition_expected() {
+        let place_node = ArcNode::Place("p1".to_string());
+        match place_node {
+            ArcNode::Transition(id) => assert_eq!(id, "t1"),
+            _ => panic!("Expected Transition variant"),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "a->b should be causality")]
+    fn test_assert_msg_footprint_causality() {
+        // Create a log where a and b are parallel, not causal
+        let log = make_log_from_traces(&[
+            &["a", "b"],
+            &["b", "a"],
+        ]);
+
+        let fp = Footprint::from_log(&log);
+        assert_eq!(
+            fp.relation("a", "b"),
+            Relation::Causality,
+            "a->b should be causality"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "a||b should be parallel")]
+    fn test_assert_msg_footprint_parallel() {
+        // Create a log where a always precedes b (causality, not parallel)
+        let log = make_repeated_log(5, &["a", "b"]);
+
+        let fp = Footprint::from_log(&log);
+        assert_eq!(
+            fp.relation("a", "b"),
+            Relation::Parallel,
+            "a||b should be parallel when both orderings observed"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "a<-b when b always precedes a")]
+    fn test_assert_msg_footprint_reverse() {
+        // Create a log where a always precedes b (not reverse)
+        let log = make_repeated_log(3, &["a", "b"]);
+        let fp = Footprint::from_log(&log);
+        assert_eq!(
+            fp.relation("a", "b"),
+            Relation::Reverse,
+            "a<-b when b always precedes a"
+        );
+    }
 }
