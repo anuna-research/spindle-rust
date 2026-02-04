@@ -11,6 +11,7 @@ derive_more.workspace = true
 indexmap.workspace = true
 rustc-hash.workspace = true
 fixedbitset.workspace = true
+smallvec.workspace = true
 serde = { workspace = true, optional = true }
 serde_json.workspace = true
 dhat = { version = "0.3.3", optional = true }
