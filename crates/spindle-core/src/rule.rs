@@ -5,12 +5,25 @@
 //! - Strict rules (->): Must hold if antecedent is true
 //! - Defeasible rules (=>): Normally hold unless defeated
 //! - Defeaters (~>): Block conclusions without proving anything
+//!
+//! # Performance
+//!
+//! Uses `SmallVec` for body and head literals to avoid heap allocation
+//! for typical rules (1-4 body literals, 1 head literal).
 
 use std::fmt;
+
+use smallvec::SmallVec;
 
 use crate::literal::Literal;
 use crate::mode::Mode;
 use crate::temporal::Temporal;
+
+/// Type alias for rule body - most rules have 1-4 body literals
+pub type RuleBody = SmallVec<[Literal; 4]>;
+
+/// Type alias for rule head - most rules have 1 head literal
+pub type RuleHead = SmallVec<[Literal; 1]>;
 
 /// Type alias for rule labels
 pub type RuleLabel = String;
@@ -73,9 +86,11 @@ pub struct Rule {
     /// Temporal bounds (if any)
     pub temporal: Temporal,
     /// Body literals (antecedents/premises)
-    pub body: Vec<Literal>,
+    /// Uses SmallVec to avoid heap allocation for typical 1-4 body literals
+    pub body: RuleBody,
     /// Head literals (consequents/conclusions)
-    pub head: Vec<Literal>,
+    /// Uses SmallVec to avoid heap allocation for typical single head
+    pub head: RuleHead,
 }
 
 impl Rule {
@@ -83,37 +98,37 @@ impl Rule {
     pub fn new(
         label: impl Into<String>,
         rule_type: RuleType,
-        body: Vec<Literal>,
-        head: Vec<Literal>,
+        body: impl Into<RuleBody>,
+        head: impl Into<RuleHead>,
     ) -> Self {
         Self {
             label: label.into(),
             rule_type,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
-            body,
-            head,
+            body: body.into(),
+            head: head.into(),
         }
     }
 
     /// Create a fact (no body)
     pub fn fact(label: impl Into<String>, head: Literal) -> Self {
-        Self::new(label, RuleType::Fact, vec![], vec![head])
+        Self::new(label, RuleType::Fact, SmallVec::new(), smallvec::smallvec![head])
     }
 
     /// Create a strict rule
-    pub fn strict(label: impl Into<String>, body: Vec<Literal>, head: Literal) -> Self {
-        Self::new(label, RuleType::Strict, body, vec![head])
+    pub fn strict(label: impl Into<String>, body: impl Into<RuleBody>, head: Literal) -> Self {
+        Self::new(label, RuleType::Strict, body, smallvec::smallvec![head])
     }
 
     /// Create a defeasible rule
-    pub fn defeasible(label: impl Into<String>, body: Vec<Literal>, head: Literal) -> Self {
-        Self::new(label, RuleType::Defeasible, body, vec![head])
+    pub fn defeasible(label: impl Into<String>, body: impl Into<RuleBody>, head: Literal) -> Self {
+        Self::new(label, RuleType::Defeasible, body, smallvec::smallvec![head])
     }
 
     /// Create a defeater
-    pub fn defeater(label: impl Into<String>, body: Vec<Literal>, head: Literal) -> Self {
-        Self::new(label, RuleType::Defeater, body, vec![head])
+    pub fn defeater(label: impl Into<String>, body: impl Into<RuleBody>, head: Literal) -> Self {
+        Self::new(label, RuleType::Defeater, body, smallvec::smallvec![head])
     }
 
     /// Check if this rule is a fact

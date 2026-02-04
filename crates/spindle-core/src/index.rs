@@ -14,10 +14,12 @@ use crate::theory::Theory;
 ///
 /// Uses `LiteralId` (4 bytes, Copy) as keys for O(1) lookups instead
 /// of `String` keys which require hashing variable-length data.
-#[derive(Debug, Clone)]
-pub struct IndexedTheory {
-    /// The underlying theory
-    theory: Theory,
+///
+/// Holds a reference to the theory to avoid deep cloning during reasoning.
+#[derive(Debug)]
+pub struct IndexedTheory<'a> {
+    /// Reference to the underlying theory (avoids deep clone)
+    theory: &'a Theory,
     /// Rules indexed by head literal (using LiteralId for fast lookup)
     head_index: FxHashMap<LiteralId, Vec<RuleLabel>>,
     /// Rules indexed by body literal (trigger index for semi-naive evaluation)
@@ -26,13 +28,15 @@ pub struct IndexedTheory {
     literal_set: FxHashSet<LiteralId>,
 }
 
-impl IndexedTheory {
-    /// Build an indexed theory from a theory.
+impl<'a> IndexedTheory<'a> {
+    /// Build an indexed theory from a theory reference.
     ///
     /// Creates indexes using `LiteralId` keys for O(1) lookups:
     /// - `head_index`: Maps head literals to rules that produce them
     /// - `body_index`: Maps body literals to rules they can trigger (trigger index)
-    pub fn build(theory: Theory) -> Self {
+    ///
+    /// Takes a reference to avoid deep cloning the theory.
+    pub fn build(theory: &'a Theory) -> Self {
         let mut head_index: FxHashMap<LiteralId, Vec<RuleLabel>> = FxHashMap::default();
         let mut body_index: FxHashMap<LiteralId, Vec<RuleLabel>> = FxHashMap::default();
         let mut literal_set: FxHashSet<LiteralId> = FxHashSet::default();
@@ -63,7 +67,7 @@ impl IndexedTheory {
 
     /// Get the underlying theory
     pub fn theory(&self) -> &Theory {
-        &self.theory
+        self.theory
     }
 
     /// Get rules with the given literal in the head.
@@ -149,7 +153,7 @@ mod tests {
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         let bird = Literal::simple("bird");
         let flies = Literal::simple("flies");
@@ -169,7 +173,7 @@ mod tests {
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         let bird = Literal::simple("bird");
         let flies = Literal::simple("flies");
@@ -194,7 +198,7 @@ mod tests {
         theory.add_defeasible_rule(&["b"], "c");
         theory.add_defeasible_rule(&["a", "b"], "d");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         let a = Literal::simple("a");
         let b = Literal::simple("b");
@@ -218,7 +222,7 @@ mod tests {
         theory.add_fact("a");
         theory.add_defeasible_rule(&["a"], "b");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         let a = Literal::simple("a");
         let b = Literal::simple("b");
@@ -244,7 +248,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "b");
         theory.add_defeasible_rule(&["b"], "c");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         // Should have a, b, c
         let all_ids: Vec<_> = indexed.all_literal_ids().collect();
@@ -256,7 +260,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("a");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         let nonexistent = Literal::simple("nonexistent");
         assert!(!indexed.contains_literal(&nonexistent));
@@ -268,14 +272,14 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("test");
 
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
         assert_eq!(indexed.theory().rule_count(), 1);
     }
 
     #[test]
     fn test_empty_theory_index() {
         let theory = Theory::new();
-        let indexed = IndexedTheory::build(theory);
+        let indexed = IndexedTheory::build(&theory);
 
         let lit = Literal::simple("any");
         assert!(indexed.rules_with_head(&lit).is_empty());

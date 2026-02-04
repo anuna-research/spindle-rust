@@ -1,0 +1,168 @@
+; Spindle Performance Optimization Plan
+; Created: 2026-02-04
+; Branch: perf/optimization-experiments
+
+; =============================================================================
+; AGENT AVAILABILITY
+; =============================================================================
+(given agent-experimenter-available)
+(given agent-validator-available)
+
+; =============================================================================
+; OPTIMIZATION TASKS
+; =============================================================================
+
+; Task 1: Avoid Theory cloning in IndexedTheory::build
+(given task-avoid-clone)
+(given no-deps-avoid-clone)
+(meta task-avoid-clone
+  (description "IndexedTheory::build takes Theory by value and clones it - use reference instead")
+  (impact "Medium - avoids deep copy of all rules and strings")
+  (location "crates/spindle-core/src/index.rs:35"))
+
+; Task 2: Replace String keys in body_remaining HashMap
+(given task-string-keys)
+(given no-deps-string-keys)
+(meta task-string-keys
+  (description "body_remaining uses String keys - should use RuleId or interned strings")
+  (impact "Medium - avoids string hashing in hot loop")
+  (location "crates/spindle-core/src/reason.rs:41-44"))
+
+; Task 3: Use bit vector for proven literals
+(given task-bitvec)
+(given no-deps-bitvec)
+(meta task-bitvec
+  (description "Replace HashSet<LiteralId> with bit vector for proven literals")
+  (impact "High - cache-friendly, O(1) without hashing")
+  (location "crates/spindle-core/src/reason.rs:37-38"))
+
+; Task 4: Use SmallVec for rule bodies
+(given task-smallvec)
+(given no-deps-smallvec)
+(meta task-smallvec
+  (description "Rule bodies are typically 1-3 elements - SmallVec avoids heap allocation")
+  (impact "Medium - improves cache locality for rule iteration")
+  (location "crates/spindle-core/src/rule.rs"))
+
+; Task 5: Pre-allocate conclusion vector
+(given task-prealloc)
+(given no-deps-prealloc)
+(meta task-prealloc
+  (description "Pre-allocate conclusions Vec with estimated size")
+  (impact "Low - reduces reallocations during reasoning")
+  (location "crates/spindle-core/src/reason.rs:33"))
+
+; Task 6: Use FxHashMap consistently
+(given task-fxhash)
+(given no-deps-fxhash)
+(meta task-fxhash
+  (description "Replace std HashMap/HashSet with FxHashMap/FxHashSet in reason.rs")
+  (impact "Medium - faster hashing for small keys like LiteralId")
+  (location "crates/spindle-core/src/reason.rs"))
+
+; =============================================================================
+; READINESS RULES
+; =============================================================================
+
+(normally r-ready-avoid-clone
+  (and task-avoid-clone no-deps-avoid-clone)
+  ready-avoid-clone)
+
+(normally r-ready-string-keys
+  (and task-string-keys no-deps-string-keys)
+  ready-string-keys)
+
+(normally r-ready-bitvec
+  (and task-bitvec no-deps-bitvec)
+  ready-bitvec)
+
+(normally r-ready-smallvec
+  (and task-smallvec no-deps-smallvec)
+  ready-smallvec)
+
+(normally r-ready-prealloc
+  (and task-prealloc no-deps-prealloc)
+  ready-prealloc)
+
+(normally r-ready-fxhash
+  (and task-fxhash no-deps-fxhash)
+  ready-fxhash)
+
+; =============================================================================
+; ASSIGNMENT RULES
+; =============================================================================
+
+(normally r-assign-avoid-clone
+  (and ready-avoid-clone agent-experimenter-available)
+  assignTo-avoid-clone-experimenter)
+
+(normally r-assign-string-keys
+  (and ready-string-keys agent-experimenter-available)
+  assignTo-string-keys-experimenter)
+
+(normally r-assign-bitvec
+  (and ready-bitvec agent-experimenter-available)
+  assignTo-bitvec-experimenter)
+
+(normally r-assign-smallvec
+  (and ready-smallvec agent-experimenter-available)
+  assignTo-smallvec-experimenter)
+
+(normally r-assign-prealloc
+  (and ready-prealloc agent-experimenter-available)
+  assignTo-prealloc-experimenter)
+
+(normally r-assign-fxhash
+  (and ready-fxhash agent-experimenter-available)
+  assignTo-fxhash-experimenter)
+
+; =============================================================================
+; COMPLETION TRIGGERS
+; =============================================================================
+
+(normally r-complete-avoid-clone
+  (and completed-avoid-clone verified-avoid-clone)
+  done-avoid-clone)
+
+(normally r-complete-string-keys
+  (and completed-string-keys verified-string-keys)
+  done-string-keys)
+
+(normally r-complete-bitvec
+  (and completed-bitvec verified-bitvec)
+  done-bitvec)
+
+(normally r-complete-smallvec
+  (and completed-smallvec verified-smallvec)
+  done-smallvec)
+
+(normally r-complete-prealloc
+  (and completed-prealloc verified-prealloc)
+  done-prealloc)
+
+(normally r-complete-fxhash
+  (and completed-fxhash verified-fxhash)
+  done-fxhash)
+
+; =============================================================================
+; PRIORITY ORDERING (highest impact first)
+; =============================================================================
+
+; Prioritize based on expected impact
+(prefer r-assign-fxhash r-assign-prealloc)
+(prefer r-assign-bitvec r-assign-fxhash)
+(prefer r-assign-string-keys r-assign-prealloc)
+(prefer r-assign-avoid-clone r-assign-prealloc)
+(prefer r-assign-smallvec r-assign-prealloc)
+
+(claims agent:system
+  :at "2026-20-40T21:20:43Z"
+  (given claimed-fxhash))
+
+(claims agent:experimenter
+  :at "2026-20-40T21:50:50Z"
+  (given completed-fxhash))
+
+(claims agent:experimenter
+  :at "2026-20-40T21:60:30Z"
+  (given claimed-avoid-clone))

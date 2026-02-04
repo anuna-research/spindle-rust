@@ -24,7 +24,9 @@
 //! - SPINdle-Racket v1.7.0 scalable/closures.rkt
 //! - Allen, J.F. "Maintaining Knowledge about Temporal Intervals" (1983)
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
@@ -39,17 +41,20 @@ use crate::theory::Theory;
 #[derive(Debug, Clone)]
 pub struct ScalableResult {
     /// Delta closure: definitely provable (+Δ)
-    pub delta: HashSet<LiteralId>,
+    pub delta: FxHashSet<LiteralId>,
     /// Lambda closure: potentially provable (over-approximation)
-    pub lambda: HashSet<LiteralId>,
+    pub lambda: FxHashSet<LiteralId>,
     /// Partial closure: defeasibly provable (+∂||)
-    pub partial: HashSet<LiteralId>,
+    pub partial: FxHashSet<LiteralId>,
 }
 
 impl ScalableResult {
     /// Convert to conclusions list
-    pub fn to_conclusions(&self, indexed: &IndexedTheory) -> Vec<Conclusion> {
-        let mut conclusions = Vec::new();
+    pub fn to_conclusions(&self, indexed: &IndexedTheory<'_>) -> Vec<Conclusion> {
+        // Pre-allocate: delta + partial (excluding delta) + delta again + 2*all_literals
+        let lit_count = indexed.all_literal_ids().count();
+        let estimated = self.delta.len() * 2 + self.partial.len() + lit_count * 2;
+        let mut conclusions = Vec::with_capacity(estimated);
 
         for &lit_id in &self.delta {
             let lit = id_to_literal(lit_id);
@@ -138,10 +143,12 @@ struct RuleState {
 
 /// Perform scalable DL(d||) reasoning on a theory
 pub fn reason_scalable(theory: &Theory) -> ScalableResult {
-    let indexed = IndexedTheory::build(theory.clone());
+    let indexed = IndexedTheory::build(theory);
+    let rule_count = theory.rule_count();
 
-    // Initialize rule states
-    let mut states: HashMap<RuleLabel, RuleState> = HashMap::new();
+    // Initialize rule states with pre-allocated capacity
+    let mut states: FxHashMap<RuleLabel, RuleState> =
+        FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
     for rule in theory.rules() {
         states.insert(
             rule.label.clone(),
@@ -176,10 +183,10 @@ pub fn reason_scalable(theory: &Theory) -> ScalableResult {
 /// 3. When a strict rule's counter reaches 0, inject its head
 /// 4. Continue until fixpoint
 fn compute_delta_closure(
-    indexed: &IndexedTheory,
-    states: &mut HashMap<RuleLabel, RuleState>,
-) -> HashSet<LiteralId> {
-    let mut delta: HashSet<LiteralId> = HashSet::new();
+    indexed: &IndexedTheory<'_>,
+    states: &mut FxHashMap<RuleLabel, RuleState>,
+) -> FxHashSet<LiteralId> {
+    let mut delta: FxHashSet<LiteralId> = FxHashSet::default();
     let mut worklist: VecDeque<LiteralId> = VecDeque::new();
 
     // Initialize with facts and empty-body strict rules
@@ -235,15 +242,15 @@ fn compute_delta_closure(
 ///     (a) All body literals in lambda
 ///     (b) Complement NOT in delta
 fn compute_lambda_closure(
-    indexed: &IndexedTheory,
-    delta: &HashSet<LiteralId>,
-) -> HashSet<LiteralId> {
-    let mut lambda: HashSet<LiteralId> = delta.clone();
+    indexed: &IndexedTheory<'_>,
+    delta: &FxHashSet<LiteralId>,
+) -> FxHashSet<LiteralId> {
+    let mut lambda: FxHashSet<LiteralId> = delta.clone();
     let mut worklist: VecDeque<LiteralId> = delta.iter().copied().collect();
 
     // Track remaining counts for lambda computation
-    let mut lambda_remaining: HashMap<RuleLabel, usize> = HashMap::new();
-    let mut fired: HashSet<RuleLabel> = HashSet::new();
+    let mut lambda_remaining: FxHashMap<RuleLabel, usize> = FxHashMap::default();
+    let mut fired: FxHashSet<RuleLabel> = FxHashSet::default();
 
     for rule in indexed.theory().rules() {
         lambda_remaining.insert(rule.label.clone(), rule.body.len());
@@ -325,15 +332,14 @@ fn compute_lambda_closure(
 ///         - Body not fully in lambda (can't attack), OR
 ///         - Defeated by a superior supporting rule
 fn compute_partial_closure(
-    indexed: &IndexedTheory,
+    indexed: &IndexedTheory<'_>,
     theory: &Theory,
-    delta: &HashSet<LiteralId>,
-    lambda: &HashSet<LiteralId>,
-) -> HashSet<LiteralId> {
-    use rustc_hash::FxHashMap;
+    delta: &FxHashSet<LiteralId>,
+    lambda: &FxHashSet<LiteralId>,
+) -> FxHashSet<LiteralId> {
     use std::collections::VecDeque;
 
-    let mut partial: HashSet<LiteralId> = delta.clone();
+    let mut partial: FxHashSet<LiteralId> = delta.clone();
 
     // Track remaining unsatisfied body literals for each rule
     let mut remaining: FxHashMap<&str, usize> = FxHashMap::default();
@@ -350,14 +356,14 @@ fn compute_partial_closure(
     }
 
     // Candidates: literals in lambda but not in delta, blocked by complement in delta
-    let blocked_by_delta: HashSet<LiteralId> = lambda
+    let blocked_by_delta: FxHashSet<LiteralId> = lambda
         .iter()
         .filter(|k| delta.contains(&k.complement()))
         .copied()
         .collect();
 
     // Helper: check if rule body is satisfied in partial
-    let body_satisfied = |rule: &Rule, partial: &HashSet<LiteralId>| -> bool {
+    let body_satisfied = |rule: &Rule, partial: &FxHashSet<LiteralId>| -> bool {
         rule.body.iter().all(|b| partial.contains(&b.literal_id()))
     };
 
@@ -366,21 +372,22 @@ fn compute_partial_closure(
         |rule: &Rule| -> bool { rule.body.iter().any(|b| !lambda.contains(&b.literal_id())) };
 
     // Helper: can we defeat the attacker using superiority?
-    let team_defeats = |lit_id: LiteralId, attacker: &Rule, partial: &HashSet<LiteralId>| -> bool {
-        for defender in indexed.rules_with_head_id(lit_id) {
-            if (defender.rule_type == RuleType::Strict
-                || defender.rule_type == RuleType::Defeasible)
-                && body_satisfied(defender, partial)
-                && theory.is_superior(&defender.label, &attacker.label)
-            {
-                return true;
+    let team_defeats =
+        |lit_id: LiteralId, attacker: &Rule, partial: &FxHashSet<LiteralId>| -> bool {
+            for defender in indexed.rules_with_head_id(lit_id) {
+                if (defender.rule_type == RuleType::Strict
+                    || defender.rule_type == RuleType::Defeasible)
+                    && body_satisfied(defender, partial)
+                    && theory.is_superior(&defender.label, &attacker.label)
+                {
+                    return true;
+                }
             }
-        }
-        false
-    };
+            false
+        };
 
     // Helper: all attacks defeated?
-    let all_attacks_defeated = |lit_id: LiteralId, partial: &HashSet<LiteralId>| -> bool {
+    let all_attacks_defeated = |lit_id: LiteralId, partial: &FxHashSet<LiteralId>| -> bool {
         for attacker in indexed.rules_with_head_id(lit_id.complement()) {
             // Skip facts
             if attacker.rule_type == RuleType::Fact {
@@ -401,7 +408,7 @@ fn compute_partial_closure(
     };
 
     // Helper: can literal be proven defeasibly?
-    let can_prove = |lit_id: LiteralId, partial: &HashSet<LiteralId>| -> bool {
+    let can_prove = |lit_id: LiteralId, partial: &FxHashSet<LiteralId>| -> bool {
         // Already in delta
         if delta.contains(&lit_id) {
             return true;
@@ -440,7 +447,7 @@ fn compute_partial_closure(
     }
 
     // Track what's already in worklist to avoid duplicates
-    let mut in_worklist: HashSet<LiteralId> = worklist.iter().copied().collect();
+    let mut in_worklist: FxHashSet<LiteralId> = worklist.iter().copied().collect();
 
     // Semi-naive iteration
     while let Some(lit_id) = worklist.pop_front() {
@@ -646,7 +653,7 @@ mod tests {
     use crate::reason::reason;
 
     /// Helper to extract defeasibly provable literals from standard reason()
-    fn extract_defeasible_provable(conclusions: &[Conclusion]) -> HashSet<String> {
+    fn extract_defeasible_provable(conclusions: &[Conclusion]) -> FxHashSet<String> {
         conclusions
             .iter()
             .filter(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable)
@@ -655,7 +662,7 @@ mod tests {
     }
 
     /// Helper to extract definitely provable literals from standard reason()
-    fn extract_definite_provable(conclusions: &[Conclusion]) -> HashSet<String> {
+    fn extract_definite_provable(conclusions: &[Conclusion]) -> FxHashSet<String> {
         conclusions
             .iter()
             .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
@@ -1473,7 +1480,7 @@ mod tests {
         let scalable = reason_scalable(&theory);
 
         let std_def = extract_defeasible_provable(&standard);
-        let scl_def: HashSet<String> = scalable
+        let scl_def: FxHashSet<String> = scalable
             .partial
             .iter()
             .map(|id| {
@@ -2005,7 +2012,7 @@ mod tests {
         theory.add_defeasible_rule(&["x"], "y"); // x not proven, so y unprovable
 
         let result = reason_scalable(&theory);
-        let indexed = IndexedTheory::build(theory.clone());
+        let indexed = IndexedTheory::build(&theory);
         let conclusions = result.to_conclusions(&indexed);
 
         // Check all conclusion types are present
@@ -2036,7 +2043,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "b"); // b in partial but not delta
 
         let result = reason_scalable(&theory);
-        let indexed = IndexedTheory::build(theory.clone());
+        let indexed = IndexedTheory::build(&theory);
         let conclusions = result.to_conclusions(&indexed);
 
         // b should be +d but not +D

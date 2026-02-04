@@ -4,17 +4,64 @@
 //!
 //! # Performance
 //!
-//! Uses `LiteralId` (4-byte Copy type) instead of `String` for HashSet
-//! keys, eliminating heap allocations in the hot reasoning loop.
+//! Uses `LiteralId` (4-byte Copy type) and BitSet for O(1) proven literal
+//! checks, eliminating heap allocations and hash computations in the hot
+//! reasoning loop.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use fixedbitset::FixedBitSet;
+use rustc_hash::FxHashMap;
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
-use crate::intern::{LiteralId, resolve};
+use crate::intern::{LiteralId, interned_count, resolve};
 use crate::literal::Literal;
 use crate::rule::RuleType;
 use crate::theory::Theory;
+
+/// A bit set optimized for tracking proven literals.
+///
+/// Maps `LiteralId` to bit indices for O(1) contains/insert operations
+/// without hashing overhead. Uses 2 bits per symbol (positive + negated).
+struct LiteralBitSet {
+    bits: FixedBitSet,
+}
+
+impl LiteralBitSet {
+    /// Create a new LiteralBitSet sized for the current interner.
+    fn new() -> Self {
+        // Each symbol needs 2 bits: one for positive, one for negated
+        let size = interned_count() * 2;
+        Self {
+            bits: FixedBitSet::with_capacity(size),
+        }
+    }
+
+    /// Convert a LiteralId to a bit index.
+    #[inline]
+    fn to_index(id: LiteralId) -> usize {
+        let symbol = id.symbol().as_raw() as usize;
+        let negated = if id.is_negated() { 1 } else { 0 };
+        symbol * 2 + negated
+    }
+
+    /// Check if a literal has been proven.
+    #[inline]
+    fn contains(&self, id: LiteralId) -> bool {
+        let idx = Self::to_index(id);
+        idx < self.bits.len() && self.bits.contains(idx)
+    }
+
+    /// Mark a literal as proven.
+    #[inline]
+    fn insert(&mut self, id: LiteralId) {
+        let idx = Self::to_index(id);
+        if idx < self.bits.len() {
+            self.bits.insert(idx);
+        }
+    }
+}
 
 /// Convert a LiteralId back to a Literal
 #[inline]
@@ -29,22 +76,29 @@ fn id_to_literal(id: LiteralId) -> Literal {
 
 /// Perform defeasible reasoning on a theory
 pub fn reason(theory: &Theory) -> Vec<Conclusion> {
-    let indexed = IndexedTheory::build(theory.clone());
-    let mut conclusions = Vec::new();
+    let indexed = IndexedTheory::build(theory);
 
-    // Track what we've proven using LiteralId (4-byte Copy type)
-    // This avoids String allocations in the hot reasoning loop
-    let mut definite_proven: HashSet<LiteralId> = HashSet::new();
-    let mut defeasible_proven: HashSet<LiteralId> = HashSet::new();
+    // Pre-allocate conclusions vector: estimate 2 conclusions per rule (positive)
+    // plus 2 per literal (negative conclusions at the end)
+    let estimated_size = theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
+    let mut conclusions = Vec::with_capacity(estimated_size);
 
-    // Track rule body satisfaction
-    let mut body_remaining: HashMap<String, usize> = HashMap::new();
+    // Track what we've proven using LiteralBitSet for O(1) operations
+    // BitSet is cache-friendly and avoids hash computation overhead
+    let mut definite_proven = LiteralBitSet::new();
+    let mut defeasible_proven = LiteralBitSet::new();
+
+    // Track rule body satisfaction - pre-allocate for all rules
+    // Use &str keys borrowed from theory to avoid string cloning
+    let rule_count = theory.rule_count();
+    let mut body_remaining: FxHashMap<&str, usize> =
+        FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
     for rule in theory.rules() {
-        body_remaining.insert(rule.label.clone(), rule.body.len());
+        body_remaining.insert(&rule.label, rule.body.len());
     }
 
-    // Worklist for forward chaining
-    let mut worklist: VecDeque<Literal> = VecDeque::new();
+    // Worklist for forward chaining - pre-allocate for estimated work
+    let mut worklist: VecDeque<Literal> = VecDeque::with_capacity(rule_count);
 
     // Phase 1: Initialize with facts
     for fact in theory.facts() {
@@ -64,7 +118,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     while let Some(lit) = worklist.pop_front() {
         // Find rules where this literal appears in body
         for rule in indexed.rules_with_body(&lit) {
-            let remaining = body_remaining.get_mut(&rule.label).unwrap();
+            let remaining = body_remaining.get_mut(rule.label.as_str()).unwrap();
             if *remaining > 0 {
                 *remaining -= 1;
 
@@ -77,7 +131,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
                         RuleType::Fact => unreachable!("Facts have no body"),
 
                         RuleType::Strict => {
-                            if !definite_proven.contains(&head_id) {
+                            if !definite_proven.contains(head_id) {
                                 definite_proven.insert(head_id);
                                 defeasible_proven.insert(head_id);
 
@@ -99,8 +153,8 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
                             let comp_id = head_id.complement();
 
                             // Only prove if complement isn't definitely proven
-                            if !definite_proven.contains(&comp_id)
-                                && !defeasible_proven.contains(&head_id)
+                            if !definite_proven.contains(comp_id)
+                                && !defeasible_proven.contains(head_id)
                             {
                                 // Check if we're blocked by superior rules
                                 let blocked = is_blocked_by_superior(
@@ -136,14 +190,14 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     for &lit_id in indexed.all_literal_ids() {
         let lit = id_to_literal(lit_id);
 
-        if !definite_proven.contains(&lit_id) {
+        if !definite_proven.contains(lit_id) {
             conclusions.push(Conclusion::new(
                 ConclusionType::DefinitelyNotProvable,
                 lit.clone(),
             ));
         }
 
-        if !defeasible_proven.contains(&lit_id) {
+        if !defeasible_proven.contains(lit_id) {
             conclusions.push(Conclusion::new(ConclusionType::DefeasiblyNotProvable, lit));
         }
     }
@@ -153,10 +207,10 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
 
 /// Check if a rule is blocked by a superior rule or defeater for the complement
 fn is_blocked_by_superior(
-    indexed: &IndexedTheory,
+    indexed: &IndexedTheory<'_>,
     theory: &Theory,
     rule: &crate::rule::Rule,
-    proven: &HashSet<LiteralId>,
+    proven: &LiteralBitSet,
 ) -> bool {
     let head_lit = rule.head_literal();
     let complement = head_lit.complement();
@@ -165,11 +219,11 @@ fn is_blocked_by_superior(
     let attacking_rules = indexed.rules_with_head(&complement);
 
     for attacker in attacking_rules {
-        // Check if attacker's body is satisfied (using LiteralId for O(1) lookup)
+        // Check if attacker's body is satisfied (using BitSet for O(1) lookup)
         let body_satisfied = attacker
             .body
             .iter()
-            .all(|b| proven.contains(&b.literal_id()));
+            .all(|b| proven.contains(b.literal_id()));
 
         if !body_satisfied {
             continue;

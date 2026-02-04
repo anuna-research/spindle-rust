@@ -180,7 +180,7 @@ impl Spindle {
     #[wasm_bindgen(js_name = reasonScalable)]
     pub fn reason_scalable(&self) -> JsValue {
         let result = reason_scalable(&self.theory);
-        let indexed = spindle_core::index::IndexedTheory::build(self.theory.clone());
+        let indexed = spindle_core::index::IndexedTheory::build(&self.theory);
         let conclusions = result.to_conclusions(&indexed);
 
         let js_conclusions: Vec<JsConclusion> = conclusions
