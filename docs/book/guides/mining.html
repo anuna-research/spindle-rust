@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Query Operators - Spindle-Rust</title>
+        <title>Process Mining - Spindle-Rust</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://codeberg.org/anuna/spindle-rust" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/queries.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/mining.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,256 +180,501 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="query-operators"><a class="header" href="#query-operators">Query Operators</a></h1>
-<p>Spindle provides three query operators for interactive reasoning: what-if, why-not, and abduction.</p>
-<h2 id="what-if-queries"><a class="header" href="#what-if-queries">What-If Queries</a></h2>
-<p><strong>What-if</strong> performs hypothetical reasoning: “What would be concluded if these facts were true?”</p>
-<h3 id="api"><a class="header" href="#api">API</a></h3>
+                        <h1 id="process-mining"><a class="header" href="#process-mining">Process Mining</a></h1>
+<p>Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and DFL rule extraction with support/confidence metrics.</p>
+<blockquote>
+<p><strong>Note</strong>: Process mining is currently available through the Rust API only. It is not exposed via the CLI or the WebAssembly bindings.</p>
+</blockquote>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Process mining bridges the gap between observed behavior (event logs) and formal models (defeasible logic rules). The pipeline works as follows:</p>
+<pre><code>EventLog -&gt; Footprint -&gt; PetriNet -&gt; LearnedRules
+               |                         |
+               v                         v
+         Relation analysis       DFL rules with
+         (causal, parallel,      support/confidence
+          unrelated)             metrics
+</code></pre>
+<p>Given a set of recorded process executions (cases), Spindle can:</p>
+<ol>
+<li>Analyze activity relationships via a <strong>footprint matrix</strong></li>
+<li>Discover a <strong>Petri net</strong> process model using the Alpha algorithm</li>
+<li>Detect <strong>conflicts</strong> (choice and mutex patterns)</li>
+<li>Extract <strong>defeasible logic rules</strong> with statistical support</li>
+</ol>
+<h2 id="event-logs"><a class="header" href="#event-logs">Event Logs</a></h2>
+<h3 id="structure"><a class="header" href="#structure">Structure</a></h3>
+<p>An event log consists of <strong>cases</strong> (process executions), each containing a sequence of <strong>events</strong>.</p>
+<ul>
+<li><code>Event</code> – a single activity execution with a timestamp, activity name, variable bindings, optional actor, and annotations</li>
+<li><code>Case</code> – a complete process trace identified by a unique ID, containing events sorted by timestamp</li>
+<li><code>EventLog</code> – the collection of cases with optional metadata</li>
+</ul>
+<h3 id="creating-events"><a class="header" href="#creating-events">Creating Events</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use spindle_core::query::{what_if, HypotheticalClaim};
-use spindle_core::literal::Literal;
+</span>use spindle_core::mining::{Event, Case, EventLog};
+use std::collections::HashMap;
 
-let hypotheticals = vec![
-    HypotheticalClaim::new(Literal::simple("wounded"))
+// Simple event with timestamp, activity, and bindings
+let mut bindings = HashMap::new();
+bindings.insert("entity".to_string(), "order-42".to_string());
+
+let event = Event::new("2026-01-17T10:00:00Z", "submitted", bindings);
+
+// Event with an actor
+let event = Event::new("2026-01-17T10:05:00Z", "reviewed", HashMap::new())
+    .with_actor("alice");
+
+// Event with annotations
+let mut annotations = HashMap::new();
+annotations.insert("priority".to_string(), "high".to_string());
+
+let event = Event::new("2026-01-17T10:10:00Z", "approved", HashMap::new())
+    .with_actor("bob")
+    .with_annotations(annotations);
+<span class="boring">}</span></code></pre>
+<h3 id="creating-cases-and-logs"><a class="header" href="#creating-cases-and-logs">Creating Cases and Logs</a></h3>
+<p>Events within a case are automatically sorted by timestamp:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Event, Case, EventLog};
+use std::collections::HashMap;
+
+// Build a case from events
+let events = vec![
+    Event::new("2026-01-17T12:00:00Z", "complete", HashMap::new()),
+    Event::new("2026-01-17T10:00:00Z", "start", HashMap::new()),
+    Event::new("2026-01-17T11:00:00Z", "process", HashMap::new()),
 ];
-let goal = Literal::negated("flies");
-let result = what_if(&amp;theory, hypotheticals, &amp;goal);
+let case = Case::new("case-1", events);
+
+// Events are sorted: start, process, complete
+assert_eq!(case.activities(), vec!["start", "process", "complete"]);
+
+// Build a log from cases
+let log = EventLog::new(vec![case]);
+<span class="boring">}</span></code></pre>
+<h3 id="log-inspection"><a class="header" href="#log-inspection">Log Inspection</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// All unique activities across the log
+let activities = log.activities();  // HashSet&lt;&amp;str&gt;
+
+// Total number of events
+let count = log.total_events();
+<span class="boring">}</span></code></pre>
+<h3 id="helper-functions"><a class="header" href="#helper-functions">Helper Functions</a></h3>
+<p>For testing and quick prototyping, helper functions simplify log construction:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{make_sequential_trace, make_log_from_traces, make_repeated_log};
+
+// Single sequential trace
+let case = make_sequential_trace("case-1", &amp;["start", "process", "end"]);
+
+// Log from multiple trace patterns
+let log = make_log_from_traces(&amp;[
+    &amp;["start", "a", "b", "end"],
+    &amp;["start", "b", "a", "end"],
+    &amp;["start", "a", "b", "end"],
+]);
+
+// Log with n identical traces
+let log = make_repeated_log(10, &amp;["submit", "review", "approve"]);
+<span class="boring">}</span></code></pre>
+<h2 id="footprint-matrix"><a class="header" href="#footprint-matrix">Footprint Matrix</a></h2>
+<p>The footprint matrix captures <strong>directly-follows</strong> relationships between activities. It is the foundation for the Alpha algorithm.</p>
+<h3 id="relations"><a class="header" href="#relations">Relations</a></h3>
+<p>Given two activities <code>a</code> and <code>b</code>, the footprint matrix assigns one of four relations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Relation</th><th>Symbol</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Causality</code></td><td><code>-&gt;</code></td><td><code>a</code> directly precedes <code>b</code> (but not <code>b</code> before <code>a</code>)</td></tr>
+<tr><td><code>Reverse</code></td><td><code>&lt;-</code></td><td><code>b</code> directly precedes <code>a</code> (but not <code>a</code> before <code>b</code>)</td></tr>
+<tr><td><code>Parallel</code></td><td><code>||</code></td><td>Both orderings observed in the log</td></tr>
+<tr><td><code>Unrelated</code></td><td><code>#</code></td><td>Never directly adjacent in any trace</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="building-a-footprint"><a class="header" href="#building-a-footprint">Building a Footprint</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Footprint, EventLog, make_repeated_log, make_log_from_traces};
+
+// Sequential pattern: a -&gt; b -&gt; c
+let log = make_repeated_log(5, &amp;["a", "b", "c"]);
+let fp = Footprint::from_log(&amp;log);
+
+// Check relations
+assert!(fp.is_causal("a", "b"));   // a -&gt; b
+assert!(fp.is_causal("b", "c"));   // b -&gt; c
+assert!(fp.is_unrelated("a", "c")); // a # c (never directly adjacent)
+
+// Parallel pattern
+let log = make_log_from_traces(&amp;[
+    &amp;["a", "b"],
+    &amp;["b", "a"],
+]);
+let fp = Footprint::from_log(&amp;log);
+assert!(fp.is_parallel("a", "b")); // a || b
+<span class="boring">}</span></code></pre>
+<h3 id="querying-the-matrix"><a class="header" href="#querying-the-matrix">Querying the Matrix</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::Relation;
+
+// Get a specific relation
+let rel = fp.relation("a", "b");
+match rel {
+    Relation::Causality =&gt; println!("a causes b"),
+    Relation::Reverse   =&gt; println!("b causes a"),
+    Relation::Parallel  =&gt; println!("a and b are concurrent"),
+    Relation::Unrelated =&gt; println!("a and b are unrelated"),
+}
+
+// Bulk queries
+let causal = fp.causal_pairs();     // Vec&lt;(String, String)&gt;
+let parallel = fp.parallel_pairs(); // Vec&lt;(String, String)&gt;
+<span class="boring">}</span></code></pre>
+<h3 id="what-the-matrix-reveals"><a class="header" href="#what-the-matrix-reveals">What the Matrix Reveals</a></h3>
+<p>The footprint matrix answers key questions about a process:</p>
+<ul>
+<li><strong>Sequencing</strong>: Which activities always follow others? (Causality)</li>
+<li><strong>Concurrency</strong>: Which activities can happen in either order? (Parallel)</li>
+<li><strong>Independence</strong>: Which activities are never adjacent? (Unrelated)</li>
+<li><strong>Reverse flow</strong>: Which activities are preceded by others? (Reverse)</li>
+</ul>
+<h2 id="alpha-algorithm-and-petri-net-discovery"><a class="header" href="#alpha-algorithm-and-petri-net-discovery">Alpha Algorithm and Petri Net Discovery</a></h2>
+<p>The Alpha algorithm transforms a footprint matrix into a Petri net, a formal model of the process.</p>
+<h3 id="petri-net-structure"><a class="header" href="#petri-net-structure">Petri Net Structure</a></h3>
+<p>A Petri net consists of:</p>
+<ul>
+<li><code>Place</code> – a passive element with an ID and label (represents conditions/states)</li>
+<li><code>Transition</code> – an active element representing an activity</li>
+<li><code>Arc</code> – a directed connection between a place and a transition (or vice versa), using <code>ArcNode::Place</code> and <code>ArcNode::Transition</code> variants</li>
+</ul>
+<h3 id="running-the-alpha-miner"><a class="header" href="#running-the-alpha-miner">Running the Alpha Miner</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{AlphaMiner, EventLog, make_repeated_log};
+
+let log = make_repeated_log(10, &amp;["a", "b", "c"]);
+
+let mut miner = AlphaMiner::new();
+let net = miner.mine(&amp;log);
+
+// Inspect the discovered net
+println!("Places: {}", net.places.len());
+println!("Transitions: {}", net.transitions.len());
+println!("Arcs: {}", net.arcs.len());
+
+// Find a transition by activity name
+if let Some(trans) = net.find_transition("b") {
+    println!("Found transition: {} ({})", trans.id, trans.activity);
+}
+
+// All activities in the net
+let activities = net.activities(); // HashSet&lt;&amp;str&gt;
 <span class="boring">}</span></code></pre>
 <h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>The Alpha algorithm performs these steps:</p>
 <ol>
-<li>Create a copy of the theory</li>
-<li>Add hypothetical facts</li>
-<li>Reason over the modified theory</li>
-<li>Return new conclusions</li>
+<li><strong>Compute footprint</strong> from the event log’s directly-follows pairs</li>
+<li><strong>Identify start/end activities</strong> (first/last in each trace)</li>
+<li><strong>Find maximal pairs</strong> <code>(A, B)</code> where all activities in <code>A</code> causally lead to all activities in <code>B</code>, and both sets are internally unrelated</li>
+<li><strong>Build the net</strong>: create transitions for each activity, places for start/end and each maximal pair, and arcs connecting them</li>
 </ol>
-<h3 id="example"><a class="header" href="#example">Example</a></h3>
-<p>Original theory:</p>
-<pre><code class="language-lisp">(given bird)
-(normally r1 bird flies)
-(normally r2 wounded (not flies))
-(prefer r2 r1)
-</code></pre>
-<p>Query: What if <code>wounded</code> is true?</p>
+<h3 id="building-a-petri-net-manually"><a class="header" href="#building-a-petri-net-manually">Building a Petri Net Manually</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("wounded"))];
-let goal = Literal::negated("flies");
-let result = what_if(&amp;theory, hypotheticals, &amp;goal);
-// result.is_provable() = true
-// result.new_conclusions = [Literal("~flies")]
-<span class="boring">}</span></code></pre>
-<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h3>
-<ul>
-<li>Exploring consequences of decisions</li>
-<li>Scenario analysis</li>
-<li>Testing rule interactions</li>
-</ul>
-<h2 id="why-not-queries"><a class="header" href="#why-not-queries">Why-Not Queries</a></h2>
-<p><strong>Why-not</strong> explains why a literal is NOT provable.</p>
-<h3 id="api-1"><a class="header" href="#api-1">API</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use spindle_core::query::why_not;
-use spindle_core::literal::Literal;
+</span>use spindle_core::mining::{PetriNet, Place, Transition, Arc, ArcNode};
 
-let literal = Literal::simple("flies");
-let explanation = why_not(&amp;theory, &amp;literal);
+let mut net = PetriNet::new();
+
+net.add_place(Place::new("p1", "start"));
+net.add_place(Place::new("p2", "end"));
+
+net.add_transition(Transition::new("t1", "submit"));
+net.add_transition(Transition::new("t2", "approve"));
+
+net.add_arc(Arc::new(
+    ArcNode::Place("p1".to_string()),
+    ArcNode::Transition("t1".to_string()),
+));
+net.add_arc(Arc::new(
+    ArcNode::Transition("t1".to_string()),
+    ArcNode::Place("p2".to_string()),
+));
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<h2 id="conflict-detection"><a class="header" href="#conflict-detection">Conflict Detection</a></h2>
+<p>Conflicts arise when activities are mutually exclusive or represent choices in the process.</p>
+<h3 id="conflict-types"><a class="header" href="#conflict-types">Conflict Types</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Source</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Choice</code></td><td>Petri net structure</td><td>XOR-split: a place has multiple outgoing transitions (only one fires)</td></tr>
+<tr><td><code>Mutex</code></td><td>Trace analysis</td><td>Two activities never co-occur in the same trace</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="detecting-conflicts"><a class="header" href="#detecting-conflicts">Detecting Conflicts</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{detect_conflicts, AlphaMiner, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["start", "a", "end"],
+    &amp;["start", "a", "end"],
+    &amp;["start", "b", "end"],
+    &amp;["start", "b", "end"],
+]);
+
+let mut miner = AlphaMiner::new();
+let net = miner.mine(&amp;log);
+let conflicts = detect_conflicts(&amp;log, &amp;net);
+
+for conflict in &amp;conflicts {
+    println!("Conflict: {:?}", conflict.activities);
+    match conflict.conflict_type {
+        spindle_core::mining::ConflictType::Choice =&gt; {
+            println!("  Type: XOR choice (from Petri net structure)");
+        }
+        spindle_core::mining::ConflictType::Mutex =&gt; {
+            println!("  Type: Mutex (never co-occur in traces)");
+        }
+    }
+    // Evidence explains the source of the conflict
+    if let Some(source) = conflict.evidence.get("source") {
+        println!("  Evidence: {}", source);
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="choice-vs-mutex"><a class="header" href="#choice-vs-mutex">Choice vs Mutex</a></h3>
+<p><strong>Choice</strong> conflicts are structural – they come from XOR-split points in the Petri net where a place has multiple outgoing transitions. Only one transition can fire.</p>
+<p><strong>Mutex</strong> conflicts are behavioral – two activities are never observed together in the same trace, but the relationship is not already captured by a choice conflict. This can indicate implicit exclusion rules.</p>
+<h2 id="rule-learning"><a class="header" href="#rule-learning">Rule Learning</a></h2>
+<p>The module extracts defeasible logic rules from causal relationships in the event log, annotated with statistical metrics.</p>
+<h3 id="support-and-confidence"><a class="header" href="#support-and-confidence">Support and Confidence</a></h3>
+<ul>
+<li><strong>Support</strong>: the number of traces where <code>a</code> is directly followed by <code>b</code></li>
+<li><strong>Confidence</strong>: the ratio of <code>a -&gt; b</code> transitions to all transitions from <code>a</code></li>
+</ul>
+<p>For example, if <code>a</code> appears 10 times as a non-final activity and <code>a -&gt; b</code> occurs 8 times, the confidence is 0.8.</p>
+<h3 id="extracting-rules"><a class="header" href="#extracting-rules">Extracting Rules</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{petri_net_to_dfl, make_repeated_log};
+
+let log = make_repeated_log(10, &amp;["submit", "review", "approve"]);
+
+// Extract rules with minimum support of 5 and confidence of 0.7
+let rules = petri_net_to_dfl(&amp;log, 5, 0.7);
+
+for lr in &amp;rules {
+    println!("Rule: {}", lr.rule.label);
+    println!("  Body: {:?}", lr.rule.body.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;());
+    println!("  Head: {:?}", lr.rule.head.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;());
+    println!("  Support: {}", lr.support);
+    println!("  Confidence: {:.2}", lr.confidence);
+    println!("  Source: {}", lr.source);  // "mined"
+}
+<span class="boring">}</span></code></pre>
+<p>Each <code>LearnedRule</code> contains:</p>
+<ul>
+<li><code>rule</code> – a defeasible logic <code>Rule</code> (type <code>Defeasible</code>, labeled <code>r_mined_N</code>)</li>
+<li><code>support</code> – trace count supporting the causal pair</li>
+<li><code>confidence</code> – ratio of supporting transitions</li>
+<li><code>source</code> – origin of the rule (defaults to <code>"mined"</code>)</li>
+</ul>
+<h3 id="filtering-by-thresholds"><a class="header" href="#filtering-by-thresholds">Filtering by Thresholds</a></h3>
+<p>Rules below the minimum support or confidence thresholds are excluded:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Strict thresholds: only high-confidence rules
+let strict_rules = petri_net_to_dfl(&amp;log, 10, 0.9);
+
+// Relaxed thresholds: discover more patterns
+let relaxed_rules = petri_net_to_dfl(&amp;log, 1, 0.0);
+<span class="boring">}</span></code></pre>
+<h2 id="complete-mining-pipeline"><a class="header" href="#complete-mining-pipeline">Complete Mining Pipeline</a></h2>
+<p>The <code>mine_rules</code> function runs the entire pipeline in a single call.</p>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{mine_rules, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["start", "a", "b", "end"],
+    &amp;["start", "a", "b", "end"],
+    &amp;["start", "a", "c", "end"],
+    &amp;["start", "a", "b", "end"],
+]);
+
+let result = mine_rules(&amp;log, 2, 0.5);
+<span class="boring">}</span></code></pre>
+<h3 id="miningresult-structure"><a class="header" href="#miningresult-structure">MiningResult Structure</a></h3>
+<p>The result bundles all outputs from the pipeline:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Learned DFL rules
+for lr in &amp;result.rules {
+    println!("{}: support={}, confidence={:.2}", lr.rule.label, lr.support, lr.confidence);
+}
+
+// Detected conflicts
+for c in &amp;result.conflicts {
+    println!("Conflict {:?}: {:?}", c.conflict_type, c.activities);
+}
+
+// Discovered Petri net
+println!("Net: {} places, {} transitions, {} arcs",
+    result.petri_net.places.len(),
+    result.petri_net.transitions.len(),
+    result.petri_net.arcs.len(),
+);
+
+// Footprint matrix
+for (a, b) in result.footprint.causal_pairs() {
+    println!("{} -&gt; {}", a, b);
+}
+
+// Mining metadata
+println!("Traces: {}", result.metadata.get("trace_count").unwrap());
+println!("Events: {}", result.metadata.get("event_count").unwrap());
+println!("Min support: {}", result.metadata.get("min_support").unwrap());
+println!("Min confidence: {}", result.metadata.get("min_confidence").unwrap());
+<span class="boring">}</span></code></pre>
+<h3 id="pipeline-steps"><a class="header" href="#pipeline-steps">Pipeline Steps</a></h3>
+<p><code>mine_rules</code> performs the following steps internally:</p>
 <ol>
-<li>Check if the literal is actually unprovable</li>
-<li>Find rules that could prove it</li>
-<li>For each rule, identify what’s blocking it:
-<ul>
-<li>Missing body literals</li>
-<li>Defeated by superior rules</li>
-<li>Blocked by defeaters</li>
-</ul>
-</li>
+<li>Build the footprint matrix from the event log</li>
+<li>Run the Alpha miner to discover the Petri net</li>
+<li>Detect conflicts from the net structure and trace analysis</li>
+<li>Extract DFL rules from causal pairs, filtered by support and confidence</li>
+<li>Package everything into a <code>MiningResult</code> with metadata</li>
 </ol>
-<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
-<p>Theory:</p>
-<pre><code class="language-lisp">(given bird)
-(given penguin)
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(prefer r2 r1)
-</code></pre>
-<p>Query: Why is <code>flies</code> not provable?</p>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="workflow-analysis"><a class="header" href="#workflow-analysis">Workflow Analysis</a></h3>
+<p>Discover the actual execution patterns from system logs:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>let literal = Literal::simple("flies");
-let explanation = why_not(&amp;theory, &amp;literal);
-// explanation.literal = Literal("flies")
-// explanation.would_derive = Some("r1")
-// explanation.blocked_by = [BlockingCondition { ... }]
+</span>use spindle_core::mining::{Event, Case, EventLog, mine_rules};
+use std::collections::HashMap;
+
+// Build log from real workflow events
+let case1 = Case::new("ticket-101", vec![
+    Event::new("2026-01-17T09:00:00Z", "opened", HashMap::new())
+        .with_actor("user"),
+    Event::new("2026-01-17T09:30:00Z", "triaged", HashMap::new())
+        .with_actor("support"),
+    Event::new("2026-01-17T10:00:00Z", "assigned", HashMap::new())
+        .with_actor("manager"),
+    Event::new("2026-01-17T14:00:00Z", "resolved", HashMap::new())
+        .with_actor("engineer"),
+]);
+
+let case2 = Case::new("ticket-102", vec![
+    Event::new("2026-01-17T10:00:00Z", "opened", HashMap::new())
+        .with_actor("user"),
+    Event::new("2026-01-17T10:15:00Z", "triaged", HashMap::new())
+        .with_actor("support"),
+    Event::new("2026-01-17T10:30:00Z", "assigned", HashMap::new())
+        .with_actor("manager"),
+    Event::new("2026-01-17T16:00:00Z", "resolved", HashMap::new())
+        .with_actor("engineer"),
+]);
+
+let log = EventLog::new(vec![case1, case2]);
+let result = mine_rules(&amp;log, 1, 0.5);
+
+// Discovered rules describe the standard ticket workflow
+for lr in &amp;result.rules {
+    println!("{}: {} =&gt; {}  (support={}, confidence={:.0}%)",
+        lr.rule.label,
+        lr.rule.body.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
+        lr.rule.head.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
+        lr.support,
+        lr.confidence * 100.0,
+    );
+}
 <span class="boring">}</span></code></pre>
-<h3 id="result-structure"><a class="header" href="#result-structure">Result Structure</a></h3>
+<h3 id="compliance-checking"><a class="header" href="#compliance-checking">Compliance Checking</a></h3>
+<p>Identify process deviations by comparing mined rules against expected patterns:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>struct WhyNotResult {
-    literal: Literal,              // What we're asking about
-    would_derive: Option&lt;String&gt;,  // Rule that could prove it
-    blocked_by: Vec&lt;BlockingCondition&gt;,  // What's blocking
+</span>use spindle_core::mining::{Footprint, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["submit", "review", "approve"],
+    &amp;["submit", "review", "approve"],
+    &amp;["submit", "approve"],           // Skipped review
+    &amp;["submit", "review", "approve"],
+]);
+
+let fp = Footprint::from_log(&amp;log);
+
+// Check if review always precedes approval
+if fp.is_causal("review", "approve") {
+    println!("Compliant: review always directly precedes approve");
+} else {
+    println!("Violation: review does not always precede approve");
 }
 
-struct BlockingCondition {
-    blocking_type: BlockingType,   // Type of blocking
-    rule_label: String,            // The blocked rule
-    missing_literals: Vec&lt;Literal&gt;, // Missing premises (if applicable)
-    blocking_rule: Option&lt;String&gt;, // Blocking rule (if applicable)
-    explanation: String,           // Human-readable explanation
-}
-
-enum BlockingType {
-    MissingPremise,    // Body not satisfied
-    Defeated,          // Defeated by defeater
-    Contradicted,      // Complement is proven
+// Check for unauthorized shortcuts
+if fp.is_causal("submit", "approve") {
+    println!("Warning: direct submit-to-approve path detected");
 }
 <span class="boring">}</span></code></pre>
-<h3 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h3>
-<ul>
-<li>Debugging unexpected results</li>
-<li>Understanding rule interactions</li>
-<li>Explaining decisions to users</li>
-</ul>
-<h2 id="abduction"><a class="header" href="#abduction">Abduction</a></h2>
-<p><strong>Abduction</strong> finds hypotheses that would make a goal provable.</p>
-<h3 id="api-2"><a class="header" href="#api-2">API</a></h3>
+<h3 id="process-discovery"><a class="header" href="#process-discovery">Process Discovery</a></h3>
+<p>Combine mining with Spindle’s reasoning engine to build executable rule sets:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use spindle_core::query::abduce;
-use spindle_core::literal::Literal;
+</span>use spindle_core::mining::{mine_rules, make_log_from_traces};
 
-let goal = Literal::simple("goal");
-let result = abduce(&amp;theory, &amp;goal, max_solutions);
-<span class="boring">}</span></code></pre>
-<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
-<ol>
-<li>Start with the goal literal</li>
-<li>Find rules that could prove it</li>
-<li>For each rule, identify missing body literals</li>
-<li>Recursively abduce missing literals</li>
-<li>Return minimal sets of assumptions</li>
-</ol>
-<h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
-<p>Theory:</p>
-<pre><code class="language-lisp">(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(normally r3 (and bird healthy) strong-flyer)
-(prefer r2 r1)
-</code></pre>
-<p>Query: What facts would make <code>flies</code> provable?</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let goal = Literal::simple("flies");
-let result = abduce(&amp;theory, &amp;goal, 3);
-// result.solutions[0].facts = HashSet { Literal("bird") }
-<span class="boring">}</span></code></pre>
-<h3 id="solution-structure"><a class="header" href="#solution-structure">Solution Structure</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct AbductionResult {
-    goal: Literal,
-    solutions: Vec&lt;AbductionSolution&gt;,
-}
+let log = make_log_from_traces(&amp;[
+    &amp;["init", "process", "validate", "complete"],
+    &amp;["init", "process", "reject"],
+    &amp;["init", "process", "validate", "complete"],
+    &amp;["init", "skip", "complete"],
+]);
 
-struct AbductionSolution {
-    facts: HashSet&lt;Literal&gt;,      // Facts to assume
-    rules_used: HashSet&lt;String&gt;,  // Rules involved
-    confidence: f64,              // Trust score (if weighted)
+let result = mine_rules(&amp;log, 1, 0.0);
+
+// The learned rules can be added to a theory for further reasoning
+println!("Discovered {} rules from {} traces",
+    result.rules.len(),
+    result.metadata.get("trace_count").unwrap(),
+);
+
+// Conflicts reveal decision points in the process
+for c in &amp;result.conflicts {
+    println!("Decision point: {:?} ({:?})", c.activities, c.conflict_type);
 }
 <span class="boring">}</span></code></pre>
-<h3 id="handling-conflicts"><a class="header" href="#handling-conflicts">Handling Conflicts</a></h3>
-<p>Abduction considers superiority:</p>
-<pre><code class="language-lisp">(given penguin)
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(prefer r2 r1)
-</code></pre>
-<p>Abducing <code>flies</code> might return:</p>
-<ul>
-<li><code>["bird", "healthy"]</code> with a rule <code>r3: bird, healthy =&gt; flies</code> where <code>r3 &gt; r2</code></li>
-<li>Or indicate that <code>flies</code> cannot be achieved given <code>penguin</code></li>
-</ul>
-<h3 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h3>
-<ul>
-<li>Diagnosis: What conditions explain symptoms?</li>
-<li>Planning: What actions achieve a goal?</li>
-<li>Debugging: What facts would fix this?</li>
-</ul>
-<h2 id="combined-queries"><a class="header" href="#combined-queries">Combined Queries</a></h2>
-<h3 id="debugging-workflow"><a class="header" href="#debugging-workflow">Debugging Workflow</a></h3>
-<ol>
-<li><strong>Observe</strong>: <code>flies</code> is not provable</li>
-<li><strong>Why-not</strong>: Discover r2 is blocking</li>
-<li><strong>What-if</strong>: Test <code>what_if(["healthy"])</code></li>
-<li><strong>Abduce</strong>: Find minimal fix</li>
-</ol>
-<h3 id="example-session"><a class="header" href="#example-session">Example Session</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// 1. Check current state
-let conclusions = theory.reason();
-assert!(!is_provable(&amp;conclusions, "flies"));
-
-// 2. Understand why
-let why = why_not(&amp;theory, "flies");
-println!("Blocked by: {:?}", why.blockers);
-
-// 3. Explore hypotheticals
-let hypo = what_if(&amp;theory, &amp;["super_bird"], "flies");
-if hypo.provable {
-    println!("Would work if super_bird");
-}
-
-// 4. Find minimal solution
-let solutions = abduce(&amp;theory, "flies", 3);
-println!("Minimal fixes: {:?}", solutions);
-<span class="boring">}</span></code></pre>
-<h2 id="webassembly-api"><a class="header" href="#webassembly-api">WebAssembly API</a></h2>
-<p>The WASM bindings expose these operators:</p>
-<pre><code class="language-typescript">import { Spindle } from 'spindle-wasm';
-
-const spindle = new Spindle();
-spindle.parseDfl(`
-  f1: &gt;&gt; bird
-  f2: &gt;&gt; penguin
-  r1: bird =&gt; flies
-  r2: penguin =&gt; ~flies
-  r2 &gt; r1
-`);
-
-// What-if
-const whatIf = spindle.whatIf(["healthy"], "flies");
-console.log(whatIf);
-
-// Why-not
-const whyNot = spindle.whyNot("flies");
-console.log(whyNot);
-
-// Abduction
-const abduce = spindle.abduce("flies", 3);
-console.log(abduce);
-</code></pre>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
-<li><strong>Depth limits</strong>: Abduction has a configurable depth limit to avoid infinite search</li>
-<li><strong>Minimal solutions</strong>: Abduction returns minimal sets, not all possible sets</li>
-<li><strong>Grounded queries</strong>: Queries work on grounded theories; variables must be bound</li>
-<li><strong>Performance</strong>: Deep abduction can be expensive for large theories</li>
+<li><strong>Alpha algorithm scope</strong>: The Alpha miner handles sequential, parallel, and choice patterns. It does not support loops, invisible transitions, or duplicate activities.</li>
+<li><strong>Directly-follows only</strong>: The footprint matrix considers only directly adjacent activities, not long-range dependencies.</li>
+<li><strong>Timestamp ordering</strong>: Events within a case are sorted lexicographically by timestamp string. Use ISO-8601 format to ensure correct ordering.</li>
+<li><strong>Rust API only</strong>: Process mining is not yet available through the CLI or WebAssembly bindings.</li>
+<li><strong>No incremental mining</strong>: The entire log must be provided upfront; streaming or incremental updates are not supported.</li>
 </ol>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guides/trust.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/explanations.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../guides/explanations.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guides/performance.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -439,11 +684,11 @@ console.log(abduce);
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guides/trust.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/explanations.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../guides/explanations.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guides/performance.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

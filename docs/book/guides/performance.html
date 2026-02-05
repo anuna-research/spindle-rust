@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e5c005ae.js";
+            window.path_to_searchindex_js = "../searchindex-64fde6ea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d17d2526.js"></script>
+        <script src="../toc-116bb599.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -234,6 +234,12 @@ time spindle --scalable theory.dfl &gt; /dev/null
 (normally r1 (and (node ?x) (node ?y) (edge ?x ?y)) (connected ?x ?y))
 </code></pre>
 <h2 id="memory-optimization"><a class="header" href="#memory-optimization">Memory Optimization</a></h2>
+<blockquote>
+<p><strong>Note:</strong> During reasoning, the proven literal set now uses a <code>BitSet</code> instead
+of <code>HashSet&lt;LiteralId&gt;</code>, providing O(1) membership tests with significantly
+better cache locality. See <a href="#recent-optimizations">Recent Optimizations</a> for
+details.</p>
+</blockquote>
 <h3 id="string-interning"><a class="header" href="#string-interning">String Interning</a></h3>
 <p>Spindle uses string interning internally. You can benefit by:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -333,6 +339,70 @@ cargo flamegraph -- spindle theory.dfl
 heaptrack spindle large-theory.dfl
 heaptrack_print heaptrack.spindle.*.gz
 </code></pre>
+<h2 id="recent-optimizations"><a class="header" href="#recent-optimizations">Recent Optimizations</a></h2>
+<p>Several targeted optimizations have been applied to Spindle’s internals. These
+are transparent to end users but can significantly reduce runtime and memory
+overhead, especially for larger theories.</p>
+<h3 id="smallvec-for-rule-bodiesheads"><a class="header" href="#smallvec-for-rule-bodiesheads">SmallVec for Rule Bodies/Heads</a></h3>
+<p><em>Commit [9bee7a3]</em></p>
+<p>Rule body and head storage was changed from <code>Vec&lt;Literal&gt;</code> to
+<code>SmallVec&lt;[Literal; 4]&gt;</code>. This means that rules with four or fewer body/head
+literals avoid heap allocation entirely – the data is stored inline on the
+stack.</p>
+<p>Most real-world defeasible rules have 1-3 body literals, so the common case is
+covered without any heap allocation. This reduces allocation pressure during
+both grounding and reasoning.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Before
+struct Rule {
+    head: Vec&lt;Literal&gt;,
+    body: Vec&lt;Literal&gt;,
+}
+
+// After
+use smallvec::SmallVec;
+struct Rule {
+    head: SmallVec&lt;[Literal; 4]&gt;,
+    body: SmallVec&lt;[Literal; 4]&gt;,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="bitset-for-proven-literals"><a class="header" href="#bitset-for-proven-literals">BitSet for Proven Literals</a></h3>
+<p><em>Commit [82ae834]</em></p>
+<p>The set of proven literals during reasoning was changed from
+<code>HashSet&lt;LiteralId&gt;</code> to a compact <code>BitSet</code>. Since <code>LiteralId</code> is a <code>u32</code>,
+bitmap indexing is a natural fit:</p>
+<ul>
+<li><strong>O(1)</strong> contains and insert operations (bit test / bit set).</li>
+<li><strong>Better cache locality</strong> – the entire proven set fits in a contiguous
+allocation rather than being scattered across hash buckets.</li>
+<li><strong>Significant improvement</strong> for theories with many literals, where hash
+collisions and bucket traversal previously added up.</li>
+</ul>
+<h3 id="fxhash-for-internal-hashmaps"><a class="header" href="#fxhash-for-internal-hashmaps">FxHash for Internal HashMaps</a></h3>
+<p><em>Commit [4fbe1fd]</em></p>
+<p>All internal <code>HashMap</code> / <code>HashSet</code> instances were switched from the default
+<code>SipHash</code> hasher to <code>FxHash</code> (provided by the <code>rustc-hash</code> crate).</p>
+<ul>
+<li><code>FxHash</code> is considerably faster for small keys (<code>u32</code>, <code>u64</code>) that are common
+throughout Spindle’s indexing and reasoning structures.</li>
+<li>It is <strong>not</strong> cryptographically secure, but Spindle’s internal maps are never
+exposed to untrusted input, so this is not a concern.</li>
+<li>This is the same hasher used inside the Rust compiler itself.</li>
+</ul>
+<h3 id="pre-allocation-strategies"><a class="header" href="#pre-allocation-strategies">Pre-allocation Strategies</a></h3>
+<p><em>Commit [2e92b84]</em></p>
+<p>Worklists, intermediate buffers, and result vectors are now pre-allocated based
+on the size of the theory before reasoning begins:</p>
+<ul>
+<li>The conclusion vector is allocated with an estimate of
+<code>rules.len() * avg_head_size</code>.</li>
+<li>Worklists are sized to the number of rules to avoid repeated reallocation
+during the fixed-point loop.</li>
+</ul>
+<p>This avoids the cost of incremental <code>Vec</code> growth (repeated
+allocate-copy-deallocate cycles) and reduces peak memory usage by avoiding
+over-allocation.</p>
 <h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
 <p>Run the built-in benchmarks:</p>
 <pre><code class="language-bash">cd crates/spindle-core
@@ -383,7 +453,7 @@ cargo bench
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guides/queries.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/mining.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -397,7 +467,7 @@ cargo bench
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guides/queries.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/mining.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

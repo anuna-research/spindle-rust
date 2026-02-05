@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-e5c005ae.js";
+            window.path_to_searchindex_js = "searchindex-64fde6ea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d17d2526.js"></script>
+        <script src="toc-116bb599.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1326,7 +1326,7 @@ inf                              ; Positive infinity
 </code></pre>
 <h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
 <pre><code class="language-bash">spindle [OPTIONS] &lt;FILE&gt;
-spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt;
+spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt; [LITERAL]
 </code></pre>
 <h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
 <h3 id="reason-default"><a class="header" href="#reason-default">reason (default)</a></h3>
@@ -1357,7 +1357,93 @@ spindle reason examples/penguin.dfl
   Superiority: 1
   Total rules: 8
 </code></pre>
+<h3 id="query"><a class="header" href="#query">query</a></h3>
+<p>Query if a literal holds in the theory.</p>
+<pre><code class="language-bash">spindle query examples/penguin.dfl flies
+spindle query examples/penguin.dfl "~flies"
+spindle query examples/penguin.dfl "(not flies)"
+spindle query examples/penguin.dfl --json flies
+</code></pre>
+<p>The literal argument supports multiple formats: <code>p</code>, <code>~p</code>, <code>(not p)</code>, or complex SPL expressions.</p>
+<p>Returns a <code>QueryStatus</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Status</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Provable</td><td>The literal is defeasibly provable</td></tr>
+<tr><td>Refuted</td><td>The negation of the literal is provable</td></tr>
+<tr><td>Unknown</td><td>Neither the literal nor its negation is provable</td></tr>
+</tbody>
+</table>
+</div>
+<p>Output:</p>
+<pre><code>QueryStatus: Provable
+</code></pre>
+<p>With <code>--json</code>:</p>
+<pre><code class="language-json">{"literal":"flies","status":"Refuted"}
+</code></pre>
+<h3 id="explain"><a class="header" href="#explain">explain</a></h3>
+<p>Show the derivation proof tree for why a literal holds.</p>
+<pre><code class="language-bash">spindle explain examples/penguin.dfl "-flies"
+spindle explain examples/penguin.dfl --json "-flies"
+</code></pre>
+<p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
+<p>Output:</p>
+<pre><code>Explanation for -flies:
+  -flies ← [defeasible] r3: penguin =&gt; -flies
+    penguin ← [fact]
+  Blocked alternatives:
+    r1: bird =&gt; flies (defeated by r3 via superiority)
+  Conflict resolutions:
+    r3 &gt; r1 (superiority)
+</code></pre>
+<p>With <code>--json</code>, the output is a JSON or JSON-LD structure containing an <code>Explanation</code> with proof nodes, blocked alternatives, and conflict resolutions.</p>
+<h3 id="why-not"><a class="header" href="#why-not">why-not</a></h3>
+<p>Explain why a literal is NOT provable.</p>
+<pre><code class="language-bash">spindle why-not examples/penguin.dfl flies
+spindle why-not examples/penguin.dfl --json flies
+</code></pre>
+<p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results.</p>
+<p>Output:</p>
+<pre><code>Why not flies?
+  Rule r1: bird =&gt; flies
+    Status: Defeated
+    Defeated by: r3 (penguin =&gt; -flies) via superiority r3 &gt; r1
+</code></pre>
+<p>Possible blocking reasons:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Reason</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>MissingPremise</td><td>A required premise of the rule is not provable</td></tr>
+<tr><td>Defeated</td><td>The rule is defeated by a stronger or competing rule</td></tr>
+<tr><td>Contradicted</td><td>The conclusion conflicts with a strictly proved literal</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="requires"><a class="header" href="#requires">requires</a></h3>
+<p>Abduction: find the minimal sets of facts needed to derive a literal.</p>
+<pre><code class="language-bash">spindle requires examples/penguin.dfl flies
+spindle requires examples/penguin.dfl --max 5 flies
+spindle requires examples/penguin.dfl --json flies
+</code></pre>
+<p>The <code>--max</code> option limits the number of solutions returned (defaults to 10).</p>
+<p>Output:</p>
+<pre><code>To derive flies, you could assume:
+  1. { bird, -penguin }
+  2. { flies }
+</code></pre>
+<p>Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
+<h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
+<p>Output results in JSON format. Available for <code>query</code>, <code>explain</code>, <code>why-not</code>, and <code>requires</code> commands.</p>
+<pre><code class="language-bash">spindle query examples/penguin.dfl --json flies
+spindle explain examples/penguin.dfl --json "-flies"
+</code></pre>
 <h3 id="--scalable"><a class="header" href="#--scalable"><code>--scalable</code></a></h3>
 <p>Use the scalable DL(d||) algorithm instead of standard DL(d).</p>
 <pre><code class="language-bash">spindle --scalable large-theory.dfl
@@ -1411,6 +1497,22 @@ spindle penguin.dfl
 
 # Same with explicit command
 spindle reason penguin.dfl
+</code></pre>
+<h3 id="querying-and-explaining"><a class="header" href="#querying-and-explaining">Querying and Explaining</a></h3>
+<pre><code class="language-bash"># Check if a literal holds
+spindle query penguin.dfl flies
+
+# Get a proof tree for a derived conclusion
+spindle explain penguin.dfl "-flies"
+
+# Debug why something is not provable
+spindle why-not penguin.dfl flies
+
+# Find what facts would make a literal provable
+spindle requires penguin.dfl flies --max 5
+
+# Get JSON output for scripting
+spindle query penguin.dfl --json flies
 </code></pre>
 <h3 id="validate-before-reasoning"><a class="header" href="#validate-before-reasoning">Validate Before Reasoning</a></h3>
 <pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
@@ -1973,6 +2075,887 @@ r2: parent_bob_charlie =&gt; ancestor_bob_charlie
 </li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="modal-operators-deontic-logic"><a class="header" href="#modal-operators-deontic-logic">Modal Operators (Deontic Logic)</a></h1>
+<p>Spindle supports modal operators for deontic reasoning, allowing you to express obligations, permissions, and prohibitions within defeasible logic theories.</p>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>Deontic logic is a branch of formal logic concerned with normative concepts such as obligation, permission, and prohibition. In defeasible reasoning, deontic modalities are particularly useful because normative rules are often subject to exceptions. For example, a general obligation to pay taxes may be defeated by a specific exemption for non-profit organizations.</p>
+<p>Spindle integrates deontic modalities directly into its literal representation. Each literal can carry a modal operator that qualifies the proposition with a normative meaning, and these modal literals participate in the same defeasible reasoning process as ordinary literals – including conflict resolution, superiority, and defeat.</p>
+<blockquote>
+<p><strong>Note:</strong> Modal operators are currently only accessible via the Rust API and WASM bindings. They are not directly supported through the CLI. If you need modal reasoning, use the library or WASM integration.</p>
+</blockquote>
+<h2 id="the-three-standard-operators"><a class="header" href="#the-three-standard-operators">The Three Standard Operators</a></h2>
+<p>Spindle provides three built-in deontic operators:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operator</th><th>DFL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Obligation</td><td><code>[O]</code></td><td><code>(must ...)</code></td><td>The proposition <strong>must</strong> hold</td></tr>
+<tr><td>Permission</td><td><code>[P]</code></td><td><code>(may ...)</code></td><td>The proposition <strong>may</strong> hold</td></tr>
+<tr><td>Forbidden</td><td><code>[F]</code></td><td><code>(forbidden ...)</code></td><td>The proposition <strong>must not</strong> hold</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="obligation-o"><a class="header" href="#obligation-o">Obligation (<code>[O]</code>)</a></h3>
+<p>An obligation states that something is required. If <code>[O]pay</code> is concluded, then there is an obligation to pay.</p>
+<h3 id="permission-p"><a class="header" href="#permission-p">Permission (<code>[P]</code>)</a></h3>
+<p>A permission states that something is allowed. If <code>[P]access</code> is concluded, then access is permitted.</p>
+<h3 id="forbidden-f"><a class="header" href="#forbidden-f">Forbidden (<code>[F]</code>)</a></h3>
+<p>A prohibition states that something is not allowed. If <code>[F]enter</code> is concluded, then entering is forbidden.</p>
+<h2 id="dfl-syntax"><a class="header" href="#dfl-syntax">DFL Syntax</a></h2>
+<p>In DFL, modal operators are written as square-bracketed prefixes on literals:</p>
+<pre><code class="language-dfl"># Modal facts
+f1: &gt;&gt; [O]pay
+f2: &gt;&gt; [P]access
+f3: &gt;&gt; [F]enter
+
+# Modal literals in rules
+r1: signed_contract =&gt; [O]pay
+r2: member =&gt; [P]access
+r3: unauthorized =&gt; [F]enter
+</code></pre>
+<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary DFL literals:</p>
+<pre><code class="language-dfl"># Negated modal literals
+r4: exemption =&gt; -[O]pay
+r5: revoked =&gt; -[P]access
+</code></pre>
+<h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
+<p>In SPL, modal operators use keyword wrappers:</p>
+<pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
+(given (must pay))
+(normally r1 signed-contract (must pay))
+
+; Permission: (may &lt;literal&gt;)
+(given (may access))
+(normally r2 member (may access))
+
+; Forbidden: (forbidden &lt;literal&gt;)
+(given (forbidden enter))
+(normally r3 unauthorized (forbidden enter))
+</code></pre>
+<h3 id="spl-negation"><a class="header" href="#spl-negation">SPL Negation</a></h3>
+<p>Negation of modal literals in SPL uses the <code>not</code> wrapper:</p>
+<pre><code class="language-lisp">; Negated obligation: not obligated to pay
+(normally r4 exemption (not (must pay)))
+
+; Negated permission: not permitted to access
+(normally r5 revoked (not (may access)))
+
+; Negated prohibition: not forbidden to enter (i.e., allowed)
+(normally r6 authorized (not (forbidden enter)))
+</code></pre>
+<h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
+<p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
+<h3 id="dfl-examples"><a class="header" href="#dfl-examples">DFL Examples</a></h3>
+<pre><code class="language-dfl"># If you signed a contract, you are obligated to pay
+r1: signed_contract =&gt; [O]pay
+
+# If you are obligated to pay and fail to pay, you are in violation
+r2: [O]pay, -paid =&gt; violation
+
+# Members may access resources
+r3: member =&gt; [P]access
+
+# Unauthorized users are forbidden from entering
+r4: unauthorized =&gt; [F]enter
+
+# An exemption defeats the obligation to pay
+r5: exemption =&gt; -[O]pay
+r5 &gt; r1
+
+# A defeater: pending review blocks the permission
+d1: pending_review ~&gt; [P]access
+</code></pre>
+<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
+<pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
+(normally r1 signed-contract (must pay))
+
+; If obligated to pay and haven't paid, violation
+(normally r2 (and (must pay) (not paid)) violation)
+
+; Members may access resources
+(normally r3 member (may access))
+
+; Unauthorized users are forbidden from entering
+(normally r4 unauthorized (forbidden enter))
+
+; An exemption defeats the obligation to pay
+(normally r5 exemption (not (must pay)))
+(prefer r5 r1)
+
+; A defeater: pending review blocks the permission
+(except d1 pending-review (may access))
+</code></pre>
+<h3 id="combining-with-predicates-and-variables"><a class="header" href="#combining-with-predicates-and-variables">Combining with Predicates and Variables</a></h3>
+<p>In SPL, modal operators can be combined with predicates and variables:</p>
+<pre><code class="language-lisp">; Employees are obligated to report hours
+(given (employee alice))
+(given (employee bob))
+(normally r1 (employee ?x) (must (report-hours ?x)))
+
+; Managers may approve expenses
+(given (manager alice))
+(normally r2 (manager ?x) (may (approve-expenses ?x)))
+
+; Contractors are forbidden from accessing internal systems
+(given (contractor charlie))
+(normally r3 (contractor ?x) (forbidden (access-internal ?x)))
+</code></pre>
+<h2 id="modal-negation-and-complements"><a class="header" href="#modal-negation-and-complements">Modal Negation and Complements</a></h2>
+<p>Every modal operator has a complement, obtained by toggling the negation flag. The complement of <code>[O]</code> (obligation) is <code>[-O]</code> (no obligation). This is distinct from the negation of the underlying proposition.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Expression</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>[O]pay</code></td><td>There is an obligation to pay</td></tr>
+<tr><td><code>[-O]pay</code></td><td>There is no obligation to pay</td></tr>
+<tr><td><code>[O]~pay</code></td><td>There is an obligation not to pay</td></tr>
+<tr><td><code>[-O]~pay</code></td><td>There is no obligation not to pay</td></tr>
+</tbody>
+</table>
+</div>
+<p>The distinction between modal negation and literal negation is important:</p>
+<ul>
+<li><strong>Modal negation</strong> (<code>[-O]pay</code>): The obligation itself does not hold. You are not required to pay, but you may still choose to.</li>
+<li><strong>Literal negation</strong> (<code>[O]~pay</code>): The obligation holds, but over the negated proposition. You are obligated not to pay.</li>
+</ul>
+<h3 id="display-format"><a class="header" href="#display-format">Display Format</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th>Display</th><th>Negated Display</th></tr>
+</thead>
+<tbody>
+<tr><td>Obligation</td><td><code>[O]</code></td><td><code>[-O]</code></td></tr>
+<tr><td>Permission</td><td><code>[P]</code></td><td><code>[-P]</code></td></tr>
+<tr><td>Forbidden</td><td><code>[F]</code></td><td><code>[-F]</code></td></tr>
+<tr><td>Custom <code>X</code></td><td><code>[X]</code></td><td><code>[-X]</code></td></tr>
+<tr><td>Empty</td><td><em>(nothing)</em></td><td><em>(nothing)</em></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="rust-api-usage"><a class="header" href="#rust-api-usage">Rust API Usage</a></h2>
+<p>The <code>Mode</code> struct is in <code>spindle_core::mode</code> and is re-exported through the prelude.</p>
+<h3 id="creating-modes"><a class="header" href="#creating-modes">Creating Modes</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+// Standard deontic operators
+let obligation = Mode::obligation();  // [O]
+let permission = Mode::permission();  // [P]
+let forbidden = Mode::forbidden();    // [F]
+
+// Empty mode (no modal operator)
+let empty = Mode::empty();
+
+// Custom mode
+let custom = Mode::new("K");  // [K] (e.g., epistemic "known")
+<span class="boring">}</span></code></pre>
+<h3 id="complement-negation-toggle"><a class="header" href="#complement-negation-toggle">Complement (Negation Toggle)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+let obligation = Mode::obligation();
+assert_eq!(format!("{}", obligation), "[O]");
+
+let neg_obligation = obligation.complement();
+assert_eq!(format!("{}", neg_obligation), "[-O]");
+
+// Double complement returns to original
+let double = neg_obligation.complement();
+assert_eq!(format!("{}", double), "[O]");
+<span class="boring">}</span></code></pre>
+<h3 id="checking-mode-state"><a class="header" href="#checking-mode-state">Checking Mode State</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+let mode = Mode::obligation();
+assert!(!mode.is_empty());
+assert!(!mode.negation);
+assert_eq!(mode.name, Some("O".to_string()));
+
+let empty = Mode::empty();
+assert!(empty.is_empty());
+<span class="boring">}</span></code></pre>
+<h3 id="creating-modal-literals"><a class="header" href="#creating-modal-literals">Creating Modal Literals</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+// A literal with an obligation mode: [O]pay
+let must_pay = Literal::new(
+    "pay",
+    false,
+    Mode::obligation(),
+    Temporal::empty(),
+    vec![],
+);
+assert!(must_pay.is_modal());
+assert_eq!(format!("{}", must_pay), "[O]pay");
+
+// A negated literal with permission mode: [P]~access
+let not_access = Literal::new(
+    "access",
+    true,
+    Mode::permission(),
+    Temporal::empty(),
+    vec![],
+);
+assert_eq!(format!("{}", not_access), "[P]~access");
+
+// Modal literal with predicates: [F]enter(restricted_area)
+let forbidden_enter = Literal::new(
+    "enter",
+    false,
+    Mode::forbidden(),
+    Temporal::empty(),
+    vec!["restricted_area".to_string()],
+);
+assert_eq!(format!("{}", forbidden_enter), "[F]enter(restricted_area)");
+<span class="boring">}</span></code></pre>
+<h3 id="modal-literals-in-rules"><a class="header" href="#modal-literals-in-rules">Modal Literals in Rules</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+use smallvec::smallvec;
+
+// r1: signed_contract =&gt; [O]pay
+let body = smallvec![Literal::simple("signed_contract")];
+let head = smallvec![Literal::new(
+    "pay",
+    false,
+    Mode::obligation(),
+    Temporal::empty(),
+    vec![],
+)];
+let rule = Rule::new("r1", RuleType::Defeasible, body, head);
+
+// r2: [O]pay, ~paid =&gt; violation
+let body = smallvec![
+    Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]),
+    Literal::negated("paid"),
+];
+let head = smallvec![Literal::simple("violation")];
+let rule = Rule::new("r2", RuleType::Defeasible, body, head);
+<span class="boring">}</span></code></pre>
+<h3 id="equality-and-hashing"><a class="header" href="#equality-and-hashing">Equality and Hashing</a></h3>
+<p>Modal operators participate in literal equality and hashing. Two literals with the same name but different modes are considered distinct:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+use std::collections::HashSet;
+
+let pay = Literal::simple("pay");
+let must_pay = Literal::new(
+    "pay",
+    false,
+    Mode::obligation(),
+    Temporal::empty(),
+    vec![],
+);
+
+// These are different literals
+assert_ne!(pay, must_pay);
+
+let mut set = HashSet::new();
+set.insert(pay.literal_id());
+// must_pay has a different hash due to the mode
+<span class="boring">}</span></code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="compliance-rules"><a class="header" href="#compliance-rules">Compliance Rules</a></h3>
+<p>Model regulatory compliance where obligations can be defeated by exceptions:</p>
+<pre><code class="language-lisp">; All companies must file annual reports
+(normally r1 company (must file-annual-report))
+
+; Small companies are exempt from detailed reporting
+(normally r2 (and company small-company) (not (must file-annual-report)))
+(prefer r2 r1)
+
+; Public companies must disclose finances
+(normally r3 public-company (must disclose-finances))
+
+; Companies in bankruptcy are exempt from disclosure
+(normally r4 (and public-company in-bankruptcy) (not (must disclose-finances)))
+(prefer r4 r3)
+</code></pre>
+<h3 id="permission-systems"><a class="header" href="#permission-systems">Permission Systems</a></h3>
+<p>Model access control with defeasible permissions:</p>
+<pre><code class="language-lisp">; Employees may access the office
+(normally r1 employee (may access-office))
+
+; Suspended employees lose access
+(normally r2 (and employee suspended) (not (may access-office)))
+(prefer r2 r1)
+
+; Managers may access restricted areas
+(normally r3 manager (may access-restricted))
+
+; Even managers are forbidden from the server room without clearance
+(normally r4 (and manager (not has-clearance)) (forbidden access-server-room))
+</code></pre>
+<h3 id="obligation-tracking"><a class="header" href="#obligation-tracking">Obligation Tracking</a></h3>
+<p>Track obligations through chains of reasoning:</p>
+<pre><code class="language-lisp">; Signing a contract creates an obligation to pay
+(normally r1 signed-contract (must pay))
+
+; Obligation to pay and failure to pay results in violation
+(normally r2 (and (must pay) (not paid)) in-violation)
+
+; Being in violation creates an obligation to remedy
+(normally r3 in-violation (must remedy))
+
+; Payment within grace period removes the violation
+(normally r4 (and in-violation paid-within-grace) (not in-violation))
+(prefer r4 r2)
+</code></pre>
+<h3 id="mixed-normative-reasoning"><a class="header" href="#mixed-normative-reasoning">Mixed Normative Reasoning</a></h3>
+<p>Combine obligations, permissions, and prohibitions in a single theory:</p>
+<pre><code class="language-lisp">; Citizens must pay taxes
+(normally r1 citizen (must pay-taxes))
+
+; Citizens may vote
+(normally r2 citizen (may vote))
+
+; Convicted felons are forbidden from voting (in some jurisdictions)
+(normally r3 (and citizen convicted-felon) (forbidden vote))
+(prefer r3 r2)
+
+; Minors are exempt from taxation
+(normally r4 (and citizen minor) (not (must pay-taxes)))
+(prefer r4 r1)
+
+; Non-citizens are forbidden from voting
+(normally r5 (not citizen) (forbidden vote))
+</code></pre>
+<h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
+<ol>
+<li><strong>No CLI support</strong>: Modal operators cannot be specified through the command-line interface. Use the Rust API or WASM bindings to construct modal literals.</li>
+<li><strong>No inter-modal axioms</strong>: Spindle does not enforce relationships between operators (e.g., it does not automatically derive <code>[P]a</code> from <code>[O]a</code>). If you need such relationships, encode them as explicit rules.</li>
+<li><strong>Custom modes are uninterpreted</strong>: Custom modes created with <code>Mode::new(name)</code> have no built-in semantics. Their meaning is determined entirely by the rules you write.</li>
+<li><strong>No modal logic tableau</strong>: Spindle performs defeasible reasoning, not modal logic model checking. Modal operators are labels on literals, not Kripke-style accessibility relations.</li>
+</ol>
+<h2 id="best-practices-3"><a class="header" href="#best-practices-3">Best Practices</a></h2>
+<ol>
+<li>
+<p><strong>Be explicit about modal relationships</strong></p>
+<pre><code class="language-lisp">; If something is obligatory, it is also permitted
+(always obligation-implies-permission (must ?x) (may ?x))
+</code></pre>
+</li>
+<li>
+<p><strong>Use superiority to handle conflicts between norms</strong></p>
+<pre><code class="language-lisp">(normally r1 employee (must attend-meeting))
+(normally r2 (and employee on-leave) (not (must attend-meeting)))
+(prefer r2 r1)
+</code></pre>
+</li>
+<li>
+<p><strong>Separate normative and factual reasoning</strong></p>
+<pre><code class="language-lisp">; Factual rules
+(normally r1 penguin bird)
+(normally r2 bird flies)
+
+; Normative rules
+(normally r3 (and endangered-species (may hunt)) (not (may hunt)))
+</code></pre>
+</li>
+<li>
+<p><strong>Document the intended interpretation of custom modes</strong></p>
+<pre><code class="language-lisp">; [K] = epistemic "known to be true"
+; Use metadata to document the mode's meaning
+(meta r1 (description "Agents know their own obligations"))
+(normally r1 (must ?x) (K ?x))
+</code></pre>
+</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="trust-weighted-reasoning"><a class="header" href="#trust-weighted-reasoning">Trust-Weighted Reasoning</a></h1>
+<p>Spindle supports trust-weighted defeasible reasoning, enabling source attribution, trust-weighted conclusions, partial defeat (diminishment), and multi-perspective evaluation.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>In multi-agent and multi-source environments, not all information is equally reliable. Trust-weighted reasoning extends Spindle’s defeasible logic with:</p>
+<ul>
+<li><strong>Source attribution</strong>: Track which agents or systems contributed facts and rules</li>
+<li><strong>Trust weighting</strong>: Assign trust values to sources and propagate them through derivations</li>
+<li><strong>Weakest-link model</strong>: A conclusion’s trust degree equals the minimum trust in its derivation chain</li>
+<li><strong>Partial defeat (diminishment)</strong>: Defeaters can reduce a conclusion’s trust without fully defeating it</li>
+<li><strong>Threshold evaluation</strong>: Named thresholds determine whether a conclusion is actionable</li>
+<li><strong>Multi-perspective evaluation</strong>: Different trust policies can evaluate the same derivation differently</li>
+</ul>
+<h2 id="source-attribution-and-claims"><a class="header" href="#source-attribution-and-claims">Source Attribution and Claims</a></h2>
+<h3 id="source-identifiers"><a class="header" href="#source-identifiers">Source Identifiers</a></h3>
+<p>Sources use a <code>category:name</code> format to identify agents, systems, or users:</p>
+<pre><code>agent:security    - A security scanning agent
+agent:coder       - A code analysis agent
+agent:qa          - A QA testing agent
+system:policy     - System-level policy rules
+user:admin        - An administrative user
+</code></pre>
+<h3 id="spl-claims-syntax"><a class="header" href="#spl-claims-syntax">SPL Claims Syntax</a></h3>
+<p>The <code>claims</code> block attributes statements to a source identity:</p>
+<pre><code class="language-lisp">(claims agent:security
+  :at "2026-01-20T09:00:00Z"
+  :note "Automated security scan results"
+  (given vulnerability_detected)
+  (normally sec1 vulnerability_detected security_risk))
+</code></pre>
+<p><strong>Syntax</strong>: <code>(claims source claims-meta? statements...)</code></p>
+<p><strong>Metadata fields</strong> (all optional):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Description</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td><code>:at</code></td><td>ISO 8601 timestamp</td><td><code>:at "2026-01-20T09:00:00Z"</code></td></tr>
+<tr><td><code>:sig</code></td><td>Cryptographic signature</td><td><code>:sig "abc123signature"</code></td></tr>
+<tr><td><code>:note</code></td><td>Human-readable annotation</td><td><code>:note "CI pipeline results"</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Allowed inner statements</strong>:</p>
+<ul>
+<li>Facts: <code>(given literal)</code></li>
+<li>Rules: <code>(normally label body head)</code>, <code>(always label body head)</code>, <code>(except label body head)</code></li>
+<li>Superiorities: <code>(prefer label1 label2)</code></li>
+</ul>
+<p>Claims blocks cannot be nested.</p>
+<h3 id="multi-agent-example"><a class="header" href="#multi-agent-example">Multi-Agent Example</a></h3>
+<p>Multiple agents contribute claims about a pull request:</p>
+<pre><code class="language-lisp">(claims agent:security
+  :at "2026-01-20T09:00:00Z"
+  :note "Automated security scan results"
+  (given vulnerability_detected)
+  (normally sec1 vulnerability_detected security_risk))
+
+(claims agent:coder
+  :at "2026-01-20T09:30:00Z"
+  :note "CI pipeline results"
+  (given tests_pass)
+  (normally dev1 tests_pass code_compiles))
+
+; Global superiority (outside claims blocks)
+(prefer sec1 dev1)
+</code></pre>
+<h3 id="rust-api-source-and-sourcedconclusion"><a class="header" href="#rust-api-source-and-sourcedconclusion">Rust API: Source and SourcedConclusion</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::{Source, SourcedConclusion};
+use spindle_core::conclusion::ConclusionType;
+use spindle_core::literal::Literal;
+
+// Create sources
+let alice = Source::new("agent:alice");
+let bob = Source::with_label("agent:bob", "Bob the Reviewer");
+
+// Display formatting
+println!("{}", alice);  // "agent:alice"
+println!("{}", bob);    // "Bob the Reviewer (agent:bob)"
+
+// Track source attribution on conclusions
+let conclusion = SourcedConclusion::new(
+        Literal::simple("approved"),
+        ConclusionType::DefeasiblyProvable,
+    )
+    .with_source(Source::new("agent:coder"))
+    .with_source(Source::new("agent:reviewer"))
+    .with_source(Source::new("agent:security"))
+    .with_derivation("r1")
+    .with_derivation("r2");
+
+assert_eq!(conclusion.sources.len(), 3);
+assert_eq!(conclusion.derivation, vec!["r1", "r2"]);
+<span class="boring">}</span></code></pre>
+<h2 id="trust-policies-and-configuration"><a class="header" href="#trust-policies-and-configuration">Trust Policies and Configuration</a></h2>
+<p>A <code>TrustPolicy</code> defines how much to trust each source, what thresholds to apply, and the default trust for unknown sources.</p>
+<h3 id="creating-a-trust-policy"><a class="header" href="#creating-a-trust-policy">Creating a Trust Policy</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::TrustPolicy;
+
+let policy = TrustPolicy::new(0.5)              // default trust for unknown sources
+    .with_trust("agent:coder", 0.9)              // high trust
+    .with_trust("agent:security", 0.95)          // very high trust
+    .with_trust("system:policy", 1.0)            // full trust
+    .with_trust("external:api", 0.6)             // moderate trust
+    .with_threshold("action", 0.7)               // threshold for taking action
+    .with_threshold("warn", 0.5)                 // threshold for warnings
+    .with_threshold("log", 0.3);                 // threshold for logging
+<span class="boring">}</span></code></pre>
+<h3 id="querying-trust"><a class="header" href="#querying-trust">Querying Trust</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Look up trust for a known source
+assert_eq!(policy.get_trust("agent:coder"), 0.9);
+assert_eq!(policy.get_trust("agent:security"), 0.95);
+
+// Unknown sources fall back to default_trust
+assert_eq!(policy.get_trust("unknown_agent"), 0.5);
+<span class="boring">}</span></code></pre>
+<h3 id="trust-value-range"><a class="header" href="#trust-value-range">Trust Value Range</a></h3>
+<p>Trust values are <code>f64</code> in the range <code>[0.0, 1.0]</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Value</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>0.0</code></td><td>No trust (fully untrusted)</td></tr>
+<tr><td><code>0.5</code></td><td>Neutral / unknown</td></tr>
+<tr><td><code>1.0</code></td><td>Full trust (axiomatically reliable)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="weakest-link-trust-model"><a class="header" href="#weakest-link-trust-model">Weakest-Link Trust Model</a></h2>
+<p>The trust degree of a derived conclusion equals the <strong>minimum trust value</strong> encountered along its entire derivation chain. This is the “weakest-link” model: a conclusion is only as trustworthy as the least trusted step that produced it.</p>
+<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<p>Given a derivation tree, each node has a trust value from its contributing source. The <code>weakest_link_trust()</code> method recursively computes the minimum:</p>
+<pre><code>       root (0.8)
+      /         \
+branch1 (0.9)   branch2 (0.6)
+    |                |
+leaf1 (0.95)    leaf2 (0.7)
+</code></pre>
+<p>The weakest link is <code>0.6</code> (from <code>branch2</code>).</p>
+<h3 id="rust-api-trustderivationnode"><a class="header" href="#rust-api-trustderivationnode">Rust API: TrustDerivationNode</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::{TrustDerivationNode, Source};
+use spindle_core::literal::Literal;
+
+// Build a derivation tree
+let leaf1 = TrustDerivationNode::new(Literal::simple("bird"), 0.9)
+    .with_source(Source::new("agent:alice"));
+let leaf2 = TrustDerivationNode::new(Literal::simple("healthy"), 0.7)
+    .with_source(Source::new("agent:bob"));
+
+let root = TrustDerivationNode::new(Literal::simple("flies"), 0.8)
+    .with_children(vec![leaf1, leaf2]);
+
+// Weakest link is 0.7 (from "healthy" via agent:bob)
+assert_eq!(root.weakest_link_trust(), 0.7);
+<span class="boring">}</span></code></pre>
+<h3 id="chain-propagation"><a class="header" href="#chain-propagation">Chain Propagation</a></h3>
+<p>In a linear derivation chain, the weakest link propagates upward:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Chain: a (0.9) -&gt; b (0.9) -&gt; c (0.5)
+let leaf = TrustDerivationNode::new(Literal::simple("a"), 0.9)
+    .with_source(Source::new("agent:hightrust"));
+let mid = TrustDerivationNode::new(Literal::simple("b"), 0.9)
+    .with_children(vec![leaf]);
+let root = TrustDerivationNode::new(Literal::simple("c"), 0.5)
+    .with_source(Source::new("agent:lowtrust"))
+    .with_children(vec![mid]);
+
+// Weakest link is 0.5 (from node "c")
+assert_eq!(root.weakest_link_trust(), 0.5);
+<span class="boring">}</span></code></pre>
+<h3 id="single-source"><a class="header" href="#single-source">Single Source</a></h3>
+<p>When a conclusion comes from a single source with no derivation chain, the degree equals the source’s trust value directly:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let node = TrustDerivationNode::new(Literal::simple("tests_pass"), 0.9)
+    .with_source(Source::new("agent:coder"));
+
+assert_eq!(node.weakest_link_trust(), 0.9);
+<span class="boring">}</span></code></pre>
+<h2 id="partial-defeat-diminishment"><a class="header" href="#partial-defeat-diminishment">Partial Defeat (Diminishment)</a></h2>
+<p>Standard defeasible logic uses binary defeat: a conclusion is either proven or not. Trust-weighted reasoning introduces <strong>diminishment</strong>, where a defeater can reduce a conclusion’s trust degree without fully defeating it.</p>
+<h3 id="diminishment-formula"><a class="header" href="#diminishment-formula">Diminishment Formula</a></h3>
+<pre><code>diminishment = min(defeater_degree * target_degree, target_degree)
+resulting_degree = (target_degree - diminishment).max(0.0)
+</code></pre>
+<p>If the defeater fully defeats the target, the resulting degree is <code>0.0</code>.</p>
+<h3 id="example-calculation"><a class="header" href="#example-calculation">Example Calculation</a></h3>
+<p>Given a target with degree <code>0.8</code> and a defeater with degree <code>0.4</code>:</p>
+<pre><code>diminishment = min(0.4 * 0.8, 0.8) = min(0.32, 0.8) = 0.32
+resulting_degree = (0.8 - 0.32).max(0.0) = 0.48
+</code></pre>
+<p>The conclusion survives but with reduced trust.</p>
+<h3 id="rust-api-diminisherinfo"><a class="header" href="#rust-api-diminisherinfo">Rust API: DiminisherInfo</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::DiminisherInfo;
+
+// Partial diminishment
+let dim = DiminisherInfo::new("defeater_rule", 0.4, 0.8);
+assert_eq!(dim.defeater_label, "defeater_rule");
+assert_eq!(dim.defeater_degree, 0.4);
+assert_eq!(dim.target_degree, 0.8);
+assert!(!dim.full_defeat);
+// resulting_degree = 0.8 - min(0.4 * 0.8, 0.8) = 0.48
+assert!((dim.resulting_degree() - 0.48).abs() &lt; 0.001);
+
+// Full defeat
+let full = DiminisherInfo::new("strong_defeater", 0.9, 0.7).as_full_defeat();
+assert!(full.full_defeat);
+assert_eq!(full.resulting_degree(), 0.0);
+<span class="boring">}</span></code></pre>
+<h3 id="diminished-conclusions"><a class="header" href="#diminished-conclusions">Diminished Conclusions</a></h3>
+<p>A <code>WeightedConclusion</code> tracks all diminishers that affected it:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::WeightedConclusion;
+use spindle_core::conclusion::ConclusionType;
+use spindle_core::literal::Literal;
+
+let mut wc = WeightedConclusion::new(
+    Literal::simple("approved"),
+    ConclusionType::DefeasiblyProvable,
+    0.9,
+);
+
+assert!(!wc.was_diminished());
+
+// Apply diminishers
+wc.diminished_by.push(DiminisherInfo::new("d1", 0.3, 0.9));
+wc.diminished_by.push(DiminisherInfo::new("d2", 0.4, 0.9));
+
+assert!(wc.was_diminished());
+assert_eq!(wc.diminished_by.len(), 2);
+<span class="boring">}</span></code></pre>
+<h3 id="resulting-degree-is-never-negative"><a class="header" href="#resulting-degree-is-never-negative">Resulting Degree is Never Negative</a></h3>
+<p>Even with strong diminishment, the resulting degree is clamped to <code>0.0</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let dim = DiminisherInfo::new("strong", 1.0, 0.5);
+assert!(dim.resulting_degree() &gt;= 0.0);
+<span class="boring">}</span></code></pre>
+<h2 id="threshold-based-decisions"><a class="header" href="#threshold-based-decisions">Threshold-Based Decisions</a></h2>
+<p>Named thresholds allow you to make decisions based on trust levels without hardcoding numeric comparisons throughout your application.</p>
+<h3 id="defining-thresholds"><a class="header" href="#defining-thresholds">Defining Thresholds</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let policy = TrustPolicy::new(0.5)
+    .with_threshold("action", 0.7)   // safe to act on
+    .with_threshold("warn", 0.5)     // worth a warning
+    .with_threshold("log", 0.3);     // worth logging
+<span class="boring">}</span></code></pre>
+<h3 id="evaluating-against-thresholds"><a class="header" href="#evaluating-against-thresholds">Evaluating Against Thresholds</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// A conclusion with degree 0.6
+assert_eq!(policy.is_above_threshold(0.6, "action"), Some(false));  // below action
+assert_eq!(policy.is_above_threshold(0.6, "warn"), Some(true));     // above warn
+assert_eq!(policy.is_above_threshold(0.6, "log"), Some(true));      // above log
+
+// Unknown thresholds return None
+assert_eq!(policy.is_above_threshold(0.9, "unknown"), None);
+<span class="boring">}</span></code></pre>
+<h3 id="boundary-behavior"><a class="header" href="#boundary-behavior">Boundary Behavior</a></h3>
+<p>Threshold evaluation uses <code>&gt;=</code> (greater than or equal):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let policy = TrustPolicy::new(0.5)
+    .with_threshold("exact", 0.7);
+
+// Exactly at threshold is considered above
+assert_eq!(policy.is_above_threshold(0.7, "exact"), Some(true));
+assert_eq!(policy.is_above_threshold(0.69999, "exact"), Some(false));
+<span class="boring">}</span></code></pre>
+<h3 id="per-conclusion-threshold-results"><a class="header" href="#per-conclusion-threshold-results">Per-Conclusion Threshold Results</a></h3>
+<p><code>WeightedConclusion</code> stores pre-computed threshold results:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut wc = WeightedConclusion::new(
+    Literal::simple("important_fact"),
+    ConclusionType::DefeasiblyProvable,
+    0.9,
+);
+
+wc.above_threshold.insert("action".to_string(), true);
+wc.above_threshold.insert("warn".to_string(), true);
+wc.above_threshold.insert("critical".to_string(), false);
+
+assert_eq!(wc.is_above_threshold("action"), Some(true));
+assert_eq!(wc.is_above_threshold("critical"), Some(false));
+assert_eq!(wc.is_above_threshold("unknown"), None);
+<span class="boring">}</span></code></pre>
+<h2 id="multi-perspective-evaluation"><a class="header" href="#multi-perspective-evaluation">Multi-Perspective Evaluation</a></h2>
+<p>The same derivation can be evaluated under different trust policies, yielding different conclusions. This models real-world scenarios where different stakeholders have different trust assessments.</p>
+<h3 id="different-perspectives-on-the-same-sources"><a class="header" href="#different-perspectives-on-the-same-sources">Different Perspectives on the Same Sources</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Security team perspective: trusts security agents highly
+let security_perspective = TrustPolicy::new(0.5)
+    .with_trust("agent:security", 0.95)
+    .with_trust("agent:coder", 0.6);
+
+// Developer perspective: trusts coders highly
+let developer_perspective = TrustPolicy::new(0.5)
+    .with_trust("agent:security", 0.5)
+    .with_trust("agent:coder", 0.9);
+
+// Same source, different trust values
+assert!(
+    security_perspective.get_trust("agent:security")
+    &gt; security_perspective.get_trust("agent:coder")
+);
+assert!(
+    developer_perspective.get_trust("agent:coder")
+    &gt; developer_perspective.get_trust("agent:security")
+);
+<span class="boring">}</span></code></pre>
+<h3 id="conservative-vs-permissive-policies"><a class="header" href="#conservative-vs-permissive-policies">Conservative vs. Permissive Policies</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Conservative: high thresholds, low default trust
+let conservative = TrustPolicy::new(0.3)
+    .with_threshold("action", 0.9)
+    .with_threshold("warn", 0.7);
+
+// Permissive: low thresholds, high default trust
+let permissive = TrustPolicy::new(0.8)
+    .with_threshold("action", 0.5)
+    .with_threshold("warn", 0.3);
+
+let degree = 0.75;
+
+// Conservative: above warn, below action
+assert_eq!(conservative.is_above_threshold(degree, "action"), Some(false));
+assert_eq!(conservative.is_above_threshold(degree, "warn"), Some(true));
+
+// Permissive: above both
+assert_eq!(permissive.is_above_threshold(degree, "action"), Some(true));
+assert_eq!(permissive.is_above_threshold(degree, "warn"), Some(true));
+<span class="boring">}</span></code></pre>
+<p>This enables the same reasoning results to drive different behavior depending on which stakeholder’s perspective is applied.</p>
+<h2 id="trust-explanations"><a class="header" href="#trust-explanations">Trust Explanations</a></h2>
+<p><code>TrustExplanation</code> provides a complete explanation of how a conclusion’s trust degree was derived, including the derivation tree and any diminishers that affected it.</p>
+<h3 id="generating-explanations"><a class="header" href="#generating-explanations">Generating Explanations</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::{TrustExplanation, TrustDerivationNode, DiminisherInfo, Source};
+use spindle_core::literal::Literal;
+
+// Build derivation tree
+let leaf = TrustDerivationNode::new(Literal::simple("premise"), 0.9)
+    .with_source(Source::with_label("src1", "Source One"));
+let root = TrustDerivationNode::new(Literal::simple("conclusion"), 0.85)
+    .with_children(vec![leaf]);
+
+// Create explanation
+let explanation = TrustExplanation::new(Literal::simple("conclusion"), 0.85)
+    .with_tree(root);
+
+println!("{}", explanation.to_natural_language());
+<span class="boring">}</span></code></pre>
+<h3 id="natural-language-output"><a class="header" href="#natural-language-output">Natural Language Output</a></h3>
+<p>The <code>to_natural_language()</code> method produces human-readable output:</p>
+<pre><code>Trust Explanation for "conclusion"
+Final trust degree: 0.85
+
+Derivation tree:
+  1. "conclusion" (trust: 0.85)
+     1. "premise" (trust: 0.90) [source: Source One (src1)]
+</code></pre>
+<h3 id="explanations-with-diminishers"><a class="header" href="#explanations-with-diminishers">Explanations with Diminishers</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let dim1 = DiminisherInfo::new("d1", 0.4, 0.9);
+let dim2 = DiminisherInfo::new("d2", 0.3, 0.9).as_full_defeat();
+
+let explanation = TrustExplanation::new(Literal::simple("goal"), 0.0)
+    .with_diminishers(vec![dim1, dim2]);
+
+println!("{}", explanation.to_natural_language());
+<span class="boring">}</span></code></pre>
+<p>Output includes diminisher details:</p>
+<pre><code>Trust Explanation for "goal"
+Final trust degree: 0.00
+
+Diminishers:
+  1. Diminished by 'd1' (degree 0.40): 0.90 -&gt; 0.45
+  2. Fully defeated by 'd2' (degree 0.30)
+</code></pre>
+<h3 id="non-provable-literals"><a class="header" href="#non-provable-literals">Non-Provable Literals</a></h3>
+<p>When a literal is not provable, the explanation has a zero degree and no derivation tree:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let explanation = TrustExplanation::new(Literal::simple("not_provable"), 0.0);
+assert_eq!(explanation.final_degree, 0.0);
+assert!(explanation.derivation_tree.is_none());
+<span class="boring">}</span></code></pre>
+<h2 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h2>
+<h3 id="multi-agent-systems"><a class="header" href="#multi-agent-systems">Multi-Agent Systems</a></h3>
+<p>In a code review pipeline, multiple agents contribute assessments with varying trust levels:</p>
+<pre><code class="language-lisp">; Security scanner has high credibility for vulnerability findings
+(claims agent:security
+  :at "2026-01-20T09:00:00Z"
+  :note "Automated security scan results"
+  (given vulnerability_detected)
+  (normally sec1 vulnerability_detected security_risk))
+
+; CI pipeline reports test results
+(claims agent:coder
+  :at "2026-01-20T09:30:00Z"
+  :note "CI pipeline results"
+  (given tests_pass)
+  (normally dev1 tests_pass code_compiles))
+
+; Superiority: security findings override development claims
+(prefer sec1 dev1)
+</code></pre>
+<p>A trust policy assigns credibility:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:security", 0.95)
+    .with_trust("agent:coder", 0.9)
+    .with_trust("agent:qa", 0.85)
+    .with_threshold("action", 0.7)
+    .with_threshold("warn", 0.5);
+<span class="boring">}</span></code></pre>
+<h3 id="auditing"><a class="header" href="#auditing">Auditing</a></h3>
+<p>Trust explanations provide a full audit trail for every conclusion:</p>
+<ul>
+<li>Which sources contributed</li>
+<li>What derivation chain was followed</li>
+<li>What the trust degree is at each step</li>
+<li>Whether any diminishers reduced the conclusion</li>
+<li>Whether the conclusion meets each named threshold</li>
+</ul>
+<p>This is useful for compliance requirements where decisions must be traceable and explainable.</p>
+<h3 id="regulatory-compliance"><a class="header" href="#regulatory-compliance">Regulatory Compliance</a></h3>
+<p>Different regulatory frameworks can be modeled as different trust policies applied to the same reasoning results:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Strict regulatory perspective
+let regulatory = TrustPolicy::new(0.3)
+    .with_trust("system:policy", 1.0)
+    .with_trust("agent:auditor", 0.95)
+    .with_trust("external:vendor", 0.4)
+    .with_threshold("compliant", 0.9)
+    .with_threshold("review_needed", 0.7);
+
+// Internal operations perspective
+let operations = TrustPolicy::new(0.7)
+    .with_trust("system:policy", 1.0)
+    .with_trust("agent:auditor", 0.8)
+    .with_trust("external:vendor", 0.7)
+    .with_threshold("compliant", 0.6)
+    .with_threshold("review_needed", 0.4);
+
+// Same conclusion degree, different compliance outcomes
+let degree = 0.75;
+assert_eq!(regulatory.is_above_threshold(degree, "compliant"), Some(false));
+assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
+<span class="boring">}</span></code></pre>
+<h2 id="limitations-2"><a class="header" href="#limitations-2">Limitations</a></h2>
+<ol>
+<li><strong>Claims parsing</strong>: The <code>(claims ...)</code> SPL syntax is documented but not yet implemented in the parser. Source attribution is available through the Rust API.</li>
+<li><strong>Static trust values</strong>: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in.</li>
+<li><strong>Weakest-link only</strong>: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.</li>
+<li><strong>No cryptographic verification</strong>: The <code>:sig</code> metadata field is stored but not verified against any cryptographic infrastructure.</li>
+<li><strong>Floating-point precision</strong>: Trust values are <code>f64</code>, so standard floating-point precision considerations apply to boundary comparisons.</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="query-operators"><a class="header" href="#query-operators">Query Operators</a></h1>
 <p>Spindle provides three query operators for interactive reasoning: what-if, why-not, and abduction.</p>
 <h2 id="what-if-queries"><a class="header" href="#what-if-queries">What-If Queries</a></h2>
@@ -1989,7 +2972,7 @@ let hypotheticals = vec![
 let goal = Literal::negated("flies");
 let result = what_if(&amp;theory, hypotheticals, &amp;goal);
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
 <ol>
 <li>Create a copy of the theory</li>
 <li>Add hypothetical facts</li>
@@ -2012,7 +2995,7 @@ let result = what_if(&amp;theory, hypotheticals, &amp;goal);
 // result.is_provable() = true
 // result.new_conclusions = [Literal("~flies")]
 <span class="boring">}</span></code></pre>
-<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h3>
+<h3 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h3>
 <ul>
 <li>Exploring consequences of decisions</li>
 <li>Scenario analysis</li>
@@ -2081,7 +3064,7 @@ enum BlockingType {
     Contradicted,      // Complement is proven
 }
 <span class="boring">}</span></code></pre>
-<h3 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h3>
+<h3 id="use-cases-1-1"><a class="header" href="#use-cases-1-1">Use Cases</a></h3>
 <ul>
 <li>Debugging unexpected results</li>
 <li>Understanding rule interactions</li>
@@ -2098,7 +3081,7 @@ use spindle_core::literal::Literal;
 let goal = Literal::simple("goal");
 let result = abduce(&amp;theory, &amp;goal, max_solutions);
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
+<h3 id="how-it-works-2-1"><a class="header" href="#how-it-works-2-1">How It Works</a></h3>
 <ol>
 <li>Start with the goal literal</li>
 <li>Find rules that could prove it</li>
@@ -2146,7 +3129,7 @@ struct AbductionSolution {
 <li><code>["bird", "healthy"]</code> with a rule <code>r3: bird, healthy =&gt; flies</code> where <code>r3 &gt; r2</code></li>
 <li>Or indicate that <code>flies</code> cannot be achieved given <code>penguin</code></li>
 </ul>
-<h3 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h3>
+<h3 id="use-cases-2-1"><a class="header" href="#use-cases-2-1">Use Cases</a></h3>
 <ul>
 <li>Diagnosis: What conditions explain symptoms?</li>
 <li>Planning: What actions achieve a goal?</li>
@@ -2206,12 +3189,1036 @@ console.log(whyNot);
 const abduce = spindle.abduce("flies", 3);
 console.log(abduce);
 </code></pre>
-<h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
+<h2 id="limitations-3"><a class="header" href="#limitations-3">Limitations</a></h2>
 <ol>
 <li><strong>Depth limits</strong>: Abduction has a configurable depth limit to avoid infinite search</li>
 <li><strong>Minimal solutions</strong>: Abduction returns minimal sets, not all possible sets</li>
 <li><strong>Grounded queries</strong>: Queries work on grounded theories; variables must be bound</li>
 <li><strong>Performance</strong>: Deep abduction can be expensive for large theories</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="explanation-system"><a class="header" href="#explanation-system">Explanation System</a></h1>
+<p>Spindle provides a comprehensive explanation system for inspecting how and why conclusions are derived in defeasible reasoning. When a reasoner produces a conclusion, understanding the derivation path, the alternatives that were considered and rejected, and the conflicts that were resolved is essential for trust, debugging, and auditability.</p>
+<h2 id="why-explanations-matter"><a class="header" href="#why-explanations-matter">Why Explanations Matter</a></h2>
+<p>Defeasible reasoning involves rules that can be overridden, conflicts between competing conclusions, and subtle interactions between superiority relations. A bare conclusion like <code>+d ~flies</code> tells you the result but not the story. The explanation system answers questions such as:</p>
+<ul>
+<li>Which rules fired to produce this conclusion?</li>
+<li>Were there competing rules that were defeated?</li>
+<li>How were conflicts resolved – by superiority, definite priority, or team defeat?</li>
+<li>What is the full derivation chain from facts to conclusion?</li>
+</ul>
+<p>This is critical in domains like legal reasoning, medical diagnosis, and access control where decisions must be justified.</p>
+<h2 id="proof-trees"><a class="header" href="#proof-trees">Proof Trees</a></h2>
+<h3 id="structure"><a class="header" href="#structure">Structure</a></h3>
+<p>An explanation is built around a <strong>proof tree</strong>: a recursive structure that traces the derivation of a literal back to the facts and rules that support it.</p>
+<p>The core types are:</p>
+<ul>
+<li>
+<p><code>ProofNode</code> – represents the derivation of a single literal, containing:</p>
+<ul>
+<li><code>literal</code> – the derived literal</li>
+<li><code>derivation_type</code> – <code>Definite</code> (strict rules and facts only) or <code>Defeasible</code> (defeasible rules involved)</li>
+<li><code>proof_step</code> – the rule application that produced this literal</li>
+<li><code>blocked_alternatives</code> – alternative derivations that were considered but rejected</li>
+<li><code>conflicts_resolved</code> – conflict resolutions that occurred at this node</li>
+</ul>
+</li>
+<li>
+<p><code>ProofStep</code> – represents one application of a rule, containing:</p>
+<ul>
+<li><code>rule_label</code> – which rule was applied</li>
+<li><code>rule_type</code> – <code>Fact</code>, <code>Strict</code>, <code>Defeasible</code>, or <code>Defeater</code></li>
+<li><code>rule_text</code> – string representation of the rule</li>
+<li><code>body_proofs</code> – recursive <code>ProofNode</code> entries for each body literal</li>
+<li><code>annotations</code> – metadata attached to the rule</li>
+</ul>
+</li>
+<li>
+<p><code>DerivationType</code> – either <code>Definite</code> or <code>Defeasible</code></p>
+</li>
+</ul>
+<h3 id="navigating-proof-trees"><a class="header" href="#navigating-proof-trees">Navigating Proof Trees</a></h3>
+<p>A proof tree reads from conclusion down to facts. At each node, the <code>proof_step</code> tells you which rule was used, and the <code>body_proofs</code> within that step give you the sub-trees for each premise.</p>
+<p>For example, given a theory where <code>penguin</code> is a fact, <code>penguin -&gt; bird</code> is strict, and <code>bird =&gt; flies</code> is defeasible, the proof tree for <code>flies</code> would look like:</p>
+<pre><code>flies [defeasible, r1: bird =&gt; flies]
+  bird [definite, s1: penguin -&gt; bird]
+    penguin [definite, f1: &gt;&gt; penguin]
+</code></pre>
+<p>Each level corresponds to a <code>ProofNode</code> whose <code>proof_step.body_proofs</code> contains the children.</p>
+<h2 id="blocked-alternatives-and-conflict-resolutions"><a class="header" href="#blocked-alternatives-and-conflict-resolutions">Blocked Alternatives and Conflict Resolutions</a></h2>
+<h3 id="blocked-alternatives"><a class="header" href="#blocked-alternatives">Blocked Alternatives</a></h3>
+<p>When the reasoner considers multiple rules that could derive a literal (or its complement), some may be blocked. A <code>BlockedProof</code> records:</p>
+<ul>
+<li><code>literal</code> – what the blocked rule tried to prove</li>
+<li><code>rule_label</code> – the label of the blocked rule</li>
+<li><code>reason</code> – a <code>BlockReason</code> enum value:
+<ul>
+<li><code>Superiority</code> – blocked by a superior rule</li>
+<li><code>Defeater</code> – blocked by a defeater</li>
+<li><code>Conflict</code> – blocked due to an unresolved conflict</li>
+<li><code>BodyUnprovable</code> – the rule’s body could not be satisfied</li>
+</ul>
+</li>
+<li><code>blocking_rule</code> – the label of the rule that caused the blocking (if applicable)</li>
+<li><code>explanation</code> – a human-readable description</li>
+</ul>
+<h3 id="conflict-resolutions"><a class="header" href="#conflict-resolutions">Conflict Resolutions</a></h3>
+<p>When two rules derive contradictory conclusions, the conflict must be resolved. A <code>ConflictResolution</code> records:</p>
+<ul>
+<li><code>winning_rule</code> – the rule that prevailed</li>
+<li><code>losing_rule</code> – the rule that was defeated</li>
+<li><code>resolution_type</code> – a <code>ResolutionType</code> enum value:
+<ul>
+<li><code>Superiority</code> – resolved by an explicit superiority relation</li>
+<li><code>DefinitePriority</code> – resolved because strict rules override defeasible ones</li>
+<li><code>TeamDefeat</code> – resolved by team defeat (a group of rules collectively defeats the attacker)</li>
+</ul>
+</li>
+</ul>
+<p>Together, blocked alternatives and conflict resolutions provide a complete picture of why one derivation was chosen over another.</p>
+<h2 id="output-formats"><a class="header" href="#output-formats">Output Formats</a></h2>
+<p>The <code>Explanation</code> type supports four output formats, each suited to different use cases.</p>
+<h3 id="natural-language"><a class="header" href="#natural-language">Natural Language</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let text = explanation.to_natural_language();
+println!("{}", text);
+<span class="boring">}</span></code></pre>
+<p>Produces human-readable output with headers, indented proof trees, and numbered lists:</p>
+<pre><code>Explanation for +d ~flies
+This was proven using defeasible rules and was not defeated by any conflicting rule.
+
+Derivation:
+  1. "~flies" was derived defeasibly
+     Using defeasible rule: r2
+     Prerequisites:
+       1. "penguin" was established as a fact
+          Using fact: f1
+
+Blocked Alternatives:
+  1. Rule 'r1' was blocked due to superiority: r2 is superior and concludes ~flies
+
+Conflict Resolutions:
+  1. 'r2' defeated 'r1' via superiority
+</code></pre>
+<p>Annotations (description and source) are included when present on proof steps.</p>
+<h3 id="json"><a class="header" href="#json">JSON</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let json = explanation.to_json();
+<span class="boring">}</span></code></pre>
+<p>Produces a structured JSON value with nested proof trees:</p>
+<pre><code class="language-json">{
+  "conclusion_type": "+d",
+  "literal": "~flies",
+  "proof_tree": {
+    "literal": "~flies",
+    "derivation_type": "defeasible",
+    "proof_step": {
+      "rule_label": "r2",
+      "rule_type": "defeasible",
+      "rule_text": "penguin =&gt; ~flies",
+      "body_proofs": [
+        {
+          "literal": "penguin",
+          "derivation_type": "definite",
+          "proof_step": {
+            "rule_label": "f1",
+            "rule_type": "fact",
+            "rule_text": "&gt;&gt; penguin",
+            "body_proofs": []
+          }
+        }
+      ]
+    }
+  },
+  "blocked_alternatives": [
+    {
+      "literal": "flies",
+      "rule_label": "r1",
+      "reason": "superiority",
+      "blocking_rule": "r2",
+      "explanation": "r2 is superior and concludes ~flies"
+    }
+  ],
+  "conflicts_resolved": [
+    {
+      "winning_rule": "r2",
+      "losing_rule": "r1",
+      "resolution_type": "superiority",
+      "superiority_label": "sup1"
+    }
+  ]
+}
+</code></pre>
+<h3 id="json-ld"><a class="header" href="#json-ld">JSON-LD</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let jsonld = explanation.to_jsonld();
+<span class="boring">}</span></code></pre>
+<p>Produces a JSON-LD document with semantic annotations for integration with linked data systems. The output includes:</p>
+<ul>
+<li><code>@context</code> defining vocabulary prefixes:
+<ul>
+<li><code>spindle</code> – <code>https://spindle.dev/ontology#</code></li>
+<li><code>prov</code> – <code>http://www.w3.org/ns/prov#</code></li>
+<li><code>rdfs</code> – <code>http://www.w3.org/2000/01/rdf-schema#</code></li>
+<li><code>xsd</code> – <code>http://www.w3.org/2001/XMLSchema#</code></li>
+</ul>
+</li>
+<li><code>@type: "spindle:Explanation"</code> on the root document</li>
+<li><code>@type: "spindle:ProofNode"</code> on proof nodes</li>
+<li><code>@type: "spindle:ProofStep"</code> on proof steps</li>
+<li><code>@type: "spindle:BlockedProof"</code> on blocked alternatives</li>
+<li><code>@type: "spindle:ConflictResolution"</code> on conflict resolutions</li>
+</ul>
+<p>Provenance annotations from rule metadata are mapped to standard vocabularies:</p>
+<ul>
+<li><code>source</code> / <code>prov:wasAttributedTo</code> for attribution</li>
+<li><code>description</code> / <code>rdfs:comment</code> for descriptions</li>
+<li><code>confidence</code> / <code>spindle:confidence</code> for trust scores</li>
+<li><code>@id</code> for linked data identifiers</li>
+</ul>
+<h3 id="graphviz-dot"><a class="header" href="#graphviz-dot">Graphviz DOT</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let dot = explanation.to_dot();
+<span class="boring">}</span></code></pre>
+<p>Produces a DOT language graph for visual rendering. The color scheme encodes derivation semantics:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Element</th><th>Shape</th><th>Color</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Definite derivation</td><td>Box</td><td>Blue (<code>#cce5ff</code>)</td><td>Derived via strict rules and facts</td></tr>
+<tr><td>Defeasible derivation</td><td>Box</td><td>Green (<code>#d4edda</code>)</td><td>Derived via defeasible rules</td></tr>
+<tr><td>Blocked alternative</td><td>Dashed box</td><td>Red (<code>#ffcccc</code>)</td><td>Derivation that was rejected</td></tr>
+<tr><td>Conflict resolution</td><td>Diamond</td><td>Orange (<code>#ffe0b3</code>)</td><td>How a conflict was decided</td></tr>
+</tbody>
+</table>
+</div>
+<p>The graph uses bottom-to-top layout (<code>rankdir=BT</code>), so facts appear at the bottom and conclusions at the top. Edges are labeled with rule labels.</p>
+<h2 id="annotations-and-metadata"><a class="header" href="#annotations-and-metadata">Annotations and Metadata</a></h2>
+<h3 id="the-annotations-type"><a class="header" href="#the-annotations-type">The Annotations Type</a></h3>
+<p><code>Annotations</code> is a metadata container with two fields:</p>
+<ul>
+<li><code>id</code> – an optional URI identifier (<code>@id</code> in JSON-LD)</li>
+<li><code>entries</code> – a <code>HashMap&lt;String, String&gt;</code> of key-value pairs</li>
+</ul>
+<h3 id="standard-vocabulary-keys"><a class="header" href="#standard-vocabulary-keys">Standard Vocabulary Keys</a></h3>
+<p>The annotation system recognizes standard vocabulary keys and provides convenience accessors that check multiple equivalent keys:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Accessor</th><th>Keys Checked (in order)</th></tr>
+</thead>
+<tbody>
+<tr><td><code>description()</code></td><td><code>description</code>, <code>dc:description</code>, <code>rdfs:comment</code></td></tr>
+<tr><td><code>source()</code></td><td><code>source</code>, <code>dc:source</code>, <code>prov:wasAttributedTo</code></td></tr>
+<tr><td><code>confidence()</code></td><td><code>confidence</code>, <code>spindle:confidence</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>You can also use <code>get(key)</code> for any arbitrary key, or <code>get_any(keys)</code> to check a list of fallback keys.</p>
+<h3 id="creating-annotations"><a class="header" href="#creating-annotations">Creating Annotations</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::explanation::Annotations;
+
+// Empty annotations
+let annots = Annotations::new();
+
+// With entries
+let annots = Annotations::with_entries(vec![
+    ("description", "Birds typically fly"),
+    ("source", "ornithology-textbook"),
+    ("confidence", "0.95"),
+]);
+
+// With a linked data identifier
+let mut annots = Annotations::with_entries(vec![
+    ("source", "legal-statute-42-usc-1983"),
+]);
+annots.id = Some("https://example.org/rules/r1".to_string());
+<span class="boring">}</span></code></pre>
+<h3 id="attaching-annotations-to-proof-steps"><a class="header" href="#attaching-annotations-to-proof-steps">Attaching Annotations to Proof Steps</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::explanation::{ProofStep, Annotations};
+use spindle_core::rule::RuleType;
+
+let annots = Annotations::with_entries(vec![
+    ("source", "expert-knowledge"),
+    ("description", "Standard medical practice guideline"),
+    ("confidence", "0.85"),
+]);
+
+let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom =&gt; diagnosis")
+    .with_annotations(annots);
+<span class="boring">}</span></code></pre>
+<p>Annotations are preserved across all output formats. In natural language, <code>description</code> and <code>source</code> are printed inline. In JSON-LD, they are mapped to <code>rdfs:comment</code>, <code>prov:wasAttributedTo</code>, and <code>spindle:confidence</code> respectively.</p>
+<h2 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h2>
+<h3 id="the-explain-command"><a class="header" href="#the-explain-command">The <code>explain</code> Command</a></h3>
+<p>Show the full derivation proof tree for a provable literal:</p>
+<pre><code class="language-bash">spindle explain theory.dfl "~flies"
+</code></pre>
+<p>Output includes the derivation chain, blocked alternatives, and conflict resolutions in natural language format.</p>
+<p>For machine-readable output:</p>
+<pre><code class="language-bash">spindle explain theory.dfl --json "~flies"
+</code></pre>
+<h3 id="the-why-not-command"><a class="header" href="#the-why-not-command">The <code>why-not</code> Command</a></h3>
+<p>Explain why a literal is NOT provable:</p>
+<pre><code class="language-bash">spindle why-not theory.dfl flies
+</code></pre>
+<p>Lists each rule that could have derived the literal and explains why it was blocked (missing premises, defeated by a stronger rule, or contradicted by a strict derivation).</p>
+<p>For machine-readable output:</p>
+<pre><code class="language-bash">spindle why-not theory.dfl --json flies
+</code></pre>
+<h3 id="debugging-workflow-1"><a class="header" href="#debugging-workflow-1">Debugging Workflow</a></h3>
+<p>A typical debugging session combines both commands:</p>
+<pre><code class="language-bash"># 1. Check what was concluded
+spindle --positive theory.dfl
+
+# 2. A literal you expected is missing -- find out why
+spindle why-not theory.dfl flies
+
+# 3. A literal you did not expect is present -- inspect its proof
+spindle explain theory.dfl "~flies"
+
+# 4. Pipe JSON output to other tools for further analysis
+spindle explain theory.dfl --json "~flies" | jq '.blocked_alternatives'
+</code></pre>
+<h2 id="rust-api-examples"><a class="header" href="#rust-api-examples">Rust API Examples</a></h2>
+<h3 id="generating-an-explanation"><a class="header" href="#generating-an-explanation">Generating an Explanation</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::explanation::explain;
+use spindle_core::literal::Literal;
+use spindle_core::theory::Theory;
+
+let mut theory = Theory::new();
+theory.add_fact("bird");
+theory.add_defeasible_rule(&amp;["bird"], "flies");
+
+let literal = Literal::simple("flies");
+if let Some(explanation) = explain(&amp;theory, &amp;literal) {
+    // Natural language output
+    println!("{}", explanation.to_natural_language());
+
+    // Structured JSON
+    let json = explanation.to_json();
+    println!("{}", serde_json::to_string_pretty(&amp;json).unwrap());
+
+    // JSON-LD for semantic web
+    let jsonld = explanation.to_jsonld();
+
+    // Graphviz DOT for visualization
+    let dot = explanation.to_dot();
+}
+<span class="boring">}</span></code></pre>
+<p>The <code>explain</code> function returns <code>None</code> if the literal is not positively provable in the theory.</p>
+<h3 id="building-explanations-manually"><a class="header" href="#building-explanations-manually">Building Explanations Manually</a></h3>
+<p>For custom explanation construction (useful in testing or when building explanations outside the standard reasoning pipeline):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::explanation::*;
+use spindle_core::conclusion::ConclusionType;
+use spindle_core::literal::Literal;
+use spindle_core::rule::RuleType;
+
+// Build a proof tree bottom-up
+let fact_step = ProofStep::new("f1", RuleType::Fact, "&gt;&gt; penguin");
+let fact_node = ProofNode::new(Literal::simple("penguin"), DerivationType::Definite)
+    .with_proof_step(fact_step);
+
+let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin =&gt; ~flies")
+    .with_body_proofs(vec![fact_node]);
+let conclusion_node = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
+    .with_proof_step(rule_step);
+
+// Record a blocked alternative
+let blocked = BlockedProof::new(
+    Literal::simple("flies"),
+    "r1",
+    BlockReason::Superiority,
+    "Rule r2 is superior and concludes ~flies",
+).with_blocking_rule("r2");
+
+// Record a conflict resolution
+let conflict = ConflictResolution::new("r2", "r1", ResolutionType::Superiority)
+    .with_superiority("sup1");
+
+// Assemble the explanation
+let explanation = Explanation::new(
+    ConclusionType::DefeasiblyProvable,
+    Literal::negated("flies"),
+)
+.with_proof(conclusion_node)
+.with_blocked(vec![blocked])
+.with_conflicts(vec![conflict]);
+<span class="boring">}</span></code></pre>
+<h3 id="inspecting-proof-trees-programmatically"><a class="header" href="#inspecting-proof-trees-programmatically">Inspecting Proof Trees Programmatically</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn walk_proof(node: &amp;ProofNode, depth: usize) {
+    let indent = "  ".repeat(depth);
+    let dtype = match node.derivation_type {
+        DerivationType::Definite =&gt; "definite",
+        DerivationType::Defeasible =&gt; "defeasible",
+    };
+    println!("{}{} [{}]", indent, node.literal, dtype);
+
+    if let Some(ref step) = node.proof_step {
+        println!("{}  via rule: {}", indent, step.rule_label);
+
+        if let Some(desc) = step.annotations.description() {
+            println!("{}  description: {}", indent, desc);
+        }
+
+        for child in &amp;step.body_proofs {
+            walk_proof(child, depth + 1);
+        }
+    }
+}
+
+if let Some(ref tree) = explanation.proof_tree {
+    walk_proof(tree, 0);
+}
+<span class="boring">}</span></code></pre>
+<h2 id="use-case-visual-proof-graphs-with-dot-output"><a class="header" href="#use-case-visual-proof-graphs-with-dot-output">Use Case: Visual Proof Graphs with DOT Output</a></h2>
+<p>The DOT output format integrates directly with Graphviz for generating visual proof graphs.</p>
+<h3 id="generating-a-graph"><a class="header" href="#generating-a-graph">Generating a Graph</a></h3>
+<pre><code class="language-bash"># Generate DOT and render to PNG
+spindle explain theory.dfl --json "~flies" \
+  | jq -r '.proof_tree' \
+  &gt; /dev/null  # Use the Rust API instead for DOT
+
+# Or from Rust:
+</code></pre>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::explanation::explain;
+use spindle_core::literal::Literal;
+use std::fs;
+use std::process::Command;
+
+let literal = Literal::negated("flies");
+if let Some(explanation) = explain(&amp;theory, &amp;literal) {
+    let dot = explanation.to_dot();
+
+    // Write DOT file
+    fs::write("proof.dot", &amp;dot).unwrap();
+
+    // Render with Graphviz
+    Command::new("dot")
+        .args(["-Tpng", "proof.dot", "-o", "proof.png"])
+        .status()
+        .unwrap();
+
+    // Or render to SVG for web embedding
+    Command::new("dot")
+        .args(["-Tsvg", "proof.dot", "-o", "proof.svg"])
+        .status()
+        .unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h3 id="reading-the-graph"><a class="header" href="#reading-the-graph">Reading the Graph</a></h3>
+<p>The generated graph uses a consistent visual language:</p>
+<ul>
+<li><strong>Blue boxes</strong> at the bottom represent facts and strict derivations. These are the foundation of the proof and cannot be defeated.</li>
+<li><strong>Green boxes</strong> represent defeasible derivations. These are the conclusions that could potentially be overridden by new information.</li>
+<li><strong>Red dashed boxes</strong> in the “Blocked Alternatives” cluster show derivations that were considered but rejected. The label includes the rule label and the reason for blocking.</li>
+<li><strong>Orange diamonds</strong> in the “Conflict Resolutions” cluster show how conflicts between competing rules were resolved, including the winning and losing rules and the resolution mechanism.</li>
+</ul>
+<p>Edges flow upward from premises to conclusions, labeled with the rule that was applied.</p>
+<h3 id="example-dot-output"><a class="header" href="#example-dot-output">Example DOT Output</a></h3>
+<p>For a penguin theory with <code>r2 &gt; r1</code>:</p>
+<pre><code class="language-dot">digraph Explanation {
+  rankdir=BT;
+  node [fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+
+  title [label="+d ~flies" shape=plaintext fontsize=14 fontcolor=black];
+
+  n1 [label="~flies\n[defeasible: r2]" shape=box style=filled fillcolor="#d4edda"];
+  n2 [label="penguin\n[fact: f1]" shape=box style=filled fillcolor="#cce5ff"];
+  n2 -&gt; n1 [label="r2"];
+  title -&gt; n1 [style=invis];
+
+  // Blocked alternatives
+  subgraph cluster_blocked {
+    label="Blocked Alternatives";
+    style=dashed;
+    color=red;
+    b3 [label="flies\n(rule: r1)\nblocked: superiority" shape=box style="dashed,filled" fillcolor="#ffcccc"];
+  }
+
+  // Conflict resolutions
+  subgraph cluster_conflicts {
+    label="Conflict Resolutions";
+    style=dashed;
+    color=orange;
+    c4 [label="r2 &gt; r1\n(superiority)" shape=diamond style=filled fillcolor="#ffe0b3"];
+  }
+}
+</code></pre>
+<h2 id="use-case-semantic-web-integration-with-json-ld"><a class="header" href="#use-case-semantic-web-integration-with-json-ld">Use Case: Semantic Web Integration with JSON-LD</a></h2>
+<p>The JSON-LD output allows Spindle explanations to participate in the linked data ecosystem.</p>
+<h3 id="publishing-explanations-as-linked-data"><a class="header" href="#publishing-explanations-as-linked-data">Publishing Explanations as Linked Data</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::explanation::{explain, Annotations, ProofStep};
+use spindle_core::literal::Literal;
+
+let literal = Literal::simple("liable");
+if let Some(explanation) = explain(&amp;theory, &amp;literal) {
+    let jsonld = explanation.to_jsonld();
+
+    // Serialize for publication
+    let output = serde_json::to_string_pretty(&amp;jsonld).unwrap();
+    println!("{}", output);
+}
+<span class="boring">}</span></code></pre>
+<p>The resulting JSON-LD document can be:</p>
+<ul>
+<li>Consumed by any JSON-LD processor (e.g., <code>jsonld.js</code>, Apache Jena)</li>
+<li>Expanded, compacted, or flattened using standard JSON-LD algorithms</li>
+<li>Converted to RDF triples for storage in a triple store</li>
+<li>Queried with SPARQL alongside other linked data</li>
+</ul>
+<h3 id="provenance-tracking"><a class="header" href="#provenance-tracking">Provenance Tracking</a></h3>
+<p>When rules carry annotations with source and confidence information, the JSON-LD output maps these to standard provenance vocabulary:</p>
+<pre><code class="language-json">{
+  "@context": {
+    "spindle": "https://spindle.dev/ontology#",
+    "prov": "http://www.w3.org/ns/prov#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "@type": "spindle:Explanation",
+  "conclusionType": "+d",
+  "literal": "liable",
+  "proofTree": {
+    "@type": "spindle:ProofNode",
+    "literal": "liable",
+    "derivationType": "defeasible",
+    "proofStep": {
+      "@type": "spindle:ProofStep",
+      "@id": "https://example.org/rules/r1",
+      "ruleLabel": "r1",
+      "ruleType": "defeasible",
+      "wasAttributedTo": "legal-statute-42-usc-1983",
+      "rdfs:comment": "Civil rights violation implies liability",
+      "spindle:confidence": "0.9"
+    }
+  }
+}
+</code></pre>
+<h3 id="linking-to-external-ontologies"><a class="header" href="#linking-to-external-ontologies">Linking to External Ontologies</a></h3>
+<p>By using standard vocabulary keys in annotations, you can link Spindle explanations to domain ontologies:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut annots = Annotations::with_entries(vec![
+    ("dc:source", "https://www.law.cornell.edu/uscode/text/42/1983"),
+    ("prov:wasAttributedTo", "https://example.org/agents/legal-expert"),
+    ("rdfs:comment", "Section 1983 civil rights liability"),
+]);
+annots.id = Some("https://example.org/rules/civil-rights-liability".to_string());
+<span class="boring">}</span></code></pre>
+<p>This enables downstream systems to dereference rule sources, look up agent information, and integrate the explanation into a broader knowledge graph.</p>
+<h2 id="limitations-4"><a class="header" href="#limitations-4">Limitations</a></h2>
+<ol>
+<li><strong>Positive proofs only</strong>: The <code>explain</code> function returns <code>None</code> for literals that are not positively provable. Use the <code>why-not</code> CLI command or the query module for negative explanations.</li>
+<li><strong>Grounded theories</strong>: Explanations work on grounded theories. Variables must be bound before explanation generation.</li>
+<li><strong>No incremental updates</strong>: Explanations are generated from a full reasoning pass. Changes to the theory require re-running the reasoner.</li>
+<li><strong>Annotation attachment</strong>: Annotations must be attached to proof steps manually when building explanations programmatically. The <code>explain</code> function does not yet automatically populate annotations from rule metadata.</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="process-mining"><a class="header" href="#process-mining">Process Mining</a></h1>
+<p>Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and DFL rule extraction with support/confidence metrics.</p>
+<blockquote>
+<p><strong>Note</strong>: Process mining is currently available through the Rust API only. It is not exposed via the CLI or the WebAssembly bindings.</p>
+</blockquote>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p>Process mining bridges the gap between observed behavior (event logs) and formal models (defeasible logic rules). The pipeline works as follows:</p>
+<pre><code>EventLog -&gt; Footprint -&gt; PetriNet -&gt; LearnedRules
+               |                         |
+               v                         v
+         Relation analysis       DFL rules with
+         (causal, parallel,      support/confidence
+          unrelated)             metrics
+</code></pre>
+<p>Given a set of recorded process executions (cases), Spindle can:</p>
+<ol>
+<li>Analyze activity relationships via a <strong>footprint matrix</strong></li>
+<li>Discover a <strong>Petri net</strong> process model using the Alpha algorithm</li>
+<li>Detect <strong>conflicts</strong> (choice and mutex patterns)</li>
+<li>Extract <strong>defeasible logic rules</strong> with statistical support</li>
+</ol>
+<h2 id="event-logs"><a class="header" href="#event-logs">Event Logs</a></h2>
+<h3 id="structure-1"><a class="header" href="#structure-1">Structure</a></h3>
+<p>An event log consists of <strong>cases</strong> (process executions), each containing a sequence of <strong>events</strong>.</p>
+<ul>
+<li><code>Event</code> – a single activity execution with a timestamp, activity name, variable bindings, optional actor, and annotations</li>
+<li><code>Case</code> – a complete process trace identified by a unique ID, containing events sorted by timestamp</li>
+<li><code>EventLog</code> – the collection of cases with optional metadata</li>
+</ul>
+<h3 id="creating-events"><a class="header" href="#creating-events">Creating Events</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Event, Case, EventLog};
+use std::collections::HashMap;
+
+// Simple event with timestamp, activity, and bindings
+let mut bindings = HashMap::new();
+bindings.insert("entity".to_string(), "order-42".to_string());
+
+let event = Event::new("2026-01-17T10:00:00Z", "submitted", bindings);
+
+// Event with an actor
+let event = Event::new("2026-01-17T10:05:00Z", "reviewed", HashMap::new())
+    .with_actor("alice");
+
+// Event with annotations
+let mut annotations = HashMap::new();
+annotations.insert("priority".to_string(), "high".to_string());
+
+let event = Event::new("2026-01-17T10:10:00Z", "approved", HashMap::new())
+    .with_actor("bob")
+    .with_annotations(annotations);
+<span class="boring">}</span></code></pre>
+<h3 id="creating-cases-and-logs"><a class="header" href="#creating-cases-and-logs">Creating Cases and Logs</a></h3>
+<p>Events within a case are automatically sorted by timestamp:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Event, Case, EventLog};
+use std::collections::HashMap;
+
+// Build a case from events
+let events = vec![
+    Event::new("2026-01-17T12:00:00Z", "complete", HashMap::new()),
+    Event::new("2026-01-17T10:00:00Z", "start", HashMap::new()),
+    Event::new("2026-01-17T11:00:00Z", "process", HashMap::new()),
+];
+let case = Case::new("case-1", events);
+
+// Events are sorted: start, process, complete
+assert_eq!(case.activities(), vec!["start", "process", "complete"]);
+
+// Build a log from cases
+let log = EventLog::new(vec![case]);
+<span class="boring">}</span></code></pre>
+<h3 id="log-inspection"><a class="header" href="#log-inspection">Log Inspection</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// All unique activities across the log
+let activities = log.activities();  // HashSet&lt;&amp;str&gt;
+
+// Total number of events
+let count = log.total_events();
+<span class="boring">}</span></code></pre>
+<h3 id="helper-functions"><a class="header" href="#helper-functions">Helper Functions</a></h3>
+<p>For testing and quick prototyping, helper functions simplify log construction:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{make_sequential_trace, make_log_from_traces, make_repeated_log};
+
+// Single sequential trace
+let case = make_sequential_trace("case-1", &amp;["start", "process", "end"]);
+
+// Log from multiple trace patterns
+let log = make_log_from_traces(&amp;[
+    &amp;["start", "a", "b", "end"],
+    &amp;["start", "b", "a", "end"],
+    &amp;["start", "a", "b", "end"],
+]);
+
+// Log with n identical traces
+let log = make_repeated_log(10, &amp;["submit", "review", "approve"]);
+<span class="boring">}</span></code></pre>
+<h2 id="footprint-matrix"><a class="header" href="#footprint-matrix">Footprint Matrix</a></h2>
+<p>The footprint matrix captures <strong>directly-follows</strong> relationships between activities. It is the foundation for the Alpha algorithm.</p>
+<h3 id="relations"><a class="header" href="#relations">Relations</a></h3>
+<p>Given two activities <code>a</code> and <code>b</code>, the footprint matrix assigns one of four relations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Relation</th><th>Symbol</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Causality</code></td><td><code>-&gt;</code></td><td><code>a</code> directly precedes <code>b</code> (but not <code>b</code> before <code>a</code>)</td></tr>
+<tr><td><code>Reverse</code></td><td><code>&lt;-</code></td><td><code>b</code> directly precedes <code>a</code> (but not <code>a</code> before <code>b</code>)</td></tr>
+<tr><td><code>Parallel</code></td><td><code>||</code></td><td>Both orderings observed in the log</td></tr>
+<tr><td><code>Unrelated</code></td><td><code>#</code></td><td>Never directly adjacent in any trace</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="building-a-footprint"><a class="header" href="#building-a-footprint">Building a Footprint</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Footprint, EventLog, make_repeated_log, make_log_from_traces};
+
+// Sequential pattern: a -&gt; b -&gt; c
+let log = make_repeated_log(5, &amp;["a", "b", "c"]);
+let fp = Footprint::from_log(&amp;log);
+
+// Check relations
+assert!(fp.is_causal("a", "b"));   // a -&gt; b
+assert!(fp.is_causal("b", "c"));   // b -&gt; c
+assert!(fp.is_unrelated("a", "c")); // a # c (never directly adjacent)
+
+// Parallel pattern
+let log = make_log_from_traces(&amp;[
+    &amp;["a", "b"],
+    &amp;["b", "a"],
+]);
+let fp = Footprint::from_log(&amp;log);
+assert!(fp.is_parallel("a", "b")); // a || b
+<span class="boring">}</span></code></pre>
+<h3 id="querying-the-matrix"><a class="header" href="#querying-the-matrix">Querying the Matrix</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::Relation;
+
+// Get a specific relation
+let rel = fp.relation("a", "b");
+match rel {
+    Relation::Causality =&gt; println!("a causes b"),
+    Relation::Reverse   =&gt; println!("b causes a"),
+    Relation::Parallel  =&gt; println!("a and b are concurrent"),
+    Relation::Unrelated =&gt; println!("a and b are unrelated"),
+}
+
+// Bulk queries
+let causal = fp.causal_pairs();     // Vec&lt;(String, String)&gt;
+let parallel = fp.parallel_pairs(); // Vec&lt;(String, String)&gt;
+<span class="boring">}</span></code></pre>
+<h3 id="what-the-matrix-reveals"><a class="header" href="#what-the-matrix-reveals">What the Matrix Reveals</a></h3>
+<p>The footprint matrix answers key questions about a process:</p>
+<ul>
+<li><strong>Sequencing</strong>: Which activities always follow others? (Causality)</li>
+<li><strong>Concurrency</strong>: Which activities can happen in either order? (Parallel)</li>
+<li><strong>Independence</strong>: Which activities are never adjacent? (Unrelated)</li>
+<li><strong>Reverse flow</strong>: Which activities are preceded by others? (Reverse)</li>
+</ul>
+<h2 id="alpha-algorithm-and-petri-net-discovery"><a class="header" href="#alpha-algorithm-and-petri-net-discovery">Alpha Algorithm and Petri Net Discovery</a></h2>
+<p>The Alpha algorithm transforms a footprint matrix into a Petri net, a formal model of the process.</p>
+<h3 id="petri-net-structure"><a class="header" href="#petri-net-structure">Petri Net Structure</a></h3>
+<p>A Petri net consists of:</p>
+<ul>
+<li><code>Place</code> – a passive element with an ID and label (represents conditions/states)</li>
+<li><code>Transition</code> – an active element representing an activity</li>
+<li><code>Arc</code> – a directed connection between a place and a transition (or vice versa), using <code>ArcNode::Place</code> and <code>ArcNode::Transition</code> variants</li>
+</ul>
+<h3 id="running-the-alpha-miner"><a class="header" href="#running-the-alpha-miner">Running the Alpha Miner</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{AlphaMiner, EventLog, make_repeated_log};
+
+let log = make_repeated_log(10, &amp;["a", "b", "c"]);
+
+let mut miner = AlphaMiner::new();
+let net = miner.mine(&amp;log);
+
+// Inspect the discovered net
+println!("Places: {}", net.places.len());
+println!("Transitions: {}", net.transitions.len());
+println!("Arcs: {}", net.arcs.len());
+
+// Find a transition by activity name
+if let Some(trans) = net.find_transition("b") {
+    println!("Found transition: {} ({})", trans.id, trans.activity);
+}
+
+// All activities in the net
+let activities = net.activities(); // HashSet&lt;&amp;str&gt;
+<span class="boring">}</span></code></pre>
+<h3 id="how-it-works-3"><a class="header" href="#how-it-works-3">How It Works</a></h3>
+<p>The Alpha algorithm performs these steps:</p>
+<ol>
+<li><strong>Compute footprint</strong> from the event log’s directly-follows pairs</li>
+<li><strong>Identify start/end activities</strong> (first/last in each trace)</li>
+<li><strong>Find maximal pairs</strong> <code>(A, B)</code> where all activities in <code>A</code> causally lead to all activities in <code>B</code>, and both sets are internally unrelated</li>
+<li><strong>Build the net</strong>: create transitions for each activity, places for start/end and each maximal pair, and arcs connecting them</li>
+</ol>
+<h3 id="building-a-petri-net-manually"><a class="header" href="#building-a-petri-net-manually">Building a Petri Net Manually</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{PetriNet, Place, Transition, Arc, ArcNode};
+
+let mut net = PetriNet::new();
+
+net.add_place(Place::new("p1", "start"));
+net.add_place(Place::new("p2", "end"));
+
+net.add_transition(Transition::new("t1", "submit"));
+net.add_transition(Transition::new("t2", "approve"));
+
+net.add_arc(Arc::new(
+    ArcNode::Place("p1".to_string()),
+    ArcNode::Transition("t1".to_string()),
+));
+net.add_arc(Arc::new(
+    ArcNode::Transition("t1".to_string()),
+    ArcNode::Place("p2".to_string()),
+));
+<span class="boring">}</span></code></pre>
+<h2 id="conflict-detection"><a class="header" href="#conflict-detection">Conflict Detection</a></h2>
+<p>Conflicts arise when activities are mutually exclusive or represent choices in the process.</p>
+<h3 id="conflict-types"><a class="header" href="#conflict-types">Conflict Types</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Source</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Choice</code></td><td>Petri net structure</td><td>XOR-split: a place has multiple outgoing transitions (only one fires)</td></tr>
+<tr><td><code>Mutex</code></td><td>Trace analysis</td><td>Two activities never co-occur in the same trace</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="detecting-conflicts"><a class="header" href="#detecting-conflicts">Detecting Conflicts</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{detect_conflicts, AlphaMiner, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["start", "a", "end"],
+    &amp;["start", "a", "end"],
+    &amp;["start", "b", "end"],
+    &amp;["start", "b", "end"],
+]);
+
+let mut miner = AlphaMiner::new();
+let net = miner.mine(&amp;log);
+let conflicts = detect_conflicts(&amp;log, &amp;net);
+
+for conflict in &amp;conflicts {
+    println!("Conflict: {:?}", conflict.activities);
+    match conflict.conflict_type {
+        spindle_core::mining::ConflictType::Choice =&gt; {
+            println!("  Type: XOR choice (from Petri net structure)");
+        }
+        spindle_core::mining::ConflictType::Mutex =&gt; {
+            println!("  Type: Mutex (never co-occur in traces)");
+        }
+    }
+    // Evidence explains the source of the conflict
+    if let Some(source) = conflict.evidence.get("source") {
+        println!("  Evidence: {}", source);
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="choice-vs-mutex"><a class="header" href="#choice-vs-mutex">Choice vs Mutex</a></h3>
+<p><strong>Choice</strong> conflicts are structural – they come from XOR-split points in the Petri net where a place has multiple outgoing transitions. Only one transition can fire.</p>
+<p><strong>Mutex</strong> conflicts are behavioral – two activities are never observed together in the same trace, but the relationship is not already captured by a choice conflict. This can indicate implicit exclusion rules.</p>
+<h2 id="rule-learning"><a class="header" href="#rule-learning">Rule Learning</a></h2>
+<p>The module extracts defeasible logic rules from causal relationships in the event log, annotated with statistical metrics.</p>
+<h3 id="support-and-confidence"><a class="header" href="#support-and-confidence">Support and Confidence</a></h3>
+<ul>
+<li><strong>Support</strong>: the number of traces where <code>a</code> is directly followed by <code>b</code></li>
+<li><strong>Confidence</strong>: the ratio of <code>a -&gt; b</code> transitions to all transitions from <code>a</code></li>
+</ul>
+<p>For example, if <code>a</code> appears 10 times as a non-final activity and <code>a -&gt; b</code> occurs 8 times, the confidence is 0.8.</p>
+<h3 id="extracting-rules"><a class="header" href="#extracting-rules">Extracting Rules</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{petri_net_to_dfl, make_repeated_log};
+
+let log = make_repeated_log(10, &amp;["submit", "review", "approve"]);
+
+// Extract rules with minimum support of 5 and confidence of 0.7
+let rules = petri_net_to_dfl(&amp;log, 5, 0.7);
+
+for lr in &amp;rules {
+    println!("Rule: {}", lr.rule.label);
+    println!("  Body: {:?}", lr.rule.body.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;());
+    println!("  Head: {:?}", lr.rule.head.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;());
+    println!("  Support: {}", lr.support);
+    println!("  Confidence: {:.2}", lr.confidence);
+    println!("  Source: {}", lr.source);  // "mined"
+}
+<span class="boring">}</span></code></pre>
+<p>Each <code>LearnedRule</code> contains:</p>
+<ul>
+<li><code>rule</code> – a defeasible logic <code>Rule</code> (type <code>Defeasible</code>, labeled <code>r_mined_N</code>)</li>
+<li><code>support</code> – trace count supporting the causal pair</li>
+<li><code>confidence</code> – ratio of supporting transitions</li>
+<li><code>source</code> – origin of the rule (defaults to <code>"mined"</code>)</li>
+</ul>
+<h3 id="filtering-by-thresholds"><a class="header" href="#filtering-by-thresholds">Filtering by Thresholds</a></h3>
+<p>Rules below the minimum support or confidence thresholds are excluded:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Strict thresholds: only high-confidence rules
+let strict_rules = petri_net_to_dfl(&amp;log, 10, 0.9);
+
+// Relaxed thresholds: discover more patterns
+let relaxed_rules = petri_net_to_dfl(&amp;log, 1, 0.0);
+<span class="boring">}</span></code></pre>
+<h2 id="complete-mining-pipeline"><a class="header" href="#complete-mining-pipeline">Complete Mining Pipeline</a></h2>
+<p>The <code>mine_rules</code> function runs the entire pipeline in a single call.</p>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{mine_rules, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["start", "a", "b", "end"],
+    &amp;["start", "a", "b", "end"],
+    &amp;["start", "a", "c", "end"],
+    &amp;["start", "a", "b", "end"],
+]);
+
+let result = mine_rules(&amp;log, 2, 0.5);
+<span class="boring">}</span></code></pre>
+<h3 id="miningresult-structure"><a class="header" href="#miningresult-structure">MiningResult Structure</a></h3>
+<p>The result bundles all outputs from the pipeline:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Learned DFL rules
+for lr in &amp;result.rules {
+    println!("{}: support={}, confidence={:.2}", lr.rule.label, lr.support, lr.confidence);
+}
+
+// Detected conflicts
+for c in &amp;result.conflicts {
+    println!("Conflict {:?}: {:?}", c.conflict_type, c.activities);
+}
+
+// Discovered Petri net
+println!("Net: {} places, {} transitions, {} arcs",
+    result.petri_net.places.len(),
+    result.petri_net.transitions.len(),
+    result.petri_net.arcs.len(),
+);
+
+// Footprint matrix
+for (a, b) in result.footprint.causal_pairs() {
+    println!("{} -&gt; {}", a, b);
+}
+
+// Mining metadata
+println!("Traces: {}", result.metadata.get("trace_count").unwrap());
+println!("Events: {}", result.metadata.get("event_count").unwrap());
+println!("Min support: {}", result.metadata.get("min_support").unwrap());
+println!("Min confidence: {}", result.metadata.get("min_confidence").unwrap());
+<span class="boring">}</span></code></pre>
+<h3 id="pipeline-steps"><a class="header" href="#pipeline-steps">Pipeline Steps</a></h3>
+<p><code>mine_rules</code> performs the following steps internally:</p>
+<ol>
+<li>Build the footprint matrix from the event log</li>
+<li>Run the Alpha miner to discover the Petri net</li>
+<li>Detect conflicts from the net structure and trace analysis</li>
+<li>Extract DFL rules from causal pairs, filtered by support and confidence</li>
+<li>Package everything into a <code>MiningResult</code> with metadata</li>
+</ol>
+<h2 id="use-cases-3"><a class="header" href="#use-cases-3">Use Cases</a></h2>
+<h3 id="workflow-analysis"><a class="header" href="#workflow-analysis">Workflow Analysis</a></h3>
+<p>Discover the actual execution patterns from system logs:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Event, Case, EventLog, mine_rules};
+use std::collections::HashMap;
+
+// Build log from real workflow events
+let case1 = Case::new("ticket-101", vec![
+    Event::new("2026-01-17T09:00:00Z", "opened", HashMap::new())
+        .with_actor("user"),
+    Event::new("2026-01-17T09:30:00Z", "triaged", HashMap::new())
+        .with_actor("support"),
+    Event::new("2026-01-17T10:00:00Z", "assigned", HashMap::new())
+        .with_actor("manager"),
+    Event::new("2026-01-17T14:00:00Z", "resolved", HashMap::new())
+        .with_actor("engineer"),
+]);
+
+let case2 = Case::new("ticket-102", vec![
+    Event::new("2026-01-17T10:00:00Z", "opened", HashMap::new())
+        .with_actor("user"),
+    Event::new("2026-01-17T10:15:00Z", "triaged", HashMap::new())
+        .with_actor("support"),
+    Event::new("2026-01-17T10:30:00Z", "assigned", HashMap::new())
+        .with_actor("manager"),
+    Event::new("2026-01-17T16:00:00Z", "resolved", HashMap::new())
+        .with_actor("engineer"),
+]);
+
+let log = EventLog::new(vec![case1, case2]);
+let result = mine_rules(&amp;log, 1, 0.5);
+
+// Discovered rules describe the standard ticket workflow
+for lr in &amp;result.rules {
+    println!("{}: {} =&gt; {}  (support={}, confidence={:.0}%)",
+        lr.rule.label,
+        lr.rule.body.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
+        lr.rule.head.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
+        lr.support,
+        lr.confidence * 100.0,
+    );
+}
+<span class="boring">}</span></code></pre>
+<h3 id="compliance-checking"><a class="header" href="#compliance-checking">Compliance Checking</a></h3>
+<p>Identify process deviations by comparing mined rules against expected patterns:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{Footprint, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["submit", "review", "approve"],
+    &amp;["submit", "review", "approve"],
+    &amp;["submit", "approve"],           // Skipped review
+    &amp;["submit", "review", "approve"],
+]);
+
+let fp = Footprint::from_log(&amp;log);
+
+// Check if review always precedes approval
+if fp.is_causal("review", "approve") {
+    println!("Compliant: review always directly precedes approve");
+} else {
+    println!("Violation: review does not always precede approve");
+}
+
+// Check for unauthorized shortcuts
+if fp.is_causal("submit", "approve") {
+    println!("Warning: direct submit-to-approve path detected");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="process-discovery"><a class="header" href="#process-discovery">Process Discovery</a></h3>
+<p>Combine mining with Spindle’s reasoning engine to build executable rule sets:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{mine_rules, make_log_from_traces};
+
+let log = make_log_from_traces(&amp;[
+    &amp;["init", "process", "validate", "complete"],
+    &amp;["init", "process", "reject"],
+    &amp;["init", "process", "validate", "complete"],
+    &amp;["init", "skip", "complete"],
+]);
+
+let result = mine_rules(&amp;log, 1, 0.0);
+
+// The learned rules can be added to a theory for further reasoning
+println!("Discovered {} rules from {} traces",
+    result.rules.len(),
+    result.metadata.get("trace_count").unwrap(),
+);
+
+// Conflicts reveal decision points in the process
+for c in &amp;result.conflicts {
+    println!("Decision point: {:?} ({:?})", c.activities, c.conflict_type);
+}
+<span class="boring">}</span></code></pre>
+<h2 id="limitations-5"><a class="header" href="#limitations-5">Limitations</a></h2>
+<ol>
+<li><strong>Alpha algorithm scope</strong>: The Alpha miner handles sequential, parallel, and choice patterns. It does not support loops, invisible transitions, or duplicate activities.</li>
+<li><strong>Directly-follows only</strong>: The footprint matrix considers only directly adjacent activities, not long-range dependencies.</li>
+<li><strong>Timestamp ordering</strong>: Events within a case are sorted lexicographically by timestamp string. Use ISO-8601 format to ensure correct ordering.</li>
+<li><strong>Rust API only</strong>: Process mining is not yet available through the CLI or WebAssembly bindings.</li>
+<li><strong>No incremental mining</strong>: The entire log must be provided upfront; streaming or incremental updates are not supported.</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h1>
@@ -2268,6 +4275,12 @@ time spindle --scalable theory.dfl &gt; /dev/null
 (normally r1 (and (node ?x) (node ?y) (edge ?x ?y)) (connected ?x ?y))
 </code></pre>
 <h2 id="memory-optimization"><a class="header" href="#memory-optimization">Memory Optimization</a></h2>
+<blockquote>
+<p><strong>Note:</strong> During reasoning, the proven literal set now uses a <code>BitSet</code> instead
+of <code>HashSet&lt;LiteralId&gt;</code>, providing O(1) membership tests with significantly
+better cache locality. See <a href="#recent-optimizations">Recent Optimizations</a> for
+details.</p>
+</blockquote>
 <h3 id="string-interning"><a class="header" href="#string-interning">String Interning</a></h3>
 <p>Spindle uses string interning internally. You can benefit by:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -2367,6 +4380,70 @@ cargo flamegraph -- spindle theory.dfl
 heaptrack spindle large-theory.dfl
 heaptrack_print heaptrack.spindle.*.gz
 </code></pre>
+<h2 id="recent-optimizations"><a class="header" href="#recent-optimizations">Recent Optimizations</a></h2>
+<p>Several targeted optimizations have been applied to Spindle’s internals. These
+are transparent to end users but can significantly reduce runtime and memory
+overhead, especially for larger theories.</p>
+<h3 id="smallvec-for-rule-bodiesheads"><a class="header" href="#smallvec-for-rule-bodiesheads">SmallVec for Rule Bodies/Heads</a></h3>
+<p><em>Commit [9bee7a3]</em></p>
+<p>Rule body and head storage was changed from <code>Vec&lt;Literal&gt;</code> to
+<code>SmallVec&lt;[Literal; 4]&gt;</code>. This means that rules with four or fewer body/head
+literals avoid heap allocation entirely – the data is stored inline on the
+stack.</p>
+<p>Most real-world defeasible rules have 1-3 body literals, so the common case is
+covered without any heap allocation. This reduces allocation pressure during
+both grounding and reasoning.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Before
+struct Rule {
+    head: Vec&lt;Literal&gt;,
+    body: Vec&lt;Literal&gt;,
+}
+
+// After
+use smallvec::SmallVec;
+struct Rule {
+    head: SmallVec&lt;[Literal; 4]&gt;,
+    body: SmallVec&lt;[Literal; 4]&gt;,
+}
+<span class="boring">}</span></code></pre>
+<h3 id="bitset-for-proven-literals"><a class="header" href="#bitset-for-proven-literals">BitSet for Proven Literals</a></h3>
+<p><em>Commit [82ae834]</em></p>
+<p>The set of proven literals during reasoning was changed from
+<code>HashSet&lt;LiteralId&gt;</code> to a compact <code>BitSet</code>. Since <code>LiteralId</code> is a <code>u32</code>,
+bitmap indexing is a natural fit:</p>
+<ul>
+<li><strong>O(1)</strong> contains and insert operations (bit test / bit set).</li>
+<li><strong>Better cache locality</strong> – the entire proven set fits in a contiguous
+allocation rather than being scattered across hash buckets.</li>
+<li><strong>Significant improvement</strong> for theories with many literals, where hash
+collisions and bucket traversal previously added up.</li>
+</ul>
+<h3 id="fxhash-for-internal-hashmaps"><a class="header" href="#fxhash-for-internal-hashmaps">FxHash for Internal HashMaps</a></h3>
+<p><em>Commit [4fbe1fd]</em></p>
+<p>All internal <code>HashMap</code> / <code>HashSet</code> instances were switched from the default
+<code>SipHash</code> hasher to <code>FxHash</code> (provided by the <code>rustc-hash</code> crate).</p>
+<ul>
+<li><code>FxHash</code> is considerably faster for small keys (<code>u32</code>, <code>u64</code>) that are common
+throughout Spindle’s indexing and reasoning structures.</li>
+<li>It is <strong>not</strong> cryptographically secure, but Spindle’s internal maps are never
+exposed to untrusted input, so this is not a concern.</li>
+<li>This is the same hasher used inside the Rust compiler itself.</li>
+</ul>
+<h3 id="pre-allocation-strategies"><a class="header" href="#pre-allocation-strategies">Pre-allocation Strategies</a></h3>
+<p><em>Commit [2e92b84]</em></p>
+<p>Worklists, intermediate buffers, and result vectors are now pre-allocated based
+on the size of the theory before reasoning begins:</p>
+<ul>
+<li>The conclusion vector is allocated with an estimate of
+<code>rules.len() * avg_head_size</code>.</li>
+<li>Worklists are sized to the number of rules to avoid repeated reallocation
+during the fixed-point loop.</li>
+</ul>
+<p>This avoids the cost of incremental <code>Vec</code> growth (repeated
+allocate-copy-deallocate cycles) and reduces peak memory usage by avoiding
+over-allocation.</p>
 <h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
 <p>Run the built-in benchmarks:</p>
 <pre><code class="language-bash">cd crates/spindle-core
@@ -2873,7 +4950,7 @@ if result.is_provable() {
     println!("Would be provable with those facts");
 }
 <span class="boring">}</span></code></pre>
-<h3 id="why-not"><a class="header" href="#why-not">Why-Not</a></h3>
+<h3 id="why-not-1"><a class="header" href="#why-not-1">Why-Not</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_core::query::why_not;
@@ -3104,7 +5181,7 @@ spindle.parseSpl(`
 <h3 id="scalable-reasoning"><a class="header" href="#scalable-reasoning">Scalable Reasoning</a></h3>
 <pre><code class="language-typescript">const conclusions = spindle.reasonScalable();
 </code></pre>
-<h3 id="query"><a class="header" href="#query">Query</a></h3>
+<h3 id="query-1"><a class="header" href="#query-1">Query</a></h3>
 <pre><code class="language-typescript">// Check if a literal is provable
 const result = spindle.query("flies");
 // Returns: { status: "provable" | "not_provable", literal, conclusion_type }
@@ -3113,7 +5190,7 @@ const result = spindle.query("flies");
 <pre><code class="language-typescript">const result = spindle.whatIf(["wounded"], "~flies");
 // Returns: { provable: boolean, new_conclusions: Array }
 </code></pre>
-<h3 id="why-not-1"><a class="header" href="#why-not-1">Why-Not</a></h3>
+<h3 id="why-not-2"><a class="header" href="#why-not-2">Why-Not</a></h3>
 <pre><code class="language-typescript">const explanation = spindle.whyNot("flies");
 // Returns: { literal, would_derive, blockers: Array }
 </code></pre>
@@ -3306,6 +5383,7 @@ function ReasoningComponent() {
 ├── explanation.rs      # Proof trees
 ├── trust.rs            # Trust-weighted reasoning
 ├── query.rs            # Query operators
+├── mining.rs           # Process mining (alpha algorithm)
 └── error.rs            # Error types
 </code></pre>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
@@ -3479,8 +5557,8 @@ Phase 3: Partial Closure (semi-naive)
 pub struct Rule {
     label: String,
     rule_type: RuleType,     // 1 byte + padding
-    body: Vec&lt;Literal&gt;,
-    head: Vec&lt;Literal&gt;,
+    body: SmallVec&lt;[Literal; 4]&gt;,  // inline for ≤4 elements
+    head: SmallVec&lt;[Literal; 4]&gt;,
 }
 
 pub struct Literal {
@@ -3495,7 +5573,7 @@ pub struct Literal {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// During reasoning, we use IDs instead of strings
-proven: HashSet`LiteralId`  // 4 bytes per entry
+proven: BitSet  // bitmap indexed by LiteralId
 worklist: VecDeque`LiteralId`
 <span class="boring">}</span></code></pre>
 <h2 id="extension-points"><a class="header" href="#extension-points">Extension Points</a></h2>
@@ -3513,6 +5591,13 @@ worklist: VecDeque`LiteralId`
 <li>Add to WASM bindings if needed</li>
 <li>Document in guides/queries.md</li>
 </ol>
+<h3 id="process-mining-pipeline"><a class="header" href="#process-mining-pipeline">Process Mining Pipeline</a></h3>
+<p>The mining module provides:</p>
+<ul>
+<li>Event log → Footprint matrix → Petri net discovery (alpha algorithm)</li>
+<li>Conflict detection (choice/mutex patterns)</li>
+<li>Rule learning with support/confidence metrics</li>
+</ul>
 <h3 id="adding-temporal-features"><a class="header" href="#adding-temporal-features">Adding Temporal Features</a></h3>
 <ol>
 <li>Extend <code>temporal.rs</code></li>
@@ -3568,6 +5653,7 @@ worklist: VecDeque`LiteralId`
 <p>Core dependencies:</p>
 <ul>
 <li><code>rustc-hash</code> - Fast hash function for internal HashMaps</li>
+<li><code>smallvec</code> - Inline storage for small vectors (rule body/head)</li>
 </ul>
 <p>Parser dependencies:</p>
 <ul>
@@ -3665,7 +5751,7 @@ worklist: VecDeque`LiteralId`
 <li><strong>LiteralId</strong> - 4-byte interned identifier, O(1) comparison</li>
 <li><strong>SuperiorityIndex</strong> - O(1) superiority lookup</li>
 <li><strong>IndexedTheory</strong> - O(1) rule lookup by head/body</li>
-<li><strong>HashSet<literalid></literalid></strong> - 4 bytes per entry vs ~24 for String</li>
+<li><strong>HashSet&lt;LiteralId&gt;</strong> - 4 bytes per entry vs ~24 for String</li>
 </ol>
 <h3 id="alternative-optimizations-not-tried"><a class="header" href="#alternative-optimizations-not-tried">Alternative Optimizations (Not Tried)</a></h3>
 <p>If future profiling shows <code>is_blocked_by_superior</code> as a bottleneck:</p>

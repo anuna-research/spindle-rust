@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e5c005ae.js";
+            window.path_to_searchindex_js = "../searchindex-64fde6ea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d17d2526.js"></script>
+        <script src="../toc-116bb599.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -210,6 +210,7 @@
 ├── explanation.rs      # Proof trees
 ├── trust.rs            # Trust-weighted reasoning
 ├── query.rs            # Query operators
+├── mining.rs           # Process mining (alpha algorithm)
 └── error.rs            # Error types
 </code></pre>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
@@ -383,8 +384,8 @@ Phase 3: Partial Closure (semi-naive)
 pub struct Rule {
     label: String,
     rule_type: RuleType,     // 1 byte + padding
-    body: Vec&lt;Literal&gt;,
-    head: Vec&lt;Literal&gt;,
+    body: SmallVec&lt;[Literal; 4]&gt;,  // inline for ≤4 elements
+    head: SmallVec&lt;[Literal; 4]&gt;,
 }
 
 pub struct Literal {
@@ -399,7 +400,7 @@ pub struct Literal {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// During reasoning, we use IDs instead of strings
-proven: HashSet`LiteralId`  // 4 bytes per entry
+proven: BitSet  // bitmap indexed by LiteralId
 worklist: VecDeque`LiteralId`
 <span class="boring">}</span></code></pre>
 <h2 id="extension-points"><a class="header" href="#extension-points">Extension Points</a></h2>
@@ -417,6 +418,13 @@ worklist: VecDeque`LiteralId`
 <li>Add to WASM bindings if needed</li>
 <li>Document in guides/queries.md</li>
 </ol>
+<h3 id="process-mining-pipeline"><a class="header" href="#process-mining-pipeline">Process Mining Pipeline</a></h3>
+<p>The mining module provides:</p>
+<ul>
+<li>Event log → Footprint matrix → Petri net discovery (alpha algorithm)</li>
+<li>Conflict detection (choice/mutex patterns)</li>
+<li>Rule learning with support/confidence metrics</li>
+</ul>
 <h3 id="adding-temporal-features"><a class="header" href="#adding-temporal-features">Adding Temporal Features</a></h3>
 <ol>
 <li>Extend <code>temporal.rs</code></li>
@@ -472,6 +480,7 @@ worklist: VecDeque`LiteralId`
 <p>Core dependencies:</p>
 <ul>
 <li><code>rustc-hash</code> - Fast hash function for internal HashMaps</li>
+<li><code>smallvec</code> - Inline storage for small vectors (rule body/head)</li>
 </ul>
 <p>Parser dependencies:</p>
 <ul>

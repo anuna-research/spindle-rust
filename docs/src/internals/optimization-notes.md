@@ -100,7 +100,7 @@ Key factors:
 1. **LiteralId** - 4-byte interned identifier, O(1) comparison
 2. **SuperiorityIndex** - O(1) superiority lookup
 3. **IndexedTheory** - O(1) rule lookup by head/body
-4. **HashSet<LiteralId>** - 4 bytes per entry vs ~24 for String
+4. **HashSet\<LiteralId\>** - 4 bytes per entry vs ~24 for String
 
 ### Alternative Optimizations (Not Tried)
 

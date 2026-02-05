@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Algorithms - Spindle-Rust</title>
+        <title>Modal Operators - Spindle-Rust</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://codeberg.org/anuna/spindle-rust" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/algorithms.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/modal.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,229 +180,415 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="algorithms"><a class="header" href="#algorithms">Algorithms</a></h1>
-<p>Spindle implements two reasoning algorithms: standard DL(d) and scalable DL(d||).</p>
-<h2 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h2>
-<p>The default algorithm uses <strong>forward chaining</strong> to compute conclusions.</p>
-<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
-<ol>
-<li><strong>Initialize</strong>: Add all facts to the proven set</li>
-<li><strong>Propagate</strong>: Find rules whose bodies are satisfied</li>
-<li><strong>Fire</strong>: Add conclusions, checking for conflicts</li>
-<li><strong>Repeat</strong>: Until no new conclusions</li>
-</ol>
-<h3 id="pseudocode"><a class="header" href="#pseudocode">Pseudocode</a></h3>
-<pre><code>function reason(theory):
-    proven = {}
-
-    # Phase 1: Facts
-    for fact in theory.facts:
-        add_conclusion(+D, fact.head)
-        add_conclusion(+d, fact.head)
-        worklist.add(fact.head)
-
-    # Phase 2: Forward chaining
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body_containing(literal):
-            if body_satisfied(rule, proven):
-                if rule.type == Strict:
-                    add_conclusion(+D, rule.head)
-                    add_conclusion(+d, rule.head)
-                elif rule.type == Defeasible:
-                    if not blocked_by_superior(rule):
-                        add_conclusion(+d, rule.head)
-                # Defeaters don't add conclusions
-
-    # Phase 3: Negative conclusions
-    for literal in all_literals:
-        if literal not in proven[+D]:
-            add_conclusion(-D, literal)
-        if literal not in proven[+d]:
-            add_conclusion(-d, literal)
-</code></pre>
-<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
-<p>When a defeasible rule fires, we check for blocking:</p>
-<pre><code>function blocked_by_superior(rule):
-    complement = negate(rule.head)
-
-    for attacker in rules_for(complement):
-        if body_satisfied(attacker):
-            if attacker.type == Defeater:
-                if not is_superior(rule, attacker):
-                    return true  # Blocked by defeater
-            elif attacker.type == Defeasible:
-                if is_superior(attacker, rule):
-                    return true  # Blocked by superior rule
-
-    return false
-</code></pre>
-<h3 id="complexity"><a class="header" href="#complexity">Complexity</a></h3>
-<ul>
-<li>Time: O(n * m) where n = rules, m = average body size</li>
-<li>Space: O(n) for proven literals</li>
-</ul>
-<h2 id="scalable-dld"><a class="header" href="#scalable-dld">Scalable DL(d||)</a></h2>
-<p>For large theories, the three-phase algorithm is more efficient.</p>
-<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
-<pre><code>Theory → [Delta] → [Lambda] → [Partial] → Conclusions
-            ↓          ↓           ↓
-       Definite   Potential   Defeasible
-       (+D)       (approx)    (+d)
-</code></pre>
-<h3 id="phase-1-delta-closure-p_δ"><a class="header" href="#phase-1-delta-closure-p_δ">Phase 1: Delta Closure (P_Δ)</a></h3>
-<p>Computes <strong>definite conclusions</strong> using only facts and strict rules.</p>
-<pre><code>function compute_delta(theory):
-    delta = {}
-    worklist = theory.facts
-
-    while worklist not empty:
-        literal = worklist.pop()
-        delta.add(literal)
-
-        for rule in strict_rules_with_body(literal):
-            if body_satisfied(rule, delta):
-                if rule.head not in delta:
-                    worklist.add(rule.head)
-
-    return delta
-</code></pre>
-<p><strong>Result</strong>: All <code>+D</code> conclusions.</p>
-<h3 id="phase-2-lambda-closure-p_λ"><a class="header" href="#phase-2-lambda-closure-p_λ">Phase 2: Lambda Closure (P_λ)</a></h3>
-<p>Computes an <strong>over-approximation</strong> of defeasible conclusions.</p>
-<p>A literal is in lambda if:</p>
-<ol>
-<li>It’s in delta, OR</li>
-<li>Some strict/defeasible rule has:
-<ul>
-<li>Body fully in lambda</li>
-<li>Complement NOT in delta</li>
-</ul>
-</li>
-</ol>
-<pre><code>function compute_lambda(theory, delta):
-    lambda = delta.copy()
-    worklist = delta.copy()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body(literal):
-            if rule.type in [Strict, Defeasible]:
-                if body_satisfied(rule, lambda):
-                    if complement(rule.head) not in delta:
-                        if rule.head not in lambda:
-                            lambda.add(rule.head)
-                            worklist.add(rule.head)
-
-    return lambda
-</code></pre>
-<p><strong>Key insight</strong>: If something is NOT in lambda, it’s definitely not defeasibly provable. This allows efficient pruning.</p>
-<h3 id="phase-3-partial-closure-p_"><a class="header" href="#phase-3-partial-closure-p_">Phase 3: Partial Closure (P_∂||)</a></h3>
-<p>Computes actual <strong>defeasible conclusions</strong> with conflict resolution.</p>
-<pre><code>function compute_partial(theory, delta, lambda):
-    partial = delta.copy()
-
-    candidates = lambda - delta  # Only check these
-    changed = true
-
-    while changed:
-        changed = false
-        for literal in candidates:
-            if literal not in partial:
-                if can_prove_defeasibly(literal, partial, lambda):
-                    partial.add(literal)
-                    changed = true
-
-    return partial
-</code></pre>
-<p>The <code>can_prove_defeasibly</code> function:</p>
-<pre><code>function can_prove_defeasibly(literal, partial, lambda):
-    # Need a supporting rule with satisfied body
-    has_support = false
-    for rule in rules_for(literal):
-        if rule.type in [Strict, Defeasible]:
-            if body_satisfied(rule, partial):
-                has_support = true
-                break
-
-    if not has_support:
-        return false
-
-    # All attacks must be defeated
-    for attacker in rules_for(complement(literal)):
-        # Attack fails if body not satisfiable
-        if not body_satisfiable(attacker, lambda):
-            continue
-
-        # Attack fails if we have a superior defender
-        if team_defeats(literal, attacker, partial):
-            continue
-
-        # This attack succeeds
-        return false
-
-    return true
-</code></pre>
-<h3 id="performance-comparison"><a class="header" href="#performance-comparison">Performance Comparison</a></h3>
+                        <h1 id="modal-operators-deontic-logic"><a class="header" href="#modal-operators-deontic-logic">Modal Operators (Deontic Logic)</a></h1>
+<p>Spindle supports modal operators for deontic reasoning, allowing you to express obligations, permissions, and prohibitions within defeasible logic theories.</p>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>Deontic logic is a branch of formal logic concerned with normative concepts such as obligation, permission, and prohibition. In defeasible reasoning, deontic modalities are particularly useful because normative rules are often subject to exceptions. For example, a general obligation to pay taxes may be defeated by a specific exemption for non-profit organizations.</p>
+<p>Spindle integrates deontic modalities directly into its literal representation. Each literal can carry a modal operator that qualifies the proposition with a normative meaning, and these modal literals participate in the same defeasible reasoning process as ordinary literals – including conflict resolution, superiority, and defeat.</p>
+<blockquote>
+<p><strong>Note:</strong> Modal operators are currently only accessible via the Rust API and WASM bindings. They are not directly supported through the CLI. If you need modal reasoning, use the library or WASM integration.</p>
+</blockquote>
+<h2 id="the-three-standard-operators"><a class="header" href="#the-three-standard-operators">The Three Standard Operators</a></h2>
+<p>Spindle provides three built-in deontic operators:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>Standard</th><th>Scalable</th></tr>
+<tr><th>Operator</th><th>DFL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td>Small theories (&lt;100 rules)</td><td>Faster</td><td>Overhead</td></tr>
-<tr><td>Large theories (&gt;1000 rules)</td><td>Slower</td><td>Faster</td></tr>
-<tr><td>Memory</td><td>Lower</td><td>Higher (3 sets)</td></tr>
-<tr><td>Conflicts</td><td>Per-rule check</td><td>Batch processing</td></tr>
+<tr><td>Obligation</td><td><code>[O]</code></td><td><code>(must ...)</code></td><td>The proposition <strong>must</strong> hold</td></tr>
+<tr><td>Permission</td><td><code>[P]</code></td><td><code>(may ...)</code></td><td>The proposition <strong>may</strong> hold</td></tr>
+<tr><td>Forbidden</td><td><code>[F]</code></td><td><code>(forbidden ...)</code></td><td>The proposition <strong>must not</strong> hold</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="when-to-use-scalable"><a class="header" href="#when-to-use-scalable">When to Use Scalable</a></h3>
-<p>Use <code>--scalable</code> when:</p>
+<h3 id="obligation-o"><a class="header" href="#obligation-o">Obligation (<code>[O]</code>)</a></h3>
+<p>An obligation states that something is required. If <code>[O]pay</code> is concluded, then there is an obligation to pay.</p>
+<h3 id="permission-p"><a class="header" href="#permission-p">Permission (<code>[P]</code>)</a></h3>
+<p>A permission states that something is allowed. If <code>[P]access</code> is concluded, then access is permitted.</p>
+<h3 id="forbidden-f"><a class="header" href="#forbidden-f">Forbidden (<code>[F]</code>)</a></h3>
+<p>A prohibition states that something is not allowed. If <code>[F]enter</code> is concluded, then entering is forbidden.</p>
+<h2 id="dfl-syntax"><a class="header" href="#dfl-syntax">DFL Syntax</a></h2>
+<p>In DFL, modal operators are written as square-bracketed prefixes on literals:</p>
+<pre><code class="language-dfl"># Modal facts
+f1: &gt;&gt; [O]pay
+f2: &gt;&gt; [P]access
+f3: &gt;&gt; [F]enter
+
+# Modal literals in rules
+r1: signed_contract =&gt; [O]pay
+r2: member =&gt; [P]access
+r3: unauthorized =&gt; [F]enter
+</code></pre>
+<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary DFL literals:</p>
+<pre><code class="language-dfl"># Negated modal literals
+r4: exemption =&gt; -[O]pay
+r5: revoked =&gt; -[P]access
+</code></pre>
+<h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
+<p>In SPL, modal operators use keyword wrappers:</p>
+<pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
+(given (must pay))
+(normally r1 signed-contract (must pay))
+
+; Permission: (may &lt;literal&gt;)
+(given (may access))
+(normally r2 member (may access))
+
+; Forbidden: (forbidden &lt;literal&gt;)
+(given (forbidden enter))
+(normally r3 unauthorized (forbidden enter))
+</code></pre>
+<h3 id="spl-negation"><a class="header" href="#spl-negation">SPL Negation</a></h3>
+<p>Negation of modal literals in SPL uses the <code>not</code> wrapper:</p>
+<pre><code class="language-lisp">; Negated obligation: not obligated to pay
+(normally r4 exemption (not (must pay)))
+
+; Negated permission: not permitted to access
+(normally r5 revoked (not (may access)))
+
+; Negated prohibition: not forbidden to enter (i.e., allowed)
+(normally r6 authorized (not (forbidden enter)))
+</code></pre>
+<h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
+<p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
+<h3 id="dfl-examples"><a class="header" href="#dfl-examples">DFL Examples</a></h3>
+<pre><code class="language-dfl"># If you signed a contract, you are obligated to pay
+r1: signed_contract =&gt; [O]pay
+
+# If you are obligated to pay and fail to pay, you are in violation
+r2: [O]pay, -paid =&gt; violation
+
+# Members may access resources
+r3: member =&gt; [P]access
+
+# Unauthorized users are forbidden from entering
+r4: unauthorized =&gt; [F]enter
+
+# An exemption defeats the obligation to pay
+r5: exemption =&gt; -[O]pay
+r5 &gt; r1
+
+# A defeater: pending review blocks the permission
+d1: pending_review ~&gt; [P]access
+</code></pre>
+<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
+<pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
+(normally r1 signed-contract (must pay))
+
+; If obligated to pay and haven't paid, violation
+(normally r2 (and (must pay) (not paid)) violation)
+
+; Members may access resources
+(normally r3 member (may access))
+
+; Unauthorized users are forbidden from entering
+(normally r4 unauthorized (forbidden enter))
+
+; An exemption defeats the obligation to pay
+(normally r5 exemption (not (must pay)))
+(prefer r5 r1)
+
+; A defeater: pending review blocks the permission
+(except d1 pending-review (may access))
+</code></pre>
+<h3 id="combining-with-predicates-and-variables"><a class="header" href="#combining-with-predicates-and-variables">Combining with Predicates and Variables</a></h3>
+<p>In SPL, modal operators can be combined with predicates and variables:</p>
+<pre><code class="language-lisp">; Employees are obligated to report hours
+(given (employee alice))
+(given (employee bob))
+(normally r1 (employee ?x) (must (report-hours ?x)))
+
+; Managers may approve expenses
+(given (manager alice))
+(normally r2 (manager ?x) (may (approve-expenses ?x)))
+
+; Contractors are forbidden from accessing internal systems
+(given (contractor charlie))
+(normally r3 (contractor ?x) (forbidden (access-internal ?x)))
+</code></pre>
+<h2 id="modal-negation-and-complements"><a class="header" href="#modal-negation-and-complements">Modal Negation and Complements</a></h2>
+<p>Every modal operator has a complement, obtained by toggling the negation flag. The complement of <code>[O]</code> (obligation) is <code>[-O]</code> (no obligation). This is distinct from the negation of the underlying proposition.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Expression</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>[O]pay</code></td><td>There is an obligation to pay</td></tr>
+<tr><td><code>[-O]pay</code></td><td>There is no obligation to pay</td></tr>
+<tr><td><code>[O]~pay</code></td><td>There is an obligation not to pay</td></tr>
+<tr><td><code>[-O]~pay</code></td><td>There is no obligation not to pay</td></tr>
+</tbody>
+</table>
+</div>
+<p>The distinction between modal negation and literal negation is important:</p>
 <ul>
-<li>Theory has &gt;1000 rules</li>
-<li>Many potential conflicts</li>
-<li>Long inference chains</li>
-<li>Lambda pruning will help</li>
+<li><strong>Modal negation</strong> (<code>[-O]pay</code>): The obligation itself does not hold. You are not required to pay, but you may still choose to.</li>
+<li><strong>Literal negation</strong> (<code>[O]~pay</code>): The obligation holds, but over the negated proposition. You are obligated not to pay.</li>
 </ul>
-<h2 id="semi-naive-evaluation"><a class="header" href="#semi-naive-evaluation">Semi-Naive Evaluation</a></h2>
-<p>Phase 3 uses <strong>semi-naive evaluation</strong> for efficiency:</p>
-<p>Instead of checking all candidates each iteration, only check literals whose dependencies changed:</p>
-<pre><code>function compute_partial_seminaive(theory, delta, lambda):
-    partial = delta.copy()
-    worklist = rules_with_empty_body()
+<h3 id="display-format"><a class="header" href="#display-format">Display Format</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th>Display</th><th>Negated Display</th></tr>
+</thead>
+<tbody>
+<tr><td>Obligation</td><td><code>[O]</code></td><td><code>[-O]</code></td></tr>
+<tr><td>Permission</td><td><code>[P]</code></td><td><code>[-P]</code></td></tr>
+<tr><td>Forbidden</td><td><code>[F]</code></td><td><code>[-F]</code></td></tr>
+<tr><td>Custom <code>X</code></td><td><code>[X]</code></td><td><code>[-X]</code></td></tr>
+<tr><td>Empty</td><td><em>(nothing)</em></td><td><em>(nothing)</em></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="rust-api-usage"><a class="header" href="#rust-api-usage">Rust API Usage</a></h2>
+<p>The <code>Mode</code> struct is in <code>spindle_core::mode</code> and is re-exported through the prelude.</p>
+<h3 id="creating-modes"><a class="header" href="#creating-modes">Creating Modes</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
 
-    while worklist not empty:
-        literal = worklist.pop()
+// Standard deontic operators
+let obligation = Mode::obligation();  // [O]
+let permission = Mode::permission();  // [P]
+let forbidden = Mode::forbidden();    // [F]
 
-        if can_prove_defeasibly(literal, partial, lambda):
-            partial.add(literal)
+// Empty mode (no modal operator)
+let empty = Mode::empty();
 
-            # Only add rules triggered by this literal
-            for rule in rules_with_body(literal):
-                if body_satisfied(rule, partial):
-                    worklist.add(rule.head)
+// Custom mode
+let custom = Mode::new("K");  // [K] (e.g., epistemic "known")
+<span class="boring">}</span></code></pre>
+<h3 id="complement-negation-toggle"><a class="header" href="#complement-negation-toggle">Complement (Negation Toggle)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
 
-    return partial
+let obligation = Mode::obligation();
+assert_eq!(format!("{}", obligation), "[O]");
+
+let neg_obligation = obligation.complement();
+assert_eq!(format!("{}", neg_obligation), "[-O]");
+
+// Double complement returns to original
+let double = neg_obligation.complement();
+assert_eq!(format!("{}", double), "[O]");
+<span class="boring">}</span></code></pre>
+<h3 id="checking-mode-state"><a class="header" href="#checking-mode-state">Checking Mode State</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+let mode = Mode::obligation();
+assert!(!mode.is_empty());
+assert!(!mode.negation);
+assert_eq!(mode.name, Some("O".to_string()));
+
+let empty = Mode::empty();
+assert!(empty.is_empty());
+<span class="boring">}</span></code></pre>
+<h3 id="creating-modal-literals"><a class="header" href="#creating-modal-literals">Creating Modal Literals</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+// A literal with an obligation mode: [O]pay
+let must_pay = Literal::new(
+    "pay",
+    false,
+    Mode::obligation(),
+    Temporal::empty(),
+    vec![],
+);
+assert!(must_pay.is_modal());
+assert_eq!(format!("{}", must_pay), "[O]pay");
+
+// A negated literal with permission mode: [P]~access
+let not_access = Literal::new(
+    "access",
+    true,
+    Mode::permission(),
+    Temporal::empty(),
+    vec![],
+);
+assert_eq!(format!("{}", not_access), "[P]~access");
+
+// Modal literal with predicates: [F]enter(restricted_area)
+let forbidden_enter = Literal::new(
+    "enter",
+    false,
+    Mode::forbidden(),
+    Temporal::empty(),
+    vec!["restricted_area".to_string()],
+);
+assert_eq!(format!("{}", forbidden_enter), "[F]enter(restricted_area)");
+<span class="boring">}</span></code></pre>
+<h3 id="modal-literals-in-rules"><a class="header" href="#modal-literals-in-rules">Modal Literals in Rules</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+use smallvec::smallvec;
+
+// r1: signed_contract =&gt; [O]pay
+let body = smallvec![Literal::simple("signed_contract")];
+let head = smallvec![Literal::new(
+    "pay",
+    false,
+    Mode::obligation(),
+    Temporal::empty(),
+    vec![],
+)];
+let rule = Rule::new("r1", RuleType::Defeasible, body, head);
+
+// r2: [O]pay, ~paid =&gt; violation
+let body = smallvec![
+    Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]),
+    Literal::negated("paid"),
+];
+let head = smallvec![Literal::simple("violation")];
+let rule = Rule::new("r2", RuleType::Defeasible, body, head);
+<span class="boring">}</span></code></pre>
+<h3 id="equality-and-hashing"><a class="header" href="#equality-and-hashing">Equality and Hashing</a></h3>
+<p>Modal operators participate in literal equality and hashing. Two literals with the same name but different modes are considered distinct:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+use std::collections::HashSet;
+
+let pay = Literal::simple("pay");
+let must_pay = Literal::new(
+    "pay",
+    false,
+    Mode::obligation(),
+    Temporal::empty(),
+    vec![],
+);
+
+// These are different literals
+assert_ne!(pay, must_pay);
+
+let mut set = HashSet::new();
+set.insert(pay.literal_id());
+// must_pay has a different hash due to the mode
+<span class="boring">}</span></code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="compliance-rules"><a class="header" href="#compliance-rules">Compliance Rules</a></h3>
+<p>Model regulatory compliance where obligations can be defeated by exceptions:</p>
+<pre><code class="language-lisp">; All companies must file annual reports
+(normally r1 company (must file-annual-report))
+
+; Small companies are exempt from detailed reporting
+(normally r2 (and company small-company) (not (must file-annual-report)))
+(prefer r2 r1)
+
+; Public companies must disclose finances
+(normally r3 public-company (must disclose-finances))
+
+; Companies in bankruptcy are exempt from disclosure
+(normally r4 (and public-company in-bankruptcy) (not (must disclose-finances)))
+(prefer r4 r3)
 </code></pre>
-<p>This avoids redundant checks and provides significant speedup for large theories.</p>
-<h2 id="semantic-equivalence"><a class="header" href="#semantic-equivalence">Semantic Equivalence</a></h2>
-<p>Both algorithms produce identical results for well-formed theories:</p>
-<pre><code>∀ theory: reason(theory) ≡ reason_scalable(theory)
+<h3 id="permission-systems"><a class="header" href="#permission-systems">Permission Systems</a></h3>
+<p>Model access control with defeasible permissions:</p>
+<pre><code class="language-lisp">; Employees may access the office
+(normally r1 employee (may access-office))
+
+; Suspended employees lose access
+(normally r2 (and employee suspended) (not (may access-office)))
+(prefer r2 r1)
+
+; Managers may access restricted areas
+(normally r3 manager (may access-restricted))
+
+; Even managers are forbidden from the server room without clearance
+(normally r4 (and manager (not has-clearance)) (forbidden access-server-room))
 </code></pre>
-<p>The test suite verifies this property across many test cases.</p>
+<h3 id="obligation-tracking"><a class="header" href="#obligation-tracking">Obligation Tracking</a></h3>
+<p>Track obligations through chains of reasoning:</p>
+<pre><code class="language-lisp">; Signing a contract creates an obligation to pay
+(normally r1 signed-contract (must pay))
+
+; Obligation to pay and failure to pay results in violation
+(normally r2 (and (must pay) (not paid)) in-violation)
+
+; Being in violation creates an obligation to remedy
+(normally r3 in-violation (must remedy))
+
+; Payment within grace period removes the violation
+(normally r4 (and in-violation paid-within-grace) (not in-violation))
+(prefer r4 r2)
+</code></pre>
+<h3 id="mixed-normative-reasoning"><a class="header" href="#mixed-normative-reasoning">Mixed Normative Reasoning</a></h3>
+<p>Combine obligations, permissions, and prohibitions in a single theory:</p>
+<pre><code class="language-lisp">; Citizens must pay taxes
+(normally r1 citizen (must pay-taxes))
+
+; Citizens may vote
+(normally r2 citizen (may vote))
+
+; Convicted felons are forbidden from voting (in some jurisdictions)
+(normally r3 (and citizen convicted-felon) (forbidden vote))
+(prefer r3 r2)
+
+; Minors are exempt from taxation
+(normally r4 (and citizen minor) (not (must pay-taxes)))
+(prefer r4 r1)
+
+; Non-citizens are forbidden from voting
+(normally r5 (not citizen) (forbidden vote))
+</code></pre>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ol>
+<li><strong>No CLI support</strong>: Modal operators cannot be specified through the command-line interface. Use the Rust API or WASM bindings to construct modal literals.</li>
+<li><strong>No inter-modal axioms</strong>: Spindle does not enforce relationships between operators (e.g., it does not automatically derive <code>[P]a</code> from <code>[O]a</code>). If you need such relationships, encode them as explicit rules.</li>
+<li><strong>Custom modes are uninterpreted</strong>: Custom modes created with <code>Mode::new(name)</code> have no built-in semantics. Their meaning is determined entirely by the rules you write.</li>
+<li><strong>No modal logic tableau</strong>: Spindle performs defeasible reasoning, not modal logic model checking. Modal operators are labels on literals, not Kripke-style accessibility relations.</li>
+</ol>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li>
+<p><strong>Be explicit about modal relationships</strong></p>
+<pre><code class="language-lisp">; If something is obligatory, it is also permitted
+(always obligation-implies-permission (must ?x) (may ?x))
+</code></pre>
+</li>
+<li>
+<p><strong>Use superiority to handle conflicts between norms</strong></p>
+<pre><code class="language-lisp">(normally r1 employee (must attend-meeting))
+(normally r2 (and employee on-leave) (not (must attend-meeting)))
+(prefer r2 r1)
+</code></pre>
+</li>
+<li>
+<p><strong>Separate normative and factual reasoning</strong></p>
+<pre><code class="language-lisp">; Factual rules
+(normally r1 penguin bird)
+(normally r2 bird flies)
+
+; Normative rules
+(normally r3 (and endangered-species (may hunt)) (not (may hunt)))
+</code></pre>
+</li>
+<li>
+<p><strong>Document the intended interpretation of custom modes</strong></p>
+<pre><code class="language-lisp">; [K] = epistemic "known to be true"
+; Use metadata to document the mode's meaning
+(meta r1 (description "Agents know their own obligations"))
+(normally r1 (must ?x) (K ?x))
+</code></pre>
+</li>
+</ol>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/temporal.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../guides/grounding.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guides/trust.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -412,11 +598,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/temporal.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../guides/grounding.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guides/trust.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -36,6 +36,7 @@ spindle-core/src/
 ├── explanation.rs      # Proof trees
 ├── trust.rs            # Trust-weighted reasoning
 ├── query.rs            # Query operators
+├── mining.rs           # Process mining (alpha algorithm)
 └── error.rs            # Error types
 ```
 
@@ -228,8 +229,8 @@ pub struct Theory {
 pub struct Rule {
     label: String,
     rule_type: RuleType,     // 1 byte + padding
-    body: Vec<Literal>,
-    head: Vec<Literal>,
+    body: SmallVec<[Literal; 4]>,  // inline for ≤4 elements
+    head: SmallVec<[Literal; 4]>,
 }
 
 pub struct Literal {
@@ -245,7 +246,7 @@ pub struct Literal {
 
 ```rust
 // During reasoning, we use IDs instead of strings
-proven: HashSet`LiteralId`  // 4 bytes per entry
+proven: BitSet  // bitmap indexed by LiteralId
 worklist: VecDeque`LiteralId`
 ```
 
@@ -264,6 +265,13 @@ worklist: VecDeque`LiteralId`
 2. Implement the algorithm
 3. Add to WASM bindings if needed
 4. Document in guides/queries.md
+
+### Process Mining Pipeline
+
+The mining module provides:
+- Event log → Footprint matrix → Petri net discovery (alpha algorithm)
+- Conflict detection (choice/mutex patterns)
+- Rule learning with support/confidence metrics
 
 ### Adding Temporal Features
 
@@ -317,6 +325,7 @@ Where:
 
 Core dependencies:
 - `rustc-hash` - Fast hash function for internal HashMaps
+- `smallvec` - Inline storage for small vectors (rule body/head)
 
 Parser dependencies:
 - `nom` - Parser combinator library

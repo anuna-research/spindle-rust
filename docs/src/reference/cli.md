@@ -12,7 +12,7 @@ cargo install --path crates/spindle-cli
 
 ```bash
 spindle [OPTIONS] <FILE>
-spindle <COMMAND> [OPTIONS] <FILE>
+spindle <COMMAND> [OPTIONS] <FILE> [LITERAL]
 ```
 
 ## Commands
@@ -63,7 +63,119 @@ Theory Statistics:
   Total rules: 8
 ```
 
+### query
+
+Query if a literal holds in the theory.
+
+```bash
+spindle query examples/penguin.dfl flies
+spindle query examples/penguin.dfl "~flies"
+spindle query examples/penguin.dfl "(not flies)"
+spindle query examples/penguin.dfl --json flies
+```
+
+The literal argument supports multiple formats: `p`, `~p`, `(not p)`, or complex SPL expressions.
+
+Returns a `QueryStatus`:
+
+| Status | Meaning |
+|--------|---------|
+| Provable | The literal is defeasibly provable |
+| Refuted | The negation of the literal is provable |
+| Unknown | Neither the literal nor its negation is provable |
+
+Output:
+```
+QueryStatus: Provable
+```
+
+With `--json`:
+```json
+{"literal":"flies","status":"Refuted"}
+```
+
+### explain
+
+Show the derivation proof tree for why a literal holds.
+
+```bash
+spindle explain examples/penguin.dfl "-flies"
+spindle explain examples/penguin.dfl --json "-flies"
+```
+
+Shows the proof tree detailing how the reasoning engine derived the conclusion.
+
+Output:
+```
+Explanation for -flies:
+  -flies ← [defeasible] r3: penguin => -flies
+    penguin ← [fact]
+  Blocked alternatives:
+    r1: bird => flies (defeated by r3 via superiority)
+  Conflict resolutions:
+    r3 > r1 (superiority)
+```
+
+With `--json`, the output is a JSON or JSON-LD structure containing an `Explanation` with proof nodes, blocked alternatives, and conflict resolutions.
+
+### why-not
+
+Explain why a literal is NOT provable.
+
+```bash
+spindle why-not examples/penguin.dfl flies
+spindle why-not examples/penguin.dfl --json flies
+```
+
+Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results.
+
+Output:
+```
+Why not flies?
+  Rule r1: bird => flies
+    Status: Defeated
+    Defeated by: r3 (penguin => -flies) via superiority r3 > r1
+```
+
+Possible blocking reasons:
+
+| Reason | Meaning |
+|--------|---------|
+| MissingPremise | A required premise of the rule is not provable |
+| Defeated | The rule is defeated by a stronger or competing rule |
+| Contradicted | The conclusion conflicts with a strictly proved literal |
+
+### requires
+
+Abduction: find the minimal sets of facts needed to derive a literal.
+
+```bash
+spindle requires examples/penguin.dfl flies
+spindle requires examples/penguin.dfl --max 5 flies
+spindle requires examples/penguin.dfl --json flies
+```
+
+The `--max` option limits the number of solutions returned (defaults to 10).
+
+Output:
+```
+To derive flies, you could assume:
+  1. { bird, -penguin }
+  2. { flies }
+```
+
+Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.
+
 ## Options
+
+### `--json`
+
+Output results in JSON format. Available for `query`, `explain`, `why-not`, and `requires` commands.
+
+```bash
+spindle query examples/penguin.dfl --json flies
+spindle explain examples/penguin.dfl --json "-flies"
+```
 
 ### `--scalable`
 
@@ -121,6 +233,25 @@ spindle penguin.dfl
 
 # Same with explicit command
 spindle reason penguin.dfl
+```
+
+### Querying and Explaining
+
+```bash
+# Check if a literal holds
+spindle query penguin.dfl flies
+
+# Get a proof tree for a derived conclusion
+spindle explain penguin.dfl "-flies"
+
+# Debug why something is not provable
+spindle why-not penguin.dfl flies
+
+# Find what facts would make a literal provable
+spindle requires penguin.dfl flies --max 5
+
+# Get JSON output for scripting
+spindle query penguin.dfl --json flies
 ```
 
 ### Validate Before Reasoning

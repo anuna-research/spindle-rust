@@ -22,7 +22,11 @@
 - [Algorithms](guides/algorithms.md)
 - [Variables and Grounding](guides/grounding.md)
 - [Temporal Reasoning](guides/temporal.md)
+- [Modal Operators](guides/modal.md)
+- [Trust-Weighted Reasoning](guides/trust.md)
 - [Query Operators](guides/queries.md)
+- [Explanation System](guides/explanations.md)
+- [Process Mining](guides/mining.md)
 - [Performance Tuning](guides/performance.md)
 - [Troubleshooting](guides/troubleshooting.md)
 

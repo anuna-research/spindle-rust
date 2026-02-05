@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e5c005ae.js";
+            window.path_to_searchindex_js = "../searchindex-64fde6ea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d17d2526.js"></script>
+        <script src="../toc-116bb599.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,7 +187,7 @@
 </code></pre>
 <h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
 <pre><code class="language-bash">spindle [OPTIONS] &lt;FILE&gt;
-spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt;
+spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt; [LITERAL]
 </code></pre>
 <h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
 <h3 id="reason-default"><a class="header" href="#reason-default">reason (default)</a></h3>
@@ -218,7 +218,93 @@ spindle reason examples/penguin.dfl
   Superiority: 1
   Total rules: 8
 </code></pre>
+<h3 id="query"><a class="header" href="#query">query</a></h3>
+<p>Query if a literal holds in the theory.</p>
+<pre><code class="language-bash">spindle query examples/penguin.dfl flies
+spindle query examples/penguin.dfl "~flies"
+spindle query examples/penguin.dfl "(not flies)"
+spindle query examples/penguin.dfl --json flies
+</code></pre>
+<p>The literal argument supports multiple formats: <code>p</code>, <code>~p</code>, <code>(not p)</code>, or complex SPL expressions.</p>
+<p>Returns a <code>QueryStatus</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Status</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Provable</td><td>The literal is defeasibly provable</td></tr>
+<tr><td>Refuted</td><td>The negation of the literal is provable</td></tr>
+<tr><td>Unknown</td><td>Neither the literal nor its negation is provable</td></tr>
+</tbody>
+</table>
+</div>
+<p>Output:</p>
+<pre><code>QueryStatus: Provable
+</code></pre>
+<p>With <code>--json</code>:</p>
+<pre><code class="language-json">{"literal":"flies","status":"Refuted"}
+</code></pre>
+<h3 id="explain"><a class="header" href="#explain">explain</a></h3>
+<p>Show the derivation proof tree for why a literal holds.</p>
+<pre><code class="language-bash">spindle explain examples/penguin.dfl "-flies"
+spindle explain examples/penguin.dfl --json "-flies"
+</code></pre>
+<p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
+<p>Output:</p>
+<pre><code>Explanation for -flies:
+  -flies ← [defeasible] r3: penguin =&gt; -flies
+    penguin ← [fact]
+  Blocked alternatives:
+    r1: bird =&gt; flies (defeated by r3 via superiority)
+  Conflict resolutions:
+    r3 &gt; r1 (superiority)
+</code></pre>
+<p>With <code>--json</code>, the output is a JSON or JSON-LD structure containing an <code>Explanation</code> with proof nodes, blocked alternatives, and conflict resolutions.</p>
+<h3 id="why-not"><a class="header" href="#why-not">why-not</a></h3>
+<p>Explain why a literal is NOT provable.</p>
+<pre><code class="language-bash">spindle why-not examples/penguin.dfl flies
+spindle why-not examples/penguin.dfl --json flies
+</code></pre>
+<p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results.</p>
+<p>Output:</p>
+<pre><code>Why not flies?
+  Rule r1: bird =&gt; flies
+    Status: Defeated
+    Defeated by: r3 (penguin =&gt; -flies) via superiority r3 &gt; r1
+</code></pre>
+<p>Possible blocking reasons:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Reason</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>MissingPremise</td><td>A required premise of the rule is not provable</td></tr>
+<tr><td>Defeated</td><td>The rule is defeated by a stronger or competing rule</td></tr>
+<tr><td>Contradicted</td><td>The conclusion conflicts with a strictly proved literal</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="requires"><a class="header" href="#requires">requires</a></h3>
+<p>Abduction: find the minimal sets of facts needed to derive a literal.</p>
+<pre><code class="language-bash">spindle requires examples/penguin.dfl flies
+spindle requires examples/penguin.dfl --max 5 flies
+spindle requires examples/penguin.dfl --json flies
+</code></pre>
+<p>The <code>--max</code> option limits the number of solutions returned (defaults to 10).</p>
+<p>Output:</p>
+<pre><code>To derive flies, you could assume:
+  1. { bird, -penguin }
+  2. { flies }
+</code></pre>
+<p>Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
+<h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
+<p>Output results in JSON format. Available for <code>query</code>, <code>explain</code>, <code>why-not</code>, and <code>requires</code> commands.</p>
+<pre><code class="language-bash">spindle query examples/penguin.dfl --json flies
+spindle explain examples/penguin.dfl --json "-flies"
+</code></pre>
 <h3 id="--scalable"><a class="header" href="#--scalable"><code>--scalable</code></a></h3>
 <p>Use the scalable DL(d||) algorithm instead of standard DL(d).</p>
 <pre><code class="language-bash">spindle --scalable large-theory.dfl
@@ -272,6 +358,22 @@ spindle penguin.dfl
 
 # Same with explicit command
 spindle reason penguin.dfl
+</code></pre>
+<h3 id="querying-and-explaining"><a class="header" href="#querying-and-explaining">Querying and Explaining</a></h3>
+<pre><code class="language-bash"># Check if a literal holds
+spindle query penguin.dfl flies
+
+# Get a proof tree for a derived conclusion
+spindle explain penguin.dfl "-flies"
+
+# Debug why something is not provable
+spindle why-not penguin.dfl flies
+
+# Find what facts would make a literal provable
+spindle requires penguin.dfl flies --max 5
+
+# Get JSON output for scripting
+spindle query penguin.dfl --json flies
 </code></pre>
 <h3 id="validate-before-reasoning"><a class="header" href="#validate-before-reasoning">Validate Before Reasoning</a></h3>
 <pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl

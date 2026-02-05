@@ -75,6 +75,11 @@ Variables can cause combinatorial explosion:
 
 ## Memory Optimization
 
+> **Note:** During reasoning, the proven literal set now uses a `BitSet` instead
+> of `HashSet<LiteralId>`, providing O(1) membership tests with significantly
+> better cache locality. See [Recent Optimizations](#recent-optimizations) for
+> details.
+
 ### String Interning
 
 Spindle uses string interning internally. You can benefit by:
@@ -198,6 +203,83 @@ cargo flamegraph -- spindle theory.dfl
 heaptrack spindle large-theory.dfl
 heaptrack_print heaptrack.spindle.*.gz
 ```
+
+## Recent Optimizations
+
+Several targeted optimizations have been applied to Spindle's internals. These
+are transparent to end users but can significantly reduce runtime and memory
+overhead, especially for larger theories.
+
+### SmallVec for Rule Bodies/Heads
+
+*Commit [9bee7a3]*
+
+Rule body and head storage was changed from `Vec<Literal>` to
+`SmallVec<[Literal; 4]>`. This means that rules with four or fewer body/head
+literals avoid heap allocation entirely -- the data is stored inline on the
+stack.
+
+Most real-world defeasible rules have 1-3 body literals, so the common case is
+covered without any heap allocation. This reduces allocation pressure during
+both grounding and reasoning.
+
+```rust
+// Before
+struct Rule {
+    head: Vec<Literal>,
+    body: Vec<Literal>,
+}
+
+// After
+use smallvec::SmallVec;
+struct Rule {
+    head: SmallVec<[Literal; 4]>,
+    body: SmallVec<[Literal; 4]>,
+}
+```
+
+### BitSet for Proven Literals
+
+*Commit [82ae834]*
+
+The set of proven literals during reasoning was changed from
+`HashSet<LiteralId>` to a compact `BitSet`. Since `LiteralId` is a `u32`,
+bitmap indexing is a natural fit:
+
+- **O(1)** contains and insert operations (bit test / bit set).
+- **Better cache locality** -- the entire proven set fits in a contiguous
+  allocation rather than being scattered across hash buckets.
+- **Significant improvement** for theories with many literals, where hash
+  collisions and bucket traversal previously added up.
+
+### FxHash for Internal HashMaps
+
+*Commit [4fbe1fd]*
+
+All internal `HashMap` / `HashSet` instances were switched from the default
+`SipHash` hasher to `FxHash` (provided by the `rustc-hash` crate).
+
+- `FxHash` is considerably faster for small keys (`u32`, `u64`) that are common
+  throughout Spindle's indexing and reasoning structures.
+- It is **not** cryptographically secure, but Spindle's internal maps are never
+  exposed to untrusted input, so this is not a concern.
+- This is the same hasher used inside the Rust compiler itself.
+
+### Pre-allocation Strategies
+
+*Commit [2e92b84]*
+
+Worklists, intermediate buffers, and result vectors are now pre-allocated based
+on the size of the theory before reasoning begins:
+
+- The conclusion vector is allocated with an estimate of
+  `rules.len() * avg_head_size`.
+- Worklists are sized to the number of rules to avoid repeated reallocation
+  during the fixed-point loop.
+
+This avoids the cost of incremental `Vec` growth (repeated
+allocate-copy-deallocate cycles) and reduces peak memory usage by avoiding
+over-allocation.
 
 ## Benchmarks
 

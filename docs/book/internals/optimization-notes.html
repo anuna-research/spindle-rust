@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Algorithms - Spindle-Rust</title>
+        <title>Optimization Notes - Spindle-Rust</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://codeberg.org/anuna/spindle-rust" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/algorithms.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/internals/optimization-notes.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,231 +180,127 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="algorithms"><a class="header" href="#algorithms">Algorithms</a></h1>
-<p>Spindle implements two reasoning algorithms: standard DL(d) and scalable DL(d||).</p>
-<h2 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h2>
-<p>The default algorithm uses <strong>forward chaining</strong> to compute conclusions.</p>
-<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+                        <h1 id="optimization-notes"><a class="header" href="#optimization-notes">Optimization Notes</a></h1>
+<p>This document records optimization attempts and findings for future reference.</p>
+<h2 id="lattice-based-memoization-february-2026"><a class="header" href="#lattice-based-memoization-february-2026">Lattice-Based Memoization (February 2026)</a></h2>
+<h3 id="motivation"><a class="header" href="#motivation">Motivation</a></h3>
+<p>The <code>is_blocked_by_superior</code> function in <code>reason.rs</code> checks if a defeasible rule is blocked by attacking rules. The hypothesis was that:</p>
 <ol>
-<li><strong>Initialize</strong>: Add all facts to the proven set</li>
-<li><strong>Propagate</strong>: Find rules whose bodies are satisfied</li>
-<li><strong>Fire</strong>: Add conclusions, checking for conflicts</li>
-<li><strong>Repeat</strong>: Until no new conclusions</li>
+<li>Multiple rules deriving the same head would check the same attackers</li>
+<li>Caching attacker status could avoid repeated O(body_size) checks</li>
+<li>A lattice-based approach (inspired by Ascent) could formalize memoization</li>
 </ol>
-<h3 id="pseudocode"><a class="header" href="#pseudocode">Pseudocode</a></h3>
-<pre><code>function reason(theory):
-    proven = {}
-
-    # Phase 1: Facts
-    for fact in theory.facts:
-        add_conclusion(+D, fact.head)
-        add_conclusion(+d, fact.head)
-        worklist.add(fact.head)
-
-    # Phase 2: Forward chaining
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body_containing(literal):
-            if body_satisfied(rule, proven):
-                if rule.type == Strict:
-                    add_conclusion(+D, rule.head)
-                    add_conclusion(+d, rule.head)
-                elif rule.type == Defeasible:
-                    if not blocked_by_superior(rule):
-                        add_conclusion(+d, rule.head)
-                # Defeaters don't add conclusions
-
-    # Phase 3: Negative conclusions
-    for literal in all_literals:
-        if literal not in proven[+D]:
-            add_conclusion(-D, literal)
-        if literal not in proven[+d]:
-            add_conclusion(-d, literal)
+<h3 id="approaches-tried"><a class="header" href="#approaches-tried">Approaches Tried</a></h3>
+<h4 id="1-proofstatus-lattice-with-memoization"><a class="header" href="#1-proofstatus-lattice-with-memoization">1. ProofStatus Lattice with Memoization</a></h4>
+<p>Created a <code>ProofStatus</code> enum representing lattice positions:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum ProofStatus {
+    Unknown,           // ⊥
+    BlockedByDelta,    // Terminal false
+    NotInLambda,       // Terminal false
+    NoSupport,         // Pending
+    HasSupport,        // Pending
+    AllAttacksDefeated,// Ready to prove
+    ProvedInPartial,   // ⊤
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Result</strong>: Correct semantically, but added 5-15% overhead due to HashMap operations.</p>
+<h4 id="2-blockedbychecker-with-conservative-invalidation"><a class="header" href="#2-blockedbychecker-with-conservative-invalidation">2. BlockedByChecker with Conservative Invalidation</a></h4>
+<p>Cached active attackers per complement literal, clearing cache when <code>proven</code> set grew.</p>
+<p><strong>Result</strong>: Cache was cleared too often, providing no benefit.</p>
+<h4 id="3-incremental-invalidation"><a class="header" href="#3-incremental-invalidation">3. Incremental Invalidation</a></h4>
+<p>Tracked <code>pending_body_literals</code> for each cache entry, only invalidating when relevant literals were proven.</p>
+<p><strong>Result</strong>: Reduced unnecessary invalidation, but overhead still exceeded savings. Cloning the <code>proven</code> HashSet for snapshot tracking was expensive.</p>
+<h4 id="4-lazy-attacker-tracking"><a class="header" href="#4-lazy-attacker-tracking">4. Lazy Attacker Tracking</a></h4>
+<p>Tracked attacker activation incrementally (like rule body counters), avoiding body satisfaction checks entirely.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct LazyAttackerTracker {
+    attacker_remaining: FxHashMap&lt;String, usize&gt;,
+    active_attackers: FxHashMap&lt;LiteralId, Vec&lt;String&gt;&gt;,
+    attacker_heads: FxHashMap&lt;String, LiteralId&gt;,
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Result</strong>: 10-80% slower due to HashMap operations and string allocations.</p>
+<h3 id="benchmark-results"><a class="header" href="#benchmark-results">Benchmark Results</a></h3>
+<pre><code>multi_target_blocked (M targets × N defenders):
+  5x10:   standard ~44µs,  lazy ~53µs (+20%),  memoized ~51µs (+16%)
+  10x10:  standard ~88µs,  lazy ~100µs (+14%), memoized ~106µs (+20%)
+  20x10:  standard ~164µs, lazy ~299µs (+82%), memoized ~228µs (+39%)
+  10x20:  standard ~180µs, lazy ~215µs (+19%), memoized ~230µs (+28%)
 </code></pre>
-<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
-<p>When a defeasible rule fires, we check for blocking:</p>
-<pre><code>function blocked_by_superior(rule):
-    complement = negate(rule.head)
-
-    for attacker in rules_for(complement):
-        if body_satisfied(attacker):
-            if attacker.type == Defeater:
-                if not is_superior(rule, attacker):
-                    return true  # Blocked by defeater
-            elif attacker.type == Defeasible:
-                if is_superior(attacker, rule):
-                    return true  # Blocked by superior rule
-
-    return false
-</code></pre>
-<h3 id="complexity"><a class="header" href="#complexity">Complexity</a></h3>
-<ul>
-<li>Time: O(n * m) where n = rules, m = average body size</li>
-<li>Space: O(n) for proven literals</li>
-</ul>
-<h2 id="scalable-dld"><a class="header" href="#scalable-dld">Scalable DL(d||)</a></h2>
-<p>For large theories, the three-phase algorithm is more efficient.</p>
-<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
-<pre><code>Theory → [Delta] → [Lambda] → [Partial] → Conclusions
-            ↓          ↓           ↓
-       Definite   Potential   Defeasible
-       (+D)       (approx)    (+d)
-</code></pre>
-<h3 id="phase-1-delta-closure-p_δ"><a class="header" href="#phase-1-delta-closure-p_δ">Phase 1: Delta Closure (P_Δ)</a></h3>
-<p>Computes <strong>definite conclusions</strong> using only facts and strict rules.</p>
-<pre><code>function compute_delta(theory):
-    delta = {}
-    worklist = theory.facts
-
-    while worklist not empty:
-        literal = worklist.pop()
-        delta.add(literal)
-
-        for rule in strict_rules_with_body(literal):
-            if body_satisfied(rule, delta):
-                if rule.head not in delta:
-                    worklist.add(rule.head)
-
-    return delta
-</code></pre>
-<p><strong>Result</strong>: All <code>+D</code> conclusions.</p>
-<h3 id="phase-2-lambda-closure-p_λ"><a class="header" href="#phase-2-lambda-closure-p_λ">Phase 2: Lambda Closure (P_λ)</a></h3>
-<p>Computes an <strong>over-approximation</strong> of defeasible conclusions.</p>
-<p>A literal is in lambda if:</p>
+<h3 id="why-all-approaches-failed"><a class="header" href="#why-all-approaches-failed">Why All Approaches Failed</a></h3>
+<p>The original <code>is_blocked_by_superior</code> is already well-optimized:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>for attacker in attacking_rules {           // O(1) lookup via IndexedTheory
+    let satisfied = attacker.body.iter()    // Small vector (~1-3 elements)
+        .all(|b| proven.contains(&amp;b));      // O(1) HashSet lookup
+    // Superiority check is O(1) via SuperiorityIndex
+}
+<span class="boring">}</span></code></pre>
+<p>Key factors:</p>
 <ol>
-<li>It’s in delta, OR</li>
-<li>Some strict/defeasible rule has:
-<ul>
-<li>Body fully in lambda</li>
-<li>Complement NOT in delta</li>
-</ul>
-</li>
+<li><strong>Operation is already cheap</strong> - Small vectors, O(1) lookups</li>
+<li><strong>Single-pass algorithm</strong> - Each literal checked once, no reuse opportunity</li>
+<li><strong>Cache overhead exceeds savings</strong> - HashMap ops, allocations, tracking state</li>
 </ol>
-<pre><code>function compute_lambda(theory, delta):
-    lambda = delta.copy()
-    worklist = delta.copy()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body(literal):
-            if rule.type in [Strict, Defeasible]:
-                if body_satisfied(rule, lambda):
-                    if complement(rule.head) not in delta:
-                        if rule.head not in lambda:
-                            lambda.add(rule.head)
-                            worklist.add(rule.head)
-
-    return lambda
-</code></pre>
-<p><strong>Key insight</strong>: If something is NOT in lambda, it’s definitely not defeasibly provable. This allows efficient pruning.</p>
-<h3 id="phase-3-partial-closure-p_"><a class="header" href="#phase-3-partial-closure-p_">Phase 3: Partial Closure (P_∂||)</a></h3>
-<p>Computes actual <strong>defeasible conclusions</strong> with conflict resolution.</p>
-<pre><code>function compute_partial(theory, delta, lambda):
-    partial = delta.copy()
-
-    candidates = lambda - delta  # Only check these
-    changed = true
-
-    while changed:
-        changed = false
-        for literal in candidates:
-            if literal not in partial:
-                if can_prove_defeasibly(literal, partial, lambda):
-                    partial.add(literal)
-                    changed = true
-
-    return partial
-</code></pre>
-<p>The <code>can_prove_defeasibly</code> function:</p>
-<pre><code>function can_prove_defeasibly(literal, partial, lambda):
-    # Need a supporting rule with satisfied body
-    has_support = false
-    for rule in rules_for(literal):
-        if rule.type in [Strict, Defeasible]:
-            if body_satisfied(rule, partial):
-                has_support = true
-                break
-
-    if not has_support:
-        return false
-
-    # All attacks must be defeated
-    for attacker in rules_for(complement(literal)):
-        # Attack fails if body not satisfiable
-        if not body_satisfiable(attacker, lambda):
-            continue
-
-        # Attack fails if we have a superior defender
-        if team_defeats(literal, attacker, partial):
-            continue
-
-        # This attack succeeds
-        return false
-
-    return true
-</code></pre>
-<h3 id="performance-comparison"><a class="header" href="#performance-comparison">Performance Comparison</a></h3>
+<h3 id="when-memoization-would-help"><a class="header" href="#when-memoization-would-help">When Memoization Would Help</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Aspect</th><th>Standard</th><th>Scalable</th></tr>
+<tr><th>Scenario</th><th>Single-Pass</th><th>Would Benefit</th></tr>
 </thead>
 <tbody>
-<tr><td>Small theories (&lt;100 rules)</td><td>Faster</td><td>Overhead</td></tr>
-<tr><td>Large theories (&gt;1000 rules)</td><td>Slower</td><td>Faster</td></tr>
-<tr><td>Memory</td><td>Lower</td><td>Higher (3 sets)</td></tr>
-<tr><td>Conflicts</td><td>Per-rule check</td><td>Batch processing</td></tr>
+<tr><td>Batch reasoning</td><td>❌ No reuse</td><td>N/A</td></tr>
+<tr><td>Interactive queries</td><td>N/A</td><td>✅ Repeated queries</td></tr>
+<tr><td>Incremental reasoning</td><td>❌ Rebuild</td><td>✅ Cache across runs</td></tr>
+<tr><td>Explanation generation</td><td>N/A</td><td>✅ Re-queries same literals</td></tr>
+<tr><td>What-if analysis</td><td>❌ Fresh run</td><td>✅ Partial cache hits</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="when-to-use-scalable"><a class="header" href="#when-to-use-scalable">When to Use Scalable</a></h3>
-<p>Use <code>--scalable</code> when:</p>
-<ul>
-<li>Theory has &gt;1000 rules</li>
-<li>Many potential conflicts</li>
-<li>Long inference chains</li>
-<li>Lambda pruning will help</li>
-</ul>
-<h2 id="semi-naive-evaluation"><a class="header" href="#semi-naive-evaluation">Semi-Naive Evaluation</a></h2>
-<p>Phase 3 uses <strong>semi-naive evaluation</strong> for efficiency:</p>
-<p>Instead of checking all candidates each iteration, only check literals whose dependencies changed:</p>
-<pre><code>function compute_partial_seminaive(theory, delta, lambda):
-    partial = delta.copy()
-    worklist = rules_with_empty_body()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        if can_prove_defeasibly(literal, partial, lambda):
-            partial.add(literal)
-
-            # Only add rules triggered by this literal
-            for rule in rules_with_body(literal):
-                if body_satisfied(rule, partial):
-                    worklist.add(rule.head)
-
-    return partial
+<h3 id="existing-optimizations-already-effective"><a class="header" href="#existing-optimizations-already-effective">Existing Optimizations (Already Effective)</a></h3>
+<ol>
+<li><strong>LiteralId</strong> - 4-byte interned identifier, O(1) comparison</li>
+<li><strong>SuperiorityIndex</strong> - O(1) superiority lookup</li>
+<li><strong>IndexedTheory</strong> - O(1) rule lookup by head/body</li>
+<li><strong>HashSet&lt;LiteralId&gt;</strong> - 4 bytes per entry vs ~24 for String</li>
+</ol>
+<h3 id="alternative-optimizations-not-tried"><a class="header" href="#alternative-optimizations-not-tried">Alternative Optimizations (Not Tried)</a></h3>
+<p>If future profiling shows <code>is_blocked_by_superior</code> as a bottleneck:</p>
+<ol>
+<li><strong>Bit vectors</strong> - Replace HashSet with bit vector for proven literals</li>
+<li><strong>Arena allocation</strong> - Pre-allocate rules in contiguous memory</li>
+<li><strong>Rule ordering</strong> - Process rules in topological order</li>
+<li><strong>SIMD body checks</strong> - Vectorize body satisfaction for large bodies</li>
+</ol>
+<h3 id="lessons-learned"><a class="header" href="#lessons-learned">Lessons Learned</a></h3>
+<ol>
+<li><strong>Profile before optimizing</strong> - The target operation was already efficient</li>
+<li><strong>Single-pass algorithms resist caching</strong> - No repeated queries means no cache hits</li>
+<li><strong>Cache overhead matters</strong> - HashMap operations can exceed saved computation</li>
+<li><strong>Simple code is often fastest</strong> - Direct iteration beats fancy data structures</li>
+</ol>
+<h3 id="code-location"><a class="header" href="#code-location">Code Location</a></h3>
+<p>The experimental code is on branch <code>feature/lattice-proof-memoization</code>:</p>
+<pre><code>8af967a feat(lattice): add lattice-based proof status memoization
+9dd60e0 feat(lattice): add BlockedByChecker for is_blocked_by_superior
+33e9923 perf(lattice): implement incremental cache invalidation
+241d5e9 bench: add memoization comparison benchmarks
+270aa98 experiment: add reason_lazy with lazy attacker tracking
 </code></pre>
-<p>This avoids redundant checks and provides significant speedup for large theories.</p>
-<h2 id="semantic-equivalence"><a class="header" href="#semantic-equivalence">Semantic Equivalence</a></h2>
-<p>Both algorithms produce identical results for well-formed theories:</p>
-<pre><code>∀ theory: reason(theory) ≡ reason_scalable(theory)
-</code></pre>
-<p>The test suite verifies this property across many test cases.</p>
+<p>The lattice module (<code>lattice.rs</code>) and memoized/lazy functions remain available for reference but are not used in production.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../internals/architecture.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../guides/grounding.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -412,13 +308,10 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../internals/architecture.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../guides/grounding.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                    </a>
             </nav>
 
         </div>

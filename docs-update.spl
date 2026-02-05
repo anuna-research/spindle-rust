@@ -1,0 +1,184 @@
+; docs-update.spl — Plan to bring docs/book up to date with implementation
+;
+; Identified gaps:
+;   1. CLI reference missing: query, explain, why-not, requires commands
+;   2. No guide for modal operators (deontic logic)
+;   3. No guide for trust-weighted reasoning
+;   4. No guide for process mining
+;   5. No guide for explanation system (proof trees, JSON-LD, DOT output)
+;   6. Performance guide missing recent optimizations (SmallVec, BitSet, FxHash)
+;   7. Architecture guide missing mining.rs module
+;   8. SUMMARY.md needs new sections
+;   9. Book needs rebuilding
+
+; ── task declarations ────────────────────────────────────────────────
+
+(given task-cli)
+(given task-modal)
+(given task-trust)
+(given task-mining)
+(given task-explain)
+(given task-perf)
+(given task-arch)
+(given task-summary)
+(given task-build)
+
+; ── current state facts ──────────────────────────────────────────────
+
+(given cli_missing_commands)
+(given no_modal_guide)
+(given no_trust_guide)
+(given no_mining_guide)
+(given no_explanation_guide)
+(given perf_guide_stale)
+(given arch_guide_stale)
+
+; ── task rules: content tasks (independent, parallelizable) ──────────
+
+(normally r-cli
+  (and task-cli cli_missing_commands)
+  completed_cli)
+(meta r-cli
+  (description "Update reference/cli.md: add query, explain, why-not, requires subcommands with options, examples, and output formats")
+  (agent "claude")
+  (priority "high"))
+
+(normally r-modal
+  (and task-modal no_modal_guide)
+  completed_modal)
+(meta r-modal
+  (description "Create guides/modal.md: obligation [O], permission [P], forbidden [F] operators with DFL/SPL examples")
+  (agent "claude")
+  (priority "high"))
+
+(normally r-trust
+  (and task-trust no_trust_guide)
+  completed_trust)
+(meta r-trust
+  (description "Create guides/trust.md: TrustPolicy, WeightedConclusion, diminishers, weakest-link model, multi-perspective reasoning")
+  (agent "claude")
+  (priority "high"))
+
+(normally r-mining
+  (and task-mining no_mining_guide)
+  completed_mining)
+(meta r-mining
+  (description "Create guides/mining.md: event logs, footprint matrix, alpha algorithm, Petri net discovery, rule learning, conflict detection")
+  (agent "claude")
+  (priority "medium"))
+
+(normally r-explain
+  (and task-explain no_explanation_guide)
+  completed_explain)
+(meta r-explain
+  (description "Create guides/explanations.md: proof trees, ProofNode, multi-format output (natural language, JSON, JSON-LD, DOT), annotations")
+  (agent "claude")
+  (priority "high"))
+
+(normally r-perf
+  (and task-perf perf_guide_stale)
+  completed_perf)
+(meta r-perf
+  (description "Update guides/performance.md: add SmallVec for rule body/head, BitSet for proven literals, FxHash for faster hashing, pre-allocation")
+  (agent "claude")
+  (priority "medium"))
+
+(normally r-arch
+  (and task-arch arch_guide_stale)
+  completed_arch)
+(meta r-arch
+  (description "Update internals/architecture.md: add mining.rs module, trust.rs detail, SmallVec/BitSet changes to memory layout")
+  (agent "claude")
+  (priority "medium"))
+
+; ── summary depends on all content tasks ─────────────────────────────
+
+(normally r-summary
+  (and task-summary completed_cli completed_modal completed_trust completed_mining completed_explain completed_perf completed_arch)
+  completed_summary)
+(meta r-summary
+  (description "Update SUMMARY.md: add Modal Operators, Trust Reasoning, Process Mining, Explanations guides")
+  (agent "claude")
+  (priority "high"))
+
+; ── build depends on summary ─────────────────────────────────────────
+
+(normally r-build
+  (and task-build completed_summary)
+  completed_build)
+(meta r-build
+  (description "Run mdbook build to regenerate docs/book/ from updated sources")
+  (agent "claude")
+  (priority "high"))
+
+; ── completion gate ──────────────────────────────────────────────────
+
+(normally r-done
+  completed_build
+  docs_up_to_date)
+(meta r-done
+  (description "All documentation is current with implementation"))
+
+(claims agent:system
+  :at "2026-20-50T19:30:28Z"
+  (given claimed-cli))
+
+(claims agent:system
+  :at "2026-20-50T19:30:32Z"
+  (given claimed-modal))
+
+(claims agent:system
+  :at "2026-20-50T19:30:32Z"
+  (given claimed-trust))
+
+(claims agent:system
+  :at "2026-20-50T19:30:33Z"
+  (given claimed-mining))
+
+(claims agent:system
+  :at "2026-20-50T19:30:33Z"
+  (given claimed-explain))
+
+(claims agent:system
+  :at "2026-20-50T19:30:33Z"
+  (given claimed-perf))
+
+(claims agent:system
+  :at "2026-20-50T19:30:34Z"
+  (given claimed-arch))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:48Z"
+  (given completed-cli))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:48Z"
+  (given completed-modal))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:49Z"
+  (given completed-trust))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:49Z"
+  (given completed-mining))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:49Z"
+  (given completed-explain))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:50Z"
+  (given completed-perf))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:50Z"
+  (given completed-arch))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:53Z"
+  (given completed-summary))
+
+(claims agent:claude
+  :at "2026-20-50T19:36:54Z"
+  (given completed-build))
