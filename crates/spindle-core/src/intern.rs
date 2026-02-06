@@ -41,6 +41,7 @@ use std::sync::RwLock;
 /// # Size
 ///
 /// `SymbolId` is 4 bytes (same as `u32`), compared to 24 bytes for `String`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct SymbolId(u32);
@@ -248,6 +249,7 @@ pub fn interned_count() -> usize {
 ///
 /// Uses the high bit of the u32 for negation, leaving 31 bits for the symbol ID.
 /// This allows up to 2^31 unique symbols (over 2 billion).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct LiteralId(u32);

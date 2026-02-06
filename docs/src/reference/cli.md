@@ -170,9 +170,10 @@ Each result is a minimal set of assumptions that, if added to the theory, would 
 
 ### `--json`
 
-Output results in JSON format. Available for `query`, `explain`, `why-not`, and `requires` commands.
+Output results in JSON format. Available for `reason`, `query`, `explain`, `why-not`, and `requires` commands.
 
 ```bash
+spindle reason examples/penguin.dfl --json
 spindle query examples/penguin.dfl --json flies
 spindle explain examples/penguin.dfl --json "-flies"
 ```

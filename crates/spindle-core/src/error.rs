@@ -20,6 +20,13 @@ pub enum SpindleError {
     /// Reasoning error
     #[error("reasoning error: {0}")]
     ReasoningError(String),
+
+    /// Validation error
+    #[error("validation error: {message}")]
+    Validation {
+        /// Human-readable validation error message
+        message: String,
+    },
 }
 
 /// Result type alias for Spindle operations

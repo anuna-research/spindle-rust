@@ -49,6 +49,7 @@ pub mod intern;
 pub mod literal;
 pub mod mining;
 pub mod mode;
+pub mod pipeline;
 pub mod query;
 pub mod reason;
 pub mod rule;
@@ -68,9 +69,12 @@ pub mod prelude {
     };
     pub use crate::literal::{Literal, LiteralName};
     pub use crate::mode::Mode;
+    pub use crate::pipeline::{PrepareOptions, PipelineResult};
+    pub use crate::query::{query, query_with_options, QueryResult, QueryStatus};
+    pub use crate::reason::{reason, reason_with_options};
     pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
-    pub use crate::temporal::Temporal;
+    pub use crate::temporal::{Temporal, TimePoint};
     pub use crate::theory::{Meta, MetaValue, Theory};
 }
 

@@ -10,12 +10,16 @@ name = "spindle"
 path = "src/main.rs"
 
 [dependencies]
-spindle-core = { path = "../spindle-core" }
+clap = { version = "4.5", features = ["derive"] }
+spindle-core = { path = "../spindle-core", features = ["serde"] }
 spindle-parser = { path = "../spindle-parser" }
-clap.workspace = true
-serde_json.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+colored = "2.0"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-tempfile = "3.10"
 assert_cmd = "2.0"
-predicates = "3.1"
+predicates = "3.0"
+tempfile = "3.10"
+regex = "1.10"

@@ -30,6 +30,7 @@ pub type LiteralName = String;
 /// The name is stored as an interned `SymbolId` (4 bytes, Copy) instead
 /// of a `String` (24 bytes, heap-allocated). Use `literal_id()` for
 /// O(1) HashSet/HashMap operations instead of `canonical_name()`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct Literal {
     /// The interned name of the literal (e.g., "flies", "bird")
@@ -43,6 +44,22 @@ pub struct Literal {
     /// Predicate arguments (e.g., for parent(alice, bob))
     /// Stored as interned SymbolIds for efficiency
     predicate_ids: Vec<SymbolId>,
+}
+
+/// Stable, semantic literal representation for JSON outputs
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiteralStruct {
+    /// Modal operator information.
+    pub mode: Mode,
+    /// Whether the literal is negated.
+    pub negated: bool,
+    /// Predicate functor name.
+    pub functor: String,
+    /// Predicate arguments.
+    pub args: Vec<String>,
+    /// Temporal bounds for the literal.
+    pub temporal: Temporal,
 }
 
 impl Literal {
@@ -177,9 +194,13 @@ impl Literal {
 
     /// Get the LiteralId for this literal (name + negation combined).
     ///
-    /// This is the preferred method for HashSet/HashMap keys as it's
-    /// a 4-byte Copy type with O(1) hashing, compared to `canonical_name()`
-    /// which allocates a new String.
+    /// **WARNING:** This ID is based on name + negation ONLY. It ignores
+    /// predicate arguments, modes, and temporals. Do NOT use this for
+    /// reasoning correctness checks where p(a) vs p(b) matters.
+    ///
+    /// This is the preferred method for HashSet/HashMap keys when only
+    /// the name/arity matters (e.g. legacy lookups), as it's
+    /// a 4-byte Copy type with O(1) hashing.
     ///
     /// # Example
     ///
@@ -190,11 +211,11 @@ impl Literal {
     /// let mut proven: HashSet<LiteralId> = HashSet::new();
     /// let bird = Literal::simple("bird");
     ///
-    /// proven.insert(bird.literal_id());
-    /// assert!(proven.contains(&bird.literal_id()));
+    /// proven.insert(bird.name_literal_id());
+    /// assert!(proven.contains(&bird.name_literal_id()));
     /// ```
     #[inline]
-    pub fn literal_id(&self) -> LiteralId {
+    pub fn name_literal_id(&self) -> LiteralId {
         LiteralId::new(self.name_id, self.negation)
     }
 
@@ -210,6 +231,101 @@ impl Literal {
         } else {
             self.name().to_owned()
         }
+    }
+
+    /// Render this literal in canonical SPL s-expression form
+    pub fn to_spl(&self) -> String {
+        let mut parts = Vec::with_capacity(1 + self.predicate_ids.len());
+        parts.push(render_spl_atom(self.name()));
+        for pred in self.predicates() {
+            parts.push(render_spl_atom(pred));
+        }
+
+        let mut expr = format!("({})", parts.join(" "));
+
+        if self.negation {
+            expr = format!("(not {expr})");
+        }
+
+        if !self.mode.is_empty() {
+            let tag = match self.mode.name.as_deref() {
+                Some("O") => "must",
+                Some("P") => "may",
+                Some("F") => "forbidden",
+                Some(name) => name,
+                None => "",
+            };
+
+            if !tag.is_empty() {
+                if self.mode.negation {
+                    expr = format!("(not ({tag} {expr}))");
+                } else {
+                    expr = format!("({tag} {expr})");
+                }
+            }
+        }
+
+        if !self.temporal.is_empty() {
+            expr = format!(
+                "(during {expr} {} {})",
+                self.temporal.start, self.temporal.end
+            );
+        }
+
+        expr
+    }
+}
+
+fn is_spl_atom_char(c: char) -> bool {
+    c.is_alphanumeric()
+        || c == '-'
+        || c == '_'
+        || c == '?'
+        || c == '~'
+        || c == ':'
+        || c == '.'
+        || c == '+'
+}
+
+fn render_spl_atom(atom: &str) -> String {
+    let needs_quotes = atom.is_empty() || atom.chars().any(|c| !is_spl_atom_char(c));
+    if !needs_quotes {
+        return atom.to_string();
+    }
+
+    let mut escaped = String::with_capacity(atom.len() + 2);
+    for c in atom.chars() {
+        match c {
+            '\\' => {
+                escaped.push('\\');
+                escaped.push('\\');
+            }
+            '"' => {
+                escaped.push('\\');
+                escaped.push('"');
+            }
+            _ => escaped.push(c),
+        }
+    }
+
+    format!("\"{escaped}\"")
+}
+
+impl From<&Literal> for LiteralStruct {
+    fn from(literal: &Literal) -> Self {
+        Self {
+            mode: literal.mode.clone(),
+            negated: literal.negation,
+            functor: literal.name().to_string(),
+            args: literal.predicates().iter().map(|s| s.to_string()).collect(),
+            temporal: literal.temporal.clone(),
+        }
+    }
+}
+
+impl From<Literal> for LiteralStruct {
+    fn from(literal: Literal) -> Self {
+        Self::from(&literal)
     }
 }
 
@@ -306,18 +422,38 @@ mod tests {
     }
 
     #[test]
-    fn test_literal_id() {
-        let pos = Literal::simple("bird");
-        let neg = Literal::negated("bird");
+    fn test_to_spl_quotes_atoms_with_spaces_and_escapes() {
+        let lit = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                "doc 1".to_string(),
+                "quote\"me".to_string(),
+                "path\\to".to_string(),
+            ],
+        );
 
-        assert!(!pos.literal_id().is_negated());
-        assert!(neg.literal_id().is_negated());
-        assert_eq!(pos.literal_id().symbol(), neg.literal_id().symbol());
-        assert_eq!(pos.literal_id(), neg.literal_id().complement());
+        assert_eq!(lit.to_spl(), "(p \"doc 1\" \"quote\\\"me\" \"path\\\\to\")");
     }
 
     #[test]
-    fn test_literal_id_in_hashset() {
+    fn test_name_literal_id() {
+        let pos = Literal::simple("bird");
+        let neg = Literal::negated("bird");
+
+        assert!(!pos.name_literal_id().is_negated());
+        assert!(neg.name_literal_id().is_negated());
+        assert_eq!(
+            pos.name_literal_id().symbol(),
+            neg.name_literal_id().symbol()
+        );
+        assert_eq!(pos.name_literal_id(), neg.name_literal_id().complement());
+    }
+
+    #[test]
+    fn test_name_literal_id_in_hashset() {
         use std::collections::HashSet;
 
         let mut set: HashSet<LiteralId> = HashSet::new();
@@ -325,12 +461,12 @@ mod tests {
         let not_bird = Literal::negated("bird");
         let flies = Literal::simple("flies");
 
-        set.insert(bird.literal_id());
-        set.insert(flies.literal_id());
+        set.insert(bird.name_literal_id());
+        set.insert(flies.name_literal_id());
 
-        assert!(set.contains(&bird.literal_id()));
-        assert!(set.contains(&flies.literal_id()));
-        assert!(!set.contains(&not_bird.literal_id()));
+        assert!(set.contains(&bird.name_literal_id()));
+        assert!(set.contains(&flies.name_literal_id()));
+        assert!(!set.contains(&not_bird.name_literal_id()));
     }
 
     #[test]

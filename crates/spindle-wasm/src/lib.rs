@@ -25,7 +25,8 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use spindle_core::literal::Literal;
+use spindle_core::literal::{Literal, LiteralStruct};
+use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
@@ -45,7 +46,39 @@ pub fn init() {
     set_panic_hook();
 }
 
-/// A conclusion from reasoning
+/// Result of reasoning
+#[derive(Serialize, Deserialize)]
+pub struct JsReasonOutput {
+    pub schema_version: String,
+    pub evaluated_at: Option<String>,
+    pub grounding: JsGroundingStats,
+    pub conclusions: Vec<JsConclusionStruct>,
+    pub stats: JsTheoryStats,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsGroundingStats {
+    pub performed: bool,
+    pub had_variables: bool,
+    pub instances: usize,
+    pub limit_hit: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsTheoryStats {
+    pub rule_count: usize,
+    pub fact_count: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsConclusionStruct {
+    pub conclusion_type: String,
+    pub literal_spl: String,
+    pub literal_struct: LiteralStruct,
+    pub positive: bool,
+}
+
+/// A conclusion from reasoning (legacy simple format)
 #[derive(Serialize, Deserialize)]
 pub struct JsConclusion {
     /// Conclusion type: "+D", "-D", "+d", "-d"
@@ -159,58 +192,97 @@ impl Spindle {
         self.theory.add_superiority(superior, inferior);
     }
 
-    /// Perform reasoning and return conclusions as JSON
+    /// Perform reasoning and return structured JSON output
     #[wasm_bindgen]
-    pub fn reason(&self) -> JsValue {
-        let conclusions = reason(&self.theory);
+    pub fn reason(&self) -> Result<JsValue, JsError> {
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
-        let js_conclusions: Vec<JsConclusion> = conclusions
+        let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
+
+        let output_conclusions: Vec<JsConclusionStruct> = conclusions
             .iter()
-            .map(|c| JsConclusion {
+            .map(|c| JsConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal: c.literal.to_string(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStruct::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
 
-        serde_wasm_bindgen::to_value(&js_conclusions).unwrap_or(JsValue::NULL)
+        let output = JsReasonOutput {
+            schema_version: "spindle.reason.v1".to_string(),
+            evaluated_at: prepared.evaluated_at.map(|t| t.to_string()),
+            grounding: JsGroundingStats {
+                performed: prepared.grounding_report.performed,
+                had_variables: prepared.grounding_report.had_variables,
+                instances: prepared.grounding_report.instances,
+                limit_hit: prepared.grounding_report.limit_hit,
+            },
+            conclusions: output_conclusions,
+            stats: JsTheoryStats {
+                rule_count: prepared.theory.rule_count(),
+                fact_count: prepared.theory.facts().count(),
+            },
+        };
+
+        Ok(serde_wasm_bindgen::to_value(&output)?)
     }
 
-    /// Perform scalable reasoning and return conclusions as JSON
+    /// Perform scalable reasoning and return structured JSON output
     #[wasm_bindgen(js_name = reasonScalable)]
-    pub fn reason_scalable(&self) -> JsValue {
-        let result = reason_scalable(&self.theory);
-        let indexed = spindle_core::index::IndexedTheory::build(&self.theory);
+    pub fn reason_scalable(&self) -> Result<JsValue, JsError> {
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        let indexed = spindle_core::index::IndexedTheory::build(&prepared.theory);
+        let result = reason_scalable(&indexed);
         let conclusions = result.to_conclusions(&indexed);
 
-        let js_conclusions: Vec<JsConclusion> = conclusions
+        let output_conclusions: Vec<JsConclusionStruct> = conclusions
             .iter()
-            .map(|c| JsConclusion {
+            .map(|c| JsConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal: c.literal.to_string(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStruct::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
 
-        serde_wasm_bindgen::to_value(&js_conclusions).unwrap_or(JsValue::NULL)
+        let output = JsReasonOutput {
+            schema_version: "spindle.reason.v1".to_string(),
+            evaluated_at: prepared.evaluated_at.map(|t| t.to_string()),
+            grounding: JsGroundingStats {
+                performed: prepared.grounding_report.performed,
+                had_variables: prepared.grounding_report.had_variables,
+                instances: prepared.grounding_report.instances,
+                limit_hit: prepared.grounding_report.limit_hit,
+            },
+            conclusions: output_conclusions,
+            stats: JsTheoryStats {
+                rule_count: prepared.theory.rule_count(),
+                fact_count: prepared.theory.facts().count(),
+            },
+        };
+
+        Ok(serde_wasm_bindgen::to_value(&output)?)
     }
 
     /// Get only positive conclusions as strings
     #[wasm_bindgen(js_name = getPositiveConclusions)]
-    pub fn get_positive_conclusions(&self) -> Vec<String> {
-        let conclusions = reason(&self.theory);
-        conclusions
+    pub fn get_positive_conclusions(&self) -> Result<Vec<String>, JsError> {
+        let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(conclusions
             .iter()
             .filter(|c| c.conclusion_type.is_positive())
             .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
-            .collect()
+            .collect())
     }
 
     /// Query a literal
     #[wasm_bindgen]
-    pub fn query(&self, literal: &str) -> JsValue {
+    pub fn query(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
-        let result = query::query(&self.theory, &lit);
+        let result = query::query(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsQueryResult {
             status: match result.status {
@@ -222,19 +294,20 @@ impl Spindle {
             conclusion_type: result.conclusion_type.map(|ct| ct.symbol().to_string()),
         };
 
-        serde_wasm_bindgen::to_value(&js_result).unwrap_or(JsValue::NULL)
+        Ok(serde_wasm_bindgen::to_value(&js_result)?)
     }
 
     /// What-if query: what happens if we assume these facts?
     #[wasm_bindgen(js_name = whatIf)]
-    pub fn what_if(&self, hypotheticals: Vec<String>, goal: &str) -> JsValue {
+    pub fn what_if(&self, hypotheticals: Vec<String>, goal: &str) -> Result<JsValue, JsError> {
         let hyps: Vec<_> = hypotheticals
             .iter()
             .map(|s| query::HypotheticalClaim::new(parse_literal(s)))
             .collect();
 
         let goal_lit = parse_literal(goal);
-        let result = query::what_if(&self.theory, hyps, &goal_lit);
+        let result = query::what_if(&self.theory, hyps, &goal_lit)
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhatIfResult {
             provable: result.is_provable(),
@@ -245,14 +318,15 @@ impl Spindle {
                 .collect(),
         };
 
-        serde_wasm_bindgen::to_value(&js_result).unwrap_or(JsValue::NULL)
+        Ok(serde_wasm_bindgen::to_value(&js_result)?)
     }
 
     /// Why-not query: why isn't this literal provable?
     #[wasm_bindgen(js_name = whyNot)]
-    pub fn why_not(&self, literal: &str) -> JsValue {
+    pub fn why_not(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
-        let result = query::why_not(&self.theory, &lit);
+        let result =
+            query::why_not(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),
@@ -264,14 +338,15 @@ impl Spindle {
                 .collect(),
         };
 
-        serde_wasm_bindgen::to_value(&js_result).unwrap_or(JsValue::NULL)
+        Ok(serde_wasm_bindgen::to_value(&js_result)?)
     }
 
     /// Abduction: what facts would make this goal provable?
     #[wasm_bindgen]
-    pub fn abduce(&self, goal: &str, max_solutions: usize) -> JsValue {
+    pub fn abduce(&self, goal: &str, max_solutions: usize) -> Result<JsValue, JsError> {
         let goal_lit = parse_literal(goal);
-        let result = query::abduce(&self.theory, &goal_lit, max_solutions);
+        let result = query::abduce(&self.theory, &goal_lit, max_solutions)
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsAbductionResult {
             goal: goal.to_string(),
@@ -282,7 +357,7 @@ impl Spindle {
                 .collect(),
         };
 
-        serde_wasm_bindgen::to_value(&js_result).unwrap_or(JsValue::NULL)
+        Ok(serde_wasm_bindgen::to_value(&js_result)?)
     }
 
     /// Get the number of rules in the theory
@@ -336,7 +411,7 @@ impl Spindle {
     #[wasm_bindgen(js_name = reasonDfl)]
     pub fn reason_dfl(&mut self, input: &str) -> Result<String, JsError> {
         self.theory = parse_dfl(input).map_err(|e| JsError::new(&e.to_string()))?;
-        let conclusions = reason(&self.theory);
+        let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
         Ok(conclusions
             .iter()
             .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
@@ -357,7 +432,7 @@ impl Spindle {
     #[wasm_bindgen(js_name = reasonSpl)]
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
         self.theory = parse_spl(input).map_err(|e| JsError::new(&e.to_string()))?;
-        let conclusions = reason(&self.theory);
+        let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
 
         let mut output = Vec::new();
 
@@ -466,9 +541,94 @@ mod tests {
         let mut spindle = Spindle::new();
         spindle.add_fact("bird");
         spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
-        let conclusions = spindle.get_positive_conclusions();
+        let conclusions = spindle.get_positive_conclusions().unwrap();
         assert!(!conclusions.is_empty());
         assert!(conclusions.iter().any(|c| c.contains("bird")));
+    }
+
+    #[test]
+    fn test_chain_reasoning() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("a");
+        spindle.add_defeasible_rule(vec!["a".to_string()], "b");
+        spindle.add_defeasible_rule(vec!["b".to_string()], "c");
+        spindle.add_defeasible_rule(vec!["c".to_string()], "d");
+
+        let conclusions = spindle.get_positive_conclusions().unwrap();
+        assert!(conclusions.iter().any(|c| c.contains(" a")));
+        assert!(conclusions.iter().any(|c| c.contains(" b")));
+        assert!(conclusions.iter().any(|c| c.contains(" c")));
+        assert!(conclusions.iter().any(|c| c.contains(" d")));
+    }
+
+    #[test]
+    fn test_strict_rule_chain() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("premise");
+        spindle.add_strict_rule(vec!["premise".to_string()], "intermediate");
+        spindle.add_strict_rule(vec!["intermediate".to_string()], "conclusion");
+
+        let conclusions = spindle.get_positive_conclusions().unwrap();
+        assert!(conclusions.iter().any(|c| c.contains("premise")));
+        assert!(conclusions.iter().any(|c| c.contains("intermediate")));
+        assert!(conclusions.iter().any(|c| c.contains("conclusion")));
+    }
+
+    #[test]
+    fn test_defeater_blocks() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_fact("injured");
+        spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        spindle.add_defeater(vec!["injured".to_string()], "~flies");
+
+        let conclusions = spindle.get_positive_conclusions().unwrap();
+        assert!(conclusions.iter().any(|c| c.contains("bird")));
+        assert!(conclusions.iter().any(|c| c.contains("injured")));
+    }
+
+    #[test]
+    fn test_penguin_example_extended() {
+        let mut spindle = Spindle::new();
+        spindle.add_fact("bird");
+        spindle.add_fact("penguin");
+        let r1 = spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
+        let r2 = spindle.add_defeasible_rule(vec!["penguin".to_string()], "~flies");
+        spindle.add_superiority(&r2, &r1);
+
+        let conclusions = spindle.get_positive_conclusions().unwrap();
+        assert!(conclusions.iter().any(|c| c.contains("bird")));
+        assert!(conclusions.iter().any(|c| c.contains("penguin")));
+        assert!(conclusions.iter().any(|c| c.contains("~flies")));
+    }
+
+    // Note: parse error tests require WASM target due to JsError
+    // See tests/wasm.rs for WASM-specific error handling tests
+
+    #[test]
+    fn test_workflow_without_jsvalue() {
+        let mut spindle = Spindle::new();
+
+        // Parse theory
+        spindle
+            .parse_dfl(
+                r#"
+            f1: >> expert
+            f2: >> novice
+            r1: expert => reliable
+            r2: novice => ~reliable
+            r1 > r2
+            "#,
+            )
+            .unwrap();
+
+        // Reason using get_positive_conclusions (returns Vec<String>, not JsValue)
+        let conclusions = spindle.get_positive_conclusions().unwrap();
+        assert!(!conclusions.is_empty());
+
+        // Clear and verify
+        spindle.clear();
+        assert_eq!(spindle.rule_count(), 0);
     }
 
     #[test]
@@ -594,91 +754,6 @@ mod tests {
             .unwrap();
         assert!(result.contains("bird"));
         assert!(result.contains("penguin"));
-    }
-
-    #[test]
-    fn test_chain_reasoning() {
-        let mut spindle = Spindle::new();
-        spindle.add_fact("a");
-        spindle.add_defeasible_rule(vec!["a".to_string()], "b");
-        spindle.add_defeasible_rule(vec!["b".to_string()], "c");
-        spindle.add_defeasible_rule(vec!["c".to_string()], "d");
-
-        let conclusions = spindle.get_positive_conclusions();
-        assert!(conclusions.iter().any(|c| c.contains(" a")));
-        assert!(conclusions.iter().any(|c| c.contains(" b")));
-        assert!(conclusions.iter().any(|c| c.contains(" c")));
-        assert!(conclusions.iter().any(|c| c.contains(" d")));
-    }
-
-    #[test]
-    fn test_strict_rule_chain() {
-        let mut spindle = Spindle::new();
-        spindle.add_fact("premise");
-        spindle.add_strict_rule(vec!["premise".to_string()], "intermediate");
-        spindle.add_strict_rule(vec!["intermediate".to_string()], "conclusion");
-
-        let conclusions = spindle.get_positive_conclusions();
-        assert!(conclusions.iter().any(|c| c.contains("premise")));
-        assert!(conclusions.iter().any(|c| c.contains("intermediate")));
-        assert!(conclusions.iter().any(|c| c.contains("conclusion")));
-    }
-
-    #[test]
-    fn test_defeater_blocks() {
-        let mut spindle = Spindle::new();
-        spindle.add_fact("bird");
-        spindle.add_fact("injured");
-        spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
-        spindle.add_defeater(vec!["injured".to_string()], "~flies");
-
-        let conclusions = spindle.get_positive_conclusions();
-        assert!(conclusions.iter().any(|c| c.contains("bird")));
-        assert!(conclusions.iter().any(|c| c.contains("injured")));
-    }
-
-    #[test]
-    fn test_penguin_example_extended() {
-        let mut spindle = Spindle::new();
-        spindle.add_fact("bird");
-        spindle.add_fact("penguin");
-        let r1 = spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
-        let r2 = spindle.add_defeasible_rule(vec!["penguin".to_string()], "~flies");
-        spindle.add_superiority(&r2, &r1);
-
-        let conclusions = spindle.get_positive_conclusions();
-        assert!(conclusions.iter().any(|c| c.contains("bird")));
-        assert!(conclusions.iter().any(|c| c.contains("penguin")));
-        assert!(conclusions.iter().any(|c| c.contains("~flies")));
-    }
-
-    // Note: parse error tests require WASM target due to JsError
-    // See tests/wasm.rs for WASM-specific error handling tests
-
-    #[test]
-    fn test_workflow_without_jsvalue() {
-        let mut spindle = Spindle::new();
-
-        // Parse theory
-        spindle
-            .parse_dfl(
-                r#"
-            f1: >> expert
-            f2: >> novice
-            r1: expert => reliable
-            r2: novice => ~reliable
-            r1 > r2
-            "#,
-            )
-            .unwrap();
-
-        // Reason using get_positive_conclusions (returns Vec<String>, not JsValue)
-        let conclusions = spindle.get_positive_conclusions();
-        assert!(!conclusions.is_empty());
-
-        // Clear and verify
-        spindle.clear();
-        assert_eq!(spindle.rule_count(), 0);
     }
 
     // Note: Tests that call reason(), reason_scalable(), query(), what_if(),

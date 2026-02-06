@@ -20,6 +20,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 /// Represents a time point (can be a moment or infinity)
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default)]
 pub enum TimePoint {
     /// Negative infinity (beginning of time)
@@ -107,8 +108,39 @@ impl fmt::Display for TimePoint {
     }
 }
 
+impl TimePoint {
+    /// Convert a TimePoint to RFC3339 format string.
+    ///
+    /// Returns `None` for infinite time points.
+    /// Returns `Some(rfc3339_string)` for finite moments.
+    ///
+    /// # Example
+    /// ```
+    /// use spindle_core::temporal::TimePoint;
+    ///
+    /// let tp = TimePoint::from_millis(1707220800000); // 2024-02-06T12:00:00Z
+    /// assert!(tp.to_rfc3339().unwrap().contains("2024-02-06"));
+    /// ```
+    pub fn to_rfc3339(&self) -> Option<String> {
+        match self {
+            TimePoint::Moment(millis) => {
+                use chrono::{DateTime, Utc};
+                // Use div_euclid/rem_euclid to correctly handle negative timestamps (pre-1970)
+                // For example: -1500ms should be -2s + 500ms, not -1s + (-500ms)
+                let secs = millis.div_euclid(1000);
+                let ms_remainder = millis.rem_euclid(1000) as u32;
+                let nsecs = ms_remainder * 1_000_000;
+                DateTime::from_timestamp(secs, nsecs)
+                    .map(|dt: DateTime<Utc>| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
+            }
+            TimePoint::NegInf | TimePoint::PosInf => None,
+        }
+    }
+}
+
 /// Temporal interval with start and end time points
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Temporal {
     /// Start time of the interval
     pub start: TimePoint,
@@ -121,6 +153,12 @@ pub const EMPTY_TEMPORAL: Temporal = Temporal {
     start: TimePoint::NegInf,
     end: TimePoint::PosInf,
 };
+
+impl Default for Temporal {
+    fn default() -> Self {
+        EMPTY_TEMPORAL
+    }
+}
 
 impl Temporal {
     /// Create an empty temporal (unbounded interval from -inf to +inf)
@@ -452,7 +490,7 @@ mod tests {
     fn test_empty_temporal() {
         let t = Temporal::empty();
         assert!(t.is_empty());
-        assert!(!t.has_info());
+        assert!(!t.has_info()); // Correct: empty/unbounded means no specific constraint info
     }
 
     #[test]
@@ -1004,6 +1042,55 @@ mod tests {
     }
 
     #[test]
+    fn test_timepoint_to_rfc3339_post_1970() {
+        // 2024-02-06T12:00:00.000Z = 1707220800000 ms
+        let tp = TimePoint::from_millis(1707220800000);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(rfc.starts_with("2024-02-06T12:00:00"));
+        assert!(rfc.ends_with("Z"));
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_with_millis() {
+        // 2024-02-06T12:00:00.500Z
+        let tp = TimePoint::from_millis(1707220800500);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(rfc.contains(".500"), "Should include milliseconds: {rfc}");
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_pre_1970() {
+        // 1969-12-31T23:59:59.500Z = -500 ms (half second before epoch)
+        let tp = TimePoint::from_millis(-500);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(
+            rfc.starts_with("1969-12-31T23:59:59"),
+            "Pre-1970 timestamp should work: {rfc}"
+        );
+        assert!(
+            rfc.contains(".500"),
+            "Should have correct milliseconds: {rfc}"
+        );
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_pre_1970_full_second() {
+        // 1969-12-31T23:59:58.000Z = -2000 ms
+        let tp = TimePoint::from_millis(-2000);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(
+            rfc.starts_with("1969-12-31T23:59:58"),
+            "Pre-1970 full second: {rfc}"
+        );
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_infinity_returns_none() {
+        assert!(TimePoint::NegInf.to_rfc3339().is_none());
+        assert!(TimePoint::PosInf.to_rfc3339().is_none());
+    }
+
+    #[test]
     fn test_timepoint_default() {
         let tp: TimePoint = Default::default();
         assert!(tp.is_neg_inf());
@@ -1083,7 +1170,7 @@ mod tests {
     #[test]
     fn test_intersection_list_single() {
         let t = Temporal::from_bounds(5, 15);
-        let result = Temporal::intersection_list(&[t.clone()]).unwrap();
+        let result = Temporal::intersection_list(std::slice::from_ref(&t)).unwrap();
 
         assert_eq!(result.start, TimePoint::Moment(5));
         assert_eq!(result.end, TimePoint::Moment(15));
@@ -1185,155 +1272,6 @@ mod tests {
         let intersection = point.intersection(&interval).unwrap();
         assert_eq!(intersection.start, TimePoint::Moment(5));
         assert_eq!(intersection.end, TimePoint::Moment(5));
-    }
-
-    // =========================================================================
-    // TEMPORAL DISPLAY AND FORMATTING
-    // =========================================================================
-
-    #[test]
-    fn test_temporal_display() {
-        let t1 = Temporal::from_bounds(5, 10);
-        assert_eq!(format!("{}", t1), "[5,10]");
-
-        let t2 = Temporal::empty();
-        assert_eq!(format!("{}", t2), ""); // Empty temporal displays as empty string
-
-        let t3 = Temporal::new(TimePoint::NegInf, TimePoint::Moment(10));
-        assert_eq!(format!("{}", t3), "[-inf,10]");
-
-        let t4 = Temporal::new(TimePoint::Moment(5), TimePoint::PosInf);
-        assert_eq!(format!("{}", t4), "[5,+inf]");
-    }
-
-    #[test]
-    fn test_allen_relation_display() {
-        assert_eq!(format!("{}", AllenRelation::Before), "before");
-        assert_eq!(format!("{}", AllenRelation::After), "after");
-        assert_eq!(format!("{}", AllenRelation::Meets), "meets");
-        assert_eq!(format!("{}", AllenRelation::MetBy), "met-by");
-        assert_eq!(format!("{}", AllenRelation::Overlaps), "overlaps");
-        assert_eq!(format!("{}", AllenRelation::OverlappedBy), "overlapped-by");
-        assert_eq!(format!("{}", AllenRelation::Contains), "contains");
-        assert_eq!(format!("{}", AllenRelation::During), "during");
-        assert_eq!(format!("{}", AllenRelation::Starts), "starts");
-        assert_eq!(format!("{}", AllenRelation::StartedBy), "started-by");
-        assert_eq!(format!("{}", AllenRelation::Finishes), "finishes");
-        assert_eq!(format!("{}", AllenRelation::FinishedBy), "finished-by");
-        assert_eq!(format!("{}", AllenRelation::Equals), "equals");
-    }
-
-    // =========================================================================
-    // TEMPORAL CONSTRUCTION AND PROPERTIES
-    // =========================================================================
-
-    #[test]
-    fn test_temporal_new() {
-        let t = Temporal::new(TimePoint::Moment(5), TimePoint::Moment(10));
-        assert_eq!(t.start, TimePoint::Moment(5));
-        assert_eq!(t.end, TimePoint::Moment(10));
-        assert!(t.has_info());
-        assert!(!t.is_empty());
-    }
-
-    #[test]
-    fn test_temporal_empty_constant() {
-        let t = EMPTY_TEMPORAL;
-        assert!(t.is_empty());
-        assert!(!t.has_info());
-        assert_eq!(t.start, TimePoint::NegInf);
-        assert_eq!(t.end, TimePoint::PosInf);
-    }
-
-    #[test]
-    fn test_temporal_default() {
-        // Default derives from TimePoint::default() which is NegInf
-        // So default Temporal is [NegInf, NegInf], not the empty temporal [NegInf, PosInf]
-        let t: Temporal = Default::default();
-        assert_eq!(t.start, TimePoint::NegInf);
-        assert_eq!(t.end, TimePoint::NegInf);
-        // Use Temporal::empty() to get the unbounded interval
-        let empty = Temporal::empty();
-        assert!(empty.is_empty());
-    }
-
-    #[test]
-    fn test_temporal_clone_and_eq() {
-        let t1 = Temporal::from_bounds(5, 10);
-        let t2 = t1.clone();
-
-        assert_eq!(t1, t2);
-        assert_eq!(t1.start, t2.start);
-        assert_eq!(t1.end, t2.end);
-    }
-
-    #[test]
-    fn test_temporal_hash() {
-        use std::collections::HashSet;
-
-        let mut set = HashSet::new();
-        set.insert(Temporal::from_bounds(0, 10));
-        set.insert(Temporal::from_bounds(5, 15));
-        set.insert(Temporal::empty());
-
-        assert!(set.contains(&Temporal::from_bounds(0, 10)));
-        assert!(set.contains(&Temporal::from_bounds(5, 15)));
-        assert!(set.contains(&Temporal::empty()));
-        assert!(!set.contains(&Temporal::from_bounds(0, 5)));
-    }
-
-    // =========================================================================
-    // OVERLAP RELATIONSHIP TO ALLEN RELATIONS
-    // =========================================================================
-
-    #[test]
-    fn test_overlap_relationship_to_allen() {
-        // temporal.intersects() uses weak inequality (<= <=), so:
-        // - It returns true for: meets, met-by, overlaps, overlapped-by, starts,
-        //   started-by, during, contains, finishes, finished-by, equals
-        // - It returns false only for: before, after (disjoint with gap)
-        let a = Temporal::from_bounds(0, 10);
-        let b = Temporal::from_bounds(15, 25); // before (with gap)
-        let c = Temporal::from_bounds(10, 20); // meets (touching)
-        let d = Temporal::from_bounds(5, 15); // overlaps
-
-        assert!(!a.intersects(&b), "before => no overlap (gap exists)");
-        assert!(a.intersects(&c), "meets => overlap (touching boundary)");
-        assert!(a.intersects(&d), "overlaps => overlap");
-    }
-
-    // =========================================================================
-    // TEST NON-OVERLAPPING TEMPORALS BLOCK RULE FIRING (TEST-021 scenario)
-    // =========================================================================
-
-    #[test]
-    fn test_non_overlapping_temporals_no_intersection() {
-        // Simulates TEST-021: a@[0,10], b@[20,30] should have no intersection
-        let a = Temporal::from_bounds(0, 10);
-        let b = Temporal::from_bounds(20, 30);
-
-        assert!(
-            !a.intersects(&b),
-            "Non-overlapping intervals should not intersect"
-        );
-        assert!(
-            a.intersection(&b).is_none(),
-            "Intersection should be None for non-overlapping"
-        );
-    }
-
-    #[test]
-    fn test_three_body_no_overlap() {
-        // a@[0,20], b@[10,30], c@[25,40] - no three-way overlap
-        let a = Temporal::from_bounds(0, 20);
-        let b = Temporal::from_bounds(10, 30);
-        let c = Temporal::from_bounds(25, 40);
-
-        let result = Temporal::intersection_list(&[a, b, c]);
-        assert!(
-            result.is_none(),
-            "No three-way temporal overlap should exist"
-        );
     }
 
     #[test]

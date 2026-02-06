@@ -4,7 +4,7 @@
 //!
 //! # Performance
 //!
-//! Uses `LiteralId` (4-byte Copy type) and BitSet for O(1) proven literal
+//! Uses `LitId` (4-byte Copy type) and BitSet for O(1) proven literal
 //! checks, eliminating heap allocations and hash computations in the hot
 //! reasoning loop.
 
@@ -14,48 +14,49 @@ use fixedbitset::FixedBitSet;
 use rustc_hash::FxHashMap;
 
 use crate::conclusion::{Conclusion, ConclusionType};
-use crate::index::IndexedTheory;
-use crate::intern::{LiteralId, interned_count, resolve};
+use crate::error::Result;
+use crate::index::{IndexedTheory, LitId};
 use crate::literal::Literal;
+use crate::pipeline::{prepare, PrepareOptions};
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
 /// A bit set optimized for tracking proven literals.
 ///
-/// Maps `LiteralId` to bit indices for O(1) contains/insert operations
-/// without hashing overhead. Uses 2 bits per symbol (positive + negated).
+/// Maps `LitId` to bit indices for O(1) contains/insert operations.
+/// Uses 2 bits per atom (positive + negated).
 struct LiteralBitSet {
     bits: FixedBitSet,
 }
 
 impl LiteralBitSet {
-    /// Create a new LiteralBitSet sized for the current interner.
-    fn new() -> Self {
-        // Each symbol needs 2 bits: one for positive, one for negated
-        let size = interned_count() * 2;
+    /// Create a new LiteralBitSet sized for the indexed theory.
+    fn new(atom_count: usize) -> Self {
+        // Each atom needs 2 bits: one for positive, one for negated
+        let size = atom_count * 2;
         Self {
             bits: FixedBitSet::with_capacity(size),
         }
     }
 
-    /// Convert a LiteralId to a bit index.
+    /// Convert a LitId to a bit index.
     #[inline]
-    fn to_index(id: LiteralId) -> usize {
-        let symbol = id.symbol().as_raw() as usize;
+    fn to_index(id: LitId) -> usize {
+        let atom_idx = id.atom().as_raw() as usize;
         let negated = if id.is_negated() { 1 } else { 0 };
-        symbol * 2 + negated
+        atom_idx * 2 + negated
     }
 
     /// Check if a literal has been proven.
     #[inline]
-    fn contains(&self, id: LiteralId) -> bool {
+    fn contains(&self, id: LitId) -> bool {
         let idx = Self::to_index(id);
         idx < self.bits.len() && self.bits.contains(idx)
     }
 
     /// Mark a literal as proven.
     #[inline]
-    fn insert(&mut self, id: LiteralId) {
+    fn insert(&mut self, id: LitId) {
         let idx = Self::to_index(id);
         if idx < self.bits.len() {
             self.bits.insert(idx);
@@ -63,47 +64,65 @@ impl LiteralBitSet {
     }
 }
 
-/// Convert a LiteralId back to a Literal
-#[inline]
-fn id_to_literal(id: LiteralId) -> Literal {
-    let name = resolve(id.symbol());
-    if id.is_negated() {
-        Literal::negated(name)
-    } else {
-        Literal::simple(name)
-    }
+/// Perform defeasible reasoning on a theory
+pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
+    reason_with_options(theory, PrepareOptions::default())
 }
 
-/// Perform defeasible reasoning on a theory
-pub fn reason(theory: &Theory) -> Vec<Conclusion> {
-    let indexed = IndexedTheory::build(theory);
+/// Perform defeasible reasoning on a theory with custom options
+///
+/// This is the primary API for as-of reasoning. Use `reference_time` in options
+/// to reason at a specific point in time:
+///
+/// ```rust
+/// use spindle_core::prelude::*;
+/// use spindle_core::reason::reason_with_options;
+/// use spindle_core::pipeline::PrepareOptions;
+/// use spindle_core::temporal::TimePoint;
+///
+/// let mut theory = Theory::new();
+/// theory.add_fact("bird");
+///
+/// // Reason at a specific time (milliseconds since epoch)
+/// let opts = PrepareOptions {
+///     reference_time: Some(TimePoint::from_millis(1707220800000)),
+///     ..Default::default()
+/// };
+/// let conclusions = reason_with_options(&theory, opts).unwrap();
+/// ```
+pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<Conclusion>> {
+    // Phase 0: Pipeline (Filtering + Validation + Grounding)
+    let prepared = prepare(theory, opts)?;
+    let grounded_theory = prepared.theory;
 
-    // Pre-allocate conclusions vector: estimate 2 conclusions per rule (positive)
-    // plus 2 per literal (negative conclusions at the end)
-    let estimated_size = theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
+    // Use the grounded theory for indexing and reasoning
+    let mut indexed = IndexedTheory::build(&grounded_theory);
+
+    // Pre-allocate conclusions vector
+    let estimated_size = grounded_theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
     let mut conclusions = Vec::with_capacity(estimated_size);
 
     // Track what we've proven using LiteralBitSet for O(1) operations
-    // BitSet is cache-friendly and avoids hash computation overhead
-    let mut definite_proven = LiteralBitSet::new();
-    let mut defeasible_proven = LiteralBitSet::new();
+    let atom_count = indexed.atom_count();
+    let mut definite_proven = LiteralBitSet::new(atom_count);
+    let mut defeasible_proven = LiteralBitSet::new(atom_count);
 
     // Track rule body satisfaction - pre-allocate for all rules
-    // Use &str keys borrowed from theory to avoid string cloning
-    let rule_count = theory.rule_count();
+    let rule_count = grounded_theory.rule_count();
     let mut body_remaining: FxHashMap<&str, usize> =
         FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
-    for rule in theory.rules() {
+    for rule in grounded_theory.rules() {
         body_remaining.insert(&rule.label, rule.body.len());
     }
 
-    // Worklist for forward chaining - pre-allocate for estimated work
+    // Worklist for forward chaining
     let mut worklist: VecDeque<Literal> = VecDeque::with_capacity(rule_count);
 
     // Phase 1: Initialize with facts
-    for fact in theory.facts() {
+    for fact in grounded_theory.facts() {
         let lit = fact.head_literal().clone();
-        let lit_id = lit.literal_id();
+        // Interning here is safe as facts are already in the theory
+        let lit_id = indexed.intern_literal(&lit);
 
         definite_proven.insert(lit_id);
         defeasible_proven.insert(lit_id);
@@ -117,6 +136,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     // Phase 2: Forward chaining
     while let Some(lit) = worklist.pop_front() {
         // Find rules where this literal appears in body
+        // using immutable lookup
         for rule in indexed.rules_with_body(&lit) {
             let remaining = body_remaining.get_mut(rule.label.as_str()).unwrap();
             if *remaining > 0 {
@@ -125,7 +145,10 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
                 // If body fully satisfied, try to fire rule
                 if *remaining == 0 {
                     let head_lit = rule.head_literal().clone();
-                    let head_id = head_lit.literal_id();
+                    // Must exist because it's in a rule in the theory
+                    let head_id = indexed
+                        .get_lit_id(&head_lit)
+                        .expect("Head literal missing from index");
 
                     match rule.rule_type {
                         RuleType::Fact => unreachable!("Facts have no body"),
@@ -159,7 +182,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
                                 // Check if we're blocked by superior rules
                                 let blocked = is_blocked_by_superior(
                                     &indexed,
-                                    theory,
+                                    &grounded_theory, // Use grounded theory which has superiorities copied
                                     rule,
                                     &defeasible_proven,
                                 );
@@ -186,23 +209,21 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
     }
 
     // Phase 3: Compute negative conclusions
-    // This runs once at the end, so the conversion is acceptable here
-    for &lit_id in indexed.all_literal_ids() {
-        let lit = id_to_literal(lit_id);
+    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
 
+    for lit_id in all_ids {
         if !definite_proven.contains(lit_id) {
-            conclusions.push(Conclusion::new(
-                ConclusionType::DefinitelyNotProvable,
-                lit.clone(),
-            ));
+            let lit = indexed.resolve_literal(lit_id);
+            conclusions.push(Conclusion::new(ConclusionType::DefinitelyNotProvable, lit));
         }
 
         if !defeasible_proven.contains(lit_id) {
+            let lit = indexed.resolve_literal(lit_id);
             conclusions.push(Conclusion::new(ConclusionType::DefeasiblyNotProvable, lit));
         }
     }
 
-    conclusions
+    Ok(conclusions)
 }
 
 /// Check if a rule is blocked by a superior rule or defeater for the complement
@@ -215,26 +236,30 @@ fn is_blocked_by_superior(
     let head_lit = rule.head_literal();
     let complement = head_lit.complement();
 
-    // Find rules for the complement (including defeaters)
     let attacking_rules = indexed.rules_with_head(&complement);
 
     for attacker in attacking_rules {
         // Check if attacker's body is satisfied (using BitSet for O(1) lookup)
-        let body_satisfied = attacker
-            .body
-            .iter()
-            .all(|b| proven.contains(b.literal_id()));
+        let body_satisfied = attacker.body.iter().all(|b| {
+            if let Some(bid) = indexed.get_lit_id(b) {
+                proven.contains(bid)
+            } else {
+                false
+            }
+        });
 
         if !body_satisfied {
             continue;
         }
 
+        // Use template_label() for superiority checks to handle grounded instances correctly
+
         // IMPORTANT: Defeaters automatically block without needing explicit superiority
         // A defeater is a rule that can block a conclusion but cannot prove its head
         if attacker.rule_type == RuleType::Defeater {
             // Check if rule is superior over the defeater (can override it)
-            // Using O(1) indexed lookup instead of linear scan
-            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
+            let rule_superior =
+                theory.is_superior(rule.template_label(), attacker.template_label());
 
             // Defeater blocks unless the rule is explicitly superior
             if !rule_superior {
@@ -244,12 +269,12 @@ fn is_blocked_by_superior(
         }
 
         // For defeasible rules: check superiority relations
-        // Using O(1) indexed lookups instead of linear scan
         // Check superiority: is attacker > rule?
-        let attacker_superior = theory.is_superior(&attacker.label, &rule.label);
+        let attacker_superior =
+            theory.is_superior(attacker.template_label(), rule.template_label());
 
         // Check if rule > attacker
-        let rule_superior = theory.is_superior(&rule.label, &attacker.label);
+        let rule_superior = theory.is_superior(rule.template_label(), attacker.template_label());
 
         // If attacker is superior and rule is not superior over it, we're blocked
         if attacker_superior && !rule_superior {
@@ -257,7 +282,16 @@ fn is_blocked_by_superior(
         }
 
         // If neither is superior, we have a conflict (both blocked in ambiguity propagation)
-        // For now, we allow both to be proven (skeptical semantics would block both)
+        // For now, we allow both to be proven (credulous semantics)?
+        // Wait, standard DL is typically skeptical or ambiguity blocking.
+        // If we return FALSE here (not blocked), then both fire?
+        // The implementation here seems to implement CREDULOUS behavior for conflicts
+        // if neither is superior.
+        // But the comment says "ambiguity propagation".
+        // If I want standard ambiguity blocking, I should return TRUE here if conflict.
+        // But let's keep existing logic structure unless spec says otherwise.
+        // Spec 1.1 says: "root cause: rule triggering and proven-sets keyed by name+negation".
+        // It doesn't complain about conflict strategy itself, just identity.
     }
 
     false
@@ -276,14 +310,12 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
-        assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                    && c.literal.name() == "bird")
-        );
+        assert!(conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name() == "bird"));
     }
 
     #[test]
@@ -291,15 +323,13 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("~guilty");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
-        assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                    && c.literal.name() == "guilty"
-                    && c.literal.negation)
-        );
+        assert!(conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name() == "guilty"
+                && c.literal.negation));
     }
 
     #[test]
@@ -308,14 +338,12 @@ mod tests {
         theory.add_fact("bird");
         theory.add_strict_rule(&["bird"], "animal");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
-        assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                    && c.literal.name() == "animal")
-        );
+        assert!(conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name() == "animal"));
     }
 
     #[test]
@@ -324,14 +352,12 @@ mod tests {
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
-        assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                    && c.literal.name() == "flies")
-        );
+        assert!(conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "flies"));
     }
 
     #[test]
@@ -342,7 +368,7 @@ mod tests {
         theory.add_fact("r");
         theory.add_defeasible_rule(&["p", "q", "r"], "s");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions
@@ -359,7 +385,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p", "q"], "r");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             !conclusions
@@ -385,16 +411,14 @@ mod tests {
 
         theory.add_superiority(&r2, &r1);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // ~flies should be defeasibly provable (penguins don't fly)
-        assert!(
-            conclusions
-                .iter()
-                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                    && c.literal.name() == "flies"
-                    && c.literal.negation)
-        );
+        assert!(conclusions
+            .iter()
+            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "flies"
+                && c.literal.negation));
     }
 
     #[test]
@@ -407,7 +431,7 @@ mod tests {
 
         theory.add_superiority(&r1, &r2);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Superior rule r1 should win
         assert!(
@@ -428,7 +452,7 @@ mod tests {
         theory.add_strict_rule(&["a", "b"], "c");
         theory.add_defeasible_rule(&["a", "b"], "~c");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Strict rule should definitely prove c
         assert!(
@@ -449,7 +473,7 @@ mod tests {
         theory.add_defeasible_rule(&["b"], "c");
         theory.add_defeasible_rule(&["c"], "d");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         for lit_name in &["b", "c", "d"] {
             assert!(
@@ -473,7 +497,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // q has no strict path, so -D q
         assert!(
@@ -491,7 +515,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "q"); // p not proven
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().any(
@@ -512,7 +536,7 @@ mod tests {
 
         theory.add_superiority(&r1, &r2);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // r1 > r2, so +d q, but ~q should be blocked
         assert!(
@@ -536,7 +560,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "q");
         theory.add_defeater(&["p"], "~q");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Defeater should block q from being proven
         let has_q = conclusions.iter().any(|c| {
@@ -570,7 +594,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeater(&["p"], "q");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Defeaters don't prove anything
         assert!(
@@ -589,7 +613,7 @@ mod tests {
     #[test]
     fn test_empty_theory() {
         let theory = Theory::new();
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Empty theory should produce no positive conclusions
         assert!(
@@ -604,7 +628,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "q");
         theory.add_defeasible_rule(&["q"], "r");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // No facts, so no positive conclusions
         assert!(
@@ -618,7 +642,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Should not crash and p should not be proven
         assert!(
@@ -637,7 +661,7 @@ mod tests {
         theory.add_defeasible_rule(&["q"], "r");
         theory.add_defeasible_rule(&["r"], "p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Should terminate without infinite loop - the fact that we reach this assertion
         // means the function terminated successfully
@@ -650,7 +674,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_fact("~p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Both should be definitely provable (inconsistent theory)
         assert!(
@@ -684,7 +708,7 @@ mod tests {
             theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
         }
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // All literals in chain should be provable
         assert!(
@@ -706,7 +730,7 @@ mod tests {
             theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
         }
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Check a sample of derived conclusions
         for i in [0, 25, 50, 75, 99].iter() {
@@ -729,7 +753,7 @@ mod tests {
             theory.add_fact(&format!("p{}", i));
         }
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         let definite_count = conclusions
             .iter()
@@ -757,7 +781,7 @@ mod tests {
         let d1 = theory.add_defeater(&["p"], "~q");
         theory.add_superiority(&r1, &d1); // r1 is superior to defeater
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // q should be provable because r1 > d1
         let has_q = conclusions.iter().any(|c| {
@@ -781,7 +805,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "~q");
         // No superiority relation
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Both q and ~q should be provable (credulous semantics)
         let has_q = conclusions.iter().any(|c| {
@@ -808,7 +832,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "q");
         theory.add_defeasible_rule(&["x"], "~q"); // x is not a fact
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         let has_q = conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
@@ -831,7 +855,7 @@ mod tests {
         let r2 = theory.add_defeasible_rule(&["p"], "~q");
         theory.add_superiority(&r2, &r1); // r2 > r1
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // q should NOT be provable (blocked by superior r2)
         let has_q = conclusions.iter().any(|c| {
@@ -867,7 +891,7 @@ mod tests {
         );
         theory.add_rule(rule);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Standard forward chaining doesn't fire empty body rules
         // This documents the behavior - use facts instead
@@ -887,7 +911,7 @@ mod tests {
         // Intentionally missing q and r facts
         theory.add_defeasible_rule(&["p", "q", "r"], "s");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions
@@ -906,7 +930,7 @@ mod tests {
         theory.add_fact("q"); // Adding q so r IS provable
         theory.add_defeasible_rule(&["p", "q"], "r");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // This will fail because r IS provable (we added q)
         assert!(
@@ -930,7 +954,7 @@ mod tests {
         // Wrong direction - r2 beats r1, so ~flies wins instead of flies
         theory.add_superiority(&r2, &r1);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // This fails because r2 > r1 means ~flies wins, not flies
         assert!(
@@ -951,7 +975,7 @@ mod tests {
         // Missing fact "b"
         theory.add_strict_rule(&["a", "b"], "c");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions
@@ -971,7 +995,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "b");
         theory.add_defeasible_rule(&["b"], "c");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         for lit_name in &["b", "c"] {
             assert!(
@@ -992,7 +1016,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_strict_rule(&["p"], "q"); // Adding strict rule so q IS provable
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().any(
@@ -1010,7 +1034,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q"); // Adding rule so q IS provable
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().any(
@@ -1027,7 +1051,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("x"); // Not empty
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().all(|c| !c.conclusion_type.is_positive()),
@@ -1042,7 +1066,7 @@ mod tests {
         theory.add_fact("p"); // Adding initial fact so it IS provable
         theory.add_defeasible_rule(&["p"], "p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             !conclusions
@@ -1050,6 +1074,102 @@ mod tests {
                 .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
                     && c.literal.name() == "p"),
             "Self-referential rule without initial fact should not prove p"
+        );
+    }
+
+    // ==========================================================================
+    // reason_with_options API TESTS (spec §3.2, Milestone 5)
+    // ==========================================================================
+
+    #[test]
+    fn test_reason_with_options_default_matches_reason() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+
+        let conclusions_default = reason(&theory).unwrap();
+        let conclusions_with_opts =
+            reason_with_options(&theory, PrepareOptions::default()).unwrap();
+
+        // Both should produce the same positive conclusions
+        let pos_default: Vec<_> = conclusions_default
+            .iter()
+            .filter(|c| c.is_positive())
+            .map(|c| c.literal.name())
+            .collect();
+
+        let pos_with_opts: Vec<_> = conclusions_with_opts
+            .iter()
+            .filter(|c| c.is_positive())
+            .map(|c| c.literal.name())
+            .collect();
+
+        assert_eq!(pos_default, pos_with_opts);
+    }
+
+    #[test]
+    fn test_reason_with_options_accepts_reference_time() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+
+        // Add a fact with a specific temporal window
+        let bird_lit = Literal::new(
+            "bird",
+            false,
+            crate::mode::Mode::default(),
+            Temporal::from_bounds(1000, 2000), // active from 1000 to 2000
+            vec![],
+        );
+        theory.add_rule(crate::rule::Rule::fact("f1", bird_lit));
+
+        // Reason at time 1500 (inside the window)
+        let opts_inside = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(1500)),
+            ..Default::default()
+        };
+        let conclusions_inside = reason_with_options(&theory, opts_inside).unwrap();
+        let has_bird_inside = conclusions_inside
+            .iter()
+            .any(|c| c.literal.name() == "bird" && c.is_positive());
+        assert!(has_bird_inside, "bird should be provable at time 1500");
+
+        // Reason at time 3000 (outside the window)
+        let opts_outside = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(3000)),
+            ..Default::default()
+        };
+        let conclusions_outside = reason_with_options(&theory, opts_outside).unwrap();
+        let has_bird_outside = conclusions_outside
+            .iter()
+            .any(|c| c.literal.name() == "bird" && c.is_positive());
+        assert!(
+            !has_bird_outside,
+            "bird should NOT be provable at time 3000 (outside temporal window)"
+        );
+    }
+
+    #[test]
+    fn test_reason_with_options_grounding_can_be_disabled() {
+        use crate::pipeline::GroundingOptions;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        // With grounding disabled, variables won't be instantiated
+        let opts = PrepareOptions {
+            grounding: GroundingOptions {
+                enabled: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        // Should still work for ground theories
+        let conclusions = reason_with_options(&theory, opts).unwrap();
+        assert!(
+            conclusions.iter().any(|c| c.is_positive()),
+            "should have positive conclusions"
         );
     }
 }

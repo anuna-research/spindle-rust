@@ -20,3 +20,6 @@ scratchpad/
 __pycache__/
 bench/__pycache__/
 bench/compiled/
+
+.env
+.aider*

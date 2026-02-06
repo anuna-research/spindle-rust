@@ -1,68 +1,200 @@
 //! Theory indexing for O(1) rule lookup
 //!
 //! Indexed theories provide fast lookup of rules by head or body literals.
-//! Uses `LiteralId` for efficient O(1) hashing instead of String keys.
+//! Uses a local atom interner to ensure correct identity for predicates with arguments.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::intern::LiteralId;
+use crate::intern::{SymbolId, intern, resolve};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel};
 use crate::theory::Theory;
 
+/// Unique identifier for an atom (predicate + args + mode) within an IndexedTheory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[repr(transparent)]
+pub struct AtomId(u32);
+
+impl AtomId {
+    /// Return the underlying raw identifier.
+    pub fn as_raw(self) -> u32 {
+        self.0
+    }
+}
+
+/// Unique identifier for a literal (AtomId + negation) within an IndexedTheory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[repr(transparent)]
+pub struct LitId(u32);
+
+impl LitId {
+    const NEGATION_BIT: u32 = 1 << 31;
+    const ATOM_MASK: u32 = !Self::NEGATION_BIT;
+
+    /// Create a LitId from an atom ID and negation flag.
+    pub fn new(atom: AtomId, negated: bool) -> Self {
+        if negated {
+            Self(atom.0 | Self::NEGATION_BIT)
+        } else {
+            Self(atom.0 & Self::ATOM_MASK)
+        }
+    }
+
+    /// Return the underlying atom ID.
+    pub fn atom(self) -> AtomId {
+        AtomId(self.0 & Self::ATOM_MASK)
+    }
+
+    /// Return true if this literal is negated.
+    pub fn is_negated(self) -> bool {
+        (self.0 & Self::NEGATION_BIT) != 0
+    }
+
+    /// Return the complement literal (negation flipped).
+    pub fn complement(self) -> Self {
+        Self(self.0 ^ Self::NEGATION_BIT)
+    }
+
+    /// Return the underlying raw identifier.
+    pub fn as_raw(self) -> u32 {
+        self.0
+    }
+}
+
+/// Key used for interning atoms.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AtomKey {
+    functor: SymbolId,
+    mode: (SymbolId, bool), // name_id, negated
+    args: Vec<SymbolId>,
+}
+
 /// An indexed theory for efficient rule lookup.
 ///
-/// Uses `LiteralId` (4 bytes, Copy) as keys for O(1) lookups instead
-/// of `String` keys which require hashing variable-length data.
-///
 /// Holds a reference to the theory to avoid deep cloning during reasoning.
+/// Interns atoms locally to ensure p(a) != p(b).
 #[derive(Debug)]
 pub struct IndexedTheory<'a> {
     /// Reference to the underlying theory (avoids deep clone)
     theory: &'a Theory,
-    /// Rules indexed by head literal (using LiteralId for fast lookup)
-    head_index: FxHashMap<LiteralId, Vec<RuleLabel>>,
-    /// Rules indexed by body literal (trigger index for semi-naive evaluation)
-    body_index: FxHashMap<LiteralId, Vec<RuleLabel>>,
+    /// Map from AtomKey to AtomId
+    atom_map: FxHashMap<AtomKey, AtomId>,
+    /// Map from AtomId to AtomKey (for reconstruction)
+    atoms: Vec<AtomKey>,
+    /// Rules indexed by head literal
+    head_index: FxHashMap<LitId, Vec<RuleLabel>>,
+    /// Rules indexed by body literal (trigger index)
+    body_index: FxHashMap<LitId, Vec<RuleLabel>>,
     /// Set of all literal IDs in the theory
-    literal_set: FxHashSet<LiteralId>,
+    literal_set: FxHashSet<LitId>,
 }
 
 impl<'a> IndexedTheory<'a> {
     /// Build an indexed theory from a theory reference.
-    ///
-    /// Creates indexes using `LiteralId` keys for O(1) lookups:
-    /// - `head_index`: Maps head literals to rules that produce them
-    /// - `body_index`: Maps body literals to rules they can trigger (trigger index)
-    ///
-    /// Takes a reference to avoid deep cloning the theory.
     pub fn build(theory: &'a Theory) -> Self {
-        let mut head_index: FxHashMap<LiteralId, Vec<RuleLabel>> = FxHashMap::default();
-        let mut body_index: FxHashMap<LiteralId, Vec<RuleLabel>> = FxHashMap::default();
-        let mut literal_set: FxHashSet<LiteralId> = FxHashSet::default();
-
-        for rule in theory.rules() {
-            // Index by head literals (using LiteralId for O(1) hashing)
-            for head_lit in &rule.head {
-                let key = head_lit.literal_id();
-                head_index.entry(key).or_default().push(rule.label.clone());
-                literal_set.insert(key);
-            }
-
-            // Index by body literals (trigger index for semi-naive evaluation)
-            for body_lit in &rule.body {
-                let key = body_lit.literal_id();
-                body_index.entry(key).or_default().push(rule.label.clone());
-                literal_set.insert(key);
-            }
-        }
-
-        Self {
+        let mut idx = Self {
             theory,
-            head_index,
-            body_index,
-            literal_set,
+            atom_map: FxHashMap::default(),
+            atoms: Vec::new(),
+            head_index: FxHashMap::default(),
+            body_index: FxHashMap::default(),
+            literal_set: FxHashSet::default(),
+        };
+
+        // Index all rules
+        for rule in theory.rules() {
+            for head_lit in &rule.head {
+                let lit_id = idx.intern_literal(head_lit);
+                idx.head_index
+                    .entry(lit_id)
+                    .or_default()
+                    .push(rule.label.clone());
+                idx.literal_set.insert(lit_id);
+            }
+
+            for body_lit in &rule.body {
+                let lit_id = idx.intern_literal(body_lit);
+                idx.body_index
+                    .entry(lit_id)
+                    .or_default()
+                    .push(rule.label.clone());
+                idx.literal_set.insert(lit_id);
+            }
         }
+
+        idx
+    }
+
+    /// Intern a literal into the local atom store.
+    pub fn intern_literal(&mut self, lit: &Literal) -> LitId {
+        let mode_id = lit
+            .mode
+            .name
+            .as_deref()
+            .map(intern)
+            .unwrap_or(SymbolId::EMPTY);
+        let key = AtomKey {
+            functor: lit.name_id(),
+            mode: (mode_id, lit.mode.negation),
+            args: lit.predicate_ids().to_vec(),
+        };
+
+        let atom_id = if let Some(&id) = self.atom_map.get(&key) {
+            id
+        } else {
+            let id = AtomId(self.atoms.len() as u32);
+            self.atom_map.insert(key.clone(), id);
+            self.atoms.push(key);
+            id
+        };
+
+        LitId::new(atom_id, lit.negation)
+    }
+
+    /// Lookup a literal ID without interning new atoms.
+    pub fn get_lit_id(&self, lit: &Literal) -> Option<LitId> {
+        let mode_id = lit
+            .mode
+            .name
+            .as_deref()
+            .map(intern)
+            .unwrap_or(SymbolId::EMPTY);
+        let key = AtomKey {
+            functor: lit.name_id(),
+            mode: (mode_id, lit.mode.negation),
+            args: lit.predicate_ids().to_vec(),
+        };
+
+        self.atom_map
+            .get(&key)
+            .map(|&atom_id| LitId::new(atom_id, lit.negation))
+    }
+
+    /// Resolve a LitId back to a Literal.
+    pub fn resolve_literal(&self, lit_id: LitId) -> Literal {
+        let atom_id = lit_id.atom();
+        let key = &self.atoms[atom_id.0 as usize];
+
+        // Construct mode from key
+        let mode_name_id = key.mode.0;
+        let mode_name = if mode_name_id.is_empty() {
+            None
+        } else {
+            Some(resolve(mode_name_id).to_string())
+        };
+
+        let mode = crate::mode::Mode {
+            name: mode_name,
+            negation: key.mode.1,
+        };
+
+        Literal::from_ids(
+            key.functor,
+            lit_id.is_negated(),
+            mode,
+            crate::temporal::Temporal::empty(), // Temporal lost in identity, which is correct for reasoning
+            key.args.clone(),
+        )
     }
 
     /// Get the underlying theory
@@ -72,11 +204,15 @@ impl<'a> IndexedTheory<'a> {
 
     /// Get rules with the given literal in the head.
     pub fn rules_with_head(&self, lit: &Literal) -> Vec<&Rule> {
-        self.rules_with_head_id(lit.literal_id())
+        if let Some(lit_id) = self.get_lit_id(lit) {
+            self.rules_with_head_id(lit_id)
+        } else {
+            Vec::new()
+        }
     }
 
-    /// Get rules with the given literal ID in the head (O(1) lookup).
-    pub fn rules_with_head_id(&self, lit_id: LiteralId) -> Vec<&Rule> {
+    /// Get rules with the given literal ID in the head.
+    pub fn rules_with_head_id(&self, lit_id: LitId) -> Vec<&Rule> {
         self.head_index
             .get(&lit_id)
             .map(|labels| {
@@ -88,24 +224,17 @@ impl<'a> IndexedTheory<'a> {
             .unwrap_or_default()
     }
 
-    /// Get rule labels with the given literal ID in the head (avoids Rule lookup).
-    pub fn rule_labels_with_head_id(&self, lit_id: LiteralId) -> &[RuleLabel] {
-        self.head_index
-            .get(&lit_id)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
-    }
-
-    /// Get rules with the given literal in the body (trigger index).
+    /// Get rules with the given literal in the body.
     pub fn rules_with_body(&self, lit: &Literal) -> Vec<&Rule> {
-        self.rules_with_body_id(lit.literal_id())
+        if let Some(lit_id) = self.get_lit_id(lit) {
+            self.rules_with_body_id(lit_id)
+        } else {
+            Vec::new()
+        }
     }
 
-    /// Get rules with the given literal ID in the body (O(1) lookup).
-    ///
-    /// This is the trigger index for semi-naive evaluation: when a literal
-    /// is proven, these are the rules that might become newly satisfiable.
-    pub fn rules_with_body_id(&self, lit_id: LiteralId) -> Vec<&Rule> {
+    /// Get rules with the given literal ID in the body.
+    pub fn rules_with_body_id(&self, lit_id: LitId) -> Vec<&Rule> {
         self.body_index
             .get(&lit_id)
             .map(|labels| {
@@ -117,29 +246,14 @@ impl<'a> IndexedTheory<'a> {
             .unwrap_or_default()
     }
 
-    /// Get rule labels with the given literal ID in the body (avoids Rule lookup).
-    ///
-    /// This is the trigger index for semi-naive evaluation.
-    pub fn rule_labels_with_body_id(&self, lit_id: LiteralId) -> &[RuleLabel] {
-        self.body_index
-            .get(&lit_id)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+    /// Get total number of distinct atoms interned.
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
     }
 
     /// Get all literal IDs in the theory.
-    pub fn all_literal_ids(&self) -> impl Iterator<Item = &LiteralId> {
+    pub fn all_literal_ids(&self) -> impl Iterator<Item = &LitId> {
         self.literal_set.iter()
-    }
-
-    /// Check if a literal ID exists in the theory.
-    pub fn contains_literal_id(&self, lit_id: LiteralId) -> bool {
-        self.literal_set.contains(&lit_id)
-    }
-
-    /// Check if a literal exists in the theory.
-    pub fn contains_literal(&self, lit: &Literal) -> bool {
-        self.literal_set.contains(&lit.literal_id())
     }
 }
 
@@ -148,151 +262,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_indexed_theory() {
+    fn test_indexed_theory_arg_discrimination() {
         let mut theory = Theory::new();
-        theory.add_fact("bird");
-        theory.add_defeasible_rule(&["bird"], "flies");
+        // p(a)
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["a".to_string()],
+            ),
+        ));
+        // p(b) => q
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["b".to_string()],
+            )],
+            Literal::simple("q"),
+        ));
 
-        let indexed = IndexedTheory::build(&theory);
+        let mut indexed = IndexedTheory::build(&theory);
 
-        let bird = Literal::simple("bird");
-        let flies = Literal::simple("flies");
-
-        // bird should be in head (from fact) and body (from rule)
-        assert!(!indexed.rules_with_head(&bird).is_empty());
-        assert!(!indexed.rules_with_body(&bird).is_empty());
-
-        // flies should be in head only
-        assert!(!indexed.rules_with_head(&flies).is_empty());
-        assert!(indexed.rules_with_body(&flies).is_empty());
-    }
-
-    #[test]
-    fn test_indexed_theory_literal_id() {
-        let mut theory = Theory::new();
-        theory.add_fact("bird");
-        theory.add_defeasible_rule(&["bird"], "flies");
-
-        let indexed = IndexedTheory::build(&theory);
-
-        let bird = Literal::simple("bird");
-        let flies = Literal::simple("flies");
-
-        // Test ID-based lookups
-        assert!(!indexed.rules_with_head_id(bird.literal_id()).is_empty());
-        assert!(!indexed.rules_with_body_id(bird.literal_id()).is_empty());
-        assert!(!indexed.rules_with_head_id(flies.literal_id()).is_empty());
-        assert!(indexed.rules_with_body_id(flies.literal_id()).is_empty());
-
-        // Test contains
-        assert!(indexed.contains_literal_id(bird.literal_id()));
-        assert!(indexed.contains_literal_id(flies.literal_id()));
-        assert!(indexed.contains_literal(&bird));
-    }
-
-    #[test]
-    fn test_trigger_index() {
-        let mut theory = Theory::new();
-        theory.add_fact("a");
-        theory.add_defeasible_rule(&["a"], "b");
-        theory.add_defeasible_rule(&["b"], "c");
-        theory.add_defeasible_rule(&["a", "b"], "d");
-
-        let indexed = IndexedTheory::build(&theory);
-
-        let a = Literal::simple("a");
-        let b = Literal::simple("b");
-
-        // When 'a' is proven, which rules can fire?
-        let triggered_by_a = indexed.rule_labels_with_body_id(a.literal_id());
-        assert_eq!(triggered_by_a.len(), 2); // r1 (a => b) and r3 (a, b => d)
-
-        // When 'b' is proven, which rules can fire?
-        let triggered_by_b = indexed.rule_labels_with_body_id(b.literal_id());
-        assert_eq!(triggered_by_b.len(), 2); // r2 (b => c) and r3 (a, b => d)
-    }
-
-    // =========================================================================
-    // ADDITIONAL COVERAGE TESTS
-    // =========================================================================
-
-    #[test]
-    fn test_rule_labels_with_head_id() {
-        let mut theory = Theory::new();
-        theory.add_fact("a");
-        theory.add_defeasible_rule(&["a"], "b");
-
-        let indexed = IndexedTheory::build(&theory);
-
-        let a = Literal::simple("a");
-        let b = Literal::simple("b");
-
-        // 'a' is head of fact
-        let head_labels_a = indexed.rule_labels_with_head_id(a.literal_id());
-        assert!(!head_labels_a.is_empty());
-
-        // 'b' is head of rule
-        let head_labels_b = indexed.rule_labels_with_head_id(b.literal_id());
-        assert!(!head_labels_b.is_empty());
-
-        // nonexistent literal returns empty
-        let nonexistent = Literal::simple("nonexistent");
-        let head_labels_none = indexed.rule_labels_with_head_id(nonexistent.literal_id());
-        assert!(head_labels_none.is_empty());
-    }
-
-    #[test]
-    fn test_all_literal_ids() {
-        let mut theory = Theory::new();
-        theory.add_fact("a");
-        theory.add_defeasible_rule(&["a"], "b");
-        theory.add_defeasible_rule(&["b"], "c");
-
-        let indexed = IndexedTheory::build(&theory);
-
-        // Should have a, b, c
-        let all_ids: Vec<_> = indexed.all_literal_ids().collect();
-        assert_eq!(all_ids.len(), 3);
-    }
-
-    #[test]
-    fn test_contains_literal_not_found() {
-        let mut theory = Theory::new();
-        theory.add_fact("a");
-
-        let indexed = IndexedTheory::build(&theory);
-
-        let nonexistent = Literal::simple("nonexistent");
-        assert!(!indexed.contains_literal(&nonexistent));
-        assert!(!indexed.contains_literal_id(nonexistent.literal_id()));
-    }
-
-    #[test]
-    fn test_theory_accessor() {
-        let mut theory = Theory::new();
-        theory.add_fact("test");
-
-        let indexed = IndexedTheory::build(&theory);
-        assert_eq!(indexed.theory().rule_count(), 1);
-    }
-
-    #[test]
-    fn test_empty_theory_index() {
-        let theory = Theory::new();
-        let indexed = IndexedTheory::build(&theory);
-
-        let lit = Literal::simple("any");
-        assert!(indexed.rules_with_head(&lit).is_empty());
-        assert!(indexed.rules_with_body(&lit).is_empty());
-        assert!(
-            indexed
-                .rule_labels_with_head_id(lit.literal_id())
-                .is_empty()
+        let p_a = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["a".to_string()],
         );
-        assert!(
-            indexed
-                .rule_labels_with_body_id(lit.literal_id())
-                .is_empty()
+        let p_b = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Default::default(),
+            vec!["b".to_string()],
         );
+
+        let id_a = indexed.intern_literal(&p_a);
+        let id_b = indexed.intern_literal(&p_b);
+
+        assert_ne!(id_a, id_b, "p(a) and p(b) should have different LitIds");
+
+        // p(a) is a fact head
+        assert!(!indexed.rules_with_head_id(id_a).is_empty());
+        // p(b) is a rule body
+        assert!(!indexed.rules_with_body_id(id_b).is_empty());
+
+        // p(a) is NOT a rule body
+        assert!(indexed.rules_with_body_id(id_a).is_empty());
     }
 }

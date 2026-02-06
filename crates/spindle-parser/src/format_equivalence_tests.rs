@@ -24,11 +24,13 @@ fn conclusions_equivalent(c1: &[Conclusion], c2: &[Conclusion]) -> bool {
 
 /// Test a DFL/SPL equivalence pair
 fn test_equivalence(name: &str, dfl_str: &str, spl_str: &str) {
-    let dfl_theory = parse_dfl(dfl_str).expect(&format!("DFL parse failed for: {}", name));
-    let spl_theory = parse_spl(spl_str).expect(&format!("SPL parse failed for: {}", name));
+    let dfl_theory =
+        parse_dfl(dfl_str).unwrap_or_else(|_| panic!("DFL parse failed for: {}", name));
+    let spl_theory =
+        parse_spl(spl_str).unwrap_or_else(|_| panic!("SPL parse failed for: {}", name));
 
-    let dfl_conclusions = reason(&dfl_theory);
-    let spl_conclusions = reason(&spl_theory);
+    let dfl_conclusions = reason(&dfl_theory).unwrap();
+    let spl_conclusions = reason(&spl_theory).unwrap();
 
     // Check both produced conclusions
     assert!(
@@ -147,8 +149,8 @@ fn test_conclusion_types_match() {
     let dfl_theory = parse_dfl(dfl).unwrap();
     let spl_theory = parse_spl(spl).unwrap();
 
-    let dfl_conclusions = reason(&dfl_theory);
-    let spl_conclusions = reason(&spl_theory);
+    let dfl_conclusions = reason(&dfl_theory).unwrap();
+    let spl_conclusions = reason(&spl_theory).unwrap();
 
     // Check that the same conclusion types are present
     let dfl_definite: Vec<_> = dfl_conclusions

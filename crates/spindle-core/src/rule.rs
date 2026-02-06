@@ -79,6 +79,9 @@ impl fmt::Display for RuleType {
 pub struct Rule {
     /// Unique label for this rule
     pub label: RuleLabel,
+    /// Original template label (for grounded instances)
+    /// If None, this is a template or ungrounded rule, so `label` is the template label.
+    pub template_label: Option<RuleLabel>,
     /// Type of rule (fact, strict, defeasible, defeater)
     pub rule_type: RuleType,
     /// Modal operator (if any)
@@ -103,6 +106,7 @@ impl Rule {
     ) -> Self {
         Self {
             label: label.into(),
+            template_label: None,
             rule_type,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
@@ -150,6 +154,13 @@ impl Rule {
     pub fn head_literal(&self) -> &Literal {
         assert_eq!(self.head.len(), 1, "Expected single head literal");
         &self.head[0]
+    }
+
+    /// Get the template label for this rule.
+    /// If this is a grounded instance, returns the original rule label.
+    /// Otherwise returns self.label.
+    pub fn template_label(&self) -> &str {
+        self.template_label.as_deref().unwrap_or(&self.label)
     }
 }
 
@@ -268,5 +279,18 @@ mod tests {
     fn test_rule_display_fact() {
         let fact = Rule::fact("f1", Literal::simple("bird"));
         assert_eq!(format!("{}", fact), "f1: >> bird");
+    }
+
+    #[test]
+    fn test_template_label() {
+        let rule = Rule::defeasible("r1", vec![], Literal::simple("a"));
+        assert_eq!(rule.template_label(), "r1");
+
+        let mut grounded = rule.clone();
+        grounded.label = "r1_1".to_string();
+        grounded.template_label = Some("r1".to_string());
+
+        assert_eq!(grounded.label, "r1_1");
+        assert_eq!(grounded.template_label(), "r1");
     }
 }

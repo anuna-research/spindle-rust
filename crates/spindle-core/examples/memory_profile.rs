@@ -134,21 +134,23 @@ fn main() {
     println!("1. Standard reasoning (100 rule groups)...");
     {
         let theory = create_wide_theory(100);
-        let _conclusions = reason(&theory);
+        let _conclusions = reason(&theory).unwrap();
     }
 
     // Profile scalable reasoning
     println!("2. Scalable reasoning (100 rule groups)...");
     {
         let theory = create_wide_theory(100);
-        let _conclusions = reason_scalable(&theory);
+        let grounded = ground_theory(&theory);
+        let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+        let _conclusions = reason_scalable(&indexed);
     }
 
     // Profile chain reasoning
     println!("3. Chain reasoning (50 rules)...");
     {
         let theory = create_chain_theory(50);
-        let _conclusions = reason(&theory);
+        let _conclusions = reason(&theory).unwrap();
     }
 
     // Profile grounding
@@ -179,21 +181,22 @@ fn main() {
             &theory,
             vec![HypotheticalClaim::new(Literal::simple("tests_pass"))],
             &Literal::simple("ready_review"),
-        );
+        )
+        .unwrap();
 
         // Why-not
-        let _result = why_not(&theory, &Literal::simple("ready_review"));
+        let _result = why_not(&theory, &Literal::simple("ready_review")).unwrap();
 
         // Abduction
-        let _result = abduce(&theory, &Literal::simple("ready_review"), 5);
+        let _result = abduce(&theory, &Literal::simple("ready_review"), 5).unwrap();
     }
 
     // Profile explanation generation
     println!("6. Explanation generation...");
     {
         let theory = create_chain_theory(10);
-        reason(&theory);
-        let _exp = explain(&theory, &Literal::simple("p10"));
+        let _ = reason(&theory).unwrap();
+        let _exp = explain(&theory, &Literal::simple("p10")).unwrap();
     }
 
     println!("\n=== Profiling complete ===");

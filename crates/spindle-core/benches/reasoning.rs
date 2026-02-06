@@ -289,10 +289,12 @@ fn bench_literal_operations(c: &mut Criterion) {
     let lit = Literal::simple("test_literal_name");
     let neg_lit = Literal::negated("test_literal_name");
 
-    group.bench_function("literal_id", |b| b.iter(|| black_box(lit.literal_id())));
+    group.bench_function("literal_id", |b| {
+        b.iter(|| black_box(lit.name_literal_id()))
+    });
 
     group.bench_function("literal_id_negated", |b| {
-        b.iter(|| black_box(neg_lit.literal_id()))
+        b.iter(|| black_box(neg_lit.name_literal_id()))
     });
 
     group.bench_function("canonical_name", |b| {
@@ -309,12 +311,12 @@ fn bench_literal_operations(c: &mut Criterion) {
 
     for i in 0..1000 {
         let l = Literal::simple(format!("lit{}", i));
-        id_set.insert(l.literal_id());
+        id_set.insert(l.name_literal_id());
         str_set.insert(l.canonical_name());
     }
 
     group.bench_function("hashset_contains_literal_id", |b| {
-        b.iter(|| black_box(id_set.contains(&lit.literal_id())))
+        b.iter(|| black_box(id_set.contains(&lit.name_literal_id())))
     });
 
     group.bench_function("hashset_contains_canonical", |b| {
@@ -360,7 +362,7 @@ fn bench_reason_facts(c: &mut Criterion) {
         let theory = create_fact_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory)))
+            b.iter(|| black_box(reason(theory).unwrap()))
         });
     }
 
@@ -374,7 +376,7 @@ fn bench_reason_chain(c: &mut Criterion) {
         let theory = create_chain_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory)))
+            b.iter(|| black_box(reason(theory).unwrap()))
         });
     }
 
@@ -388,7 +390,7 @@ fn bench_reason_wide(c: &mut Criterion) {
         let theory = create_wide_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory)))
+            b.iter(|| black_box(reason(theory).unwrap()))
         });
     }
 
@@ -402,7 +404,7 @@ fn bench_reason_conflicts(c: &mut Criterion) {
         let theory = create_conflict_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory)))
+            b.iter(|| black_box(reason(theory).unwrap()))
         });
     }
 
@@ -420,7 +422,11 @@ fn bench_reason_scalable(c: &mut Criterion) {
         let theory = create_wide_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason_scalable(theory)))
+            b.iter(|| {
+                let grounded = ground_theory(theory);
+                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+                black_box(reason_scalable(&indexed))
+            })
         });
     }
 
@@ -436,11 +442,15 @@ fn bench_standard_vs_scalable(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory)))
+            b.iter(|| black_box(reason(theory).unwrap()))
         });
 
         group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason_scalable(theory)))
+            b.iter(|| {
+                let grounded = ground_theory(theory);
+                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+                black_box(reason_scalable(&indexed))
+            })
         });
     }
 
@@ -460,11 +470,15 @@ fn bench_scaling(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory)))
+            b.iter(|| black_box(reason(theory).unwrap()))
         });
 
         group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason_scalable(theory)))
+            b.iter(|| {
+                let grounded = ground_theory(theory);
+                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+                black_box(reason_scalable(&indexed))
+            })
         });
     }
 
@@ -677,7 +691,7 @@ fn bench_explanation(c: &mut Criterion) {
         vec![Literal::simple("bird")],
         Literal::simple("flies"),
     ));
-    reason(&simple_theory); // Compute conclusions
+    let _ = reason(&simple_theory); // Compute conclusions
 
     group.bench_function("explain_simple", |b| {
         b.iter(|| black_box(explain(&simple_theory, &Literal::simple("flies"))))
@@ -685,7 +699,7 @@ fn bench_explanation(c: &mut Criterion) {
 
     // Chain theory (deeper proof trees)
     let chain_theory = create_chain_theory(10);
-    reason(&chain_theory);
+    reason(&chain_theory).unwrap();
 
     group.bench_function("explain_chain", |b| {
         b.iter(|| black_box(explain(&chain_theory, &Literal::simple("p10"))))
@@ -693,14 +707,14 @@ fn bench_explanation(c: &mut Criterion) {
 
     // Conflict theory (shows conflict resolution)
     let conflict_theory = create_conflict_theory(5);
-    reason(&conflict_theory);
+    reason(&conflict_theory).unwrap();
 
     group.bench_function("explain_conflict", |b| {
         b.iter(|| black_box(explain(&conflict_theory, &Literal::simple("prop0"))))
     });
 
     // Output format benchmarks
-    if let Some(exp) = explain(&chain_theory, &Literal::simple("p5")) {
+    if let Some(exp) = explain(&chain_theory, &Literal::simple("p5")).unwrap() {
         group.bench_function("to_natural_language", |b| {
             b.iter(|| black_box(exp.to_natural_language()))
         });
