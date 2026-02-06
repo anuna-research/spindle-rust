@@ -18,12 +18,12 @@
 //! - Explanation generation
 //! - Parser performance (DFL and SPL formats)
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use spindle_core::explanation::explain;
 use spindle_core::grounding::ground_theory;
 use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
-use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
+use spindle_core::query::{abduce, what_if, why_not, HypotheticalClaim};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
 use spindle_core::temporal::{Temporal, TimePoint};
@@ -420,7 +420,11 @@ fn bench_reason_scalable(c: &mut Criterion) {
         let theory = create_wide_theory(*size);
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason_scalable(theory)))
+            b.iter(|| {
+                let grounded = ground_theory(theory);
+                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+                black_box(reason_scalable(&indexed))
+            })
         });
     }
 
@@ -440,7 +444,11 @@ fn bench_standard_vs_scalable(c: &mut Criterion) {
         });
 
         group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason_scalable(theory)))
+            b.iter(|| {
+                let grounded = ground_theory(theory);
+                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+                black_box(reason_scalable(&indexed))
+            })
         });
     }
 
@@ -464,7 +472,11 @@ fn bench_scaling(c: &mut Criterion) {
         });
 
         group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason_scalable(theory)))
+            b.iter(|| {
+                let grounded = ground_theory(theory);
+                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+                black_box(reason_scalable(&indexed))
+            })
         });
     }
 

@@ -179,8 +179,9 @@ impl Spindle {
     /// Perform scalable reasoning and return conclusions as JSON
     #[wasm_bindgen(js_name = reasonScalable)]
     pub fn reason_scalable(&self) -> JsValue {
-        let result = reason_scalable(&self.theory);
-        let indexed = spindle_core::index::IndexedTheory::build(&self.theory);
+        let grounded = spindle_core::grounding::ground_theory(&self.theory);
+        let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+        let result = reason_scalable(&indexed);
         let conclusions = result.to_conclusions(&indexed);
 
         let js_conclusions: Vec<JsConclusion> = conclusions

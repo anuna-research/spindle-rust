@@ -13,7 +13,7 @@ use spindle_core::explanation::explain;
 use spindle_core::grounding::ground_theory;
 use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
-use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
+use spindle_core::query::{abduce, what_if, why_not, HypotheticalClaim};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
 use spindle_core::temporal::Temporal;
@@ -141,7 +141,9 @@ fn main() {
     println!("2. Scalable reasoning (100 rule groups)...");
     {
         let theory = create_wide_theory(100);
-        let _conclusions = reason_scalable(&theory);
+        let grounded = ground_theory(&theory);
+        let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+        let _conclusions = reason_scalable(&indexed);
     }
 
     // Profile chain reasoning
