@@ -623,12 +623,12 @@ mod tests {
     fn test_semantic_equiv_empty_theory() {
         let theory = Theory::new();
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
         let std_def = extract_defeasible_provable(&standard);
-        
+
         // Manual partial extraction via to_conclusions since set comparison is hard with LitId
         let scl_conclusions = scalable.to_conclusions(&indexed);
         let scl_def = extract_defeasible_provable(&scl_conclusions);
@@ -642,7 +642,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("p");
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -660,7 +660,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "b");
         theory.add_defeasible_rule(&["b"], "c");
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -679,7 +679,7 @@ mod tests {
         theory.add_strict_rule(&["p"], "q");
         theory.add_strict_rule(&["q"], "r");
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -698,7 +698,7 @@ mod tests {
         theory.add_strict_rule(&["p"], "q");
         theory.add_defeasible_rule(&["q"], "r");
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -722,7 +722,7 @@ mod tests {
         let r2 = theory.add_defeasible_rule(&["trigger"], "~result");
         theory.add_superiority(&r1, &r2);
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -742,7 +742,7 @@ mod tests {
         let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
         theory.add_superiority(&r2, &r1);
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -761,7 +761,7 @@ mod tests {
             theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
         }
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 
@@ -782,7 +782,7 @@ mod tests {
             theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
         }
 
-        let standard = reason(&theory);
+        let standard = reason(&theory).unwrap();
         let indexed = IndexedTheory::build(&theory);
         let scalable = reason_scalable(&indexed);
 

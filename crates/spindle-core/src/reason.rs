@@ -14,8 +14,10 @@ use fixedbitset::FixedBitSet;
 use rustc_hash::FxHashMap;
 
 use crate::conclusion::{Conclusion, ConclusionType};
+use crate::error::Result;
 use crate::index::{IndexedTheory, LitId};
 use crate::literal::Literal;
+use crate::pipeline::{prepare, PrepareOptions};
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
@@ -63,11 +65,10 @@ impl LiteralBitSet {
 }
 
 /// Perform defeasible reasoning on a theory
-pub fn reason(theory: &Theory) -> Vec<Conclusion> {
-    // Phase 0: Grounding
-    // We always ground the theory. If there are no variables, this is a cheap pass-through.
-    // Ideally we would check for variables first, but ground_theory does that.
-    let grounded_theory = crate::grounding::ground_theory(theory);
+pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
+    // Phase 0: Pipeline (Filtering + Validation + Grounding)
+    let prepared = prepare(theory, PrepareOptions::default())?;
+    let grounded_theory = prepared.theory;
 
     // Use the grounded theory for indexing and reasoning
     let mut indexed = IndexedTheory::build(&grounded_theory);
@@ -197,7 +198,7 @@ pub fn reason(theory: &Theory) -> Vec<Conclusion> {
         }
     }
 
-    conclusions
+    Ok(conclusions)
 }
 
 /// Check if a rule is blocked by a superior rule or defeater for the complement
@@ -284,7 +285,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(conclusions
             .iter()
@@ -297,7 +298,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("~guilty");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(conclusions
             .iter()
@@ -312,7 +313,7 @@ mod tests {
         theory.add_fact("bird");
         theory.add_strict_rule(&["bird"], "animal");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(conclusions
             .iter()
@@ -326,7 +327,7 @@ mod tests {
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(conclusions
             .iter()
@@ -342,7 +343,7 @@ mod tests {
         theory.add_fact("r");
         theory.add_defeasible_rule(&["p", "q", "r"], "s");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions
@@ -359,7 +360,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p", "q"], "r");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             !conclusions
@@ -385,7 +386,7 @@ mod tests {
 
         theory.add_superiority(&r2, &r1);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // ~flies should be defeasibly provable (penguins don't fly)
         assert!(conclusions
@@ -405,7 +406,7 @@ mod tests {
 
         theory.add_superiority(&r1, &r2);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Superior rule r1 should win
         assert!(
@@ -426,7 +427,7 @@ mod tests {
         theory.add_strict_rule(&["a", "b"], "c");
         theory.add_defeasible_rule(&["a", "b"], "~c");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Strict rule should definitely prove c
         assert!(
@@ -447,7 +448,7 @@ mod tests {
         theory.add_defeasible_rule(&["b"], "c");
         theory.add_defeasible_rule(&["c"], "d");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         for lit_name in &["b", "c", "d"] {
             assert!(
@@ -471,7 +472,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // q has no strict path, so -D q
         assert!(
@@ -489,7 +490,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "q"); // p not proven
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().any(
@@ -510,7 +511,7 @@ mod tests {
 
         theory.add_superiority(&r1, &r2);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // r1 > r2, so +d q, but ~q should be blocked
         assert!(
@@ -534,7 +535,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "q");
         theory.add_defeater(&["p"], "~q");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Defeater should block q from being proven
         let has_q = conclusions.iter().any(|c| {
@@ -568,7 +569,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeater(&["p"], "q");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Defeaters don't prove anything
         assert!(
@@ -587,7 +588,7 @@ mod tests {
     #[test]
     fn test_empty_theory() {
         let theory = Theory::new();
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Empty theory should produce no positive conclusions
         assert!(
@@ -602,7 +603,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "q");
         theory.add_defeasible_rule(&["q"], "r");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // No facts, so no positive conclusions
         assert!(
@@ -616,7 +617,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Should not crash and p should not be proven
         assert!(
@@ -635,7 +636,7 @@ mod tests {
         theory.add_defeasible_rule(&["q"], "r");
         theory.add_defeasible_rule(&["r"], "p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Should terminate without infinite loop - the fact that we reach this assertion
         // means the function terminated successfully
@@ -648,7 +649,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_fact("~p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Both should be definitely provable (inconsistent theory)
         assert!(
@@ -682,7 +683,7 @@ mod tests {
             theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
         }
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // All literals in chain should be provable
         assert!(
@@ -704,7 +705,7 @@ mod tests {
             theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
         }
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Check a sample of derived conclusions
         for i in [0, 25, 50, 75, 99].iter() {
@@ -727,7 +728,7 @@ mod tests {
             theory.add_fact(&format!("p{}", i));
         }
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         let definite_count = conclusions
             .iter()
@@ -755,7 +756,7 @@ mod tests {
         let d1 = theory.add_defeater(&["p"], "~q");
         theory.add_superiority(&r1, &d1); // r1 is superior to defeater
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // q should be provable because r1 > d1
         let has_q = conclusions.iter().any(|c| {
@@ -779,7 +780,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "~q");
         // No superiority relation
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Both q and ~q should be provable (credulous semantics)
         let has_q = conclusions.iter().any(|c| {
@@ -806,7 +807,7 @@ mod tests {
         theory.add_defeasible_rule(&["p"], "q");
         theory.add_defeasible_rule(&["x"], "~q"); // x is not a fact
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         let has_q = conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
@@ -829,7 +830,7 @@ mod tests {
         let r2 = theory.add_defeasible_rule(&["p"], "~q");
         theory.add_superiority(&r2, &r1); // r2 > r1
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // q should NOT be provable (blocked by superior r2)
         let has_q = conclusions.iter().any(|c| {
@@ -865,7 +866,7 @@ mod tests {
         );
         theory.add_rule(rule);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // Standard forward chaining doesn't fire empty body rules
         // This documents the behavior - use facts instead
@@ -885,7 +886,7 @@ mod tests {
         // Intentionally missing q and r facts
         theory.add_defeasible_rule(&["p", "q", "r"], "s");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions
@@ -904,7 +905,7 @@ mod tests {
         theory.add_fact("q"); // Adding q so r IS provable
         theory.add_defeasible_rule(&["p", "q"], "r");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // This will fail because r IS provable (we added q)
         assert!(
@@ -928,7 +929,7 @@ mod tests {
         // Wrong direction - r2 beats r1, so ~flies wins instead of flies
         theory.add_superiority(&r2, &r1);
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         // This fails because r2 > r1 means ~flies wins, not flies
         assert!(
@@ -949,7 +950,7 @@ mod tests {
         // Missing fact "b"
         theory.add_strict_rule(&["a", "b"], "c");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions
@@ -969,7 +970,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "b");
         theory.add_defeasible_rule(&["b"], "c");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         for lit_name in &["b", "c"] {
             assert!(
@@ -990,7 +991,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_strict_rule(&["p"], "q"); // Adding strict rule so q IS provable
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().any(
@@ -1008,7 +1009,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q"); // Adding rule so q IS provable
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().any(
@@ -1025,7 +1026,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("x"); // Not empty
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             conclusions.iter().all(|c| !c.conclusion_type.is_positive()),
@@ -1040,7 +1041,7 @@ mod tests {
         theory.add_fact("p"); // Adding initial fact so it IS provable
         theory.add_defeasible_rule(&["p"], "p");
 
-        let conclusions = reason(&theory);
+        let conclusions = reason(&theory).unwrap();
 
         assert!(
             !conclusions

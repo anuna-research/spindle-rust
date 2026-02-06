@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::conclusion::ConclusionType;
+use crate::error::Result;
 use crate::grounding::{apply_substitution_to_literal, match_literal};
 use crate::literal::Literal;
 use crate::rule::RuleType;
@@ -566,16 +567,21 @@ impl Explanation {
 }
 
 /// Explain why a conclusion holds (returns Proof Tree)
-pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Explanation> {
+pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Option<Explanation>> {
     use crate::reason::reason;
-    let conclusions = reason(theory);
+    let conclusions = reason(theory)?;
 
     // Find the conclusion for the target literal
-    let conclusion = conclusions
+    let conclusion = match conclusions
         .iter()
-        .find(|c| c.literal == *literal && c.conclusion_type.is_positive())?;
+        .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
+    {
+        Some(c) => c,
+        None => return Ok(None),
+    };
 
-    let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
+    let mut explanation =
+        Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
     if let Some(rule_label) = &conclusion.rule_label
         && let Some(rule) = theory.get_rule(rule_label)
@@ -601,19 +607,27 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Expl
         for body_lit in &rule.body {
             let ground_body_lit = apply_substitution_to_literal(body_lit, &subst);
 
-            if let Some(body_expl) = explain(theory, &ground_body_lit) {
+            if let Some(body_expl) = explain(theory, &ground_body_lit)? {
                 if let Some(body_tree) = body_expl.proof_tree {
                     body_proofs.push(body_tree);
                 }
             } else {
                 // If exact ground literal not found, try to find a matching one
                 // (Handle existential cases like matter_seen where body var isn't in head)
-                if let Some(matching_conc) = conclusions.iter().find(|c| {
-                    c.conclusion_type.is_positive() && match_literal(body_lit, &c.literal).is_some()
-                }) && let Some(body_expl) = explain(theory, &matching_conc.literal)
-                    && let Some(body_tree) = body_expl.proof_tree
-                {
-                    body_proofs.push(body_tree);
+                // We need to iterate carefully to propagate errors from explain
+                let mut found_match = false;
+                for c in &conclusions {
+                    if c.conclusion_type.is_positive()
+                        && match_literal(body_lit, &c.literal).is_some()
+                    {
+                        if let Some(body_expl) = explain(theory, &c.literal)? {
+                            if let Some(body_tree) = body_expl.proof_tree {
+                                body_proofs.push(body_tree);
+                                found_match = true;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -635,7 +649,7 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Option<Expl
         explanation.proof_tree = Some(proof_node);
     }
 
-    Some(explanation)
+    Ok(Some(explanation))
 }
 
 /// Convert proof node to natural language (recursive)
@@ -1968,7 +1982,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
 
-        let result = explain(&theory, &Literal::simple("bird"));
+        let result = explain(&theory, &Literal::simple("bird")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
         assert_eq!(
@@ -1986,7 +2000,7 @@ mod tests {
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
 
-        let result = explain(&theory, &Literal::simple("flies"));
+        let result = explain(&theory, &Literal::simple("flies")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
         assert_eq!(
@@ -2006,7 +2020,7 @@ mod tests {
         theory.add_fact("bird");
 
         // Try to explain something that isn't provable
-        let result = explain(&theory, &Literal::simple("nonexistent"));
+        let result = explain(&theory, &Literal::simple("nonexistent")).unwrap();
         assert!(result.is_none());
     }
 
@@ -2019,7 +2033,7 @@ mod tests {
         theory.add_strict_rule(&["p"], "q");
         theory.add_strict_rule(&["q"], "r");
 
-        let result = explain(&theory, &Literal::simple("r"));
+        let result = explain(&theory, &Literal::simple("r")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
         assert_eq!(
@@ -2035,7 +2049,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("~guilty");
 
-        let result = explain(&theory, &Literal::negated("guilty"));
+        let result = explain(&theory, &Literal::negated("guilty")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
         assert!(explanation.literal.is_negated());
@@ -2050,7 +2064,7 @@ mod tests {
         theory.add_fact("b");
         theory.add_defeasible_rule(&["a", "b"], "c");
 
-        let result = explain(&theory, &Literal::simple("c"));
+        let result = explain(&theory, &Literal::simple("c")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
         assert!(explanation.proof_tree.is_some());
@@ -2088,7 +2102,7 @@ mod tests {
         theory.add_fact("a");
         theory.add_strict_rule(&["a"], "b");
 
-        let result = explain(&theory, &Literal::simple("b"));
+        let result = explain(&theory, &Literal::simple("b")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
 
@@ -2107,7 +2121,7 @@ mod tests {
         theory.add_fact("y");
         theory.add_defeasible_rule(&["x", "y"], "z");
 
-        let result = explain(&theory, &Literal::simple("z"));
+        let result = explain(&theory, &Literal::simple("z")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
 
@@ -2124,7 +2138,7 @@ mod tests {
         theory.add_fact("p");
         theory.add_strict_rule(&["p"], "q");
 
-        let result = explain(&theory, &Literal::simple("q"));
+        let result = explain(&theory, &Literal::simple("q")).unwrap();
         assert!(result.is_some());
         let explanation = result.unwrap();
 

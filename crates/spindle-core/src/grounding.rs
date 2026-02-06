@@ -291,18 +291,23 @@ fn match_body_with_delta(
 
 /// Ground a theory by instantiating rules with variables
 pub fn ground_theory(theory: &Theory) -> Theory {
-    ground_theory_with_limit(theory, 100)
+    ground_theory_with_limit(theory, 100, usize::MAX).0
 }
 
-/// Ground a theory with a maximum iteration limit
-pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theory {
+/// Ground a theory with a maximum iteration limit and instance limit
+/// Returns (grounded_theory, limit_hit)
+pub fn ground_theory_with_limit(
+    theory: &Theory,
+    max_iterations: usize,
+    max_instances: usize,
+) -> (Theory, bool) {
     // Separate ground rules from rules with variables
     let (ground_rules, var_rules): (Vec<_>, Vec<_>) =
         theory.rules().partition(|r| !has_variables(r));
 
     // If no rules with variables, return as-is
     if var_rules.is_empty() {
-        return theory.clone();
+        return (theory.clone(), false);
     }
 
     // Track facts using interned types (minimal allocation)
@@ -334,6 +339,7 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
 
     // Iterate until fixpoint
     let mut facts_new = facts_list.clone();
+    let mut limit_hit = false;
 
     for iteration in 0..max_iterations {
         if iteration >= max_iterations {
@@ -355,6 +361,10 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
 
         // For each rule with variables
         for rule in &var_rules {
+            if limit_hit {
+                break;
+            }
+
             let substitutions = match_body_with_delta(
                 &rule.body,
                 &fact_index,
@@ -364,6 +374,11 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
             );
 
             for subst in substitutions {
+                if instance_counter >= max_instances {
+                    limit_hit = true;
+                    break;
+                }
+
                 // Create signature key from SymbolId pairs (Copy types, no allocation)
                 let sig_key: Vec<(SymbolId, SymbolId)> = {
                     let mut pairs: Vec<_> = subst.iter().map(|(k, v)| (*k, *v)).collect();
@@ -402,7 +417,7 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
         facts_list.extend(new_facts_this_round.iter().cloned());
         all_generated_rules.extend(new_rules_this_round);
 
-        if new_facts_this_round.is_empty() {
+        if new_facts_this_round.is_empty() || limit_hit {
             break;
         }
 
@@ -418,7 +433,7 @@ pub fn ground_theory_with_limit(theory: &Theory, max_iterations: usize) -> Theor
         grounded.add_superiority(&sup.superior, &sup.inferior);
     }
 
-    grounded
+    (grounded, limit_hit)
 }
 
 #[cfg(test)]
@@ -956,7 +971,7 @@ mod tests {
         theory.add_rule(r1);
 
         // Ground with limit of 1
-        let grounded = ground_theory_with_limit(&theory, 1);
+        let (grounded, _) = ground_theory_with_limit(&theory, 1, 1000);
         // Should still produce results
         assert!(grounded.rule_count() >= 1);
     }

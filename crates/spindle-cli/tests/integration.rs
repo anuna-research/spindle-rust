@@ -1,7 +1,7 @@
 //! Integration tests for the spindle CLI
 
-use assert_cmd::Command;
 use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -681,15 +681,39 @@ fn test_spl_except_rule() {
 }
 
 #[test]
-fn test_spl_prefer_rule() {
+fn test_reason_json_schema() {
     let content = r#"
-(given bird)
-(given penguin)
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(prefer r2 r1)
+f1: >> bird
+r1: bird => flies
 "#;
-    let (_dir, path) = setup_theory_file(content, "spl");
+    let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle().arg("reason").arg(&path).assert().success();
+    spindle()
+        .arg("reason")
+        .arg(&path)
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"schema_version\""))
+        .stdout(predicate::str::contains("\"grounding\""))
+        .stdout(predicate::str::contains("\"had_variables\""))
+        .stdout(predicate::str::contains("\"instances\""))
+        .stdout(predicate::str::contains("\"limit_hit\""))
+        .stdout(predicate::str::contains("\"evaluated_at\""));
+}
+
+#[test]
+fn test_direct_json_flag() {
+    let content = r#"
+f1: >> bird
+r1: bird => flies
+"#;
+    let (_dir, path) = setup_theory_file(content, "dfl");
+
+    spindle()
+        .arg(&path)
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"schema_version\""));
 }

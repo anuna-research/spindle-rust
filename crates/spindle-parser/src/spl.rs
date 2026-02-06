@@ -39,6 +39,7 @@ use nom::{
     sequence::{delimited, preceded},
 };
 
+use chrono::DateTime;
 use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{Temporal, TimePoint};
@@ -451,31 +452,10 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
                     if let Ok(n) = s.parse::<i64>() {
                         return Ok(TimePoint::from_millis(n));
                     }
-                    
-                    // Simple RFC3339-like parsing for common format YYYY-MM-DDTHH:MM:SSZ
-                    // This is a minimal implementation to satisfy the P2 requirement without full chrono dep
-                    // If complex parsing is needed later, chrono should be added.
-                    if s.len() >= 20 && (s.ends_with('Z') || s.contains('+') || s.contains('-')) {
-                        // Very rough heuristic to return a deterministic large integer for testing
-                        // Ideally: use chrono::DateTime::parse_from_rfc3339(s)
-                        // Here: return a placeholder or hash for now to avoid breaking build
-                        // But wait, the user asked to FIX it.
-                        // Since I cannot add dependencies easily without cargo edit, 
-                        // I will try to parse basic YYYY-MM-DD... manually or error gracefully.
-                        
-                        // Let's implement a super basic parser for YYYY-MM-DD at least?
-                        // Actually, let's just allow it as "valid" but map to 0 or something 
-                        // if we can't parse, OR return error that chrono is missing.
-                        // The previous code returned an error. The user wants it implemented.
-                        // I will stub it to return 0 with a TODO warning in logs if possible,
-                        // or better: just map it to 0 for now so it parses.
-                        // Realistically, without chrono, parsing RFC3339 correctly is hard.
-                        // I'll stick to the error but make it clearer, OR try to parse simple cases.
-                        
-                        return Err(ParseError::ParserError {
-                            line: 1,
-                            message: "RFC3339 string parsing requires chrono dependency (not yet enabled)".to_string(),
-                        });
+
+                    // RFC3339 parsing using chrono
+                    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+                        return Ok(TimePoint::from_millis(dt.timestamp_millis()));
                     }
 
                     Err(ParseError::ParserError {
@@ -693,5 +673,19 @@ mod tests {
         assert_eq!(lit.name(), "pay");
         assert!(lit.is_modal());
         assert_eq!(lit.mode.name, Some("O".to_string()));
+    }
+
+    #[test]
+    fn test_parse_moment_rfc3339() {
+        // 2024-01-01T00:00:00Z is 1704067200000 millis
+        let theory = parse_spl("(given (during p (moment \"2024-01-01T00:00:00Z\") inf))").unwrap();
+        let fact = theory.facts().next().unwrap();
+        let lit = fact.head_literal();
+        
+        if let TimePoint::Moment(millis) = lit.temporal.start {
+             assert_eq!(millis, 1704067200000);
+        } else {
+             panic!("Expected Moment for start time, got {:?}", lit.temporal.start);
+        }
     }
 }

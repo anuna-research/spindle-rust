@@ -184,6 +184,11 @@ impl Theory {
         &self.metadata
     }
 
+    /// Copy metadata from another theory
+    pub fn copy_metadata_from(&mut self, other: &Theory) {
+        self.metadata = other.metadata.clone();
+    }
+
     /// Get the number of rules
     pub fn rule_count(&self) -> usize {
         self.rules.len()
@@ -192,7 +197,7 @@ impl Theory {
     /// Perform reasoning and return conclusions
     ///
     /// This is a stub - actual implementation in reason module
-    pub fn reason(&self) -> Vec<Conclusion> {
+    pub fn reason(&self) -> crate::error::Result<Vec<Conclusion>> {
         crate::reason::reason(self)
     }
 
@@ -288,7 +293,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
-        let conclusions = theory.reason();
+        let conclusions = theory.reason().unwrap();
         assert!(!conclusions.is_empty());
     }
 }

@@ -9,6 +9,7 @@ description = "DFL and SPL parser for spindle defeasible logic"
 spindle-core = { path = "../spindle-core" }
 nom.workspace = true
 thiserror.workspace = true
+chrono = "0.4.43"
 
 [dev-dependencies]
 pretty_assertions.workspace = true

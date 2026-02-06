@@ -178,9 +178,13 @@ impl Literal {
 
     /// Get the LiteralId for this literal (name + negation combined).
     ///
-    /// This is the preferred method for HashSet/HashMap keys as it's
-    /// a 4-byte Copy type with O(1) hashing, compared to `canonical_name()`
-    /// which allocates a new String.
+    /// **WARNING:** This ID is based on name + negation ONLY. It ignores
+    /// predicate arguments, modes, and temporals. Do NOT use this for
+    /// reasoning correctness checks where p(a) vs p(b) matters.
+    ///
+    /// This is the preferred method for HashSet/HashMap keys when only
+    /// the name/arity matters (e.g. legacy lookups), as it's
+    /// a 4-byte Copy type with O(1) hashing.
     ///
     /// # Example
     ///
@@ -191,11 +195,11 @@ impl Literal {
     /// let mut proven: HashSet<LiteralId> = HashSet::new();
     /// let bird = Literal::simple("bird");
     ///
-    /// proven.insert(bird.literal_id());
-    /// assert!(proven.contains(&bird.literal_id()));
+    /// proven.insert(bird.name_literal_id());
+    /// assert!(proven.contains(&bird.name_literal_id()));
     /// ```
     #[inline]
-    pub fn literal_id(&self) -> LiteralId {
+    pub fn name_literal_id(&self) -> LiteralId {
         LiteralId::new(self.name_id, self.negation)
     }
 
@@ -307,18 +311,21 @@ mod tests {
     }
 
     #[test]
-    fn test_literal_id() {
+    fn test_name_literal_id() {
         let pos = Literal::simple("bird");
         let neg = Literal::negated("bird");
 
-        assert!(!pos.literal_id().is_negated());
-        assert!(neg.literal_id().is_negated());
-        assert_eq!(pos.literal_id().symbol(), neg.literal_id().symbol());
-        assert_eq!(pos.literal_id(), neg.literal_id().complement());
+        assert!(!pos.name_literal_id().is_negated());
+        assert!(neg.name_literal_id().is_negated());
+        assert_eq!(
+            pos.name_literal_id().symbol(),
+            neg.name_literal_id().symbol()
+        );
+        assert_eq!(pos.name_literal_id(), neg.name_literal_id().complement());
     }
 
     #[test]
-    fn test_literal_id_in_hashset() {
+    fn test_name_literal_id_in_hashset() {
         use std::collections::HashSet;
 
         let mut set: HashSet<LiteralId> = HashSet::new();
@@ -326,12 +333,12 @@ mod tests {
         let not_bird = Literal::negated("bird");
         let flies = Literal::simple("flies");
 
-        set.insert(bird.literal_id());
-        set.insert(flies.literal_id());
+        set.insert(bird.name_literal_id());
+        set.insert(flies.name_literal_id());
 
-        assert!(set.contains(&bird.literal_id()));
-        assert!(set.contains(&flies.literal_id()));
-        assert!(!set.contains(&not_bird.literal_id()));
+        assert!(set.contains(&bird.name_literal_id()));
+        assert!(set.contains(&flies.name_literal_id()));
+        assert!(!set.contains(&not_bird.name_literal_id()));
     }
 
     #[test]

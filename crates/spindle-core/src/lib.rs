@@ -49,6 +49,7 @@ pub mod intern;
 pub mod literal;
 pub mod mining;
 pub mod mode;
+pub mod pipeline;
 pub mod query;
 pub mod reason;
 pub mod rule;

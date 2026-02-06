@@ -6,12 +6,15 @@ mod tests;
 use std::fs;
 use std::path::PathBuf;
 
+use chrono::DateTime;
 use clap::{Parser, Subcommand};
 use serde::Serialize;
 use spindle_core::conclusion::{Conclusion, ConclusionType};
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
+use spindle_core::pipeline::{prepare, PrepareOptions};
 use spindle_core::query::{QueryStatus, abduce, query, why_not};
+use spindle_core::temporal::TimePoint;
 use spindle_parser::spl::parse_spl as parse_spl_str;
 use spindle_parser::{parse_dfl, parse_spl};
 
@@ -38,6 +41,10 @@ struct Cli {
     /// Output in JSON format
     #[arg(long)]
     json: bool,
+
+    /// Reference time for "as-of" reasoning (ISO 8601)
+    #[arg(long, global = true)]
+    at: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -114,6 +121,19 @@ enum Commands {
 fn main() {
     let cli = Cli::parse();
 
+    // Parse reference time if provided
+    let reference_time = if let Some(ref s) = cli.at {
+        match DateTime::parse_from_rfc3339(s) {
+            Ok(dt) => Some(TimePoint::from_millis(dt.timestamp_millis())),
+            Err(e) => {
+                eprintln!("Error parsing time '{s}': {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
     match cli.command {
         Some(Commands::Reason {
             file,
@@ -121,7 +141,7 @@ fn main() {
             positive,
             json,
         }) => {
-            run_reason(&file, scalable, positive, json);
+            run_reason(&file, scalable, positive, json, reference_time);
         }
         Some(Commands::Validate { file }) => {
             run_validate(&file);
@@ -134,21 +154,21 @@ fn main() {
             literal,
             json,
         }) => {
-            run_query(&file, &literal, json);
+            run_query(&file, &literal, json, reference_time);
         }
         Some(Commands::Explain {
             file,
             literal,
             json,
         }) => {
-            run_explain(&file, &literal, json);
+            run_explain(&file, &literal, json, reference_time);
         }
         Some(Commands::WhyNot {
             file,
             literal,
             json,
         }) => {
-            run_why_not(&file, &literal, json);
+            run_why_not(&file, &literal, json, reference_time);
         }
         Some(Commands::Requires {
             file,
@@ -156,11 +176,11 @@ fn main() {
             max,
             json,
         }) => {
-            run_requires(&file, &literal, max, json);
+            run_requires(&file, &literal, max, json, reference_time);
         }
         None => {
             if let Some(file) = cli.input {
-                run_reason(&file, cli.scalable, cli.positive, cli.json);
+                run_reason(&file, cli.scalable, cli.positive, cli.json, reference_time);
             } else {
                 println!("Spindle v0.1.0 - Defeasible Logic Reasoning Engine");
                 println!("Ported from SPINdle-Racket v1.7.0");
@@ -254,6 +274,9 @@ struct ReasonOutput {
 #[derive(serde::Serialize)]
 struct GroundingStats {
     performed: bool,
+    had_variables: bool,
+    instances: usize,
+    limit_hit: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -270,16 +293,44 @@ struct TheoryStats {
     fact_count: usize,
 }
 
-fn run_reason(file: &PathBuf, scalable: bool, positive_only: bool, json_output: bool) {
+fn run_reason(
+    file: &PathBuf,
+    scalable: bool,
+    positive_only: bool,
+    json_output: bool,
+    reference_time: Option<TimePoint>,
+) {
     let theory = load_theory(file);
 
+    let opts = PrepareOptions {
+        reference_time,
+        ..Default::default()
+    };
+
+    // Run the pipeline (validation, temporal filtering, grounding)
+    // This enforces range restriction and other checks
+    let pipeline_result = match prepare(&theory, opts) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Error during preparation: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let conclusions = if scalable {
-        let grounded = spindle_core::grounding::ground_theory(&theory);
-        let indexed = spindle_core::index::IndexedTheory::build(&grounded);
+        let indexed = spindle_core::index::IndexedTheory::build(&pipeline_result.theory);
         let result = spindle_core::scalable::reason_scalable(&indexed);
         result.to_conclusions(&indexed)
     } else {
-        theory.reason()
+        // Pass the prepared theory. reason() will call prepare() again,
+        // but since it's already grounded, it will be a fast no-op for grounding.
+        match spindle_core::reason::reason(&pipeline_result.theory) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Error during reasoning: {e}");
+                std::process::exit(1);
+            }
+        }
     };
 
     if json_output {
@@ -296,12 +347,19 @@ fn run_reason(file: &PathBuf, scalable: bool, positive_only: bool, json_output: 
 
         let output = ReasonOutput {
             schema_version: "spindle.reason.v1".to_string(),
-            evaluated_at: None, // Timepoint filtering not yet enabled
-            grounding: GroundingStats { performed: true }, // Always performed now
+            evaluated_at: pipeline_result
+                .evaluated_at
+                .map(|t: TimePoint| t.to_string()), // Use actual evaluated_at from pipeline
+            grounding: GroundingStats {
+                performed: pipeline_result.grounding_report.performed,
+                had_variables: pipeline_result.grounding_report.had_variables,
+                instances: pipeline_result.grounding_report.instances,
+                limit_hit: pipeline_result.grounding_report.limit_hit,
+            },
             conclusions: output_conclusions,
             stats: TheoryStats {
-                rule_count: theory.rule_count(),
-                fact_count: theory.facts().count(),
+                rule_count: pipeline_result.theory.rule_count(),
+                fact_count: pipeline_result.theory.facts().count(),
             },
         };
 
@@ -356,10 +414,29 @@ fn run_stats(file: &PathBuf) {
     println!("  Superiorities: {}", theory.superiorities().len());
 }
 
-fn run_query(file: &PathBuf, literal: &str, json: bool) {
+fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
+    
+    let opts = PrepareOptions {
+        reference_time,
+        ..Default::default()
+    };
+    let prepared = match prepare(&theory, opts) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Error during preparation: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let lit = parse_literal_arg(literal);
-    let result = query(&theory, &lit);
+    let result = match query(&prepared.theory, &lit) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error querying literal: {e}");
+            std::process::exit(1);
+        }
+    };
 
     if json {
         use serde_json::json;
@@ -385,12 +462,25 @@ fn run_query(file: &PathBuf, literal: &str, json: bool) {
     }
 }
 
-fn run_explain(file: &PathBuf, literal: &str, json: bool) {
+fn run_explain(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
+    
+    let opts = PrepareOptions {
+        reference_time,
+        ..Default::default()
+    };
+    let prepared = match prepare(&theory, opts) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Error during preparation: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let lit = parse_literal_arg(literal);
 
-    match explain(&theory, &lit) {
-        Some(explanation) => {
+    match explain(&prepared.theory, &lit) {
+        Ok(Some(explanation)) => {
             if json {
                 println!(
                     "{}",
@@ -400,7 +490,7 @@ fn run_explain(file: &PathBuf, literal: &str, json: bool) {
                 println!("{}", explanation.to_natural_language());
             }
         }
-        None => {
+        Ok(None) => {
             if json {
                 println!(
                     "{}",
@@ -415,13 +505,36 @@ fn run_explain(file: &PathBuf, literal: &str, json: bool) {
             }
             std::process::exit(1);
         }
+        Err(e) => {
+            eprintln!("Error explaining literal: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
-fn run_why_not(file: &PathBuf, literal: &str, json: bool) {
+fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
+    
+    let opts = PrepareOptions {
+        reference_time,
+        ..Default::default()
+    };
+    let prepared = match prepare(&theory, opts) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Error during preparation: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let lit = parse_literal_arg(literal);
-    let result = why_not(&theory, &lit);
+    let result = match why_not(&prepared.theory, &lit) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error checking why-not: {e}");
+            std::process::exit(1);
+        }
+    };
 
     if json {
         use serde_json::json;
@@ -448,10 +561,29 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool) {
     }
 }
 
-fn run_requires(file: &PathBuf, literal: &str, max: usize, json: bool) {
+fn run_requires(file: &PathBuf, literal: &str, max: usize, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
+    
+    let opts = PrepareOptions {
+        reference_time,
+        ..Default::default()
+    };
+    let prepared = match prepare(&theory, opts) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Error during preparation: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let lit = parse_literal_arg(literal);
-    let result = abduce(&theory, &lit, max);
+    let result = match abduce(&prepared.theory, &lit, max) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error finding requirements: {e}");
+            std::process::exit(1);
+        }
+    };
 
     if json {
         use serde_json::json;

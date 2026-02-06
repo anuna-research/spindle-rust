@@ -209,14 +209,16 @@ Attach metadata to rules:
 
 ### Time Points
 
+Supported time formats:
+
 ```lisp
-(moment 2024)                    ; Year
-(moment 2024 6 15)               ; Year, month, day
-(moment 2024 6 15 14 30 0 "UTC") ; Full timestamp
-(moment "2024-06-15T14:30:00Z")  ; ISO 8601
+(moment "2024-06-15T14:30:00Z")  ; RFC3339 / ISO 8601
+(moment 1718461800000)           ; Epoch milliseconds
 inf                              ; Positive infinity
 -inf                             ; Negative infinity
 ```
+
+> Note: Multi-arity forms like `(moment 2024 6 15)` are reserved for future extensions.
 
 ### During
 
@@ -227,23 +229,7 @@ inf                              ; Positive infinity
 
 ### Allen Relations
 
-All 13 Allen interval relations:
-
-```lisp
-(before ?t1 ?t2)       ; t1 ends before t2 starts
-(after ?t1 ?t2)        ; t1 starts after t2 ends
-(meets ?t1 ?t2)        ; t1 ends exactly when t2 starts
-(met-by ?t1 ?t2)       ; t1 starts exactly when t2 ends
-(overlaps ?t1 ?t2)     ; t1 starts before t2, ends during t2
-(overlapped-by ?t1 ?t2)
-(contains ?t1 ?t2)     ; t1 strictly contains t2
-(within ?t1 ?t2)       ; t1 is strictly within t2
-(starts ?t1 ?t2)       ; Same start, t1 ends first
-(started-by ?t1 ?t2)
-(finishes ?t1 ?t2)     ; t1 starts after t2, same end
-(finished-by ?t1 ?t2)
-(equals ?t1 ?t2)       ; Same start and end
-```
+*Not currently supported in Spindle v1.*
 
 ## Complete Example
 

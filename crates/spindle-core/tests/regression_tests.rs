@@ -32,7 +32,7 @@ fn test_arg_discrimination() {
         Literal::simple("q"),
     ));
 
-    let conclusions = reason(&theory);
+    let conclusions = reason(&theory).unwrap();
 
     // Expectation: q is NOT proven because p(a) != p(b)
     let q_proven = conclusions.iter().any(|c| {
@@ -79,7 +79,7 @@ fn test_grounding_end_to_end() {
     ));
 
     // reason() currently doesn't call ground_theory, so this will likely fail to produce q(a)
-    let conclusions = reason(&theory);
+    let conclusions = reason(&theory).unwrap();
 
     let qa_proven = conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
@@ -162,7 +162,7 @@ fn test_superiority_grounded() {
     // Prefer r2 over r1
     theory.add_superiority("r2", "r1");
 
-    let conclusions = reason(&theory);
+    let conclusions = reason(&theory).unwrap();
 
     let flies_neg_proven = conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable

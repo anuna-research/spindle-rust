@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use crate::conclusion::ConclusionType;
+use crate::error::Result;
 use crate::literal::Literal;
 use crate::reason::reason;
 use crate::rule::{Rule, RuleType};
@@ -84,27 +85,27 @@ impl QueryResult {
 }
 
 /// Query a literal against a theory
-pub fn query(theory: &Theory, literal: &Literal) -> QueryResult {
-    let conclusions = reason(theory);
+pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
+    let conclusions = reason(theory)?;
     let complement = literal.complement();
 
     // Check if literal is provable
     for conc in &conclusions {
         if conc.literal == *literal && conc.conclusion_type.is_positive() {
-            return QueryResult::new(literal.clone(), QueryStatus::Provable)
-                .with_conclusion_type(conc.conclusion_type);
+            return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
+                .with_conclusion_type(conc.conclusion_type));
         }
     }
 
     // Check if complement is provable (refuted)
     for conc in &conclusions {
         if conc.literal == complement && conc.conclusion_type.is_positive() {
-            return QueryResult::new(literal.clone(), QueryStatus::Refuted);
+            return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
         }
     }
 
     // Unknown
-    QueryResult::new(literal.clone(), QueryStatus::Unknown)
+    Ok(QueryResult::new(literal.clone(), QueryStatus::Unknown))
 }
 
 // =============================================================================
@@ -171,9 +172,9 @@ pub fn what_if(
     theory: &Theory,
     hypotheticals: Vec<HypotheticalClaim>,
     goal: &Literal,
-) -> WhatIfResult {
+) -> Result<WhatIfResult> {
     // Get baseline conclusions
-    let baseline = reason(theory);
+    let baseline = reason(theory)?;
     let baseline_provable: HashSet<_> = baseline
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
@@ -189,10 +190,10 @@ pub fn what_if(
     }
 
     // Reason on modified theory
-    let modified_conclusions = reason(&modified);
+    let modified_conclusions = reason(&modified)?;
 
     // Query result
-    let result = query(&modified, goal);
+    let result = query(&modified, goal)?;
 
     // Find new conclusions
     let new_conclusions: Vec<Literal> = modified_conclusions
@@ -207,12 +208,12 @@ pub fn what_if(
     // Find changed conclusions (simplified - just track new positives)
     let changed_conclusions = Vec::new(); // Could be expanded to track full changes
 
-    WhatIfResult {
+    Ok(WhatIfResult {
         hypotheticals,
         result,
         new_conclusions,
         changed_conclusions,
-    }
+    })
 }
 
 /// Convenience function: Check if a goal would be provable given hypotheticals
@@ -220,8 +221,8 @@ pub fn what_if_provable(
     theory: &Theory,
     hypotheticals: Vec<HypotheticalClaim>,
     goal: &Literal,
-) -> bool {
-    what_if(theory, hypotheticals, goal).is_provable()
+) -> Result<bool> {
+    Ok(what_if(theory, hypotheticals, goal)?.is_provable())
 }
 
 // =============================================================================
@@ -365,8 +366,8 @@ impl fmt::Display for WhyNotResult {
 }
 
 /// Explain why a literal is NOT provable
-pub fn why_not(theory: &Theory, literal: &Literal) -> WhyNotResult {
-    let conclusions = reason(theory);
+pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
+    let conclusions = reason(theory)?;
 
     // First check if it IS provable (then why-not doesn't apply)
     let is_provable = conclusions
@@ -374,7 +375,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> WhyNotResult {
         .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
 
     if is_provable {
-        return WhyNotResult::new(literal.clone());
+        return Ok(WhyNotResult::new(literal.clone()));
     }
 
     // Collect proven literals for checking body satisfaction
@@ -427,7 +428,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> WhyNotResult {
         }
     }
 
-    result
+    Ok(result)
 }
 
 // =============================================================================
@@ -525,11 +526,11 @@ impl fmt::Display for AbductionResult {
 ///
 /// Uses backward chaining to find minimal sets of facts that would
 /// enable the goal to be proven.
-pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> AbductionResult {
+pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
     let mut result = AbductionResult::new(goal.clone());
 
     // First check if already provable
-    let conclusions = reason(theory);
+    let conclusions = reason(theory)?;
     let is_provable = conclusions
         .iter()
         .any(|c| c.literal == *goal && c.conclusion_type.is_positive());
@@ -538,7 +539,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Abductio
         result
             .solutions
             .push(AbductionSolution::new(HashSet::new()));
-        return result;
+        return Ok(result);
     }
 
     // Collect what's already proven
@@ -600,16 +601,16 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Abductio
         result.solutions.push(sol);
     }
 
-    result
+    Ok(result)
 }
 
 /// Convenience function: Get the minimal facts needed to prove a goal
-pub fn requires(theory: &Theory, goal: &Literal) -> Vec<Literal> {
-    let result = abduce(theory, goal, 1);
-    result
+pub fn requires(theory: &Theory, goal: &Literal) -> Result<Vec<Literal>> {
+    let result = abduce(theory, goal, 1)?;
+    Ok(result
         .smallest_solution()
         .map(|s| s.facts.iter().cloned().collect())
-        .unwrap_or_default()
+        .unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -692,7 +693,7 @@ mod tests {
     #[test]
     fn test_query_provable_fact() {
         let th = make_fact_theory();
-        let result = query(&th, &Literal::simple("bird"));
+        let result = query(&th, &Literal::simple("bird")).unwrap();
         assert_eq!(result.status, QueryStatus::Provable);
         assert!(result.is_provable());
     }
@@ -700,7 +701,7 @@ mod tests {
     #[test]
     fn test_query_unknown_for_nonexistent() {
         let th = make_fact_theory();
-        let result = query(&th, &Literal::simple("unknown"));
+        let result = query(&th, &Literal::simple("unknown")).unwrap();
         assert_eq!(result.status, QueryStatus::Unknown);
         assert!(!result.is_provable());
     }
@@ -710,7 +711,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("~bird");
 
-        let result = query(&theory, &Literal::simple("bird"));
+        let result = query(&theory, &Literal::simple("bird")).unwrap();
         assert_eq!(result.status, QueryStatus::Refuted);
     }
 
@@ -721,7 +722,7 @@ mod tests {
     #[test]
     fn test_query_detects_definite_conclusions() {
         let th = make_fact_theory();
-        let result = query(&th, &Literal::simple("bird"));
+        let result = query(&th, &Literal::simple("bird")).unwrap();
         assert_eq!(result.status, QueryStatus::Provable);
         assert!(result.is_definitely_provable());
     }
@@ -729,7 +730,7 @@ mod tests {
     #[test]
     fn test_query_detects_defeasible_conclusions() {
         let th = make_defeasible_theory();
-        let result = query(&th, &Literal::simple("flies"));
+        let result = query(&th, &Literal::simple("flies")).unwrap();
         assert_eq!(result.status, QueryStatus::Provable);
         assert!(result.is_defeasibly_provable());
     }
@@ -737,7 +738,7 @@ mod tests {
     #[test]
     fn test_query_strict_rule_produces_definite() {
         let th = make_strict_theory();
-        let result = query(&th, &Literal::simple("mortal"));
+        let result = query(&th, &Literal::simple("mortal")).unwrap();
         assert_eq!(result.status, QueryStatus::Provable);
         assert!(result.is_definitely_provable());
     }
@@ -748,19 +749,19 @@ mod tests {
 
         // All should be provable through the chain
         assert_eq!(
-            query(&th, &Literal::simple("a")).status,
+            query(&th, &Literal::simple("a")).unwrap().status,
             QueryStatus::Provable
         );
         assert_eq!(
-            query(&th, &Literal::simple("b")).status,
+            query(&th, &Literal::simple("b")).unwrap().status,
             QueryStatus::Provable
         );
         assert_eq!(
-            query(&th, &Literal::simple("c")).status,
+            query(&th, &Literal::simple("c")).unwrap().status,
             QueryStatus::Provable
         );
         assert_eq!(
-            query(&th, &Literal::simple("d")).status,
+            query(&th, &Literal::simple("d")).unwrap().status,
             QueryStatus::Provable
         );
     }
@@ -769,7 +770,7 @@ mod tests {
     fn test_query_conflict_with_superiority() {
         let th = make_conflict_theory();
         // flies should be refuted because penguin > bird and penguin => ~flies
-        let result = query(&th, &Literal::simple("flies"));
+        let result = query(&th, &Literal::simple("flies")).unwrap();
         assert_eq!(result.status, QueryStatus::Refuted);
     }
 
@@ -777,7 +778,7 @@ mod tests {
     fn test_query_defeater_blocks() {
         let th = make_defeater_theory();
         // With broken_wing, flies should be unknown (defeated but not refuted)
-        let result = query(&th, &Literal::simple("flies"));
+        let result = query(&th, &Literal::simple("flies")).unwrap();
         // Defeaters prevent positive conclusion but don't prove negative
         assert!(result.status == QueryStatus::Unknown || result.status == QueryStatus::Refuted);
     }
@@ -788,7 +789,7 @@ mod tests {
         theory.add_fact("~happy");
         theory.add_defeasible_rule(&["~happy"], "sad");
 
-        let result = query(&theory, &Literal::negated("happy"));
+        let result = query(&theory, &Literal::negated("happy")).unwrap();
         assert_eq!(result.status, QueryStatus::Provable);
     }
 
@@ -796,7 +797,7 @@ mod tests {
     fn test_query_result_literal_preserved() {
         let th = make_fact_theory();
         let lit = Literal::simple("bird");
-        let result = query(&th, &lit);
+        let result = query(&th, &lit).unwrap();
         assert_eq!(result.literal.name(), "bird");
     }
 
@@ -814,7 +815,7 @@ mod tests {
     #[test]
     fn test_why_not_returns_result() {
         let th = make_missing_premise_theory();
-        let result = why_not(&th, &Literal::simple("ready_review"));
+        let result = why_not(&th, &Literal::simple("ready_review")).unwrap();
         assert!(result.has_blockers());
     }
 
@@ -822,14 +823,14 @@ mod tests {
     fn test_why_not_preserves_literal() {
         let th = make_missing_premise_theory();
         let lit = Literal::simple("ready_review");
-        let result = why_not(&th, &lit);
+        let result = why_not(&th, &lit).unwrap();
         assert_eq!(result.literal.name(), "ready_review");
     }
 
     #[test]
     fn test_why_not_shows_missing_premise() {
         let th = make_missing_premise_theory();
-        let result = why_not(&th, &Literal::simple("ready_review"));
+        let result = why_not(&th, &Literal::simple("ready_review")).unwrap();
 
         let missing = result.get_missing_premises();
         assert!(!missing.is_empty());
@@ -842,7 +843,7 @@ mod tests {
         theory.add_defeasible_rule(&["a", "b", "c"], "goal");
         // All three premises are missing
 
-        let result = why_not(&theory, &Literal::simple("goal"));
+        let result = why_not(&theory, &Literal::simple("goal")).unwrap();
         let missing = result.get_missing_premises();
         assert_eq!(missing.len(), 3);
     }
@@ -854,7 +855,7 @@ mod tests {
         theory.add_fact("b");
         theory.add_defeasible_rule(&["a", "b", "c"], "goal");
 
-        let result = why_not(&theory, &Literal::simple("goal"));
+        let result = why_not(&theory, &Literal::simple("goal")).unwrap();
         let missing = result.get_missing_premises();
         assert_eq!(missing.len(), 1);
         assert!(missing.iter().any(|l| l.name() == "c"));
@@ -867,7 +868,7 @@ mod tests {
     #[test]
     fn test_why_not_no_rules_for_literal() {
         let th = Theory::new();
-        let result = why_not(&th, &Literal::simple("unknown"));
+        let result = why_not(&th, &Literal::simple("unknown")).unwrap();
         assert!(result.would_derive.is_none());
     }
 
@@ -876,7 +877,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["x"], "y"); // Rule exists but for different literal
 
-        let result = why_not(&theory, &Literal::simple("z"));
+        let result = why_not(&theory, &Literal::simple("z")).unwrap();
         assert!(result.would_derive.is_none());
     }
 
@@ -889,13 +890,11 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("~flies"); // Complement is proven
 
-        let result = why_not(&theory, &Literal::simple("flies"));
-        assert!(
-            result
-                .blocked_by
-                .iter()
-                .any(|b| b.blocking_type == BlockingType::Contradicted)
-        );
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        assert!(result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Contradicted));
     }
 
     #[test]
@@ -903,7 +902,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("~happy");
 
-        let result = why_not(&theory, &Literal::simple("happy"));
+        let result = why_not(&theory, &Literal::simple("happy")).unwrap();
         let contradicted = result
             .blocked_by
             .iter()
@@ -920,7 +919,7 @@ mod tests {
     #[test]
     fn test_why_not_for_provable_literal() {
         let th = make_fact_theory();
-        let result = why_not(&th, &Literal::simple("bird"));
+        let result = why_not(&th, &Literal::simple("bird")).unwrap();
         // For provable literals, why-not should return no blockers
         assert!(!result.has_blockers());
     }
@@ -932,7 +931,7 @@ mod tests {
     #[test]
     fn test_why_not_display_format() {
         let th = make_missing_premise_theory();
-        let result = why_not(&th, &Literal::simple("ready_review"));
+        let result = why_not(&th, &Literal::simple("ready_review")).unwrap();
         let s = result.to_string();
         assert!(s.contains("not provable"));
         assert!(s.contains("ready_review"));
@@ -941,7 +940,7 @@ mod tests {
     #[test]
     fn test_why_not_display_no_rules() {
         let th = Theory::new();
-        let result = why_not(&th, &Literal::simple("unknown"));
+        let result = why_not(&th, &Literal::simple("unknown")).unwrap();
         let s = result.to_string();
         assert!(s.contains("no rules"));
     }
@@ -986,7 +985,7 @@ mod tests {
     #[test]
     fn test_abduce_returns_result() {
         let th = make_missing_premise_theory();
-        let result = abduce(&th, &Literal::simple("ready_review"), 10);
+        let result = abduce(&th, &Literal::simple("ready_review"), 10).unwrap();
         assert!(result.has_solutions());
     }
 
@@ -994,21 +993,21 @@ mod tests {
     fn test_abduce_preserves_goal() {
         let th = make_missing_premise_theory();
         let goal = Literal::simple("ready_review");
-        let result = abduce(&th, &goal, 10);
+        let result = abduce(&th, &goal, 10).unwrap();
         assert_eq!(result.goal.name(), "ready_review");
     }
 
     #[test]
     fn test_abduce_already_provable() {
         let th = make_fact_theory();
-        let result = abduce(&th, &Literal::simple("bird"), 10);
+        let result = abduce(&th, &Literal::simple("bird"), 10).unwrap();
         assert!(result.is_already_provable());
     }
 
     #[test]
     fn test_abduce_already_provable_empty_solution() {
         let th = make_fact_theory();
-        let result = abduce(&th, &Literal::simple("bird"), 10);
+        let result = abduce(&th, &Literal::simple("bird"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert!(sol.is_already_provable());
         assert_eq!(sol.size(), 0);
@@ -1021,7 +1020,7 @@ mod tests {
     #[test]
     fn test_abduce_finds_missing_facts() {
         let th = make_missing_premise_theory();
-        let result = abduce(&th, &Literal::simple("ready_review"), 10);
+        let result = abduce(&th, &Literal::simple("ready_review"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         // Should find tests_pass as needed
         assert!(sol.facts.iter().any(|l| l.name() == "tests_pass"));
@@ -1032,7 +1031,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "q");
 
-        let result = abduce(&theory, &Literal::simple("q"), 10);
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert_eq!(sol.size(), 1);
         assert!(sol.facts.contains(&Literal::simple("p")));
@@ -1043,7 +1042,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["a", "b", "c"], "goal");
 
-        let result = abduce(&theory, &Literal::simple("goal"), 10);
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert_eq!(sol.size(), 3);
     }
@@ -1054,7 +1053,7 @@ mod tests {
         theory.add_fact("a");
         theory.add_defeasible_rule(&["a", "b"], "goal");
 
-        let result = abduce(&theory, &Literal::simple("goal"), 10);
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert_eq!(sol.size(), 1);
         assert!(sol.facts.contains(&Literal::simple("b")));
@@ -1070,7 +1069,7 @@ mod tests {
         theory.add_defeasible_rule(&["bird"], "flies");
         theory.add_defeasible_rule(&["plane"], "flies");
 
-        let result = abduce(&theory, &Literal::simple("flies"), 10);
+        let result = abduce(&theory, &Literal::simple("flies"), 10).unwrap();
         assert_eq!(result.solutions.len(), 2);
     }
 
@@ -1080,7 +1079,7 @@ mod tests {
         theory.add_defeasible_rule(&["bird"], "flies");
         theory.add_defeasible_rule(&["plane"], "flies");
 
-        let result = abduce(&theory, &Literal::simple("flies"), 10);
+        let result = abduce(&theory, &Literal::simple("flies"), 10).unwrap();
 
         let has_bird = result
             .solutions
@@ -1102,7 +1101,7 @@ mod tests {
         theory.add_defeasible_rule(&["b"], "x");
         theory.add_defeasible_rule(&["c"], "x");
 
-        let result = abduce(&theory, &Literal::simple("x"), 1);
+        let result = abduce(&theory, &Literal::simple("x"), 1).unwrap();
         assert!(result.solutions.len() <= 1);
     }
 
@@ -1112,7 +1111,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "goal");
         theory.add_defeasible_rule(&["b", "c"], "goal");
 
-        let result = abduce(&theory, &Literal::simple("goal"), 10);
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
 
         if result.solutions.len() > 1 {
             let sizes: Vec<_> = result.solutions.iter().map(|s| s.size()).collect();
@@ -1132,7 +1131,7 @@ mod tests {
     #[test]
     fn test_abduce_hypothesizes_goal_when_no_rules() {
         let th = Theory::new();
-        let result = abduce(&th, &Literal::simple("unknown"), 10);
+        let result = abduce(&th, &Literal::simple("unknown"), 10).unwrap();
 
         let sol = result.smallest_solution().unwrap();
         // Should hypothesize the literal itself
@@ -1148,7 +1147,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["a", "b"], "goal");
 
-        let result = abduce(&theory, &Literal::simple("goal"), 10);
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert_eq!(sol.size(), 2);
     }
@@ -1158,7 +1157,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "q");
 
-        let result = abduce(&theory, &Literal::simple("q"), 10);
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert_eq!(sol.confidence, 1.0);
     }
@@ -1168,7 +1167,7 @@ mod tests {
         let mut theory = Theory::new();
         let r1 = theory.add_defeasible_rule(&["p"], "q");
 
-        let result = abduce(&theory, &Literal::simple("q"), 10);
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert!(sol.rules_used.contains(&r1));
     }
@@ -1182,7 +1181,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["precondition"], "result");
 
-        let needed = requires(&theory, &Literal::simple("result"));
+        let needed = requires(&theory, &Literal::simple("result")).unwrap();
         assert!(!needed.is_empty());
         assert!(needed.iter().any(|l| l.name() == "precondition"));
     }
@@ -1192,7 +1191,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
 
-        let needed = requires(&theory, &Literal::simple("bird"));
+        let needed = requires(&theory, &Literal::simple("bird")).unwrap();
         assert!(needed.is_empty());
     }
 
@@ -1202,7 +1201,7 @@ mod tests {
         theory.add_defeasible_rule(&["a"], "goal");
         theory.add_defeasible_rule(&["b", "c"], "goal");
 
-        let result = abduce(&theory, &Literal::simple("goal"), 10);
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
         let smallest = result.smallest_solution().unwrap();
         assert_eq!(smallest.size(), 1);
     }
@@ -1222,7 +1221,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["p"], "q");
 
-        let result = abduce(&theory, &Literal::simple("q"), 10);
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
         let s = result.to_string();
         assert!(s.contains("Abduction"));
         assert!(s.contains("Add facts"));
@@ -1233,7 +1232,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("p");
 
-        let result = abduce(&theory, &Literal::simple("p"), 10);
+        let result = abduce(&theory, &Literal::simple("p"), 10).unwrap();
         let s = result.to_string();
         assert!(s.contains("Already provable"));
     }
@@ -1253,7 +1252,7 @@ mod tests {
     fn test_what_if_returns_result() {
         let th = make_missing_premise_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
-        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
         assert!(result.is_provable());
     }
 
@@ -1262,14 +1261,12 @@ mod tests {
         let th = make_missing_premise_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
         assert!(result.is_provable());
-        assert!(
-            result
-                .new_conclusions
-                .iter()
-                .any(|l| l.name() == "ready_review")
-        );
+        assert!(result
+            .new_conclusions
+            .iter()
+            .any(|l| l.name() == "ready_review"));
     }
 
     #[test]
@@ -1278,7 +1275,7 @@ mod tests {
         let original_count = th.rule_count();
 
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
-        let _ = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let _ = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
 
         // Original theory unchanged
         assert_eq!(th.rule_count(), original_count);
@@ -1289,11 +1286,7 @@ mod tests {
         let th = make_missing_premise_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
 
-        assert!(what_if_provable(
-            &th,
-            hypotheticals,
-            &Literal::simple("ready_review")
-        ));
+        assert!(what_if_provable(&th, hypotheticals, &Literal::simple("ready_review")).unwrap());
     }
 
     #[test]
@@ -1301,11 +1294,7 @@ mod tests {
         let th = make_missing_premise_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("irrelevant"))];
 
-        assert!(!what_if_provable(
-            &th,
-            hypotheticals,
-            &Literal::simple("ready_review")
-        ));
+        assert!(!what_if_provable(&th, hypotheticals, &Literal::simple("ready_review")).unwrap());
     }
 
     // ==========================================================================
@@ -1320,14 +1309,13 @@ mod tests {
             "ci_server",
         )];
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
         assert!(result.is_provable());
         assert_eq!(
             result.hypotheticals[0].source,
             Some("ci_server".to_string())
         );
     }
-
     #[test]
     fn test_hypothetical_claim_anonymous() {
         let claim = HypotheticalClaim::new(Literal::simple("fact"));
@@ -1355,11 +1343,7 @@ mod tests {
             HypotheticalClaim::new(Literal::simple("b")),
         ];
 
-        assert!(what_if_provable(
-            &theory,
-            hypotheticals,
-            &Literal::simple("c")
-        ));
+        assert!(what_if_provable(&theory, hypotheticals, &Literal::simple("c")).unwrap());
     }
 
     #[test]
@@ -1370,7 +1354,7 @@ mod tests {
             HypotheticalClaim::new(Literal::simple("extra")),
         ];
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
         assert_eq!(result.hypotheticals.len(), 2);
     }
 
@@ -1386,7 +1370,7 @@ mod tests {
 
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("a"))];
 
-        let result = what_if(&theory, hypotheticals, &Literal::simple("c"));
+        let result = what_if(&theory, hypotheticals, &Literal::simple("c")).unwrap();
         assert!(result.is_provable());
     }
 
@@ -1397,7 +1381,7 @@ mod tests {
 
         let hypotheticals = vec![HypotheticalClaim::new(Literal::negated("broken"))];
 
-        let result = what_if(&theory, hypotheticals, &Literal::simple("works"));
+        let result = what_if(&theory, hypotheticals, &Literal::simple("works")).unwrap();
         assert!(result.is_provable());
     }
 
@@ -1406,7 +1390,7 @@ mod tests {
         let th = make_missing_premise_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
 
         // new_conclusions should contain ready_review and tests_pass
         assert!(!result.new_conclusions.is_empty());
@@ -1417,7 +1401,7 @@ mod tests {
         let th = make_missing_premise_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
 
         let newly = result.newly_provable();
         assert!(newly.iter().any(|l| l.name() == "ready_review"));
@@ -1432,7 +1416,7 @@ mod tests {
         let th = make_fact_theory();
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("extra"))];
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("bird"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("bird")).unwrap();
         assert!(result.is_provable());
     }
 
@@ -1441,7 +1425,7 @@ mod tests {
         let th = make_defeasible_theory();
         let hypotheticals = vec![]; // No hypotheticals needed
 
-        let result = what_if(&th, hypotheticals, &Literal::simple("flies"));
+        let result = what_if(&th, hypotheticals, &Literal::simple("flies")).unwrap();
         assert!(result.is_provable());
     }
 
@@ -1455,11 +1439,11 @@ mod tests {
         let flies = Literal::simple("flies");
 
         // Query says provable
-        let q_result = query(&th, &flies);
+        let q_result = query(&th, &flies).unwrap();
         assert!(q_result.is_provable());
 
         // Why-not should have no blockers
-        let wn_result = why_not(&th, &flies);
+        let wn_result = why_not(&th, &flies).unwrap();
         assert!(!wn_result.has_blockers());
     }
 
@@ -1469,11 +1453,11 @@ mod tests {
         let ready = Literal::simple("ready_review");
 
         // Query says not provable
-        let q_result = query(&th, &ready);
+        let q_result = query(&th, &ready).unwrap();
         assert!(!q_result.is_provable());
 
         // Why-not should explain why
-        let wn_result = why_not(&th, &ready);
+        let wn_result = why_not(&th, &ready).unwrap();
         assert!(wn_result.has_blockers());
     }
 
@@ -1483,12 +1467,12 @@ mod tests {
         let ready = Literal::simple("ready_review");
 
         // Why-not shows blocking
-        let wn = why_not(&th, &ready);
+        let wn = why_not(&th, &ready).unwrap();
         let missing = wn.get_missing_premises();
         assert!(!missing.is_empty());
 
         // Requires finds what to add
-        let needed = requires(&th, &ready);
+        let needed = requires(&th, &ready).unwrap();
         assert!(!needed.is_empty());
 
         // Both should identify tests_pass
@@ -1502,13 +1486,13 @@ mod tests {
         let ready = Literal::simple("ready_review");
 
         // Get what's needed via abduction
-        let needed = requires(&th, &ready);
+        let needed = requires(&th, &ready).unwrap();
 
         // Use those as hypotheticals
         let hypotheticals: Vec<_> = needed.into_iter().map(HypotheticalClaim::new).collect();
 
         // What-if should now prove the goal
-        let result = what_if(&th, hypotheticals, &ready);
+        let result = what_if(&th, hypotheticals, &ready).unwrap();
         assert!(result.is_provable());
     }
 
@@ -1518,23 +1502,23 @@ mod tests {
         let ready = Literal::simple("ready_review");
 
         // 1. Query shows not provable
-        let q = query(&th, &ready);
+        let q = query(&th, &ready).unwrap();
         assert!(!q.is_provable());
 
         // 2. Why-not explains the blocker
-        let wn = why_not(&th, &ready);
+        let wn = why_not(&th, &ready).unwrap();
         assert!(wn.has_blockers());
         assert!(!wn.get_missing_premises().is_empty());
 
         // 3. Abduction finds solution
-        let ab = abduce(&th, &ready, 10);
+        let ab = abduce(&th, &ready, 10).unwrap();
         assert!(ab.has_solutions());
         let sol = ab.smallest_solution().unwrap();
         assert!(sol.facts.iter().any(|l| l.name() == "tests_pass"));
 
         // 4. What-if verifies solution works
         let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
-        let wi = what_if(&th, hypotheticals, &ready);
+        let wi = what_if(&th, hypotheticals, &ready).unwrap();
         assert!(wi.is_provable());
     }
 
@@ -1544,15 +1528,15 @@ mod tests {
         let flies = Literal::simple("flies");
 
         // 1. Query shows provable
-        let q = query(&th, &flies);
+        let q = query(&th, &flies).unwrap();
         assert!(q.is_provable());
 
         // 2. Why-not has no blockers
-        let wn = why_not(&th, &flies);
+        let wn = why_not(&th, &flies).unwrap();
         assert!(!wn.has_blockers());
 
         // 3. Abduction shows already provable
-        let ab = abduce(&th, &flies, 10);
+        let ab = abduce(&th, &flies, 10).unwrap();
         assert!(ab.is_already_provable());
     }
 }
