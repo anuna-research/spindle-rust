@@ -12,7 +12,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use crate::intern::{intern, resolve, LiteralId, SymbolId};
+use crate::intern::{LiteralId, SymbolId, intern, resolve};
 use crate::mode::Mode;
 use crate::temporal::Temporal;
 
@@ -44,6 +44,22 @@ pub struct Literal {
     /// Predicate arguments (e.g., for parent(alice, bob))
     /// Stored as interned SymbolIds for efficiency
     predicate_ids: Vec<SymbolId>,
+}
+
+/// Stable, semantic literal representation for JSON outputs
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiteralStruct {
+    /// Modal operator information.
+    pub mode: Mode,
+    /// Whether the literal is negated.
+    pub negated: bool,
+    /// Predicate functor name.
+    pub functor: String,
+    /// Predicate arguments.
+    pub args: Vec<String>,
+    /// Temporal bounds for the literal.
+    pub temporal: Temporal,
 }
 
 impl Literal {
@@ -216,6 +232,101 @@ impl Literal {
             self.name().to_owned()
         }
     }
+
+    /// Render this literal in canonical SPL s-expression form
+    pub fn to_spl(&self) -> String {
+        let mut parts = Vec::with_capacity(1 + self.predicate_ids.len());
+        parts.push(render_spl_atom(self.name()));
+        for pred in self.predicates() {
+            parts.push(render_spl_atom(pred));
+        }
+
+        let mut expr = format!("({})", parts.join(" "));
+
+        if self.negation {
+            expr = format!("(not {expr})");
+        }
+
+        if !self.mode.is_empty() {
+            let tag = match self.mode.name.as_deref() {
+                Some("O") => "must",
+                Some("P") => "may",
+                Some("F") => "forbidden",
+                Some(name) => name,
+                None => "",
+            };
+
+            if !tag.is_empty() {
+                if self.mode.negation {
+                    expr = format!("(not ({tag} {expr}))");
+                } else {
+                    expr = format!("({tag} {expr})");
+                }
+            }
+        }
+
+        if !self.temporal.is_empty() {
+            expr = format!(
+                "(during {expr} {} {})",
+                self.temporal.start, self.temporal.end
+            );
+        }
+
+        expr
+    }
+}
+
+fn is_spl_atom_char(c: char) -> bool {
+    c.is_alphanumeric()
+        || c == '-'
+        || c == '_'
+        || c == '?'
+        || c == '~'
+        || c == ':'
+        || c == '.'
+        || c == '+'
+}
+
+fn render_spl_atom(atom: &str) -> String {
+    let needs_quotes = atom.is_empty() || atom.chars().any(|c| !is_spl_atom_char(c));
+    if !needs_quotes {
+        return atom.to_string();
+    }
+
+    let mut escaped = String::with_capacity(atom.len() + 2);
+    for c in atom.chars() {
+        match c {
+            '\\' => {
+                escaped.push('\\');
+                escaped.push('\\');
+            }
+            '"' => {
+                escaped.push('\\');
+                escaped.push('"');
+            }
+            _ => escaped.push(c),
+        }
+    }
+
+    format!("\"{escaped}\"")
+}
+
+impl From<&Literal> for LiteralStruct {
+    fn from(literal: &Literal) -> Self {
+        Self {
+            mode: literal.mode.clone(),
+            negated: literal.negation,
+            functor: literal.name().to_string(),
+            args: literal.predicates().iter().map(|s| s.to_string()).collect(),
+            temporal: literal.temporal.clone(),
+        }
+    }
+}
+
+impl From<Literal> for LiteralStruct {
+    fn from(literal: Literal) -> Self {
+        Self::from(&literal)
+    }
 }
 
 impl PartialEq for Literal {
@@ -308,6 +419,23 @@ mod tests {
 
         let neg = Literal::negated("flies");
         assert_eq!(format!("{}", neg), "~flies");
+    }
+
+    #[test]
+    fn test_to_spl_quotes_atoms_with_spaces_and_escapes() {
+        let lit = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                "doc 1".to_string(),
+                "quote\"me".to_string(),
+                "path\\to".to_string(),
+            ],
+        );
+
+        assert_eq!(lit.to_spl(), "(p \"doc 1\" \"quote\\\"me\" \"path\\\\to\")");
     }
 
     #[test]

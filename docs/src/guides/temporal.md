@@ -10,7 +10,7 @@ Time points are represented as milliseconds since the Unix epoch (UTC).
 
 ```lisp
 (moment "2024-06-15T14:30:00Z")    ; RFC3339 / ISO 8601 string (UTC)
-(moment 1718461800000)             ; Integer epoch milliseconds
+1718461800000                      ; Integer epoch milliseconds
 inf                                ; Positive infinity (never ends)
 -inf                               ; Negative infinity (always existed)
 ```

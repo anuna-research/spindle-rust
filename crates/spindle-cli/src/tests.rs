@@ -9,13 +9,13 @@
 //! - Integration with reasoning engine
 //! - Error handling for invalid queries
 
+use spindle_core::Theory;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::literal::Literal;
 use spindle_core::query::{
-    abduce, query, what_if, what_if_provable, why_not, BlockingType, HypotheticalClaim, QueryStatus,
+    BlockingType, HypotheticalClaim, QueryStatus, abduce, query, what_if, what_if_provable, why_not,
 };
 use spindle_core::rule::{Rule, RuleType};
-use spindle_core::Theory;
 use spindle_parser::parse_spl;
 use std::fs;
 use tempfile::TempDir;
@@ -153,12 +153,11 @@ fn parse_literal_arg(s: &str) -> Literal {
     if s.trim().starts_with('(') {
         // Try SPL parsing
         let dummy_spl = format!("(given {})", s);
-        if let Ok(theory) = parse_spl(&dummy_spl) {
-            if let Some(fact) = theory.facts().next() {
-                if let Some(head) = fact.head.first() {
-                    return head.clone();
-                }
-            }
+        if let Ok(theory) = parse_spl(&dummy_spl)
+            && let Some(fact) = theory.facts().next()
+            && let Some(head) = fact.head.first()
+        {
+            return head.clone();
         }
     }
 
@@ -390,7 +389,7 @@ fn test_abduce_solution_includes_missing_premise() {
     // First solution should include tests_pass
     let first_sol = &solutions[0];
     let fact_names: Vec<_> = first_sol.facts.iter().map(|l| l.name()).collect();
-    assert!(fact_names.iter().any(|n| *n == "tests_pass"));
+    assert!(fact_names.contains(&"tests_pass"));
 }
 
 #[test]
@@ -408,7 +407,7 @@ fn test_abduce_no_rules_hypothesizes_literal() {
     // The only solution should be to add the literal itself
     let first_sol = &result.solutions[0];
     let fact_names: Vec<_> = first_sol.facts.iter().map(|l| l.name()).collect();
-    assert!(fact_names.iter().any(|n| *n == "unknown"));
+    assert!(fact_names.contains(&"unknown"));
 }
 
 #[test]

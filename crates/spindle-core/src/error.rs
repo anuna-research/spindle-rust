@@ -23,7 +23,10 @@ pub enum SpindleError {
 
     /// Validation error
     #[error("validation error: {message}")]
-    Validation { message: String },
+    Validation {
+        /// Human-readable validation error message
+        message: String,
+    },
 }
 
 /// Result type alias for Spindle operations

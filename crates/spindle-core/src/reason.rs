@@ -66,8 +66,33 @@ impl LiteralBitSet {
 
 /// Perform defeasible reasoning on a theory
 pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
+    reason_with_options(theory, PrepareOptions::default())
+}
+
+/// Perform defeasible reasoning on a theory with custom options
+///
+/// This is the primary API for as-of reasoning. Use `reference_time` in options
+/// to reason at a specific point in time:
+///
+/// ```rust
+/// use spindle_core::prelude::*;
+/// use spindle_core::reason::reason_with_options;
+/// use spindle_core::pipeline::PrepareOptions;
+/// use spindle_core::temporal::TimePoint;
+///
+/// let mut theory = Theory::new();
+/// theory.add_fact("bird");
+///
+/// // Reason at a specific time (milliseconds since epoch)
+/// let opts = PrepareOptions {
+///     reference_time: Some(TimePoint::from_millis(1707220800000)),
+///     ..Default::default()
+/// };
+/// let conclusions = reason_with_options(&theory, opts).unwrap();
+/// ```
+pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<Conclusion>> {
     // Phase 0: Pipeline (Filtering + Validation + Grounding)
-    let prepared = prepare(theory, PrepareOptions::default())?;
+    let prepared = prepare(theory, opts)?;
     let grounded_theory = prepared.theory;
 
     // Use the grounded theory for indexing and reasoning
@@ -1049,6 +1074,102 @@ mod tests {
                 .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
                     && c.literal.name() == "p"),
             "Self-referential rule without initial fact should not prove p"
+        );
+    }
+
+    // ==========================================================================
+    // reason_with_options API TESTS (spec §3.2, Milestone 5)
+    // ==========================================================================
+
+    #[test]
+    fn test_reason_with_options_default_matches_reason() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+
+        let conclusions_default = reason(&theory).unwrap();
+        let conclusions_with_opts =
+            reason_with_options(&theory, PrepareOptions::default()).unwrap();
+
+        // Both should produce the same positive conclusions
+        let pos_default: Vec<_> = conclusions_default
+            .iter()
+            .filter(|c| c.is_positive())
+            .map(|c| c.literal.name())
+            .collect();
+
+        let pos_with_opts: Vec<_> = conclusions_with_opts
+            .iter()
+            .filter(|c| c.is_positive())
+            .map(|c| c.literal.name())
+            .collect();
+
+        assert_eq!(pos_default, pos_with_opts);
+    }
+
+    #[test]
+    fn test_reason_with_options_accepts_reference_time() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+
+        // Add a fact with a specific temporal window
+        let bird_lit = Literal::new(
+            "bird",
+            false,
+            crate::mode::Mode::default(),
+            Temporal::from_bounds(1000, 2000), // active from 1000 to 2000
+            vec![],
+        );
+        theory.add_rule(crate::rule::Rule::fact("f1", bird_lit));
+
+        // Reason at time 1500 (inside the window)
+        let opts_inside = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(1500)),
+            ..Default::default()
+        };
+        let conclusions_inside = reason_with_options(&theory, opts_inside).unwrap();
+        let has_bird_inside = conclusions_inside
+            .iter()
+            .any(|c| c.literal.name() == "bird" && c.is_positive());
+        assert!(has_bird_inside, "bird should be provable at time 1500");
+
+        // Reason at time 3000 (outside the window)
+        let opts_outside = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(3000)),
+            ..Default::default()
+        };
+        let conclusions_outside = reason_with_options(&theory, opts_outside).unwrap();
+        let has_bird_outside = conclusions_outside
+            .iter()
+            .any(|c| c.literal.name() == "bird" && c.is_positive());
+        assert!(
+            !has_bird_outside,
+            "bird should NOT be provable at time 3000 (outside temporal window)"
+        );
+    }
+
+    #[test]
+    fn test_reason_with_options_grounding_can_be_disabled() {
+        use crate::pipeline::GroundingOptions;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        // With grounding disabled, variables won't be instantiated
+        let opts = PrepareOptions {
+            grounding: GroundingOptions {
+                enabled: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        // Should still work for ground theories
+        let conclusions = reason_with_options(&theory, opts).unwrap();
+        assert!(
+            conclusions.iter().any(|c| c.is_positive()),
+            "should have positive conclusions"
         );
     }
 }

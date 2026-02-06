@@ -108,6 +108,36 @@ impl fmt::Display for TimePoint {
     }
 }
 
+impl TimePoint {
+    /// Convert a TimePoint to RFC3339 format string.
+    ///
+    /// Returns `None` for infinite time points.
+    /// Returns `Some(rfc3339_string)` for finite moments.
+    ///
+    /// # Example
+    /// ```
+    /// use spindle_core::temporal::TimePoint;
+    ///
+    /// let tp = TimePoint::from_millis(1707220800000); // 2024-02-06T12:00:00Z
+    /// assert!(tp.to_rfc3339().unwrap().contains("2024-02-06"));
+    /// ```
+    pub fn to_rfc3339(&self) -> Option<String> {
+        match self {
+            TimePoint::Moment(millis) => {
+                use chrono::{DateTime, Utc};
+                // Use div_euclid/rem_euclid to correctly handle negative timestamps (pre-1970)
+                // For example: -1500ms should be -2s + 500ms, not -1s + (-500ms)
+                let secs = millis.div_euclid(1000);
+                let ms_remainder = millis.rem_euclid(1000) as u32;
+                let nsecs = ms_remainder * 1_000_000;
+                DateTime::from_timestamp(secs, nsecs)
+                    .map(|dt: DateTime<Utc>| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
+            }
+            TimePoint::NegInf | TimePoint::PosInf => None,
+        }
+    }
+}
+
 /// Temporal interval with start and end time points
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1012,6 +1042,55 @@ mod tests {
     }
 
     #[test]
+    fn test_timepoint_to_rfc3339_post_1970() {
+        // 2024-02-06T12:00:00.000Z = 1707220800000 ms
+        let tp = TimePoint::from_millis(1707220800000);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(rfc.starts_with("2024-02-06T12:00:00"));
+        assert!(rfc.ends_with("Z"));
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_with_millis() {
+        // 2024-02-06T12:00:00.500Z
+        let tp = TimePoint::from_millis(1707220800500);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(rfc.contains(".500"), "Should include milliseconds: {rfc}");
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_pre_1970() {
+        // 1969-12-31T23:59:59.500Z = -500 ms (half second before epoch)
+        let tp = TimePoint::from_millis(-500);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(
+            rfc.starts_with("1969-12-31T23:59:59"),
+            "Pre-1970 timestamp should work: {rfc}"
+        );
+        assert!(
+            rfc.contains(".500"),
+            "Should have correct milliseconds: {rfc}"
+        );
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_pre_1970_full_second() {
+        // 1969-12-31T23:59:58.000Z = -2000 ms
+        let tp = TimePoint::from_millis(-2000);
+        let rfc = tp.to_rfc3339().unwrap();
+        assert!(
+            rfc.starts_with("1969-12-31T23:59:58"),
+            "Pre-1970 full second: {rfc}"
+        );
+    }
+
+    #[test]
+    fn test_timepoint_to_rfc3339_infinity_returns_none() {
+        assert!(TimePoint::NegInf.to_rfc3339().is_none());
+        assert!(TimePoint::PosInf.to_rfc3339().is_none());
+    }
+
+    #[test]
     fn test_timepoint_default() {
         let tp: TimePoint = Default::default();
         assert!(tp.is_neg_inf());
@@ -1091,7 +1170,7 @@ mod tests {
     #[test]
     fn test_intersection_list_single() {
         let t = Temporal::from_bounds(5, 15);
-        let result = Temporal::intersection_list(&[t.clone()]).unwrap();
+        let result = Temporal::intersection_list(std::slice::from_ref(&t)).unwrap();
 
         assert_eq!(result.start, TimePoint::Moment(5));
         assert_eq!(result.end, TimePoint::Moment(15));

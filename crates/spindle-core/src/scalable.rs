@@ -11,7 +11,6 @@ use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::{IndexedTheory, LitId};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
-use crate::theory::Theory;
 
 /// Result of scalable reasoning: three closure sets
 ///
@@ -335,7 +334,7 @@ fn compute_partial_closure(
             if (defender.rule_type == RuleType::Strict
                 || defender.rule_type == RuleType::Defeasible)
                 && body_satisfied(defender, partial)
-                && theory.is_superior(&defender.label, &attacker.label)
+                && theory.is_superior(defender.template_label(), attacker.template_label())
             {
                 return true;
             }
@@ -449,6 +448,7 @@ fn compute_partial_closure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Theory;
 
     #[test]
     fn test_delta_closure_facts() {
@@ -458,7 +458,7 @@ mod tests {
 
         let indexed = IndexedTheory::build(&theory);
         let result = reason_scalable(&indexed);
-        
+
         assert!(result.contains_delta(&indexed, "a"));
         assert!(result.contains_delta(&indexed, "b"));
         assert_eq!(result.delta.len(), 2);
@@ -475,7 +475,7 @@ mod tests {
 
         let indexed = IndexedTheory::build(&theory);
         let result = reason_scalable(&indexed);
-        
+
         assert!(result.contains_delta(&indexed, "p"));
         assert!(result.contains_delta(&indexed, "q"));
         assert!(result.contains_delta(&indexed, "r"));
@@ -497,7 +497,7 @@ mod tests {
         assert!(result.contains_delta(&indexed, "p"));
         assert!(result.contains_delta(&indexed, "q"));
         assert!(!result.contains_delta(&indexed, "r"));
-        
+
         assert!(result.contains_lambda(&indexed, "p"));
         assert!(result.contains_lambda(&indexed, "q"));
         assert!(result.contains_lambda(&indexed, "r"));
@@ -666,9 +666,9 @@ mod tests {
 
         let std_def = extract_defeasible_provable(&standard);
 
-        for lit in &["a", "b", "c"] {
-            assert!(std_def.contains(*lit));
-            assert!(scalable.contains_partial(&indexed, *lit));
+        for &lit in ["a", "b", "c"].iter() {
+            assert!(std_def.contains(lit));
+            assert!(scalable.contains_partial(&indexed, lit));
         }
     }
 
@@ -685,9 +685,9 @@ mod tests {
 
         let std_definite = extract_definite_provable(&standard);
 
-        for lit in &["p", "q", "r"] {
-            assert!(std_definite.contains(*lit));
-            assert!(scalable.contains_delta(&indexed, *lit));
+        for &lit in ["p", "q", "r"].iter() {
+            assert!(std_definite.contains(lit));
+            assert!(scalable.contains_delta(&indexed, lit));
         }
     }
 
@@ -872,10 +872,10 @@ mod tests {
     fn test_stateless_reason_scalable_does_not_mutate_theory() {
         let mut theory = Theory::new();
         theory.add_fact("bird");
-        
+
         let indexed = IndexedTheory::build(&theory);
         let _result = reason_scalable(&indexed);
-        
+
         // Checks theory didn't change... theory is referenced by indexed, so it couldn't change
         // logic holds
     }

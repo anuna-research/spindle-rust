@@ -18,12 +18,12 @@
 //! - Explanation generation
 //! - Parser performance (DFL and SPL formats)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use spindle_core::explanation::explain;
 use spindle_core::grounding::ground_theory;
 use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
-use spindle_core::query::{abduce, what_if, why_not, HypotheticalClaim};
+use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
 use spindle_core::temporal::{Temporal, TimePoint};
@@ -691,7 +691,7 @@ fn bench_explanation(c: &mut Criterion) {
         vec![Literal::simple("bird")],
         Literal::simple("flies"),
     ));
-    reason(&simple_theory); // Compute conclusions
+    let _ = reason(&simple_theory); // Compute conclusions
 
     group.bench_function("explain_simple", |b| {
         b.iter(|| black_box(explain(&simple_theory, &Literal::simple("flies"))))

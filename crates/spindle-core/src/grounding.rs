@@ -26,7 +26,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::intern::{resolve, SymbolId};
+use crate::intern::{SymbolId, resolve};
 
 #[cfg(test)]
 use crate::intern::intern;
@@ -432,6 +432,8 @@ pub fn ground_theory_with_limit(
     for sup in theory.superiorities() {
         grounded.add_superiority(&sup.superior, &sup.inferior);
     }
+
+    grounded.copy_metadata_from(theory);
 
     (grounded, limit_hit)
 }

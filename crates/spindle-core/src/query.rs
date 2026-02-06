@@ -12,7 +12,8 @@ use std::fmt;
 use crate::conclusion::ConclusionType;
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::reason::reason;
+use crate::pipeline::PrepareOptions;
+use crate::reason::{reason, reason_with_options};
 use crate::rule::{Rule, RuleType};
 use crate::theory::Theory;
 
@@ -86,7 +87,36 @@ impl QueryResult {
 
 /// Query a literal against a theory
 pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
-    let conclusions = reason(theory)?;
+    query_with_options(theory, literal, PrepareOptions::default())
+}
+
+/// Query a literal against a theory with custom options
+///
+/// This is the primary API for as-of queries. Use `reference_time` in options
+/// to query at a specific point in time:
+///
+/// ```rust
+/// use spindle_core::prelude::*;
+/// use spindle_core::query::query_with_options;
+/// use spindle_core::pipeline::PrepareOptions;
+/// use spindle_core::temporal::TimePoint;
+///
+/// let mut theory = Theory::new();
+/// theory.add_fact("bird");
+///
+/// // Query at a specific time (milliseconds since epoch)
+/// let opts = PrepareOptions {
+///     reference_time: Some(TimePoint::from_millis(1707220800000)),
+///     ..Default::default()
+/// };
+/// let result = query_with_options(&theory, &Literal::simple("bird"), opts).unwrap();
+/// ```
+pub fn query_with_options(
+    theory: &Theory,
+    literal: &Literal,
+    opts: PrepareOptions,
+) -> Result<QueryResult> {
+    let conclusions = reason_with_options(theory, opts)?;
     let complement = literal.complement();
 
     // Check if literal is provable
@@ -178,7 +208,7 @@ pub fn what_if(
     let baseline_provable: HashSet<_> = baseline
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.canonical_name())
+        .map(|c| c.literal.clone())
         .collect();
 
     // Create modified theory with hypotheticals
@@ -198,10 +228,7 @@ pub fn what_if(
     // Find new conclusions
     let new_conclusions: Vec<Literal> = modified_conclusions
         .iter()
-        .filter(|c| {
-            c.conclusion_type.is_positive()
-                && !baseline_provable.contains(&c.literal.canonical_name())
-        })
+        .filter(|c| c.conclusion_type.is_positive() && !baseline_provable.contains(&c.literal))
         .map(|c| c.literal.clone())
         .collect();
 
@@ -382,7 +409,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     let proven: HashSet<_> = conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.canonical_name())
+        .map(|c| c.literal.clone())
         .collect();
 
     let mut result = WhyNotResult::new(literal.clone());
@@ -401,7 +428,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
             let missing: Vec<_> = rule
                 .body
                 .iter()
-                .filter(|b| !proven.contains(&b.canonical_name()))
+                .filter(|b| !proven.contains(*b))
                 .cloned()
                 .collect();
 
@@ -417,7 +444,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     if !found_rule {
         // Check if complement is proven (contradicted)
         let complement = literal.complement();
-        if proven.contains(&complement.canonical_name()) {
+        if proven.contains(&complement) {
             result.blocked_by.push(BlockingCondition {
                 blocking_type: BlockingType::Contradicted,
                 rule_label: String::new(),
@@ -546,7 +573,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
     let proven: HashSet<_> = conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.canonical_name())
+        .map(|c| c.literal.clone())
         .collect();
 
     // Find rules that could derive the goal
@@ -558,7 +585,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
             let missing: HashSet<_> = rule
                 .body
                 .iter()
-                .filter(|b| !proven.contains(&b.canonical_name()))
+                .filter(|b| !proven.contains(*b))
                 .cloned()
                 .collect();
 
@@ -1538,5 +1565,115 @@ mod tests {
         // 3. Abduction shows already provable
         let ab = abduce(&th, &flies, 10).unwrap();
         assert!(ab.is_already_provable());
+    }
+
+    // ==========================================================================
+    // query_with_options API TESTS (spec §3.2, Milestone 5)
+    // ==========================================================================
+
+    #[test]
+    fn test_query_with_options_default_matches_query() {
+        let th = make_defeasible_theory();
+        let bird = Literal::simple("bird");
+
+        let result_default = query(&th, &bird).unwrap();
+        let result_with_opts = query_with_options(&th, &bird, PrepareOptions::default()).unwrap();
+
+        assert_eq!(result_default.status, result_with_opts.status);
+        assert_eq!(result_default.is_provable(), result_with_opts.is_provable());
+    }
+
+    #[test]
+    fn test_query_with_options_accepts_reference_time() {
+        use crate::mode::Mode;
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+
+        // Add a fact with a specific temporal window
+        let bird_lit = Literal::new(
+            "bird",
+            false,
+            Mode::default(),
+            Temporal::from_bounds(1000, 2000), // active from 1000 to 2000
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", bird_lit.clone()));
+
+        let bird_query = Literal::simple("bird");
+
+        // Query at time 1500 (inside the window)
+        let opts_inside = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(1500)),
+            ..Default::default()
+        };
+        let result_inside = query_with_options(&theory, &bird_query, opts_inside).unwrap();
+        assert!(
+            result_inside.is_provable(),
+            "bird should be provable at time 1500"
+        );
+
+        // Query at time 3000 (outside the window)
+        let opts_outside = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(3000)),
+            ..Default::default()
+        };
+        let result_outside = query_with_options(&theory, &bird_query, opts_outside).unwrap();
+        assert!(
+            !result_outside.is_provable(),
+            "bird should NOT be provable at time 3000 (outside temporal window)"
+        );
+    }
+
+    #[test]
+    fn test_query_with_options_temporal_disjoint_no_conflict() {
+        use crate::mode::Mode;
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+
+        // Add bird fact active from 1000 to 2000
+        let bird_lit = Literal::new(
+            "bird",
+            false,
+            Mode::default(),
+            Temporal::from_bounds(1000, 2000),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", bird_lit));
+
+        // Add ~bird fact active from 3000 to 4000 (disjoint!)
+        let not_bird_lit = Literal::new(
+            "bird",
+            true, // negated
+            Mode::default(),
+            Temporal::from_bounds(3000, 4000),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f2", not_bird_lit));
+
+        // At time 1500, bird should be provable (no conflict because ~bird is disjoint)
+        let opts = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(1500)),
+            ..Default::default()
+        };
+        let result = query_with_options(&theory, &Literal::simple("bird"), opts).unwrap();
+        assert!(
+            result.is_provable(),
+            "bird should be provable at time 1500 (disjoint temporals don't conflict)"
+        );
+
+        // At time 3500, ~bird should be provable
+        let opts = PrepareOptions {
+            reference_time: Some(TimePoint::from_millis(3500)),
+            ..Default::default()
+        };
+        let result = query_with_options(&theory, &Literal::negated("bird"), opts).unwrap();
+        assert!(
+            result.is_provable(),
+            "~bird should be provable at time 3500"
+        );
     }
 }

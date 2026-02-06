@@ -213,7 +213,7 @@ Supported time formats:
 
 ```lisp
 (moment "2024-06-15T14:30:00Z")  ; RFC3339 / ISO 8601
-(moment 1718461800000)           ; Epoch milliseconds
+1718461800000                    ; Epoch milliseconds
 inf                              ; Positive infinity
 -inf                             ; Negative infinity
 ```
@@ -224,7 +224,9 @@ inf                              ; Positive infinity
 
 ```lisp
 (given (during bird 1 10))
-(given (during (employed alice acme) (moment 2020) (moment 2023)))
+(given (during (employed alice acme)
+  (moment "2020-01-01T00:00:00Z")
+  (moment "2023-01-01T00:00:00Z")))
 ```
 
 ### Allen Relations

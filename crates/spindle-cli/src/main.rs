@@ -8,11 +8,10 @@ use std::path::PathBuf;
 
 use chrono::DateTime;
 use clap::{Parser, Subcommand};
-use serde::Serialize;
-use spindle_core::conclusion::{Conclusion, ConclusionType};
+use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
-use spindle_core::literal::Literal;
-use spindle_core::pipeline::{prepare, PrepareOptions};
+use spindle_core::literal::{Literal, LiteralStruct};
+use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{QueryStatus, abduce, query, why_not};
 use spindle_core::temporal::TimePoint;
 use spindle_parser::spl::parse_spl as parse_spl_str;
@@ -283,7 +282,7 @@ struct GroundingStats {
 struct ConclusionStruct {
     conclusion_type: String,
     literal_spl: String,
-    literal_struct: Literal,
+    literal_struct: LiteralStruct,
     positive: bool,
 }
 
@@ -334,22 +333,31 @@ fn run_reason(
     };
 
     if json_output {
-        let output_conclusions: Vec<ConclusionStruct> = conclusions
+        let mut output_conclusions: Vec<ConclusionStruct> = conclusions
             .into_iter()
             .filter(|c| !positive_only || c.is_positive())
             .map(|c| ConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_string(), // Display impl is SPL format
-                literal_struct: c.literal.clone(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStruct::from(&c.literal),
                 positive: c.is_positive(),
             })
             .collect();
+
+        // Sort conclusions for deterministic output (per spec §3.5)
+        // Sort by literal_spl first, then by conclusion_type for stability
+        output_conclusions.sort_by(|a, b| {
+            match a.literal_spl.cmp(&b.literal_spl) {
+                std::cmp::Ordering::Equal => a.conclusion_type.cmp(&b.conclusion_type),
+                other => other,
+            }
+        });
 
         let output = ReasonOutput {
             schema_version: "spindle.reason.v1".to_string(),
             evaluated_at: pipeline_result
                 .evaluated_at
-                .map(|t: TimePoint| t.to_string()), // Use actual evaluated_at from pipeline
+                .and_then(|t: TimePoint| t.to_rfc3339()), // Use RFC3339 format per spec
             grounding: GroundingStats {
                 performed: pipeline_result.grounding_report.performed,
                 had_variables: pipeline_result.grounding_report.had_variables,
@@ -416,7 +424,7 @@ fn run_stats(file: &PathBuf) {
 
 fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
-    
+
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
@@ -464,7 +472,7 @@ fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<T
 
 fn run_explain(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
-    
+
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
@@ -514,7 +522,7 @@ fn run_explain(file: &PathBuf, literal: &str, json: bool, reference_time: Option
 
 fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
     let theory = load_theory(file);
-    
+
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
@@ -561,9 +569,15 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option
     }
 }
 
-fn run_requires(file: &PathBuf, literal: &str, max: usize, json: bool, reference_time: Option<TimePoint>) {
+fn run_requires(
+    file: &PathBuf,
+    literal: &str,
+    max: usize,
+    json: bool,
+    reference_time: Option<TimePoint>,
+) {
     let theory = load_theory(file);
-    
+
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()

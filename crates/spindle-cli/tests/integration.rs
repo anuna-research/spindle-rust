@@ -1,7 +1,7 @@
 //! Integration tests for the spindle CLI
 
-use assert_cmd::cargo::cargo_bin_cmd;
 use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -16,7 +16,7 @@ fn setup_theory_file(content: &str, extension: &str) -> (TempDir, std::path::Pat
 
 /// Get the spindle command
 fn spindle() -> Command {
-    cargo_bin_cmd!("spindle").into()
+    cargo_bin_cmd!("spindle")
 }
 
 // ============================================================================

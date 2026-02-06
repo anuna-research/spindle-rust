@@ -9,7 +9,7 @@ description = "WebAssembly bindings for Spindle defeasible logic engine"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-spindle-core = { path = "../spindle-core" }
+spindle-core = { path = "../spindle-core", features = ["serde"] }
 spindle-parser = { path = "../spindle-parser" }
 wasm-bindgen = "0.2"
 serde = { workspace = true, features = ["derive"] }

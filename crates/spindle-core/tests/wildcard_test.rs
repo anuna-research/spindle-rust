@@ -1,5 +1,5 @@
 use spindle_core::literal::Literal;
-use spindle_core::pipeline::{prepare, PrepareOptions};
+use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::rule::Rule;
 use spindle_core::theory::Theory;
 

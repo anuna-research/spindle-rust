@@ -1,5 +1,5 @@
 use spindle_core::temporal::{Temporal, TimePoint};
-use spindle_core::{conclusion::ConclusionType, reason::reason, Literal, Rule, Theory};
+use spindle_core::{Literal, Rule, Theory, conclusion::ConclusionType, reason::reason};
 
 #[test]
 fn test_arg_discrimination() {

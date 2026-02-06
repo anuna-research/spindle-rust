@@ -5,7 +5,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::intern::{intern, resolve, SymbolId};
+use crate::intern::{SymbolId, intern, resolve};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel};
 use crate::theory::Theory;
@@ -16,6 +16,7 @@ use crate::theory::Theory;
 pub struct AtomId(u32);
 
 impl AtomId {
+    /// Return the underlying raw identifier.
     pub fn as_raw(self) -> u32 {
         self.0
     }
@@ -30,6 +31,7 @@ impl LitId {
     const NEGATION_BIT: u32 = 1 << 31;
     const ATOM_MASK: u32 = !Self::NEGATION_BIT;
 
+    /// Create a LitId from an atom ID and negation flag.
     pub fn new(atom: AtomId, negated: bool) -> Self {
         if negated {
             Self(atom.0 | Self::NEGATION_BIT)
@@ -38,18 +40,22 @@ impl LitId {
         }
     }
 
+    /// Return the underlying atom ID.
     pub fn atom(self) -> AtomId {
         AtomId(self.0 & Self::ATOM_MASK)
     }
 
+    /// Return true if this literal is negated.
     pub fn is_negated(self) -> bool {
         (self.0 & Self::NEGATION_BIT) != 0
     }
 
+    /// Return the complement literal (negation flipped).
     pub fn complement(self) -> Self {
         Self(self.0 ^ Self::NEGATION_BIT)
     }
 
+    /// Return the underlying raw identifier.
     pub fn as_raw(self) -> u32 {
         self.0
     }

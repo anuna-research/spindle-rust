@@ -35,14 +35,15 @@ use nom::{
     branch::alt,
     bytes::complete::take_while1,
     character::complete::{char, multispace0},
+    error::{Error, ErrorKind},
     multi::many0,
     sequence::{delimited, preceded},
 };
 
 use chrono::DateTime;
-use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{Temporal, TimePoint};
+use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 
 use crate::ParseError;
 
@@ -162,15 +163,52 @@ fn parse_list(input: &str) -> IResult<&str, SExpr> {
 /// Parse a string: "..."
 fn parse_string(input: &str) -> IResult<&str, SExpr> {
     let (input, _) = char('"').parse(input)?;
-    let (input, content) = take_while1(|c| c != '"').parse(input)?;
-    let (input, _) = char('"').parse(input)?;
-    Ok((input, SExpr::Atom(content.to_string())))
+    let mut escaped = false;
+    let mut out = String::new();
+    let mut end_idx = None;
+
+    for (idx, c) in input.char_indices() {
+        if escaped {
+            out.push(c);
+            escaped = false;
+            continue;
+        }
+
+        if c == '\\' {
+            escaped = true;
+            continue;
+        }
+
+        if c == '"' {
+            end_idx = Some(idx);
+            break;
+        }
+
+        out.push(c);
+    }
+
+    let end_idx = match end_idx {
+        Some(idx) => idx,
+        None => {
+            return Err(nom::Err::Error(Error::new(input, ErrorKind::Char)));
+        }
+    };
+
+    let remaining = &input[end_idx + 1..];
+    Ok((remaining, SExpr::Atom(out)))
 }
 
 /// Parse an atom (identifier, number, variable)
 fn parse_atom(input: &str) -> IResult<&str, SExpr> {
     let (input, s) = take_while1(|c: char| {
-        c.is_alphanumeric() || c == '-' || c == '_' || c == '?' || c == '~' || c == ':' || c == '.' || c == '+'
+        c.is_alphanumeric()
+            || c == '-'
+            || c == '_'
+            || c == '?'
+            || c == '~'
+            || c == ':'
+            || c == '.'
+            || c == '+'
     })
     .parse(input)?;
     Ok((input, SExpr::Atom(s.to_string())))
@@ -393,7 +431,8 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                     if items.len() != 4 {
                         return Err(ParseError::ParserError {
                             line: 1,
-                            message: "during takes exactly three arguments: literal, start, end".to_string(),
+                            message: "during takes exactly three arguments: literal, start, end"
+                                .to_string(),
                         });
                     }
                     let mut lit = parse_literal(&items[1])?;
@@ -445,14 +484,9 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
             }
         }
         SExpr::List(items) => {
-            // (moment "RFC3339") or (moment NUMBER)
+            // (moment "RFC3339") only
             if items.len() == 2 && items[0].as_atom() == Some("moment") {
                 if let Some(s) = items[1].as_atom() {
-                    // Check if it's a number string
-                    if let Ok(n) = s.parse::<i64>() {
-                        return Ok(TimePoint::from_millis(n));
-                    }
-
                     // RFC3339 parsing using chrono
                     if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
                         return Ok(TimePoint::from_millis(dt.timestamp_millis()));
@@ -460,7 +494,7 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
 
                     Err(ParseError::ParserError {
                         line: 1,
-                        message: format!("Invalid timepoint format: {}", s),
+                        message: format!("Invalid RFC3339 timepoint for moment: {}", s),
                     })
                 } else {
                     Err(ParseError::ParserError {
@@ -469,9 +503,9 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
                     })
                 }
             } else if items.len() >= 4 && items[0].as_atom() == Some("moment") {
-                 // (moment YYYY MM DD ...)
-                 // Stub implementation for multi-arity
-                 Err(ParseError::ParserError {
+                // (moment YYYY MM DD ...)
+                // Stub implementation for multi-arity
+                Err(ParseError::ParserError {
                     line: 1,
                     message: "Multi-arity moment (YYYY MM DD ...) not yet supported".to_string(),
                 })
@@ -681,11 +715,24 @@ mod tests {
         let theory = parse_spl("(given (during p (moment \"2024-01-01T00:00:00Z\") inf))").unwrap();
         let fact = theory.facts().next().unwrap();
         let lit = fact.head_literal();
-        
+
         if let TimePoint::Moment(millis) = lit.temporal.start {
-             assert_eq!(millis, 1704067200000);
+            assert_eq!(millis, 1704067200000);
         } else {
-             panic!("Expected Moment for start time, got {:?}", lit.temporal.start);
+            panic!(
+                "Expected Moment for start time, got {:?}",
+                lit.temporal.start
+            );
         }
+    }
+
+    #[test]
+    fn test_reject_ambiguous_moment_numeric() {
+        let err = parse_spl("(given (during p (moment 2020) inf))").unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("moment"),
+            "Expected error mentioning moment for ambiguous numeric form"
+        );
     }
 }

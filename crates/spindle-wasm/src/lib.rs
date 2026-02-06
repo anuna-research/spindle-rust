@@ -25,8 +25,8 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use spindle_core::literal::Literal;
-use spindle_core::pipeline::{prepare, PrepareOptions};
+use spindle_core::literal::{Literal, LiteralStruct};
+use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
@@ -74,7 +74,7 @@ pub struct JsTheoryStats {
 pub struct JsConclusionStruct {
     pub conclusion_type: String,
     pub literal_spl: String,
-    pub literal_struct: Literal,
+    pub literal_struct: LiteralStruct,
     pub positive: bool,
 }
 
@@ -204,8 +204,8 @@ impl Spindle {
             .iter()
             .map(|c| JsConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_string(),
-                literal_struct: c.literal.clone(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStruct::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
@@ -242,8 +242,8 @@ impl Spindle {
             .iter()
             .map(|c| JsConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_string(),
-                literal_struct: c.literal.clone(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStruct::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();

@@ -580,8 +580,7 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Opti
         None => return Ok(None),
     };
 
-    let mut explanation =
-        Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
+    let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
     if let Some(rule_label) = &conclusion.rule_label
         && let Some(rule) = theory.get_rule(rule_label)
@@ -615,18 +614,14 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Opti
                 // If exact ground literal not found, try to find a matching one
                 // (Handle existential cases like matter_seen where body var isn't in head)
                 // We need to iterate carefully to propagate errors from explain
-                let mut found_match = false;
                 for c in &conclusions {
                     if c.conclusion_type.is_positive()
                         && match_literal(body_lit, &c.literal).is_some()
+                        && let Some(body_expl) = explain(theory, &c.literal)?
+                        && let Some(body_tree) = body_expl.proof_tree
                     {
-                        if let Some(body_expl) = explain(theory, &c.literal)? {
-                            if let Some(body_tree) = body_expl.proof_tree {
-                                body_proofs.push(body_tree);
-                                found_match = true;
-                                break;
-                            }
-                        }
+                        body_proofs.push(body_tree);
+                        break;
                     }
                 }
             }

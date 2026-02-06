@@ -29,8 +29,11 @@ pub struct PrepareOptions {
 /// Options for grounding
 #[derive(Debug, Clone)]
 pub struct GroundingOptions {
+    /// Whether grounding is enabled.
     pub enabled: bool,
+    /// Maximum grounding iterations.
     pub max_iterations: usize,
+    /// Maximum generated instances before stopping.
     pub max_instances: usize,
 }
 
@@ -47,7 +50,9 @@ impl Default for GroundingOptions {
 /// Options for validation
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {
+    /// Enforce range restriction for rules.
     pub enforce_range_restricted: bool,
+    /// Reject wildcard '_' usage in rule heads.
     pub reject_wildcard_in_head: bool,
 }
 
@@ -63,9 +68,13 @@ impl Default for ValidationOptions {
 /// Report on the grounding process
 #[derive(Debug, Clone, Default)]
 pub struct GroundingReport {
+    /// Whether grounding ran.
     pub performed: bool,
+    /// Whether the input contained variables.
     pub had_variables: bool,
+    /// Number of grounded instances produced.
     pub instances: usize,
+    /// Whether grounding stopped due to limits.
     pub limit_hit: bool,
 }
 
