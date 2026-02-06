@@ -26,7 +26,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::intern::{SymbolId, resolve};
+use crate::intern::{resolve, SymbolId};
 
 #[cfg(test)]
 use crate::intern::intern;
@@ -149,7 +149,10 @@ fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: u
         .map(|lit| apply_substitution_to_literal(lit, subst))
         .collect();
 
-    Rule::new(new_label, rule.rule_type, new_body, new_head)
+    let mut new_rule = Rule::new(new_label, rule.rule_type, new_body, new_head);
+    // Preserve the original rule's label as the template label for superiority
+    new_rule.template_label = Some(rule.label.clone());
+    new_rule
 }
 
 /// Merge two substitutions, returning None if they conflict

@@ -11,6 +11,7 @@ use std::fmt;
 use crate::literal::Literal;
 
 /// The type of conclusion
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConclusionType {
     /// Definitely provable (+D)
@@ -58,6 +59,7 @@ impl fmt::Display for ConclusionType {
 }
 
 /// A conclusion from the reasoning engine
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Conclusion {
     /// The type of conclusion

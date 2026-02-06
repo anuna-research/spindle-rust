@@ -7,7 +7,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use spindle_core::conclusion::ConclusionType;
+use serde::Serialize;
+use spindle_core::conclusion::{Conclusion, ConclusionType};
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
 use spindle_core::query::{QueryStatus, abduce, query, why_not};
@@ -51,6 +52,9 @@ enum Commands {
         /// Only show positive conclusions
         #[arg(long)]
         positive: bool,
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
     },
     /// Validate a theory file
     Validate {
@@ -115,8 +119,9 @@ fn main() {
             file,
             scalable,
             positive,
+            json,
         }) => {
-            run_reason(&file, scalable, positive);
+            run_reason(&file, scalable, positive, json);
         }
         Some(Commands::Validate { file }) => {
             run_validate(&file);
@@ -155,7 +160,7 @@ fn main() {
         }
         None => {
             if let Some(file) = cli.input {
-                run_reason(&file, cli.scalable, cli.positive);
+                run_reason(&file, cli.scalable, cli.positive, cli.json);
             } else {
                 println!("Spindle v0.1.0 - Defeasible Logic Reasoning Engine");
                 println!("Ported from SPINdle-Racket v1.7.0");
@@ -237,33 +242,87 @@ fn parse_literal_arg(s: &str) -> Literal {
     }
 }
 
-fn run_reason(file: &PathBuf, scalable: bool, positive_only: bool) {
+#[derive(serde::Serialize)]
+struct ReasonOutput {
+    schema_version: String,
+    evaluated_at: Option<String>,
+    grounding: GroundingStats,
+    conclusions: Vec<ConclusionStruct>,
+    stats: TheoryStats,
+}
+
+#[derive(serde::Serialize)]
+struct GroundingStats {
+    performed: bool,
+}
+
+#[derive(serde::Serialize)]
+struct ConclusionStruct {
+    conclusion_type: String,
+    literal_spl: String,
+    literal_struct: Literal,
+    positive: bool,
+}
+
+#[derive(serde::Serialize)]
+struct TheoryStats {
+    rule_count: usize,
+    fact_count: usize,
+}
+
+fn run_reason(file: &PathBuf, scalable: bool, positive_only: bool, json_output: bool) {
     let theory = load_theory(file);
 
     let conclusions = if scalable {
-        let result = spindle_core::scalable::reason_scalable(&theory);
         let indexed = spindle_core::index::IndexedTheory::build(&theory);
+        let result = spindle_core::scalable::reason_scalable(&indexed);
         result.to_conclusions(&indexed)
     } else {
         theory.reason()
     };
 
-    println!("Conclusions:");
-    println!();
+    if json_output {
+        let output_conclusions: Vec<ConclusionStruct> = conclusions
+            .into_iter()
+            .filter(|c| !positive_only || c.is_positive())
+            .map(|c| ConclusionStruct {
+                conclusion_type: c.conclusion_type.symbol().to_string(),
+                literal_spl: c.literal.to_string(), // Display impl is SPL format
+                literal_struct: c.literal.clone(),
+                positive: c.is_positive(),
+            })
+            .collect();
 
-    for c in &conclusions {
-        if positive_only && !c.is_positive() {
-            continue;
-        }
-
-        let symbol = match c.conclusion_type {
-            ConclusionType::DefinitelyProvable => "+D",
-            ConclusionType::DefinitelyNotProvable => "-D",
-            ConclusionType::DefeasiblyProvable => "+d",
-            ConclusionType::DefeasiblyNotProvable => "-d",
+        let output = ReasonOutput {
+            schema_version: "spindle.reason.v1".to_string(),
+            evaluated_at: None, // Timepoint filtering not yet enabled
+            grounding: GroundingStats { performed: true }, // Always performed now
+            conclusions: output_conclusions,
+            stats: TheoryStats {
+                rule_count: theory.rule_count(),
+                fact_count: theory.facts().count(),
+            },
         };
 
-        println!("  {} {}", symbol, c.literal);
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    } else {
+        println!("Conclusions:");
+        println!();
+
+        for c in &conclusions {
+            if positive_only && !c.is_positive() {
+                continue;
+            }
+
+            let symbol = match c.conclusion_type {
+                ConclusionType::DefinitelyProvable => "+D",
+                ConclusionType::DefinitelyNotProvable => "-D",
+                ConclusionType::DefeasiblyProvable => "+d",
+                ConclusionType::DefeasiblyNotProvable => "-d",
+            };
+
+            println!("  {} {}", symbol, c.literal);
+        }
     }
 }
 

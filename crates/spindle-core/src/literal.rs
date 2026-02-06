@@ -12,7 +12,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use crate::intern::{LiteralId, SymbolId, intern, resolve};
+use crate::intern::{intern, resolve, LiteralId, SymbolId};
 use crate::mode::Mode;
 use crate::temporal::Temporal;
 
@@ -30,6 +30,7 @@ pub type LiteralName = String;
 /// The name is stored as an interned `SymbolId` (4 bytes, Copy) instead
 /// of a `String` (24 bytes, heap-allocated). Use `literal_id()` for
 /// O(1) HashSet/HashMap operations instead of `canonical_name()`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct Literal {
     /// The interned name of the literal (e.g., "flies", "bird")

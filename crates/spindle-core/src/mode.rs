@@ -5,6 +5,7 @@
 use std::fmt;
 
 /// Modal operator for deontic logic
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Mode {
     /// Mode name (e.g., "O" for obligation)
