@@ -127,7 +127,7 @@ spindle why-not examples/penguin.dfl flies
 spindle why-not examples/penguin.dfl --json flies
 ```
 
-Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results.
+Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes `is_provable: true` and `blocked_by` will be empty.
 
 Output:
 ```

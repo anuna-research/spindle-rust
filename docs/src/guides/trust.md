@@ -550,7 +550,7 @@ assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
 
 ## Limitations
 
-1. **Claims parsing**: The `(claims ...)` SPL syntax is documented but not yet implemented in the parser. Source attribution is available through the Rust API.
+1. **Claims parsing**: The `(claims ...)` SPL syntax is implemented in the SPL parser. Source attribution is available through the Rust API and via SPL `claims` blocks.
 2. **Static trust values**: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in.
 3. **Weakest-link only**: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.
 4. **No cryptographic verification**: The `:sig` metadata field is stored but not verified against any cryptographic infrastructure.

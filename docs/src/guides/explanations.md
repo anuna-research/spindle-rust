@@ -304,6 +304,8 @@ For machine-readable output:
 spindle why-not theory.dfl --json flies
 ```
 
+The JSON output includes `is_provable` to indicate whether the literal is actually provable, and `would_derive` with the rule label when available.
+
 ### Debugging Workflow
 
 A typical debugging session combines both commands:
