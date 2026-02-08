@@ -189,21 +189,21 @@ const result = spindle.query("flies");
 
 ```typescript
 const result = spindle.whatIf(["wounded"], "~flies");
-// Returns: { provable: boolean, new_conclusions: Array }
+// Returns: { provable: boolean, new_conclusions: Array, changed_conclusions: Array }
 ```
 
 ### Why-Not
 
 ```typescript
 const explanation = spindle.whyNot("flies");
-// Returns: { literal, would_derive, blockers: Array }
+// Returns: { literal, is_provable, would_derive, blockers: Array }
 ```
 
 ### Abduction
 
 ```typescript
 const solutions = spindle.abduce("goal", 3);
-// Returns: { goal, solutions: Array<Array<string>> }
+// Returns: { goal, solutions: Array<{ facts: string[], rules_used: string[], confidence: number }> }
 ```
 
 ### Reset
@@ -230,22 +230,38 @@ interface QueryResult {
 interface WhatIfResult {
     provable: boolean;
     new_conclusions: Conclusion[];
+    changed_conclusions: ChangedConclusion[];
 }
 
 interface WhyNotExplanation {
     literal: string;
+    is_provable: boolean;
     would_derive: string | null;
     blockers: Blocker[];
 }
 
 interface Blocker {
-    rule: string;
-    reason: string;
+    blocking_type: "MissingPremise" | "Defeated" | "Contradicted";
+    rule_label: string;
+    blocking_rule: string | null;
+    explanation: string;
 }
 
 interface AbductionResult {
     goal: string;
-    solutions: string[][];
+    solutions: AbductionSolution[];
+}
+
+interface AbductionSolution {
+    facts: string[];
+    rules_used: string[];
+    confidence: number;
+}
+
+interface ChangedConclusion {
+    literal: string;
+    old_type: string;
+    new_type: string;
 }
 ```
 

@@ -449,6 +449,8 @@ fn compute_partial_closure(
 mod tests {
     use super::*;
     use crate::Theory;
+    use crate::literal::Literal;
+    use crate::rule::Rule;
 
     #[test]
     fn test_delta_closure_facts() {
@@ -864,6 +866,41 @@ mod tests {
             assert!(result.contains_partial(&indexed, &format!("q{}", i)));
             assert!(!result.contains_partial(&indexed, &format!("~q{}", i)));
         }
+    }
+
+    #[test]
+    fn test_duplicate_facts_no_double_decrement() {
+        // Regression: duplicate facts in theory should not cause double-decrement
+        // of body_remaining counters in delta/lambda/partial closures.
+        let mut theory = Theory::new();
+        // Add the same fact twice via two separate rules
+        theory.add_rule(Rule::fact("f1", Literal::simple("p")));
+        theory.add_rule(Rule::fact("f2", Literal::simple("p")));
+        // Add a rule whose body depends on p
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let indexed = IndexedTheory::build(&theory);
+        let result = reason_scalable(&indexed);
+
+        // q should still be provable (not broken by double-decrement)
+        assert!(result.contains_partial(&indexed, "q"));
+        assert!(result.contains_partial(&indexed, "p"));
+    }
+
+    #[test]
+    fn test_duplicate_facts_multi_body_rule() {
+        // Regression: duplicate facts should not incorrectly satisfy multi-body rules
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
+        theory.add_rule(Rule::fact("f2", Literal::simple("a"))); // duplicate
+        theory.add_defeasible_rule(&["a", "b"], "goal");
+
+        let indexed = IndexedTheory::build(&theory);
+        let result = reason_scalable(&indexed);
+
+        // goal should NOT be provable - b is missing
+        assert!(!result.contains_partial(&indexed, "goal"));
+        assert!(result.contains_partial(&indexed, "a"));
     }
 
     // stateless tests need updating too, but they are simpler

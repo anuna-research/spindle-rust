@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-64fde6ea.js";
+            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -181,164 +181,38 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="temporal-reasoning"><a class="header" href="#temporal-reasoning">Temporal Reasoning</a></h1>
-<p>Spindle supports temporal reasoning using Allen’s interval algebra.</p>
+<p>Spindle supports timepoint (“as-of”) reasoning, allowing you to reason about facts and rules active at a specific moment in time.</p>
 <h2 id="time-points"><a class="header" href="#time-points">Time Points</a></h2>
-<h3 id="basic-moments"><a class="header" href="#basic-moments">Basic Moments</a></h3>
-<pre><code class="language-lisp">(moment 2024)                      ; Year only
-(moment 2024 6 15)                 ; Year, month, day
-(moment 2024 6 15 14 30 0 "UTC")   ; Full timestamp
-(moment "2024-06-15T14:30:00Z")    ; ISO 8601 string
+<p>Time points are represented as milliseconds since the Unix epoch (UTC).</p>
+<h3 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h3>
+<pre><code class="language-lisp">(moment "2024-06-15T14:30:00Z")    ; RFC3339 / ISO 8601 string (UTC)
+1718461800000                      ; Integer epoch milliseconds
+inf                                ; Positive infinity (never ends)
+-inf                               ; Negative infinity (always existed)
 </code></pre>
-<h3 id="special-values"><a class="header" href="#special-values">Special Values</a></h3>
-<pre><code class="language-lisp">inf    ; Positive infinity (never ends)
--inf   ; Negative infinity (always existed)
-</code></pre>
+<p>Note: Multi-arity forms (e.g., <code>(moment 2024 6 15)</code>) are not currently supported.</p>
 <h2 id="during-operator"><a class="header" href="#during-operator">During Operator</a></h2>
-<p>The <code>during</code> operator associates a literal with a time interval:</p>
-<pre><code class="language-lisp">(given (during bird 1 10))
-(given (during (employed alice acme) (moment 2020) (moment 2023)))
-</code></pre>
+<p>The <code>during</code> operator associates a literal with a time interval <code>[start, end]</code>.</p>
 <p>Syntax: <code>(during literal start end)</code></p>
-<h3 id="example-employment-history"><a class="header" href="#example-employment-history">Example: Employment History</a></h3>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
 <pre><code class="language-lisp">; Alice worked at Acme from 2020 to 2022
-(given (during (employed alice acme) (moment 2020) (moment 2022)))
+(given (during (employed alice acme) (moment "2020-01-01T00:00:00Z") (moment "2022-01-01T00:00:00Z")))
 
 ; Alice works at Beta from 2022 onwards
-(given (during (employed alice beta) (moment 2022) inf))
-
-; Employees can access company resources
-(normally r1 (during (employed ?x ?company) ?t) (during (can-access ?x ?company) ?t))
+(given (during (employed alice beta) (moment "2022-01-01T00:00:00Z") inf))
 </code></pre>
-<h2 id="allens-interval-relations"><a class="header" href="#allens-interval-relations">Allen’s Interval Relations</a></h2>
-<p>Spindle supports all 13 Allen interval relations for comparing time intervals.</p>
-<h3 id="basic-relations"><a class="header" href="#basic-relations">Basic Relations</a></h3>
-<pre><code class="language-lisp">(before ?t1 ?t2)    ; t1 ends before t2 starts
-                    ; |--t1--|
-                    ;           |--t2--|
-
-(after ?t1 ?t2)     ; t1 starts after t2 ends
-                    ;           |--t1--|
-                    ; |--t2--|
-
-(meets ?t1 ?t2)     ; t1 ends exactly when t2 starts
-                    ; |--t1--|
-                    ;        |--t2--|
-
-(met-by ?t1 ?t2)    ; t1 starts exactly when t2 ends
-                    ;        |--t1--|
-                    ; |--t2--|
-</code></pre>
-<h3 id="overlap-relations"><a class="header" href="#overlap-relations">Overlap Relations</a></h3>
-<pre><code class="language-lisp">(overlaps ?t1 ?t2)      ; t1 starts before t2, ends during t2
-                        ; |----t1----|
-                        ;       |----t2----|
-
-(overlapped-by ?t1 ?t2) ; t2 starts before t1, ends during t1
-                        ;       |----t1----|
-                        ; |----t2----|
-</code></pre>
-<h3 id="containment-relations"><a class="header" href="#containment-relations">Containment Relations</a></h3>
-<pre><code class="language-lisp">(contains ?t1 ?t2)  ; t1 strictly contains t2
-                    ; |--------t1--------|
-                    ;     |--t2--|
-
-(within ?t1 ?t2)    ; t1 is strictly within t2
-                    ;     |--t1--|
-                    ; |--------t2--------|
-</code></pre>
-<h3 id="boundary-sharing-relations"><a class="header" href="#boundary-sharing-relations">Boundary-Sharing Relations</a></h3>
-<pre><code class="language-lisp">(starts ?t1 ?t2)      ; Same start, t1 ends first
-                      ; |--t1--|
-                      ; |------t2------|
-
-(started-by ?t1 ?t2)  ; Same start, t2 ends first
-                      ; |------t1------|
-                      ; |--t2--|
-
-(finishes ?t1 ?t2)    ; t1 starts after t2, same end
-                      ;       |--t1--|
-                      ; |------t2----|
-
-(finished-by ?t1 ?t2) ; t2 starts after t1, same end
-                      ; |------t1----|
-                      ;       |--t2--|
-
-(equals ?t1 ?t2)      ; Same start and end
-                      ; |----t1----|
-                      ; |----t2----|
-</code></pre>
-<h2 id="temporal-rules"><a class="header" href="#temporal-rules">Temporal Rules</a></h2>
-<h3 id="propagating-temporal-properties"><a class="header" href="#propagating-temporal-properties">Propagating Temporal Properties</a></h3>
-<pre><code class="language-lisp">; If something is a bird during interval t, it has feathers during t
-(normally r1 (during bird ?t) (during has-feathers ?t))
-</code></pre>
-<h3 id="temporal-constraints"><a class="header" href="#temporal-constraints">Temporal Constraints</a></h3>
-<pre><code class="language-lisp">; Events that precede others
-(normally r1
-  (and (during event1 ?t1)
-       (during event2 ?t2)
-       (before ?t1 ?t2))
-  event1-precedes-event2)
-</code></pre>
-<h3 id="overlapping-intervals"><a class="header" href="#overlapping-intervals">Overlapping Intervals</a></h3>
-<pre><code class="language-lisp">; If two meetings overlap, there's a conflict
-(normally conflict
-  (and (during (meeting ?room ?m1) ?t1)
-       (during (meeting ?room ?m2) ?t2)
-       (overlaps ?t1 ?t2))
-  (scheduling-conflict ?room))
-</code></pre>
-<h2 id="example-project-timeline"><a class="header" href="#example-project-timeline">Example: Project Timeline</a></h2>
-<pre><code class="language-lisp">; Project phases
-(given (during (phase design) (moment 2024 1 1) (moment 2024 3 31)))
-(given (during (phase implementation) (moment 2024 3 1) (moment 2024 8 31)))
-(given (during (phase testing) (moment 2024 7 1) (moment 2024 9 30)))
-
-; Phases that overlap
-(normally r1
-  (and (during (phase ?p1) ?t1)
-       (during (phase ?p2) ?t2)
-       (overlaps ?t1 ?t2))
-  (parallel-work ?p1 ?p2))
-
-; Resource needed during phase
-(normally r2 (during (phase implementation) ?t) (during needs-developers ?t))
-</code></pre>
-<h2 id="querying-at-specific-times"><a class="header" href="#querying-at-specific-times">Querying at Specific Times</a></h2>
-<p>To query conclusions at a specific time, filter the results by temporal bounds.</p>
-<pre><code class="language-lisp">; Is alice employed at acme in 2021?
-; Check: (during (employed alice acme) ?t) where 2021 is within ?t
-</code></pre>
+<h2 id="as-of-reasoning"><a class="header" href="#as-of-reasoning">“As-Of” Reasoning</a></h2>
+<p>When reasoning with a reference time <code>t</code>, Spindle filters the theory:</p>
+<ol>
+<li><strong>Facts</strong>: A fact <code>(during p start end)</code> is active if <code>start &lt;= t &lt;= end</code>.</li>
+<li><strong>Rules</strong>: A rule is active if all its body literals and its head literal are active at <code>t</code>.</li>
+</ol>
+<p>This allows querying the system state at any historical or future point.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
-<li><strong>Discrete time</strong>: Moments are discrete, not continuous</li>
-<li><strong>No duration arithmetic</strong>: Cannot compute <code>t1 + 5 days</code></li>
-<li><strong>No fuzzy boundaries</strong>: Intervals have precise start/end</li>
-<li><strong>Grounding required</strong>: Temporal variables must be bound by facts</li>
-</ol>
-<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
-<ol>
-<li>
-<p><strong>Use meaningful intervals</strong></p>
-<pre><code class="language-lisp">; Good: named intervals
-(given (during project-alpha (moment 2024 1 1) (moment 2024 12 31)))
-
-; Avoid: magic numbers
-(given (during x 1 365))
-</code></pre>
-</li>
-<li>
-<p><strong>Document temporal semantics</strong></p>
-<pre><code class="language-lisp">; Employment is during working hours only
-(meta r1 (note "Applies during business hours"))
-</code></pre>
-</li>
-<li>
-<p><strong>Consider open intervals</strong></p>
-<pre><code class="language-lisp">; Ongoing employment (no end date)
-(given (during (employed alice acme) (moment 2024) inf))
-</code></pre>
-</li>
+<li><strong>Timepoint only</strong>: Currently, Spindle supports reasoning <em>at</em> a timepoint. Interval inference (deriving new intervals from rules) is planned for a future release.</li>
+<li><strong>No Allen Relations</strong>: Allen relations (<code>before</code>, <code>after</code>, <code>overlaps</code>, etc.) are not yet supported in the core reasoner.</li>
+<li><strong>No Interval Variables</strong>: You cannot bind a variable to a time interval (e.g., <code>(during p ?t)</code> is not supported).</li>
 </ol>
 
                     </main>

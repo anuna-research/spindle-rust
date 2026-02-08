@@ -8,7 +8,7 @@
 //! - Blocked alternatives tracking
 //! - Conflict resolution explanations
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::conclusion::ConclusionType;
@@ -568,7 +568,27 @@ impl Explanation {
 
 /// Explain why a conclusion holds (returns Proof Tree)
 pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Option<Explanation>> {
+    let mut visited = HashSet::new();
+    explain_inner(theory, literal, &mut visited)
+}
+
+/// Internal recursive helper with cycle detection via `visited` set.
+fn explain_inner(
+    theory: &crate::theory::Theory,
+    literal: &Literal,
+    visited: &mut HashSet<String>,
+) -> Result<Option<Explanation>> {
     use crate::reason::reason;
+
+    let literal_key = literal.to_string();
+
+    // Cycle detection: if we are already in the process of explaining this
+    // literal, return None to break the cycle instead of recursing forever.
+    if visited.contains(&literal_key) {
+        return Ok(None);
+    }
+    visited.insert(literal_key.clone());
+
     let conclusions = reason(theory)?;
 
     // Find the conclusion for the target literal
@@ -577,7 +597,10 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Opti
         .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
     {
         Some(c) => c,
-        None => return Ok(None),
+        None => {
+            visited.remove(&literal_key);
+            return Ok(None);
+        }
     };
 
     let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
@@ -606,18 +629,18 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Opti
         for body_lit in &rule.body {
             let ground_body_lit = apply_substitution_to_literal(body_lit, &subst);
 
-            if let Some(body_expl) = explain(theory, &ground_body_lit)? {
+            if let Some(body_expl) = explain_inner(theory, &ground_body_lit, visited)? {
                 if let Some(body_tree) = body_expl.proof_tree {
                     body_proofs.push(body_tree);
                 }
             } else {
                 // If exact ground literal not found, try to find a matching one
                 // (Handle existential cases like matter_seen where body var isn't in head)
-                // We need to iterate carefully to propagate errors from explain
+                // We need to iterate carefully to propagate errors from explain_inner
                 for c in &conclusions {
                     if c.conclusion_type.is_positive()
                         && match_literal(body_lit, &c.literal).is_some()
-                        && let Some(body_expl) = explain(theory, &c.literal)?
+                        && let Some(body_expl) = explain_inner(theory, &c.literal, visited)?
                         && let Some(body_tree) = body_expl.proof_tree
                     {
                         body_proofs.push(body_tree);
@@ -644,6 +667,7 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Opti
         explanation.proof_tree = Some(proof_node);
     }
 
+    visited.remove(&literal_key);
     Ok(Some(explanation))
 }
 
@@ -2182,5 +2206,22 @@ mod tests {
 
         let json = proof_node_to_json(&node);
         assert_eq!(json["proof_step"]["rule_type"], "defeater");
+    }
+
+    #[test]
+    fn test_explain_cyclic_rules_no_stack_overflow() {
+        use crate::theory::Theory;
+
+        // Create a theory with cyclic rule dependencies: a -> b, b -> c, c -> a
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+        theory.add_defeasible_rule(&["c"], "a"); // cycle back to a
+
+        // Calling explain on "c" should NOT stack overflow.
+        // It should return Ok (either Some or None) without panicking.
+        let result = explain(&theory, &Literal::simple("c"));
+        assert!(result.is_ok(), "explain() should not panic on cyclic rules");
     }
 }

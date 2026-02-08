@@ -346,11 +346,9 @@ fn run_reason(
 
         // Sort conclusions for deterministic output (per spec §3.5)
         // Sort by literal_spl first, then by conclusion_type for stability
-        output_conclusions.sort_by(|a, b| {
-            match a.literal_spl.cmp(&b.literal_spl) {
-                std::cmp::Ordering::Equal => a.conclusion_type.cmp(&b.conclusion_type),
-                other => other,
-            }
+        output_conclusions.sort_by(|a, b| match a.literal_spl.cmp(&b.literal_spl) {
+            std::cmp::Ordering::Equal => a.conclusion_type.cmp(&b.conclusion_type),
+            other => other,
         });
 
         let output = ReasonOutput {
@@ -560,6 +558,7 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option
 
         let output = json!({
             "literal": result.literal.to_string(),
+            "is_provable": result.is_provable(),
             "would_derive": result.would_derive,
             "blocked_by": blockers
         });

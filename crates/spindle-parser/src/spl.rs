@@ -54,25 +54,49 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
 
     let mut theory = Theory::new();
 
-    // Parse all top-level expressions
-    let (remaining, exprs) = parse_expressions(&cleaned).map_err(|e| ParseError::ParserError {
-        line: 1,
-        message: format!("SPL parse error: {e:?}"),
+    // Parse all top-level expressions, tracking positions for line numbers
+    let (remaining, expr_positions) = parse_expressions_with_positions(&cleaned).map_err(|e| {
+        let line = line_of_from_error(&cleaned, &e);
+        ParseError::ParserError {
+            line,
+            message: format!("SPL parse error: {e:?}"),
+        }
     })?;
 
     if !remaining.trim().is_empty() {
+        let line = line_of_offset(&cleaned, cleaned.len() - remaining.len());
         return Err(ParseError::ParserError {
-            line: 1,
+            line,
             message: format!("Unparsed input remaining: {}", remaining.trim()),
         });
     }
 
-    // Process expressions
-    for expr in exprs {
-        process_expr(&mut theory, &expr)?;
+    // Process expressions with line number tracking
+    for (expr, offset) in expr_positions {
+        let line = line_of_offset(&cleaned, offset);
+        process_expr_with_line(&mut theory, &expr, line)?;
     }
 
     Ok(theory)
+}
+
+/// Calculate line number from byte offset in original input
+fn line_of_offset(input: &str, offset: usize) -> usize {
+    let clamped = offset.min(input.len());
+    input[..clamped].chars().filter(|&c| c == '\n').count() + 1
+}
+
+/// Calculate line number from a nom parse error on cleaned input.
+///
+/// Extracts the remaining (unparsed) input length from the nom error and
+/// computes the byte offset into the cleaned string.
+fn line_of_from_error(cleaned: &str, err: &nom::Err<Error<&str>>) -> usize {
+    let remaining_len = match err {
+        nom::Err::Error(e) | nom::Err::Failure(e) => e.input.len(),
+        nom::Err::Incomplete(_) => 0,
+    };
+    let offset = cleaned.len().saturating_sub(remaining_len);
+    line_of_offset(cleaned, offset)
 }
 
 /// Remove semicolon comments and #lang directives from input, respecting quotes
@@ -139,9 +163,34 @@ impl SExpr {
     }
 }
 
-/// Parse multiple expressions
-fn parse_expressions(input: &str) -> IResult<&str, Vec<SExpr>> {
-    many0(preceded(multispace0, parse_sexpr)).parse(input)
+/// Parse multiple expressions, tracking byte offsets for each
+fn parse_expressions_with_positions(input: &str) -> IResult<&str, Vec<(SExpr, usize)>> {
+    let mut results = Vec::new();
+    let mut remaining = input;
+
+    loop {
+        // Skip whitespace
+        let (after_ws, _) = multispace0::<&str, Error<&str>>(remaining)?;
+        if after_ws.is_empty() {
+            break;
+        }
+
+        // Record offset before parsing the expression
+        let offset = input.len() - after_ws.len();
+
+        match parse_sexpr(after_ws) {
+            Ok((rest, expr)) => {
+                results.push((expr, offset));
+                remaining = rest;
+            }
+            Err(_) => break,
+        }
+    }
+
+    let final_remaining = remaining;
+    // Skip trailing whitespace
+    let (final_remaining, _) = multispace0::<&str, Error<&str>>(final_remaining)?;
+    Ok((final_remaining, results))
 }
 
 /// Parse a single s-expression
@@ -214,10 +263,14 @@ fn parse_atom(input: &str) -> IResult<&str, SExpr> {
     Ok((input, SExpr::Atom(s.to_string())))
 }
 
-/// Process an s-expression into theory elements
-fn process_expr(theory: &mut Theory, expr: &SExpr) -> Result<(), ParseError> {
+/// Process an s-expression into theory elements (with line number)
+fn process_expr_with_line(
+    theory: &mut Theory,
+    expr: &SExpr,
+    line: usize,
+) -> Result<(), ParseError> {
     let list = expr.as_list().ok_or_else(|| ParseError::ParserError {
-        line: 1,
+        line,
         message: "Expected list expression".to_string(),
     })?;
 
@@ -226,42 +279,116 @@ fn process_expr(theory: &mut Theory, expr: &SExpr) -> Result<(), ParseError> {
     }
 
     let keyword = list[0].as_atom().ok_or_else(|| ParseError::ParserError {
-        line: 1,
+        line,
         message: "Expected keyword".to_string(),
     })?;
 
     match keyword {
-        "given" => process_fact(theory, &list[1..]),
-        "always" => process_rule(theory, RuleType::Strict, &list[1..]),
-        "normally" => process_rule(theory, RuleType::Defeasible, &list[1..]),
-        "except" => process_rule(theory, RuleType::Defeater, &list[1..]),
-        "prefer" => process_prefer(theory, &list[1..]),
-        "meta" => process_meta(theory, &list[1..]),
+        "given" => process_fact_with_line(theory, &list[1..], line),
+        "always" => process_rule_with_line(theory, RuleType::Strict, &list[1..], line),
+        "normally" => process_rule_with_line(theory, RuleType::Defeasible, &list[1..], line),
+        "except" => process_rule_with_line(theory, RuleType::Defeater, &list[1..], line),
+        "prefer" => process_prefer_with_line(theory, &list[1..], line),
+        "meta" => process_meta_with_line(theory, &list[1..], line),
+        "claims" => process_claims(theory, &list[1..], line),
         "#lang" => Ok(()), // Ignore #lang directive
         _ => Err(ParseError::ParserError {
-            line: 1,
+            line,
             message: format!("Unknown keyword: {keyword}"),
         }),
     }
 }
 
-/// Process a fact: (given literal)
-fn process_fact(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
+/// Process a claims block: (claims source :at "timestamp" (expr1) (expr2) ...)
+fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
     if args.is_empty() {
         return Err(ParseError::ParserError {
-            line: 1,
+            line,
+            message: "claims requires a source".to_string(),
+        });
+    }
+
+    let source = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "claims source must be an atom".to_string(),
+    })?;
+
+    let mut timestamp: Option<String> = None;
+    let mut body_start = 1;
+
+    // Parse optional :at "timestamp"
+    while body_start < args.len() {
+        if let Some(kw) = args[body_start].as_atom()
+            && kw == ":at"
+        {
+            if body_start + 1 >= args.len() {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: "claims :at requires a timestamp atom".to_string(),
+                });
+            }
+            let ts = args[body_start + 1]
+                .as_atom()
+                .ok_or_else(|| ParseError::ParserError {
+                    line,
+                    message: "claims :at requires a timestamp atom".to_string(),
+                })?;
+            timestamp = Some(ts.to_string());
+            body_start += 2;
+            continue;
+        }
+        break;
+    }
+
+    // Process each claimed expression.
+    // We propagate a best-effort per-expression line by advancing from the
+    // claims line; this preserves useful diagnostics for multi-line blocks.
+    for (expr_idx, expr) in args[body_start..].iter().enumerate() {
+        let expr_line = line + expr_idx + 1;
+        let labels_before: std::collections::HashSet<String> =
+            theory.rules().map(|r| r.label.clone()).collect();
+
+        // Each expression inside claims is processed normally but gets source metadata
+        process_expr_with_line(theory, expr, expr_line)?;
+
+        // Find newly added rule labels, then attach metadata
+        let new_labels: Vec<String> = theory
+            .rules()
+            .filter(|r| !labels_before.contains(&r.label))
+            .map(|r| r.label.clone())
+            .collect();
+
+        for label in new_labels {
+            theory.add_meta_string(&label, "source", source);
+            if let Some(ref ts) = timestamp {
+                theory.add_meta_string(&label, "timestamp", ts);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Process a fact with line number: (given literal)
+fn process_fact_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
+    if args.is_empty() {
+        return Err(ParseError::ParserError {
+            line,
             message: "fact requires at least one argument".to_string(),
         });
     }
 
-    let lit = parse_literal(&args[0])?;
+    let lit = parse_literal_with_line(&args[0], line)?;
 
     // Handle flat predicate: (given pred arg1 arg2 ...)
     // Only if the first arg is an atom and there are more args
     let lit = if args.len() > 1 && args[0].as_atom().is_some() {
         let name = args[0].as_atom().unwrap();
         // Check if name is a reserved keyword that should be parsed as a nested literal instead
-        // e.g. (given during (p a) 1 2) vs (given p a b)
         match name {
             "during" | "must" | "may" | "forbidden" | "not" => lit,
             _ => {
@@ -271,7 +398,7 @@ fn process_fact(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
                         a.as_atom()
                             .map(|s| s.to_string())
                             .ok_or_else(|| ParseError::ParserError {
-                                line: 1,
+                                line,
                                 message: "Expected atom argument".to_string(),
                             })
                     })
@@ -289,21 +416,22 @@ fn process_fact(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
         lit
     };
 
-    let label = theory.next_fact_label();
+    let label = generate_unique_label(theory, "f");
     let rule = Rule::fact(label, lit);
     theory.add_rule(rule);
     Ok(())
 }
 
-/// Process a rule: (always/normally/except [label] body head)
-fn process_rule(
+/// Process a rule with line number: (always/normally/except [label] body head)
+fn process_rule_with_line(
     theory: &mut Theory,
     rule_type: RuleType,
     args: &[SExpr],
+    line: usize,
 ) -> Result<(), ParseError> {
     if args.len() < 2 {
         return Err(ParseError::ParserError {
-            line: 1,
+            line,
             message: "rule requires at least body and head".to_string(),
         });
     }
@@ -325,19 +453,34 @@ fn process_rule(
         (None, &args[0], &args[1])
     };
 
-    let body = parse_body(body_expr)?;
-    let head = parse_literal(head_expr)?;
+    let body = parse_body_with_line(body_expr, line)?;
+    let head = parse_literal_with_line(head_expr, line)?;
 
-    let final_label = label.unwrap_or_else(|| theory.next_rule_label(rule_type));
+    let prefix = match rule_type {
+        RuleType::Fact => "f",
+        RuleType::Strict => "s",
+        RuleType::Defeasible => "r",
+        RuleType::Defeater => "d",
+    };
+    let final_label = label.unwrap_or_else(|| generate_unique_label(theory, prefix));
+
+    // Detect label collision with existing rules
+    if theory.get_rule(&final_label).is_some() {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!("Duplicate rule label: {final_label}"),
+        });
+    }
+
     let rule = Rule::new(final_label, rule_type, body, vec![head]);
     theory.add_rule(rule);
     Ok(())
 }
 
-/// Parse a body expression (single literal or conjunction)
-fn parse_body(expr: &SExpr) -> Result<Vec<Literal>, ParseError> {
+/// Parse a body expression with line number
+fn parse_body_with_line(expr: &SExpr, line: usize) -> Result<Vec<Literal>, ParseError> {
     match expr {
-        SExpr::Atom(_) => Ok(vec![parse_literal(expr)?]),
+        SExpr::Atom(_) => Ok(vec![parse_literal_with_line(expr, line)?]),
         SExpr::List(items) => {
             if items.is_empty() {
                 return Ok(vec![]);
@@ -345,21 +488,34 @@ fn parse_body(expr: &SExpr) -> Result<Vec<Literal>, ParseError> {
 
             // Check for (and ...)
             if let Some("and") = items[0].as_atom() {
-                items[1..].iter().map(parse_literal).collect()
+                items[1..]
+                    .iter()
+                    .map(|item| parse_literal_with_line(item, line))
+                    .collect()
             } else {
                 // Single complex literal
-                Ok(vec![parse_literal(expr)?])
+                Ok(vec![parse_literal_with_line(expr, line)?])
             }
         }
     }
 }
 
-/// Parse a literal expression
-fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
+/// Parse a literal expression with line number tracking
+fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseError> {
     match expr {
         SExpr::Atom(s) => {
-            // Handle negation prefix
-            if let Some(name) = s.strip_prefix('~') {
+            // Handle double-negation: ~~name -> positive name
+            if let Some(name) = s.strip_prefix("~~") {
+                if name.is_empty() {
+                    return Err(ParseError::ParserError {
+                        line,
+                        message: "Double negation with empty name".to_string(),
+                    });
+                }
+                // ~~name = not(not(name)) = name (positive)
+                Ok(Literal::simple(name))
+            } else if let Some(name) = s.strip_prefix('~') {
+                // Handle single negation prefix
                 Ok(Literal::negated(name))
             } else {
                 Ok(Literal::simple(s))
@@ -368,13 +524,13 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
         SExpr::List(items) => {
             if items.is_empty() {
                 return Err(ParseError::ParserError {
-                    line: 1,
+                    line,
                     message: "Empty list is not a valid literal".to_string(),
                 });
             }
 
             let first = items[0].as_atom().ok_or_else(|| ParseError::ParserError {
-                line: 1,
+                line,
                 message: "Expected atom in literal".to_string(),
             })?;
 
@@ -383,22 +539,22 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                     // (not literal)
                     if items.len() != 2 {
                         return Err(ParseError::ParserError {
-                            line: 1,
+                            line,
                             message: "not takes exactly one argument".to_string(),
                         });
                     }
-                    let inner = parse_literal(&items[1])?;
+                    let inner = parse_literal_with_line(&items[1], line)?;
                     Ok(inner.complement())
                 }
                 "must" => {
                     // (must literal)
                     if items.len() != 2 {
                         return Err(ParseError::ParserError {
-                            line: 1,
+                            line,
                             message: "must takes exactly one argument".to_string(),
                         });
                     }
-                    let mut lit = parse_literal(&items[1])?;
+                    let mut lit = parse_literal_with_line(&items[1], line)?;
                     lit.mode = Mode::obligation();
                     Ok(lit)
                 }
@@ -406,11 +562,11 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                     // (may literal)
                     if items.len() != 2 {
                         return Err(ParseError::ParserError {
-                            line: 1,
+                            line,
                             message: "may takes exactly one argument".to_string(),
                         });
                     }
-                    let mut lit = parse_literal(&items[1])?;
+                    let mut lit = parse_literal_with_line(&items[1], line)?;
                     lit.mode = Mode::permission();
                     Ok(lit)
                 }
@@ -418,11 +574,11 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                     // (forbidden literal)
                     if items.len() != 2 {
                         return Err(ParseError::ParserError {
-                            line: 1,
+                            line,
                             message: "forbidden takes exactly one argument".to_string(),
                         });
                     }
-                    let mut lit = parse_literal(&items[1])?;
+                    let mut lit = parse_literal_with_line(&items[1], line)?;
                     lit.mode = Mode::forbidden();
                     Ok(lit)
                 }
@@ -430,14 +586,14 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                     // (during literal start end)
                     if items.len() != 4 {
                         return Err(ParseError::ParserError {
-                            line: 1,
+                            line,
                             message: "during takes exactly three arguments: literal, start, end"
                                 .to_string(),
                         });
                     }
-                    let mut lit = parse_literal(&items[1])?;
-                    let start = parse_timepoint(&items[2])?;
-                    let end = parse_timepoint(&items[3])?;
+                    let mut lit = parse_literal_with_line(&items[1], line)?;
+                    let start = parse_timepoint_with_line(&items[2], line)?;
+                    let end = parse_timepoint_with_line(&items[3], line)?;
                     lit.temporal = Temporal::new(start, end);
                     Ok(lit)
                 }
@@ -448,7 +604,7 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
                         .map(|a| {
                             a.as_atom().map(|s| s.to_string()).ok_or_else(|| {
                                 ParseError::ParserError {
-                                    line: 1,
+                                    line,
                                     message: "Expected atom argument".to_string(),
                                 }
                             })
@@ -467,7 +623,7 @@ fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
     }
 }
 
-fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
+fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, ParseError> {
     match expr {
         SExpr::Atom(s) => {
             if s == "-inf" {
@@ -478,7 +634,7 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
                 Ok(TimePoint::from_millis(n))
             } else {
                 Err(ParseError::ParserError {
-                    line: 1,
+                    line,
                     message: format!("Invalid timepoint: {}", s),
                 })
             }
@@ -493,25 +649,23 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
                     }
 
                     Err(ParseError::ParserError {
-                        line: 1,
+                        line,
                         message: format!("Invalid RFC3339 timepoint for moment: {}", s),
                     })
                 } else {
                     Err(ParseError::ParserError {
-                        line: 1,
+                        line,
                         message: "moment argument must be atom".to_string(),
                     })
                 }
             } else if items.len() >= 4 && items[0].as_atom() == Some("moment") {
-                // (moment YYYY MM DD ...)
-                // Stub implementation for multi-arity
                 Err(ParseError::ParserError {
-                    line: 1,
+                    line,
                     message: "Multi-arity moment (YYYY MM DD ...) not yet supported".to_string(),
                 })
             } else {
                 Err(ParseError::ParserError {
-                    line: 1,
+                    line,
                     message: "Invalid timepoint expression".to_string(),
                 })
             }
@@ -519,17 +673,21 @@ fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
     }
 }
 
-/// Process meta: (meta label (key "value") (key2 "value2") ...)
-fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
+/// Process meta with line number
+fn process_meta_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
     if args.is_empty() {
         return Err(ParseError::ParserError {
-            line: 1,
+            line,
             message: "meta requires a label".to_string(),
         });
     }
 
     let label = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
-        line: 1,
+        line,
         message: "meta label must be an atom".to_string(),
     })?;
 
@@ -541,7 +699,7 @@ fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
             let key = prop_list[0]
                 .as_atom()
                 .ok_or_else(|| ParseError::ParserError {
-                    line: 1,
+                    line,
                     message: "meta property key must be an atom".to_string(),
                 })?;
 
@@ -555,7 +713,7 @@ fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
                         .map(|item| {
                             item.as_atom().map(|s| s.to_string()).ok_or_else(|| {
                                 ParseError::ParserError {
-                                    line: 1,
+                                    line,
                                     message: "meta list values must be atoms".to_string(),
                                 }
                             })
@@ -572,11 +730,15 @@ fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
     Ok(())
 }
 
-/// Process prefer: (prefer r1 r2 ...)
-fn process_prefer(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
+/// Process prefer with line number
+fn process_prefer_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
     if args.len() < 2 {
         return Err(ParseError::ParserError {
-            line: 1,
+            line,
             message: "prefer requires at least two labels".to_string(),
         });
     }
@@ -585,7 +747,7 @@ fn process_prefer(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError>
         .iter()
         .map(|a| {
             a.as_atom().ok_or_else(|| ParseError::ParserError {
-                line: 1,
+                line,
                 message: "prefer arguments must be atoms".to_string(),
             })
         })
@@ -600,27 +762,17 @@ fn process_prefer(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError>
     Ok(())
 }
 
-// Helper trait for Theory to generate labels
-trait TheoryLabelExt {
-    fn next_fact_label(&mut self) -> String;
-    fn next_rule_label(&mut self, rule_type: RuleType) -> String;
-}
-
-impl TheoryLabelExt for Theory {
-    fn next_fact_label(&mut self) -> String {
-        let count = self.facts().count() + 1;
-        format!("f{count}")
-    }
-
-    fn next_rule_label(&mut self, rule_type: RuleType) -> String {
-        let prefix = match rule_type {
-            RuleType::Fact => "f",
-            RuleType::Strict => "s",
-            RuleType::Defeasible => "r",
-            RuleType::Defeater => "d",
-        };
-        let count = self.rules_by_type(rule_type).count() + 1;
-        format!("{prefix}{count}")
+/// Generate a unique label that doesn't collide with existing labels in the theory.
+/// Uses a simple counter approach: prefix1, prefix2, prefix3, etc.
+/// If a label already exists, keeps incrementing until a free slot is found.
+fn generate_unique_label(theory: &Theory, prefix: &str) -> String {
+    let mut counter = theory.rule_count() + 1;
+    loop {
+        let label = format!("{prefix}{counter}");
+        if theory.get_rule(&label).is_none() {
+            return label;
+        }
+        counter += 1;
     }
 }
 
@@ -733,6 +885,181 @@ mod tests {
         assert!(
             message.contains("moment"),
             "Expected error mentioning moment for ambiguous numeric form"
+        );
+    }
+
+    // =========================================================================
+    // REGRESSION TESTS - Bug Hunt Fixes
+    // =========================================================================
+
+    #[test]
+    fn test_claims_keyword_basic() {
+        // Regression: SPL parser should handle 'claims' keyword
+        let input = r#"(claims agent:alice :at "2024-01-01T00:00:00Z" (given bird))"#;
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.rule_count(), 1);
+
+        // Should have source metadata
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label);
+        assert!(meta.is_some(), "Claims should attach source metadata");
+    }
+
+    #[test]
+    fn test_claims_keyword_multiple_facts() {
+        let input = r#"(claims agent:bob (given sunny) (given warm))"#;
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.rule_count(), 2);
+    }
+
+    #[test]
+    fn test_auto_label_no_collision() {
+        // Regression: auto-labels should not collide with user-provided labels
+        let input = "(normally r3 bird flies)\n(normally bird2 animal)";
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.rule_count(), 2);
+
+        // Both rules should have distinct labels
+        let labels: Vec<_> = theory.rules().map(|r| r.label.clone()).collect();
+        let unique: std::collections::HashSet<_> = labels.iter().collect();
+        assert_eq!(labels.len(), unique.len(), "Labels should be unique");
+    }
+
+    #[test]
+    fn test_double_negation_stripped() {
+        // Regression: ~~name should be treated as positive literal
+        let theory = parse_spl("(given ~~bird)").unwrap();
+        let fact = theory.facts().next().unwrap();
+        let lit = fact.head_literal();
+        assert!(
+            !lit.is_negated(),
+            "~~bird should be positive (double negation cancels)"
+        );
+        assert_eq!(lit.name(), "bird");
+    }
+
+    #[test]
+    fn test_double_negation_in_rule() {
+        let theory = parse_spl("(normally r1 ~~p q)").unwrap();
+        let rule = theory.rules().next().unwrap();
+        assert!(!rule.body[0].is_negated(), "~~p in body should be positive");
+    }
+
+    #[test]
+    fn test_line_numbers_in_errors() {
+        // Regression: parser errors should report actual line numbers, not always line 1
+        let input = "(given bird)\n(given fish)\n(bogus_keyword something)";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        // The error is on line 3
+        assert!(
+            message.contains("3") || message.contains("bogus_keyword"),
+            "Error should reference line 3 or the bad keyword, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_line_numbers_not_always_one() {
+        // More specific test: an error late in the file should NOT say line 1
+        let input = "(given a)\n(given b)\n(given c)\n(given d)\n(bad)";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        // Should mention line 5 (or at least not line 1)
+        assert!(
+            !message.contains("line 1") || message.contains("line 5"),
+            "Error on line 5 should not report line 1, got: {message}"
+        );
+    }
+
+    // =========================================================================
+    // Reviewer Fix Tests
+    // =========================================================================
+
+    #[test]
+    fn test_claims_timestamp_attached() {
+        // Fix 2: verify "timestamp" metadata key is set when :at is provided
+        let input = r#"(claims agent:alice :at "2024-06-15T12:00:00Z" (given sunny))"#;
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.rule_count(), 1);
+
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label);
+        assert!(meta.is_some(), "Should have metadata");
+
+        let meta_map = meta.unwrap();
+        assert!(
+            meta_map.properties.contains_key("timestamp"),
+            "Should have 'timestamp' metadata key"
+        );
+        let ts_val = &meta_map.properties["timestamp"];
+        match ts_val {
+            MetaValue::String(s) => assert_eq!(s, "2024-06-15T12:00:00Z"),
+            other => panic!("Expected String metadata for timestamp, got: {:?}", other),
+        }
+
+        assert!(
+            meta_map.properties.contains_key("source"),
+            "Should have 'source' metadata key"
+        );
+    }
+
+    #[test]
+    fn test_claims_prefer_no_wrong_metadata() {
+        // Fix 3: claims block with prefer inside — metadata should only attach to actual rules
+        let input = r#"(claims agent:bob (given bird) (normally r1 bird flies) (prefer r1 r2) (given fish))"#;
+        let theory = parse_spl(input).unwrap();
+
+        // Should have 3 rules: bird fact, r1, fish fact
+        assert_eq!(theory.rule_count(), 3);
+
+        // All 3 rules should have source metadata
+        for rule in theory.rules() {
+            let meta = theory.get_meta(&rule.label);
+            assert!(
+                meta.is_some() && meta.unwrap().properties.contains_key("source"),
+                "Rule {} should have source metadata",
+                rule.label
+            );
+        }
+
+        // The prefer expression should NOT have attached metadata to the wrong rule.
+        // Specifically, r1's source should be "agent:bob" (from claims), not duplicated.
+        let r1_meta = theory.get_meta("r1").unwrap();
+        match &r1_meta.properties["source"] {
+            MetaValue::String(s) => assert_eq!(s, "agent:bob"),
+            other => panic!("Expected String source for r1, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_claims_at_requires_atom_timestamp() {
+        let err = parse_spl("(claims agent:alice :at (given bird))").unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("claims :at requires a timestamp atom"),
+            "Expected malformed :at value to fail, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_line_numbers_with_lang_directive() {
+        let input = "#lang spindle\n(bogus something)";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("line 2"),
+            "Expected error to report line 2 after #lang, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_claims_inner_expression_line_numbers() {
+        let input = "(claims agent:alice\n  (given bird)\n  (bogus something))";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("line 3"),
+            "Expected bad inner claims expression to report line 3, got: {message}"
         );
     }
 }

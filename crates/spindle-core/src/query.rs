@@ -6,8 +6,9 @@
 //! - **Why-Not**: Explanation of failures - "Why isn't X provable?"
 //! - **Abduction**: Finding hypotheses - "What facts would make X provable?"
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::conclusion::ConclusionType;
 use crate::error::Result;
@@ -194,6 +195,47 @@ impl WhatIfResult {
     }
 }
 
+/// Global counter for unique hypothetical labels to avoid collision
+static HYP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[inline]
+fn conclusion_strength(ct: ConclusionType) -> u8 {
+    match ct {
+        ConclusionType::DefinitelyProvable => 4,
+        ConclusionType::DefeasiblyProvable => 3,
+        ConclusionType::DefeasiblyNotProvable => 2,
+        ConclusionType::DefinitelyNotProvable => 1,
+    }
+}
+
+fn strongest_conclusions_by_literal(
+    conclusions: &[crate::conclusion::Conclusion],
+) -> HashMap<Literal, ConclusionType> {
+    let mut by_lit = HashMap::new();
+    for conc in conclusions {
+        by_lit
+            .entry(conc.literal.clone())
+            .and_modify(|old| {
+                if conclusion_strength(conc.conclusion_type) > conclusion_strength(*old) {
+                    *old = conc.conclusion_type;
+                }
+            })
+            .or_insert(conc.conclusion_type);
+    }
+    by_lit
+}
+
+fn next_hyp_label(theory: &Theory, unique_id: u64, start_index: usize) -> String {
+    let mut index = start_index.max(1);
+    loop {
+        let candidate = format!("__hyp_{}_{}", unique_id, index);
+        if theory.get_rule(&candidate).is_none() {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
 /// Perform hypothetical reasoning: "What if we assumed these facts?"
 ///
 /// Creates a copy of the theory with hypothetical facts added,
@@ -211,19 +253,36 @@ pub fn what_if(
         .map(|c| c.literal.clone())
         .collect();
 
-    // Create modified theory with hypotheticals
+    // Create modified theory with hypotheticals using unique labels
+    let unique_id = HYP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut modified = theory.clone();
     for (i, hyp) in hypotheticals.iter().enumerate() {
-        let label = format!("hyp{}", i + 1);
+        let label = next_hyp_label(&modified, unique_id, i + 1);
         let rule = Rule::fact(&label, hyp.literal.clone());
         modified.add_rule(rule);
     }
 
-    // Reason on modified theory
+    // Reason on modified theory (only once, not via query which reasons again)
     let modified_conclusions = reason(&modified)?;
 
-    // Query result
-    let result = query(&modified, goal)?;
+    // Determine goal status directly from conclusions (avoids calling query->reason again)
+    let goal_complement = goal.complement();
+    let mut result = QueryResult::new(goal.clone(), QueryStatus::Unknown);
+    for conc in &modified_conclusions {
+        if conc.literal == *goal && conc.conclusion_type.is_positive() {
+            result = QueryResult::new(goal.clone(), QueryStatus::Provable)
+                .with_conclusion_type(conc.conclusion_type);
+            break;
+        }
+    }
+    if result.status == QueryStatus::Unknown {
+        for conc in &modified_conclusions {
+            if conc.literal == goal_complement && conc.conclusion_type.is_positive() {
+                result = QueryResult::new(goal.clone(), QueryStatus::Refuted);
+                break;
+            }
+        }
+    }
 
     // Find new conclusions
     let new_conclusions: Vec<Literal> = modified_conclusions
@@ -232,8 +291,23 @@ pub fn what_if(
         .map(|c| c.literal.clone())
         .collect();
 
-    // Find changed conclusions (simplified - just track new positives)
-    let changed_conclusions = Vec::new(); // Could be expanded to track full changes
+    // Track changed conclusions by comparing strongest status per literal.
+    // This captures both positive->positive changes and positive->negative
+    // transitions (e.g. a literal that becomes unprovable under hypotheticals).
+    let mut changed_conclusions = Vec::new();
+    let baseline_by_lit = strongest_conclusions_by_literal(&baseline);
+    let modified_by_lit = strongest_conclusions_by_literal(&modified_conclusions);
+
+    let mut all_literals: HashSet<Literal> = baseline_by_lit.keys().cloned().collect();
+    all_literals.extend(modified_by_lit.keys().cloned());
+    for lit in all_literals {
+        if let (Some(&old_type), Some(&new_type)) =
+            (baseline_by_lit.get(&lit), modified_by_lit.get(&lit))
+            && old_type != new_type
+        {
+            changed_conclusions.push((lit, old_type, new_type));
+        }
+    }
 
     Ok(WhatIfResult {
         hypotheticals,
@@ -333,7 +407,7 @@ impl BlockingCondition {
 /// Result of a why-not query
 #[derive(Debug, Clone)]
 pub struct WhyNotResult {
-    /// The literal that is not provable
+    /// The literal queried
     pub literal: Literal,
     /// Rule that would derive this literal (if body was satisfied)
     pub would_derive: Option<String>,
@@ -349,6 +423,13 @@ impl WhyNotResult {
             would_derive: None,
             blocked_by: Vec::new(),
         }
+    }
+
+    /// Check if the literal is actually provable.
+    ///
+    /// A provable literal has a deriving rule but no blockers.
+    pub fn is_provable(&self) -> bool {
+        self.would_derive.is_some() && self.blocked_by.is_empty()
     }
 
     /// Check if there are any blocking conditions
@@ -369,6 +450,14 @@ impl WhyNotResult {
 impl fmt::Display for WhyNotResult {
     /// Convert to human-readable string
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_provable() {
+            write!(f, "{} is provable", self.literal)?;
+            if let Some(ref rule) = self.would_derive {
+                write!(f, " (derived by rule: {rule})")?;
+            }
+            return Ok(());
+        }
+
         if self.blocked_by.is_empty() {
             return write!(
                 f,
@@ -402,7 +491,13 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
 
     if is_provable {
-        return Ok(WhyNotResult::new(literal.clone()));
+        // Return a result with would_derive taken from the conclusion's rule_label
+        let mut result = WhyNotResult::new(literal.clone());
+        result.would_derive = conclusions
+            .iter()
+            .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
+            .and_then(|c| c.rule_label.clone());
+        return Ok(result);
     }
 
     // Collect proven literals for checking body satisfaction
@@ -412,12 +507,13 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         .map(|c| c.literal.clone())
         .collect();
 
+    let complement = literal.complement();
     let mut result = WhyNotResult::new(literal.clone());
     let mut found_rule = false;
 
     // Find rules that could derive this literal and why they don't fire
     for rule in theory.rules() {
-        if rule.head_literal() == literal {
+        if rule.head_literal() == literal && rule.rule_type != RuleType::Defeater {
             found_rule = true;
 
             if result.would_derive.is_none() {
@@ -436,6 +532,60 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 result
                     .blocked_by
                     .push(BlockingCondition::missing_premise(&rule.label, missing));
+            } else {
+                // Body is fully satisfied but conclusion not proven.
+                // Check for defeater blocking.
+                let mut blocked = false;
+                for attacker in theory.rules() {
+                    if attacker.head_literal() == &complement {
+                        let attacker_body_satisfied =
+                            attacker.body.iter().all(|b| proven.contains(b));
+                        if !attacker_body_satisfied {
+                            continue;
+                        }
+
+                        if attacker.rule_type == RuleType::Defeater {
+                            // Defeaters block unless the rule is explicitly superior
+                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
+                            if !rule_superior {
+                                result.blocked_by.push(BlockingCondition::defeated(
+                                    &rule.label,
+                                    &attacker.label,
+                                ));
+                                blocked = true;
+                            }
+                        } else {
+                            // For defeasible rules: check superiority both directions
+                            let attacker_superior =
+                                theory.is_superior(&attacker.label, &rule.label);
+                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
+
+                            if rule_superior && !attacker_superior {
+                                // Rule is superior — skip this attacker
+                                continue;
+                            }
+
+                            // Report as blocker if attacker is superior or ambiguity
+                            result.blocked_by.push(BlockingCondition::contradicted(
+                                &rule.label,
+                                &attacker.label,
+                            ));
+                            blocked = true;
+                        }
+                    }
+                }
+                if !blocked {
+                    // Body satisfied, no attackers found, but still not provable.
+                    // This can happen with ambiguity blocking.
+                    result.blocked_by.push(BlockingCondition {
+                        blocking_type: BlockingType::Contradicted,
+                        rule_label: rule.label.clone(),
+                        missing_literals: Vec::new(),
+                        blocking_rule: None,
+                        explanation: "Body satisfied but conclusion blocked by ambiguity"
+                            .to_string(),
+                    });
+                }
             }
         }
     }
@@ -443,7 +593,6 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     // If no rules found at all
     if !found_rule {
         // Check if complement is proven (contradicted)
-        let complement = literal.complement();
         if proven.contains(&complement) {
             result.blocked_by.push(BlockingCondition {
                 blocking_type: BlockingType::Contradicted,
@@ -918,10 +1067,12 @@ mod tests {
         theory.add_fact("~flies"); // Complement is proven
 
         let result = why_not(&theory, &Literal::simple("flies")).unwrap();
-        assert!(result
-            .blocked_by
-            .iter()
-            .any(|b| b.blocking_type == BlockingType::Contradicted));
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_type == BlockingType::Contradicted)
+        );
     }
 
     #[test]
@@ -1290,10 +1441,12 @@ mod tests {
 
         let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
         assert!(result.is_provable());
-        assert!(result
-            .new_conclusions
-            .iter()
-            .any(|l| l.name() == "ready_review"));
+        assert!(
+            result
+                .new_conclusions
+                .iter()
+                .any(|l| l.name() == "ready_review")
+        );
     }
 
     #[test]
@@ -1674,6 +1827,277 @@ mod tests {
         assert!(
             result.is_provable(),
             "~bird should be provable at time 3500"
+        );
+    }
+
+    // ==========================================================================
+    // REGRESSION TESTS - Bug Hunt Fixes
+    // ==========================================================================
+
+    #[test]
+    fn test_why_not_detects_defeater_blocking() {
+        // Regression: why_not should detect when a defeater blocks a conclusion
+        let th = make_defeater_theory();
+        // bird => flies, broken_wing ~> ~flies (defeater)
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+
+        // Should detect the defeater blocking
+        let has_defeated = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Defeated);
+        let has_contradicted = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Contradicted);
+
+        assert!(
+            has_defeated || has_contradicted,
+            "why_not should detect defeater or contradiction blocking, got: {:?}",
+            result.blocked_by
+        );
+    }
+
+    #[test]
+    fn test_what_if_no_triple_reasoning() {
+        // Regression: what_if should not call reason() 3 times.
+        // We verify correctness (the performance fix is structural).
+        let th = make_missing_premise_theory();
+        let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
+
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
+        assert!(result.is_provable());
+        assert!(!result.new_conclusions.is_empty());
+    }
+
+    #[test]
+    fn test_what_if_unique_labels_no_collision() {
+        // Regression: hypothetical labels should not collide with user labels
+        let mut theory = Theory::new();
+        // User has a rule labeled "hyp1" (which old code would collide with)
+        theory.add_rule(Rule::defeasible(
+            "hyp1",
+            vec![Literal::simple("a")],
+            Literal::simple("b"),
+        ));
+        theory.add_fact("x");
+        theory.add_defeasible_rule(&["x"], "goal");
+
+        let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("a"))];
+        let result = what_if(&theory, hypotheticals, &Literal::simple("goal")).unwrap();
+
+        // Should still work correctly despite user having "hyp1" label
+        assert!(result.is_provable());
+    }
+
+    #[test]
+    fn test_next_hyp_label_skips_existing_rule_labels() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("__hyp_42_1", Literal::simple("a")));
+        theory.add_rule(Rule::fact("__hyp_42_2", Literal::simple("b")));
+
+        let label = next_hyp_label(&theory, 42, 1);
+        assert_eq!(label, "__hyp_42_3");
+    }
+
+    #[test]
+    fn test_what_if_changed_conclusions_no_false_positive_when_status_unchanged() {
+        // Regression: baseline and modified can both contain +D and +d for the same literal.
+        // This should not be reported as a status change.
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("irrelevant"))],
+            &Literal::simple("p"),
+        )
+        .unwrap();
+
+        assert!(
+            result.changed_conclusions.is_empty(),
+            "No status change expected for p, got {:?}",
+            result.changed_conclusions
+        );
+    }
+
+    #[test]
+    fn test_what_if_changed_conclusions_includes_becomes_unprovable() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        // Baseline: +d q. Hypothetical ~q fact should block q.
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::negated("q"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        let has_transition = result.changed_conclusions.iter().any(|(lit, old, new)| {
+            lit == &Literal::simple("q")
+                && *old == ConclusionType::DefeasiblyProvable
+                && !new.is_positive()
+        });
+        assert!(
+            has_transition,
+            "Expected q to appear in changed_conclusions when it becomes unprovable, got {:?}",
+            result.changed_conclusions
+        );
+    }
+
+    #[test]
+    fn test_what_if_changed_conclusions_detects_real_upgrade() {
+        // When a hypothetical adds a strict rule that upgrades a literal
+        // from +d to +D, changed_conclusions should report it.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        // p is only defeasibly provable in baseline
+        theory.add_rule(Rule::new(
+            "d1",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        // q depends on a premise we'll supply
+        theory.add_defeasible_rule(&["trigger"], "q");
+
+        // Use a strict rule body: trigger => p (strict)
+        theory.add_rule(Rule::strict(
+            "s1",
+            vec![Literal::simple("trigger")],
+            Literal::simple("p"),
+        ));
+
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("trigger"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        // p should go from +d (baseline) to +D (modified) — a real change
+        let p_change = result.changed_conclusions.iter().find(|(lit, _, _)| {
+            lit.name() == "p" && !lit.negation
+        });
+        assert!(
+            p_change.is_some(),
+            "Should detect p upgrading from +d to +D, got: {:?}",
+            result.changed_conclusions
+        );
+        let (_, old, new) = p_change.unwrap();
+        assert_eq!(*old, ConclusionType::DefeasiblyProvable);
+        assert_eq!(*new, ConclusionType::DefinitelyProvable);
+    }
+
+    #[test]
+    fn test_what_if_new_conclusion_also_in_changed() {
+        // A literal that becomes provable under hypotheticals should appear
+        // in new_conclusions AND in changed_conclusions (negative → positive).
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&["trigger"], "q");
+
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("trigger"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        // q is new (not provable in baseline)
+        assert!(
+            result.new_conclusions.iter().any(|l| l.name() == "q"),
+            "q should appear in new_conclusions"
+        );
+        // q should also appear in changed_conclusions (it went from -d to +d)
+        let q_in_changed = result.changed_conclusions.iter().any(|(lit, old, new)| {
+            lit.name() == "q" && !lit.negation && !old.is_positive() && new.is_positive()
+        });
+        assert!(
+            q_in_changed,
+            "q should appear in changed_conclusions as a negative→positive transition, got {:?}",
+            result.changed_conclusions
+        );
+    }
+
+    #[test]
+    fn test_why_not_provable_literal_no_false_blockers() {
+        // Regression: why_not on a provable literal should return no blockers
+        // and should identify the deriving rule
+        let th = make_defeasible_theory();
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+
+        assert!(!result.has_blockers());
+        assert!(
+            result.would_derive.is_some(),
+            "Should identify deriving rule"
+        );
+    }
+
+    #[test]
+    fn test_why_not_respects_superiority() {
+        // r1 > r2: why_not for r1's head should NOT list r2 as blocker
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+        theory.add_superiority(&r1, &r2);
+
+        // flies should be provable since r1 > r2
+        let q = query(&theory, &Literal::simple("flies")).unwrap();
+        assert!(q.is_provable(), "flies should be provable with r1 > r2");
+
+        // why_not should have no blockers (since it IS provable)
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        assert!(
+            !result.has_blockers(),
+            "why_not should not report blockers for provable literal with superior rule"
+        );
+    }
+
+    #[test]
+    fn test_why_not_superiority_inferior_not_blocker() {
+        // When r1 > r2 and flies is NOT provable for other reasons,
+        // r2 should still not be listed as a blocker for r1
+        let mut theory = Theory::new();
+        theory.add_fact("penguin");
+        // bird is NOT a fact, so r1's body is unsatisfied
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+        theory.add_superiority(&r1, &r2);
+
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        assert!(result.has_blockers());
+
+        // The blocker should be missing premise (bird), not r2 as contradicted
+        let has_r2_blocker = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_rule.as_deref() == Some(&r2));
+        assert!(
+            !has_r2_blocker,
+            "Inferior rule r2 should not be listed as a blocker when r1 > r2"
+        );
+    }
+
+    #[test]
+    fn test_why_not_defeater_not_blocker_when_superior() {
+        // When rule is superior to a defeater, the defeater should not block
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("broken_wing");
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let d1 = theory.add_defeater(&["broken_wing"], "~flies");
+        theory.add_superiority(&r1, &d1);
+
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        // flies should be provable since r1 > d1
+        assert!(
+            !result.has_blockers(),
+            "Defeater should not block when rule is superior"
         );
     }
 }

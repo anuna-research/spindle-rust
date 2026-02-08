@@ -20,6 +20,11 @@ impl AtomId {
     pub fn as_raw(self) -> u32 {
         self.0
     }
+
+    /// Create an AtomId from a raw u32 value.
+    pub fn from_raw(value: u32) -> Self {
+        AtomId(value)
+    }
 }
 
 /// Unique identifier for a literal (AtomId + negation) within an IndexedTheory.

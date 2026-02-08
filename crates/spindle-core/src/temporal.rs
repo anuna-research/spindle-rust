@@ -167,15 +167,33 @@ impl Temporal {
     }
 
     /// Create a temporal with specific bounds
+    ///
+    /// If `start > end`, the bounds are automatically swapped.
     pub fn new(start: TimePoint, end: TimePoint) -> Self {
-        Self { start, end }
+        if start > end {
+            Self {
+                start: end,
+                end: start,
+            }
+        } else {
+            Self { start, end }
+        }
     }
 
     /// Create a temporal from numeric bounds (milliseconds)
+    ///
+    /// If `start > end`, the bounds are automatically swapped to ensure
+    /// a valid interval. This prevents inverted intervals from causing
+    /// incorrect temporal reasoning.
     pub fn from_bounds(start: i64, end: i64) -> Self {
+        let (lo, hi) = if start > end {
+            (end, start)
+        } else {
+            (start, end)
+        };
         Self {
-            start: TimePoint::Moment(start),
-            end: TimePoint::Moment(end),
+            start: TimePoint::Moment(lo),
+            end: TimePoint::Moment(hi),
         }
     }
 
@@ -1272,6 +1290,31 @@ mod tests {
         let intersection = point.intersection(&interval).unwrap();
         assert_eq!(intersection.start, TimePoint::Moment(5));
         assert_eq!(intersection.end, TimePoint::Moment(5));
+    }
+
+    #[test]
+    fn test_inverted_interval_auto_corrected() {
+        // Regression: from_bounds(10, 5) should auto-swap to [5, 10]
+        let t = Temporal::from_bounds(10, 5);
+        assert_eq!(t.start, TimePoint::Moment(5));
+        assert_eq!(t.end, TimePoint::Moment(10));
+        assert!(t.active_at_millis(7));
+    }
+
+    #[test]
+    fn test_inverted_interval_new_auto_corrected() {
+        // Regression: Temporal::new with inverted TimePoints should auto-swap
+        let t = Temporal::new(TimePoint::Moment(100), TimePoint::Moment(50));
+        assert_eq!(t.start, TimePoint::Moment(50));
+        assert_eq!(t.end, TimePoint::Moment(100));
+    }
+
+    #[test]
+    fn test_equal_bounds_not_swapped() {
+        // Equal bounds should remain unchanged
+        let t = Temporal::from_bounds(5, 5);
+        assert_eq!(t.start, TimePoint::Moment(5));
+        assert_eq!(t.end, TimePoint::Moment(5));
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
 use crate::index::{IndexedTheory, LitId};
 use crate::literal::Literal;
-use crate::pipeline::{prepare, PrepareOptions};
+use crate::pipeline::{PrepareOptions, prepare};
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
@@ -55,12 +55,16 @@ impl LiteralBitSet {
     }
 
     /// Mark a literal as proven.
+    ///
+    /// Automatically grows the bitset if needed, preventing silent data loss
+    /// when new atoms are interned after the bitset is initially sized.
     #[inline]
     fn insert(&mut self, id: LitId) {
         let idx = Self::to_index(id);
-        if idx < self.bits.len() {
-            self.bits.insert(idx);
+        if idx >= self.bits.len() {
+            self.bits.grow(idx + 1);
         }
+        self.bits.insert(idx);
     }
 }
 
@@ -117,12 +121,20 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 
     // Worklist for forward chaining
     let mut worklist: VecDeque<Literal> = VecDeque::with_capacity(rule_count);
+    // Track which literals have been enqueued to prevent duplicate processing
+    let mut enqueued = LiteralBitSet::new(atom_count);
 
-    // Phase 1: Initialize with facts
+    // Phase 1: Initialize with facts (deduplicated)
     for fact in grounded_theory.facts() {
         let lit = fact.head_literal().clone();
         // Interning here is safe as facts are already in the theory
         let lit_id = indexed.intern_literal(&lit);
+
+        // Skip duplicate facts — only process each literal once
+        if enqueued.contains(lit_id) {
+            continue;
+        }
+        enqueued.insert(lit_id);
 
         definite_proven.insert(lit_id);
         defeasible_proven.insert(lit_id);
@@ -131,6 +143,60 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
         conclusions.push(Conclusion::defeasibly_provable(lit.clone()).with_rule(&fact.label));
 
         worklist.push_back(lit);
+    }
+
+    // Phase 1b: Initialize empty-body non-fact rules
+    // These rules have no body literals so forward chaining never triggers them.
+    // We must seed their heads into the worklist explicitly.
+    for rule in grounded_theory.rules() {
+        if rule.body.is_empty() && rule.rule_type != RuleType::Fact {
+            let head_lit = rule.head_literal().clone();
+            let head_id = indexed.intern_literal(&head_lit);
+
+            match rule.rule_type {
+                RuleType::Strict => {
+                    // Even if the literal was already enqueued/proven defeasibly,
+                    // a strict empty-body rule must still upgrade it to definite.
+                    if !definite_proven.contains(head_id) {
+                        definite_proven.insert(head_id);
+                        defeasible_proven.insert(head_id);
+                        conclusions.push(
+                            Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
+                        );
+                        conclusions.push(
+                            Conclusion::defeasibly_provable(head_lit.clone()).with_rule(&rule.label),
+                        );
+                    }
+                    if !enqueued.contains(head_id) {
+                        enqueued.insert(head_id);
+                        worklist.push_back(head_lit);
+                    }
+                }
+                RuleType::Defeasible => {
+                    // Empty-body defeasible rules fire immediately but can still be blocked
+                    if !defeasible_proven.contains(head_id) {
+                        let blocked = is_blocked_by_superior(
+                            &indexed,
+                            &grounded_theory,
+                            rule,
+                            &defeasible_proven,
+                        );
+                        if !blocked {
+                            defeasible_proven.insert(head_id);
+                            conclusions.push(
+                                Conclusion::defeasibly_provable(head_lit.clone())
+                                    .with_rule(&rule.label),
+                            );
+                        }
+                    }
+                    if defeasible_proven.contains(head_id) && !enqueued.contains(head_id) {
+                        enqueued.insert(head_id);
+                        worklist.push_back(head_lit);
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     // Phase 2: Forward chaining
@@ -167,7 +233,10 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
                                         .with_rule(&rule.label),
                                 );
 
-                                worklist.push_back(head_lit);
+                                if !enqueued.contains(head_id) {
+                                    enqueued.insert(head_id);
+                                    worklist.push_back(head_lit);
+                                }
                             }
                         }
 
@@ -182,7 +251,7 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
                                 // Check if we're blocked by superior rules
                                 let blocked = is_blocked_by_superior(
                                     &indexed,
-                                    &grounded_theory, // Use grounded theory which has superiorities copied
+                                    &grounded_theory,
                                     rule,
                                     &defeasible_proven,
                                 );
@@ -193,7 +262,10 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
                                         Conclusion::defeasibly_provable(head_lit.clone())
                                             .with_rule(&rule.label),
                                     );
-                                    worklist.push_back(head_lit);
+                                    if !enqueued.contains(head_id) {
+                                        enqueued.insert(head_id);
+                                        worklist.push_back(head_lit);
+                                    }
                                 }
                             }
                         }
@@ -281,17 +353,12 @@ fn is_blocked_by_superior(
             return true;
         }
 
-        // If neither is superior, we have a conflict (both blocked in ambiguity propagation)
-        // For now, we allow both to be proven (credulous semantics)?
-        // Wait, standard DL is typically skeptical or ambiguity blocking.
-        // If we return FALSE here (not blocked), then both fire?
-        // The implementation here seems to implement CREDULOUS behavior for conflicts
-        // if neither is superior.
-        // But the comment says "ambiguity propagation".
-        // If I want standard ambiguity blocking, I should return TRUE here if conflict.
-        // But let's keep existing logic structure unless spec says otherwise.
-        // Spec 1.1 says: "root cause: rule triggering and proven-sets keyed by name+negation".
-        // It doesn't complain about conflict strategy itself, just identity.
+        // Ambiguity blocking (skeptical semantics): if neither rule is superior
+        // over the other and both have satisfied bodies, block the conclusion.
+        // This matches scalable.rs behavior and standard DL(d) semantics.
+        if !attacker_superior && !rule_superior {
+            return true;
+        }
     }
 
     false
@@ -312,10 +379,12 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "bird"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "bird")
+        );
     }
 
     #[test]
@@ -325,11 +394,13 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "guilty"
-                && c.literal.negation));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "guilty"
+                    && c.literal.negation)
+        );
     }
 
     #[test]
@@ -340,10 +411,12 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "animal"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "animal")
+        );
     }
 
     #[test]
@@ -354,10 +427,12 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "flies"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies")
+        );
     }
 
     #[test]
@@ -414,11 +489,13 @@ mod tests {
         let conclusions = reason(&theory).unwrap();
 
         // ~flies should be defeasibly provable (penguins don't fly)
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "flies"
-                && c.literal.negation));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies"
+                    && c.literal.negation)
+        );
     }
 
     #[test]
@@ -798,7 +875,7 @@ mod tests {
 
     #[test]
     fn test_mutual_non_superiority_ambiguity() {
-        // Neither rule is superior - both can fire (credulous semantics)
+        // Neither rule is superior - ambiguity blocking (skeptical semantics)
         let mut theory = Theory::new();
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q");
@@ -807,7 +884,7 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        // Both q and ~q should be provable (credulous semantics)
+        // Neither q nor ~q should be defeasibly provable (ambiguity blocking)
         let has_q = conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && c.literal.name() == "q"
@@ -819,9 +896,14 @@ mod tests {
                 && c.literal.negation
         });
 
-        // In the current implementation with credulous semantics, both may be proven
-        // This test verifies the behavior is consistent
-        let _ = (has_q, has_not_q);
+        assert!(
+            !has_q,
+            "q should NOT be defeasibly provable under ambiguity blocking"
+        );
+        assert!(
+            !has_not_q,
+            "~q should NOT be defeasibly provable under ambiguity blocking"
+        );
     }
 
     #[test]
@@ -877,9 +959,7 @@ mod tests {
 
     #[test]
     fn test_empty_body_strict_rule() {
-        // Empty-body strict rules aren't triggered in standard reason()
-        // because forward chaining requires body literals to trigger.
-        // Use scalable reasoning or facts for empty-body rules.
+        // Empty-body strict rules should fire and prove their head
         use crate::rule::Rule;
 
         let mut theory = Theory::new();
@@ -893,9 +973,325 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        // Standard forward chaining doesn't fire empty body rules
-        // This documents the behavior - use facts instead
-        let _ = conclusions;
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "truth"),
+            "Empty-body strict rule should prove its head"
+        );
+    }
+
+    #[test]
+    fn test_empty_body_defeasible_rule() {
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        let rule = Rule::new(
+            "axiom",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("maybe")],
+        );
+        theory.add_rule(rule);
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "maybe"),
+            "Empty-body defeasible rule should prove its head"
+        );
+    }
+
+    #[test]
+    fn test_empty_body_rule_chains() {
+        // Empty-body rule should seed forward chaining
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        let axiom = Rule::new(
+            "axiom",
+            RuleType::Strict,
+            vec![],
+            vec![Literal::simple("base")],
+        );
+        theory.add_rule(axiom);
+        theory.add_defeasible_rule(&["base"], "derived");
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "derived"),
+            "Forward chaining should work from empty-body rule heads"
+        );
+    }
+
+    #[test]
+    fn test_empty_body_strict_not_lost_when_defeasible_same_head_exists() {
+        // Regression: if an empty-body defeasible rule for `p` is seen before an
+        // empty-body strict rule for `p`, strict derivation must still be emitted.
+        // We iterate labels to avoid depending on HashMap iteration order.
+        use crate::rule::Rule;
+
+        for i in 0..128 {
+            let mut theory = Theory::new();
+            theory.add_rule(Rule::new(
+                format!("d{}", i),
+                RuleType::Defeasible,
+                vec![],
+                vec![Literal::simple("p")],
+            ));
+            theory.add_rule(Rule::new(
+                format!("s{}", i),
+                RuleType::Strict,
+                vec![],
+                vec![Literal::simple("p")],
+            ));
+
+            let conclusions = reason(&theory).unwrap();
+            let has_definite_p = conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            });
+
+            assert!(
+                has_definite_p,
+                "missing +D p for label pair d{} / s{}",
+                i,
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_fact_plus_empty_body_strict_no_duplicate_conclusions() {
+        // A fact already proves +D p. An empty-body strict rule for p should not
+        // emit a second +D p conclusion.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_rule(Rule::new(
+            "axiom",
+            RuleType::Strict,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+
+        let conclusions = reason(&theory).unwrap();
+        let definite_p_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            })
+            .count();
+
+        assert_eq!(definite_p_count, 1, "Should have exactly one +D p");
+    }
+
+    #[test]
+    fn test_fact_plus_empty_body_defeasible_no_duplicate_and_chains() {
+        // A fact already proves p. An empty-body defeasible rule for p should
+        // not produce a duplicate, and forward chaining from p should still work.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_rule(Rule::new(
+            "d_axiom",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let conclusions = reason(&theory).unwrap();
+
+        let defeasible_p_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            })
+            .count();
+        assert_eq!(defeasible_p_count, 1, "Should have exactly one +d p");
+
+        let has_q = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+        assert!(has_q, "Forward chaining from p to q should still work");
+    }
+
+    #[test]
+    fn test_two_empty_body_defeasible_same_head_only_one_conclusion() {
+        // Two empty-body defeasible rules for the same head should produce
+        // exactly one +d conclusion, not two.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::new(
+            "d1",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        theory.add_rule(Rule::new(
+            "d2",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+
+        let conclusions = reason(&theory).unwrap();
+        let defeasible_p_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            })
+            .count();
+
+        assert_eq!(defeasible_p_count, 1, "Should have exactly one +d p");
+    }
+
+    // ==========================================================================
+    // REGRESSION TESTS: Duplicate fact deduplication
+    // ==========================================================================
+
+    #[test]
+    fn test_duplicate_facts_no_double_conclusions() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("bird"); // duplicate
+
+        let conclusions = reason(&theory).unwrap();
+
+        let bird_definite_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "bird"
+            })
+            .count();
+
+        assert_eq!(
+            bird_definite_count, 1,
+            "Duplicate facts should produce exactly one +D conclusion, got {}",
+            bird_definite_count
+        );
+    }
+
+    #[test]
+    fn test_duplicate_facts_no_premature_rule_firing() {
+        // Critical regression test: duplicate facts must not cause
+        // multi-body rules to fire with unsatisfied body literals.
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_fact("p"); // duplicate
+        theory.add_defeasible_rule(&["p", "q"], "r");
+
+        let conclusions = reason(&theory).unwrap();
+
+        let has_r = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable && c.literal.name() == "r"
+        });
+
+        assert!(
+            !has_r,
+            "Rule with body [p, q] must NOT fire when only p is proven (even with duplicate p facts)"
+        );
+    }
+
+    // ==========================================================================
+    // REGRESSION TESTS: Ambiguity blocking (skeptical semantics)
+    // ==========================================================================
+
+    #[test]
+    fn test_ambiguity_blocking_with_superiority() {
+        // When superiority resolves the conflict, the superior rule should win
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        let r1 = theory.add_defeasible_rule(&["p"], "q");
+        let r2 = theory.add_defeasible_rule(&["p"], "~q");
+        theory.add_superiority(&r1, &r2);
+
+        let conclusions = reason(&theory).unwrap();
+
+        let has_q = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+
+        assert!(has_q, "Superior rule should prove q");
+    }
+
+    #[test]
+    fn test_ambiguity_blocking_no_conflict_when_attacker_unsatisfied() {
+        // If attacker's body is not satisfied, no blocking should occur
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeasible_rule(&["unproven"], "~q");
+
+        let conclusions = reason(&theory).unwrap();
+
+        let has_q = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+
+        assert!(
+            has_q,
+            "q should be provable when attacker body is unsatisfied"
+        );
+    }
+
+    #[test]
+    fn test_standard_scalable_parity_ambiguity() {
+        // Standard and scalable algorithms should agree on ambiguity blocking
+        use crate::index::IndexedTheory;
+        use crate::scalable::reason_scalable;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeasible_rule(&["p"], "~q");
+
+        let standard = reason(&theory).unwrap();
+        let indexed = IndexedTheory::build(&theory);
+        let scalable = reason_scalable(&indexed);
+        let scalable_conclusions = scalable.to_conclusions(&indexed);
+
+        let std_has_q = standard.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+        let scl_has_q = scalable_conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+
+        assert_eq!(
+            std_has_q, scl_has_q,
+            "Standard and scalable should agree on ambiguity blocking for q"
+        );
     }
 
     // ==========================================================================
@@ -1170,6 +1566,53 @@ mod tests {
         assert!(
             conclusions.iter().any(|c| c.is_positive()),
             "should have positive conclusions"
+        );
+    }
+
+    // ==========================================================================
+    // REGRESSION TESTS: LiteralBitSet auto-grow
+    // ==========================================================================
+
+    #[test]
+    fn test_bitset_grows_on_insert_beyond_capacity() {
+        use crate::index::AtomId;
+
+        // Create a small bitset (capacity for 2 atoms = 4 bits)
+        let mut bitset = LiteralBitSet::new(2);
+
+        // Insert at atom 10, well beyond initial capacity
+        let lit_id = LitId::new(AtomId::from_raw(10), false);
+        bitset.insert(lit_id);
+
+        assert!(
+            bitset.contains(lit_id),
+            "Bitset should contain the inserted literal after growing"
+        );
+    }
+
+    #[test]
+    fn test_bitset_preserves_existing_on_grow() {
+        use crate::index::AtomId;
+
+        let mut bitset = LiteralBitSet::new(2);
+
+        // Insert at atom 0
+        let lit_0 = LitId::new(AtomId::from_raw(0), false);
+        bitset.insert(lit_0);
+        assert!(bitset.contains(lit_0));
+
+        // Grow by inserting at atom 10
+        let lit_10 = LitId::new(AtomId::from_raw(10), true);
+        bitset.insert(lit_10);
+
+        // Atom 0 should still be present
+        assert!(
+            bitset.contains(lit_0),
+            "Existing bit at atom 0 should be preserved after grow"
+        );
+        assert!(
+            bitset.contains(lit_10),
+            "New bit at atom 10 should be present after grow"
         );
     }
 }

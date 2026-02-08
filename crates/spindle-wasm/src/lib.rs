@@ -26,10 +26,12 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use spindle_core::literal::{Literal, LiteralStruct};
+use spindle_core::mode::Mode;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
+use spindle_core::temporal::Temporal;
 use spindle_core::theory::{MetaValue, Theory};
 use spindle_parser::{parse_dfl, parse_spl};
 
@@ -107,6 +109,15 @@ pub struct JsWhatIfResult {
     pub provable: bool,
     /// New conclusions enabled
     pub new_conclusions: Vec<String>,
+    /// Conclusions that changed type (literal, old_type, new_type)
+    pub changed_conclusions: Vec<JsChangedConclusion>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsChangedConclusion {
+    pub literal: String,
+    pub old_type: String,
+    pub new_type: String,
 }
 
 /// Why-not result
@@ -114,10 +125,20 @@ pub struct JsWhatIfResult {
 pub struct JsWhyNotResult {
     /// The literal
     pub literal: String,
+    /// Whether the literal is actually provable
+    pub is_provable: bool,
     /// Rule that would derive it
     pub would_derive: Option<String>,
-    /// Blocking conditions
-    pub blockers: Vec<String>,
+    /// Blocking conditions (structured)
+    pub blockers: Vec<JsBlocker>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsBlocker {
+    pub blocking_type: String,
+    pub rule_label: String,
+    pub blocking_rule: Option<String>,
+    pub explanation: String,
 }
 
 /// Abduction result
@@ -126,7 +147,14 @@ pub struct JsAbductionResult {
     /// The goal
     pub goal: String,
     /// Solutions (each is a list of facts to add)
-    pub solutions: Vec<Vec<String>>,
+    pub solutions: Vec<JsAbductionSolution>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JsAbductionSolution {
+    pub facts: Vec<String>,
+    pub rules_used: Vec<String>,
+    pub confidence: f64,
 }
 
 /// The main Spindle reasoning engine
@@ -200,7 +228,7 @@ impl Spindle {
 
         let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
 
-        let output_conclusions: Vec<JsConclusionStruct> = conclusions
+        let mut output_conclusions: Vec<JsConclusionStruct> = conclusions
             .iter()
             .map(|c| JsConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
@@ -209,10 +237,16 @@ impl Spindle {
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
+        // Sort for deterministic output matching CLI behavior
+        output_conclusions.sort_by(|a, b| {
+            a.literal_spl
+                .cmp(&b.literal_spl)
+                .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
+        });
 
         let output = JsReasonOutput {
             schema_version: "spindle.reason.v1".to_string(),
-            evaluated_at: prepared.evaluated_at.map(|t| t.to_string()),
+            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
             grounding: JsGroundingStats {
                 performed: prepared.grounding_report.performed,
                 had_variables: prepared.grounding_report.had_variables,
@@ -238,7 +272,7 @@ impl Spindle {
         let result = reason_scalable(&indexed);
         let conclusions = result.to_conclusions(&indexed);
 
-        let output_conclusions: Vec<JsConclusionStruct> = conclusions
+        let mut output_conclusions: Vec<JsConclusionStruct> = conclusions
             .iter()
             .map(|c| JsConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
@@ -247,10 +281,15 @@ impl Spindle {
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
+        output_conclusions.sort_by(|a, b| {
+            a.literal_spl
+                .cmp(&b.literal_spl)
+                .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
+        });
 
         let output = JsReasonOutput {
             schema_version: "spindle.reason.v1".to_string(),
-            evaluated_at: prepared.evaluated_at.map(|t| t.to_string()),
+            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
             grounding: JsGroundingStats {
                 performed: prepared.grounding_report.performed,
                 had_variables: prepared.grounding_report.had_variables,
@@ -278,11 +317,14 @@ impl Spindle {
             .collect())
     }
 
-    /// Query a literal
+    /// Query a literal (runs prepare() for grounding/temporal support)
     #[wasm_bindgen]
     pub fn query(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
-        let result = query::query(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        let result =
+            query::query(&prepared.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsQueryResult {
             status: match result.status {
@@ -305,8 +347,10 @@ impl Spindle {
             .map(|s| query::HypotheticalClaim::new(parse_literal(s)))
             .collect();
 
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
         let goal_lit = parse_literal(goal);
-        let result = query::what_if(&self.theory, hyps, &goal_lit)
+        let result = query::what_if(&prepared.theory, hyps, &goal_lit)
             .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhatIfResult {
@@ -315,6 +359,15 @@ impl Spindle {
                 .new_conclusions
                 .iter()
                 .map(|l| l.to_string())
+                .collect(),
+            changed_conclusions: result
+                .changed_conclusions
+                .iter()
+                .map(|(lit, old, new)| JsChangedConclusion {
+                    literal: lit.to_string(),
+                    old_type: old.symbol().to_string(),
+                    new_type: new.symbol().to_string(),
+                })
                 .collect(),
         };
 
@@ -325,16 +378,24 @@ impl Spindle {
     #[wasm_bindgen(js_name = whyNot)]
     pub fn why_not(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
         let result =
-            query::why_not(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+            query::why_not(&prepared.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),
+            is_provable: result.is_provable(),
             would_derive: result.would_derive,
             blockers: result
                 .blocked_by
                 .iter()
-                .map(|b| b.explanation.clone())
+                .map(|b| JsBlocker {
+                    blocking_type: b.blocking_type.to_string(),
+                    rule_label: b.rule_label.clone(),
+                    blocking_rule: b.blocking_rule.clone(),
+                    explanation: b.explanation.clone(),
+                })
                 .collect(),
         };
 
@@ -345,7 +406,9 @@ impl Spindle {
     #[wasm_bindgen]
     pub fn abduce(&self, goal: &str, max_solutions: usize) -> Result<JsValue, JsError> {
         let goal_lit = parse_literal(goal);
-        let result = query::abduce(&self.theory, &goal_lit, max_solutions)
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        let result = query::abduce(&prepared.theory, &goal_lit, max_solutions)
             .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsAbductionResult {
@@ -353,7 +416,11 @@ impl Spindle {
             solutions: result
                 .solutions
                 .iter()
-                .map(|sol| sol.facts.iter().map(|l| l.to_string()).collect())
+                .map(|sol| JsAbductionSolution {
+                    facts: sol.facts.iter().map(|l| l.to_string()).collect(),
+                    rules_used: sol.rules_used.iter().cloned().collect(),
+                    confidence: sol.confidence,
+                })
                 .collect(),
         };
 
@@ -465,12 +532,51 @@ impl Default for Spindle {
     }
 }
 
-/// Parse a literal string, handling negation prefix
+/// Parse a literal string, handling negation prefix, predicate arguments, and (not ...) syntax
+///
+/// Supported formats:
+/// - `"bird"` → positive literal
+/// - `"~flies"` or `"-flies"` → negated literal
+/// - `"(not flies)"` → negated literal (SPL-style)
+/// - `"parent(X, Y)"` → literal with predicate arguments
+/// - `"~parent(X, Y)"` → negated literal with predicate arguments
 fn parse_literal(s: &str) -> Literal {
+    let s = s.trim();
+
+    // Handle SPL-style (not ...) syntax
+    if s.starts_with("(not ") && s.ends_with(')') {
+        let inner = s[5..s.len() - 1].trim();
+        return parse_literal_inner(inner, true);
+    }
+
+    // Handle ~ or - negation prefix
     if let Some(name) = s.strip_prefix('~') {
-        Literal::negated(name)
-    } else if let Some(name) = s.strip_prefix('-') {
-        Literal::negated(name)
+        return parse_literal_inner(name, true);
+    }
+    if let Some(name) = s.strip_prefix('-') {
+        return parse_literal_inner(name, true);
+    }
+
+    parse_literal_inner(s, false)
+}
+
+/// Parse the inner part of a literal, handling predicate arguments like `parent(X, Y)`
+fn parse_literal_inner(s: &str, negated: bool) -> Literal {
+    if let Some(paren_pos) = s.find('(')
+        && s.ends_with(')')
+    {
+        let name = &s[..paren_pos];
+        let args_str = &s[paren_pos + 1..s.len() - 1];
+        let args: Vec<String> = args_str
+            .split(',')
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect();
+        return Literal::new(name, negated, Mode::empty(), Temporal::empty(), args);
+    }
+
+    if negated {
+        Literal::negated(s)
     } else {
         Literal::simple(s)
     }
@@ -754,6 +860,42 @@ mod tests {
             .unwrap();
         assert!(result.contains("bird"));
         assert!(result.contains("penguin"));
+    }
+
+    // =========================================================================
+    // REGRESSION TESTS - WASM Parity Bug Hunt Fixes
+    // =========================================================================
+
+    #[test]
+    fn test_parse_literal_not_syntax() {
+        let lit = parse_literal("(not flies)");
+        assert!(lit.negation);
+        assert_eq!(lit.name(), "flies");
+    }
+
+    #[test]
+    fn test_parse_literal_predicate_args() {
+        let lit = parse_literal("parent(X, Y)");
+        assert!(!lit.negation);
+        assert_eq!(lit.name(), "parent");
+        assert!(lit.is_predicate());
+        assert_eq!(lit.predicates().len(), 2);
+    }
+
+    #[test]
+    fn test_parse_literal_negated_predicate_args() {
+        let lit = parse_literal("~parent(X, Y)");
+        assert!(lit.negation);
+        assert_eq!(lit.name(), "parent");
+        assert!(lit.is_predicate());
+        assert_eq!(lit.predicates().len(), 2);
+    }
+
+    #[test]
+    fn test_parse_literal_not_syntax_trimmed() {
+        let lit = parse_literal("  (not  bird )  ");
+        assert!(lit.negation);
+        assert_eq!(lit.name(), "bird");
     }
 
     // Note: Tests that call reason(), reason_scalable(), query(), what_if(),

@@ -191,7 +191,9 @@ fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
             .iter()
             .all(|lit| lit.temporal.is_empty() || lit.temporal.active_at(t));
 
-        if head_active && body_active {
+        let rule_active = rule.temporal.is_empty() || rule.temporal.active_at(t);
+
+        if rule_active && head_active && body_active {
             new_theory.add_rule(rule.clone());
         }
     }
