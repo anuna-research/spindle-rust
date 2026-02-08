@@ -180,7 +180,12 @@ fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitut
 /// Create a key for indexing facts (using interned SymbolId, zero allocation)
 #[inline]
 fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
-    (lit.name_id(), lit.negation, lit.predicate_ids().len(), lit.mode.clone())
+    (
+        lit.name_id(),
+        lit.negation,
+        lit.predicate_ids().len(),
+        lit.mode.clone(),
+    )
 }
 
 /// Create a key for deduplicating literals (using interned IDs, minimal allocation)
@@ -188,7 +193,12 @@ fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
 /// Returns (name_id, negation, predicate_ids, mode) - all Copy types except the Vec and Mode
 #[inline]
 fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<SymbolId>, Mode) {
-    (lit.name_id(), lit.negation, lit.predicate_ids().to_vec(), lit.mode.clone())
+    (
+        lit.name_id(),
+        lit.negation,
+        lit.predicate_ids().to_vec(),
+        lit.mode.clone(),
+    )
 }
 
 /// Match body literals against facts, returning all valid substitutions
@@ -319,7 +329,8 @@ pub fn ground_theory_with_limit(
     // Track facts using interned types (minimal allocation)
     let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<SymbolId>, Mode)> = FxHashSet::default();
     let mut facts_list: Vec<Literal> = Vec::new();
-    let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> = FxHashMap::default();
+    let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
+        FxHashMap::default();
 
     // Initialize with ground facts
     for rule in theory.facts() {
@@ -1339,10 +1350,7 @@ mod tests {
             vec!["alice".to_string()],
         );
         let result = match_literal(&pattern, &ground);
-        assert!(
-            result.is_some(),
-            "[O]pay(?x) should match [O]pay(alice)"
-        );
+        assert!(result.is_some(), "[O]pay(?x) should match [O]pay(alice)");
         let subst = result.unwrap();
         let x_id = intern("?x");
         let alice_id = intern("alice");
@@ -1390,9 +1398,7 @@ mod tests {
         let grounded = ground_theory(&theory);
 
         // Should NOT have any grounded instance of r1 since modes don't match
-        let has_grounded_r1 = grounded
-            .rules()
-            .any(|r| r.label.starts_with("r1_"));
+        let has_grounded_r1 = grounded.rules().any(|r| r.label.starts_with("r1_"));
         assert!(
             !has_grounded_r1,
             "Rule with non-modal body should not match [O] fact"
@@ -1439,14 +1445,12 @@ mod tests {
         let grounded = ground_theory(&theory);
 
         // Should have a grounded instance of r1
-        let has_grounded_r1 = grounded
-            .rules()
-            .any(|r| {
-                r.label.starts_with("r1_")
-                    && r.head
-                        .iter()
-                        .any(|h| h.name() == "paid" && h.predicates() == vec!["alice"])
-            });
+        let has_grounded_r1 = grounded.rules().any(|r| {
+            r.label.starts_with("r1_")
+                && r.head
+                    .iter()
+                    .any(|h| h.name() == "paid" && h.predicates() == vec!["alice"])
+        });
         assert!(
             has_grounded_r1,
             "Rule with [O] body should match [O] fact and produce paid(alice)"

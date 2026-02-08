@@ -448,9 +448,9 @@ fn compute_partial_closure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Theory;
     use crate::literal::Literal;
     use crate::rule::Rule;
-    use crate::Theory;
 
     #[test]
     fn test_delta_closure_facts() {

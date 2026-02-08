@@ -69,8 +69,8 @@ pub mod prelude {
     };
     pub use crate::literal::{Literal, LiteralName};
     pub use crate::mode::Mode;
-    pub use crate::pipeline::{PrepareOptions, PipelineResult};
-    pub use crate::query::{query, query_with_options, QueryResult, QueryStatus};
+    pub use crate::pipeline::{PipelineResult, PrepareOptions};
+    pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
     pub use crate::reason::{reason, reason_with_options};
     pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};

@@ -2224,5 +2224,4 @@ mod tests {
         let result = explain(&theory, &Literal::simple("c"));
         assert!(result.is_ok(), "explain() should not panic on cyclic rules");
     }
-
 }

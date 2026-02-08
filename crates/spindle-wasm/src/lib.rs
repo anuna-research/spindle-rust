@@ -27,11 +27,11 @@ use wasm_bindgen::prelude::*;
 
 use spindle_core::literal::{Literal, LiteralStruct};
 use spindle_core::mode::Mode;
-use spindle_core::temporal::Temporal;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
 use spindle_core::scalable::reason_scalable;
+use spindle_core::temporal::Temporal;
 use spindle_core::theory::{MetaValue, Theory};
 use spindle_parser::{parse_dfl, parse_spl};
 
@@ -125,6 +125,8 @@ pub struct JsChangedConclusion {
 pub struct JsWhyNotResult {
     /// The literal
     pub literal: String,
+    /// Whether the literal is actually provable
+    pub is_provable: bool,
     /// Rule that would derive it
     pub would_derive: Option<String>,
     /// Blocking conditions (structured)
@@ -321,8 +323,8 @@ impl Spindle {
         let lit = parse_literal(literal);
         let prepared = prepare(&self.theory, PrepareOptions::default())
             .map_err(|e| JsError::new(&e.to_string()))?;
-        let result = query::query(&prepared.theory, &lit)
-            .map_err(|e| JsError::new(&e.to_string()))?;
+        let result =
+            query::query(&prepared.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsQueryResult {
             status: match result.status {
@@ -383,6 +385,7 @@ impl Spindle {
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),
+            is_provable: result.is_provable,
             would_derive: result.would_derive,
             blockers: result
                 .blocked_by
@@ -559,17 +562,17 @@ fn parse_literal(s: &str) -> Literal {
 
 /// Parse the inner part of a literal, handling predicate arguments like `parent(X, Y)`
 fn parse_literal_inner(s: &str, negated: bool) -> Literal {
-    if let Some(paren_pos) = s.find('(') {
-        if s.ends_with(')') {
-            let name = &s[..paren_pos];
-            let args_str = &s[paren_pos + 1..s.len() - 1];
-            let args: Vec<String> = args_str
-                .split(',')
-                .map(|a| a.trim().to_string())
-                .filter(|a| !a.is_empty())
-                .collect();
-            return Literal::new(name, negated, Mode::empty(), Temporal::empty(), args);
-        }
+    if let Some(paren_pos) = s.find('(')
+        && s.ends_with(')')
+    {
+        let name = &s[..paren_pos];
+        let args_str = &s[paren_pos + 1..s.len() - 1];
+        let args: Vec<String> = args_str
+            .split(',')
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect();
+        return Literal::new(name, negated, Mode::empty(), Temporal::empty(), args);
     }
 
     if negated {

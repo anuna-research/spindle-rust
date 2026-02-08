@@ -17,7 +17,7 @@ use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
 use crate::index::{IndexedTheory, LitId};
 use crate::literal::Literal;
-use crate::pipeline::{prepare, PrepareOptions};
+use crate::pipeline::{PrepareOptions, prepare};
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
@@ -61,7 +61,10 @@ impl LiteralBitSet {
     #[inline]
     fn insert(&mut self, id: LitId) {
         let idx = Self::to_index(id);
-        self.bits.grow_and_insert(idx);
+        if idx >= self.bits.len() {
+            self.bits.grow(idx + 1);
+        }
+        self.bits.insert(idx);
     }
 }
 
@@ -370,10 +373,12 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "bird"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "bird")
+        );
     }
 
     #[test]
@@ -383,11 +388,13 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "guilty"
-                && c.literal.negation));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "guilty"
+                    && c.literal.negation)
+        );
     }
 
     #[test]
@@ -398,10 +405,12 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "animal"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "animal")
+        );
     }
 
     #[test]
@@ -412,10 +421,12 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "flies"));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies")
+        );
     }
 
     #[test]
@@ -472,11 +483,13 @@ mod tests {
         let conclusions = reason(&theory).unwrap();
 
         // ~flies should be defeasibly provable (penguins don't fly)
-        assert!(conclusions
-            .iter()
-            .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "flies"
-                && c.literal.negation));
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies"
+                    && c.literal.negation)
+        );
     }
 
     #[test]
@@ -1101,7 +1114,10 @@ mod tests {
                 && !c.literal.negation
         });
 
-        assert!(has_q, "q should be provable when attacker body is unsatisfied");
+        assert!(
+            has_q,
+            "q should be provable when attacker body is unsatisfied"
+        );
     }
 
     #[test]

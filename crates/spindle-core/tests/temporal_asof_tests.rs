@@ -1,8 +1,8 @@
-use spindle_core::{Rule, RuleType};
 use spindle_core::literal::Literal;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::theory::Theory;
+use spindle_core::{Rule, RuleType};
 
 #[test]
 fn test_disjoint_complements_do_not_conflict_at_timepoint() {
@@ -106,7 +106,13 @@ fn test_rule_level_temporal_filtered_when_inactive() {
     // Fact: bird (always active)
     theory.add_rule(Rule::fact(
         "f1",
-        Literal::new("bird", false, Default::default(), Default::default(), vec![]),
+        Literal::new(
+            "bird",
+            false,
+            Default::default(),
+            Default::default(),
+            vec![],
+        ),
     ));
 
     // Rule: bird => flies, but only active in [100,200]
@@ -158,7 +164,13 @@ fn test_rule_level_temporal_kept_when_active() {
 
     theory.add_rule(Rule::fact(
         "f1",
-        Literal::new("bird", false, Default::default(), Default::default(), vec![]),
+        Literal::new(
+            "bird",
+            false,
+            Default::default(),
+            Default::default(),
+            vec![],
+        ),
     ));
 
     let mut rule = Rule::new(
@@ -216,7 +228,13 @@ fn test_rule_unbounded_temporal_always_active() {
 
     theory.add_rule(Rule::fact(
         "f1",
-        Literal::new("bird", false, Default::default(), Default::default(), vec![]),
+        Literal::new(
+            "bird",
+            false,
+            Default::default(),
+            Default::default(),
+            vec![],
+        ),
     ));
 
     // Rule with default (empty) temporal

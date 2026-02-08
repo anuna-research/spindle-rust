@@ -261,12 +261,11 @@ pub fn what_if(
         .map(|c| (c.literal.clone(), c.conclusion_type))
         .collect();
     for conc in &modified_conclusions {
-        if conc.conclusion_type.is_positive() {
-            if let Some(&old_type) = baseline_by_lit.get(&conc.literal) {
-                if old_type != conc.conclusion_type {
-                    changed_conclusions.push((conc.literal.clone(), old_type, conc.conclusion_type));
-                }
-            }
+        if conc.conclusion_type.is_positive()
+            && let Some(&old_type) = baseline_by_lit.get(&conc.literal)
+            && old_type != conc.conclusion_type
+        {
+            changed_conclusions.push((conc.literal.clone(), old_type, conc.conclusion_type));
         }
     }
 
@@ -368,8 +367,10 @@ impl BlockingCondition {
 /// Result of a why-not query
 #[derive(Debug, Clone)]
 pub struct WhyNotResult {
-    /// The literal that is not provable
+    /// The literal queried
     pub literal: Literal,
+    /// Whether the literal is actually provable
+    pub is_provable: bool,
     /// Rule that would derive this literal (if body was satisfied)
     pub would_derive: Option<String>,
     /// Conditions blocking the derivation
@@ -381,6 +382,7 @@ impl WhyNotResult {
     pub fn new(literal: Literal) -> Self {
         Self {
             literal,
+            is_provable: false,
             would_derive: None,
             blocked_by: Vec::new(),
         }
@@ -404,6 +406,14 @@ impl WhyNotResult {
 impl fmt::Display for WhyNotResult {
     /// Convert to human-readable string
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_provable {
+            write!(f, "{} is provable", self.literal)?;
+            if let Some(ref rule) = self.would_derive {
+                write!(f, " (derived by rule: {rule})")?;
+            }
+            return Ok(());
+        }
+
         if self.blocked_by.is_empty() {
             return write!(
                 f,
@@ -437,16 +447,13 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
 
     if is_provable {
-        // Return a result with would_derive set so callers know which rule proved it
+        // Return a result with would_derive taken from the conclusion's rule_label
         let mut result = WhyNotResult::new(literal.clone());
-        for rule in theory.rules() {
-            if rule.head_literal() == literal
-                && rule.rule_type != RuleType::Defeater
-            {
-                result.would_derive = Some(rule.label.clone());
-                break;
-            }
-        }
+        result.is_provable = true;
+        result.would_derive = conclusions
+            .iter()
+            .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
+            .and_then(|c| c.rule_label.clone());
         return Ok(result);
     }
 
@@ -488,20 +495,15 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 let mut blocked = false;
                 for attacker in theory.rules() {
                     if attacker.head_literal() == &complement {
-                        let attacker_body_satisfied = attacker
-                            .body
-                            .iter()
-                            .all(|b| proven.contains(b));
+                        let attacker_body_satisfied =
+                            attacker.body.iter().all(|b| proven.contains(b));
                         if !attacker_body_satisfied {
                             continue;
                         }
 
                         if attacker.rule_type == RuleType::Defeater {
                             // Defeaters block unless the rule is explicitly superior
-                            let rule_superior = theory.is_superior(
-                                &rule.label,
-                                &attacker.label,
-                            );
+                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
                             if !rule_superior {
                                 result.blocked_by.push(BlockingCondition::defeated(
                                     &rule.label,
@@ -511,14 +513,9 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                             }
                         } else {
                             // For defeasible rules: check superiority both directions
-                            let attacker_superior = theory.is_superior(
-                                &attacker.label,
-                                &rule.label,
-                            );
-                            let rule_superior = theory.is_superior(
-                                &rule.label,
-                                &attacker.label,
-                            );
+                            let attacker_superior =
+                                theory.is_superior(&attacker.label, &rule.label);
+                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
 
                             if rule_superior && !attacker_superior {
                                 // Rule is superior — skip this attacker
@@ -542,7 +539,8 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                         rule_label: rule.label.clone(),
                         missing_literals: Vec::new(),
                         blocking_rule: None,
-                        explanation: "Body satisfied but conclusion blocked by ambiguity".to_string(),
+                        explanation: "Body satisfied but conclusion blocked by ambiguity"
+                            .to_string(),
                     });
                 }
             }
@@ -1026,10 +1024,12 @@ mod tests {
         theory.add_fact("~flies"); // Complement is proven
 
         let result = why_not(&theory, &Literal::simple("flies")).unwrap();
-        assert!(result
-            .blocked_by
-            .iter()
-            .any(|b| b.blocking_type == BlockingType::Contradicted));
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_type == BlockingType::Contradicted)
+        );
     }
 
     #[test]
@@ -1398,10 +1398,12 @@ mod tests {
 
         let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
         assert!(result.is_provable());
-        assert!(result
-            .new_conclusions
-            .iter()
-            .any(|l| l.name() == "ready_review"));
+        assert!(
+            result
+                .new_conclusions
+                .iter()
+                .any(|l| l.name() == "ready_review")
+        );
     }
 
     #[test]
@@ -1853,7 +1855,10 @@ mod tests {
         let result = why_not(&th, &Literal::simple("flies")).unwrap();
 
         assert!(!result.has_blockers());
-        assert!(result.would_derive.is_some(), "Should identify deriving rule");
+        assert!(
+            result.would_derive.is_some(),
+            "Should identify deriving rule"
+        );
     }
 
     #[test]
@@ -1893,9 +1898,10 @@ mod tests {
         assert!(result.has_blockers());
 
         // The blocker should be missing premise (bird), not r2 as contradicted
-        let has_r2_blocker = result.blocked_by.iter().any(|b| {
-            b.blocking_rule.as_deref() == Some(&r2)
-        });
+        let has_r2_blocker = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_rule.as_deref() == Some(&r2));
         assert!(
             !has_r2_blocker,
             "Inferior rule r2 should not be listed as a blocker when r1 > r2"

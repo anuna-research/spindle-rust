@@ -55,14 +55,13 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     let mut theory = Theory::new();
 
     // Parse all top-level expressions, tracking positions for line numbers
-    let (remaining, expr_positions) =
-        parse_expressions_with_positions(&cleaned).map_err(|e| {
-            let line = line_of_from_error(input, &cleaned, &e);
-            ParseError::ParserError {
-                line,
-                message: format!("SPL parse error: {e:?}"),
-            }
-        })?;
+    let (remaining, expr_positions) = parse_expressions_with_positions(&cleaned).map_err(|e| {
+        let line = line_of_from_error(input, &cleaned, &e);
+        ParseError::ParserError {
+            line,
+            message: format!("SPL parse error: {e:?}"),
+        }
+    })?;
 
     if !remaining.trim().is_empty() {
         let line = line_of_offset(input, cleaned.len() - remaining.len());
@@ -266,7 +265,11 @@ fn parse_atom(input: &str) -> IResult<&str, SExpr> {
 }
 
 /// Process an s-expression into theory elements (with line number)
-fn process_expr_with_line(theory: &mut Theory, expr: &SExpr, line: usize) -> Result<(), ParseError> {
+fn process_expr_with_line(
+    theory: &mut Theory,
+    expr: &SExpr,
+    line: usize,
+) -> Result<(), ParseError> {
     let list = expr.as_list().ok_or_else(|| ParseError::ParserError {
         line,
         message: "Expected list expression".to_string(),
@@ -316,14 +319,15 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
 
     // Parse optional :at "timestamp"
     while body_start < args.len() {
-        if let Some(kw) = args[body_start].as_atom() {
-            if kw == ":at" && body_start + 1 < args.len() {
-                if let Some(ts) = args[body_start + 1].as_atom() {
-                    timestamp = Some(ts.to_string());
-                }
-                body_start += 2;
-                continue;
+        if let Some(kw) = args[body_start].as_atom()
+            && kw == ":at"
+            && body_start + 1 < args.len()
+        {
+            if let Some(ts) = args[body_start + 1].as_atom() {
+                timestamp = Some(ts.to_string());
             }
+            body_start += 2;
+            continue;
         }
         break;
     }
@@ -355,7 +359,11 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
 }
 
 /// Process a fact with line number: (given literal)
-fn process_fact_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+fn process_fact_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
     if args.is_empty() {
         return Err(ParseError::ParserError {
             line,
@@ -655,7 +663,11 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
 }
 
 /// Process meta with line number
-fn process_meta_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+fn process_meta_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
     if args.is_empty() {
         return Err(ParseError::ParserError {
             line,
@@ -708,7 +720,11 @@ fn process_meta_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> R
 }
 
 /// Process prefer with line number
-fn process_prefer_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+fn process_prefer_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
     if args.len() < 2 {
         return Err(ParseError::ParserError {
             line,
@@ -904,7 +920,10 @@ mod tests {
         let theory = parse_spl("(given ~~bird)").unwrap();
         let fact = theory.facts().next().unwrap();
         let lit = fact.head_literal();
-        assert!(!lit.is_negated(), "~~bird should be positive (double negation cancels)");
+        assert!(
+            !lit.is_negated(),
+            "~~bird should be positive (double negation cancels)"
+        );
         assert_eq!(lit.name(), "bird");
     }
 

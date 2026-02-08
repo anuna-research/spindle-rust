@@ -122,10 +122,7 @@ impl Interner {
     }
 
     fn resolve(&self, id: SymbolId) -> &'static str {
-        self.strings
-            .get(id.0 as usize)
-            .copied()
-            .unwrap_or("")
+        self.strings.get(id.0 as usize).copied().unwrap_or("")
     }
 
     fn len(&self) -> usize {
@@ -594,15 +591,16 @@ mod tests {
         }
 
         let ptr_after = resolve(id).as_ptr();
-        assert_eq!(ptr_before, ptr_after, "resolve pointer should be stable after Vec growth");
+        assert_eq!(
+            ptr_before, ptr_after,
+            "resolve pointer should be stable after Vec growth"
+        );
         assert_eq!(resolve(id), "stable_growth_test");
     }
 
     #[test]
     fn test_batch_resolve_correctness() {
-        let ids: Vec<SymbolId> = (0..50)
-            .map(|i| intern(&format!("batch_{}", i)))
-            .collect();
+        let ids: Vec<SymbolId> = (0..50).map(|i| intern(&format!("batch_{}", i))).collect();
 
         let resolved: Vec<&'static str> = ids.iter().map(|&id| resolve(id)).collect();
 
