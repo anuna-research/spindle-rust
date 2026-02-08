@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-64fde6ea.js";
+            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -311,15 +311,15 @@ const result = spindle.query("flies");
 </code></pre>
 <h3 id="what-if"><a class="header" href="#what-if">What-If</a></h3>
 <pre><code class="language-typescript">const result = spindle.whatIf(["wounded"], "~flies");
-// Returns: { provable: boolean, new_conclusions: Array }
+// Returns: { provable: boolean, new_conclusions: Array, changed_conclusions: Array }
 </code></pre>
 <h3 id="why-not"><a class="header" href="#why-not">Why-Not</a></h3>
 <pre><code class="language-typescript">const explanation = spindle.whyNot("flies");
-// Returns: { literal, would_derive, blockers: Array }
+// Returns: { literal, is_provable, would_derive, blockers: Array }
 </code></pre>
 <h3 id="abduction"><a class="header" href="#abduction">Abduction</a></h3>
 <pre><code class="language-typescript">const solutions = spindle.abduce("goal", 3);
-// Returns: { goal, solutions: Array&lt;Array&lt;string&gt;&gt; }
+// Returns: { goal, solutions: Array&lt;{ facts: string[], rules_used: string[], confidence: number }&gt; }
 </code></pre>
 <h3 id="reset"><a class="header" href="#reset">Reset</a></h3>
 <pre><code class="language-typescript">spindle.clear();  // Clear all rules and facts
@@ -340,22 +340,38 @@ interface QueryResult {
 interface WhatIfResult {
     provable: boolean;
     new_conclusions: Conclusion[];
+    changed_conclusions: ChangedConclusion[];
 }
 
 interface WhyNotExplanation {
     literal: string;
+    is_provable: boolean;
     would_derive: string | null;
     blockers: Blocker[];
 }
 
 interface Blocker {
-    rule: string;
-    reason: string;
+    blocking_type: "MissingPremise" | "Defeated" | "Contradicted";
+    rule_label: string;
+    blocking_rule: string | null;
+    explanation: string;
 }
 
 interface AbductionResult {
     goal: string;
-    solutions: string[][];
+    solutions: AbductionSolution[];
+}
+
+interface AbductionSolution {
+    facts: string[];
+    rules_used: string[];
+    confidence: number;
+}
+
+interface ChangedConclusion {
+    literal: string;
+    old_type: string;
+    new_type: string;
 }
 </code></pre>
 <h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>

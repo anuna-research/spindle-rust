@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-64fde6ea.js";
+            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -654,7 +654,7 @@ assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
 <span class="boring">}</span></code></pre>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
-<li><strong>Claims parsing</strong>: The <code>(claims ...)</code> SPL syntax is documented but not yet implemented in the parser. Source attribution is available through the Rust API.</li>
+<li><strong>Claims parsing</strong>: The <code>(claims ...)</code> SPL syntax is implemented in the SPL parser. Source attribution is available through the Rust API and via SPL <code>claims</code> blocks.</li>
 <li><strong>Static trust values</strong>: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in.</li>
 <li><strong>Weakest-link only</strong>: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.</li>
 <li><strong>No cryptographic verification</strong>: The <code>:sig</code> metadata field is stored but not verified against any cryptographic infrastructure.</li>
