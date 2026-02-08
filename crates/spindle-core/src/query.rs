@@ -1948,6 +1948,81 @@ mod tests {
     }
 
     #[test]
+    fn test_what_if_changed_conclusions_detects_real_upgrade() {
+        // When a hypothetical adds a strict rule that upgrades a literal
+        // from +d to +D, changed_conclusions should report it.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        // p is only defeasibly provable in baseline
+        theory.add_rule(Rule::new(
+            "d1",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        // q depends on a premise we'll supply
+        theory.add_defeasible_rule(&["trigger"], "q");
+
+        // Use a strict rule body: trigger => p (strict)
+        theory.add_rule(Rule::strict(
+            "s1",
+            vec![Literal::simple("trigger")],
+            Literal::simple("p"),
+        ));
+
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("trigger"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        // p should go from +d (baseline) to +D (modified) — a real change
+        let p_change = result.changed_conclusions.iter().find(|(lit, _, _)| {
+            lit.name() == "p" && !lit.negation
+        });
+        assert!(
+            p_change.is_some(),
+            "Should detect p upgrading from +d to +D, got: {:?}",
+            result.changed_conclusions
+        );
+        let (_, old, new) = p_change.unwrap();
+        assert_eq!(*old, ConclusionType::DefeasiblyProvable);
+        assert_eq!(*new, ConclusionType::DefinitelyProvable);
+    }
+
+    #[test]
+    fn test_what_if_new_conclusion_also_in_changed() {
+        // A literal that becomes provable under hypotheticals should appear
+        // in new_conclusions AND in changed_conclusions (negative → positive).
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&["trigger"], "q");
+
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("trigger"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        // q is new (not provable in baseline)
+        assert!(
+            result.new_conclusions.iter().any(|l| l.name() == "q"),
+            "q should appear in new_conclusions"
+        );
+        // q should also appear in changed_conclusions (it went from -d to +d)
+        let q_in_changed = result.changed_conclusions.iter().any(|(lit, old, new)| {
+            lit.name() == "q" && !lit.negation && !old.is_positive() && new.is_positive()
+        });
+        assert!(
+            q_in_changed,
+            "q should appear in changed_conclusions as a negative→positive transition, got {:?}",
+            result.changed_conclusions
+        );
+    }
+
+    #[test]
     fn test_why_not_provable_literal_no_false_blockers() {
         // Regression: why_not on a provable literal should return no blockers
         // and should identify the deriving rule

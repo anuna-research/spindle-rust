@@ -1070,6 +1070,103 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_fact_plus_empty_body_strict_no_duplicate_conclusions() {
+        // A fact already proves +D p. An empty-body strict rule for p should not
+        // emit a second +D p conclusion.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_rule(Rule::new(
+            "axiom",
+            RuleType::Strict,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+
+        let conclusions = reason(&theory).unwrap();
+        let definite_p_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            })
+            .count();
+
+        assert_eq!(definite_p_count, 1, "Should have exactly one +D p");
+    }
+
+    #[test]
+    fn test_fact_plus_empty_body_defeasible_no_duplicate_and_chains() {
+        // A fact already proves p. An empty-body defeasible rule for p should
+        // not produce a duplicate, and forward chaining from p should still work.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_rule(Rule::new(
+            "d_axiom",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let conclusions = reason(&theory).unwrap();
+
+        let defeasible_p_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            })
+            .count();
+        assert_eq!(defeasible_p_count, 1, "Should have exactly one +d p");
+
+        let has_q = conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+        assert!(has_q, "Forward chaining from p to q should still work");
+    }
+
+    #[test]
+    fn test_two_empty_body_defeasible_same_head_only_one_conclusion() {
+        // Two empty-body defeasible rules for the same head should produce
+        // exactly one +d conclusion, not two.
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::new(
+            "d1",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        theory.add_rule(Rule::new(
+            "d2",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+
+        let conclusions = reason(&theory).unwrap();
+        let defeasible_p_count = conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            })
+            .count();
+
+        assert_eq!(defeasible_p_count, 1, "Should have exactly one +d p");
+    }
+
     // ==========================================================================
     // REGRESSION TESTS: Duplicate fact deduplication
     // ==========================================================================
