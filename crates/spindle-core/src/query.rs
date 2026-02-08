@@ -6,7 +6,7 @@
 //! - **Why-Not**: Explanation of failures - "Why isn't X provable?"
 //! - **Abduction**: Finding hypotheses - "What facts would make X provable?"
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -199,11 +199,40 @@ impl WhatIfResult {
 static HYP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[inline]
-fn positive_strength(ct: ConclusionType) -> u8 {
+fn conclusion_strength(ct: ConclusionType) -> u8 {
     match ct {
-        ConclusionType::DefinitelyProvable => 2,
-        ConclusionType::DefeasiblyProvable => 1,
-        _ => 0,
+        ConclusionType::DefinitelyProvable => 4,
+        ConclusionType::DefeasiblyProvable => 3,
+        ConclusionType::DefeasiblyNotProvable => 2,
+        ConclusionType::DefinitelyNotProvable => 1,
+    }
+}
+
+fn strongest_conclusions_by_literal(
+    conclusions: &[crate::conclusion::Conclusion],
+) -> HashMap<Literal, ConclusionType> {
+    let mut by_lit = HashMap::new();
+    for conc in conclusions {
+        by_lit
+            .entry(conc.literal.clone())
+            .and_modify(|old| {
+                if conclusion_strength(conc.conclusion_type) > conclusion_strength(*old) {
+                    *old = conc.conclusion_type;
+                }
+            })
+            .or_insert(conc.conclusion_type);
+    }
+    by_lit
+}
+
+fn next_hyp_label(theory: &Theory, unique_id: u64, start_index: usize) -> String {
+    let mut index = start_index.max(1);
+    loop {
+        let candidate = format!("__hyp_{}_{}", unique_id, index);
+        if theory.get_rule(&candidate).is_none() {
+            return candidate;
+        }
+        index += 1;
     }
 }
 
@@ -228,7 +257,7 @@ pub fn what_if(
     let unique_id = HYP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut modified = theory.clone();
     for (i, hyp) in hypotheticals.iter().enumerate() {
-        let label = format!("__hyp_{}_{}", unique_id, i + 1);
+        let label = next_hyp_label(&modified, unique_id, i + 1);
         let rule = Rule::fact(&label, hyp.literal.clone());
         modified.add_rule(rule);
     }
@@ -262,42 +291,21 @@ pub fn what_if(
         .map(|c| c.literal.clone())
         .collect();
 
-    // Track changed conclusions by comparing strongest positive status per literal.
-    // This avoids false positives when both +D and +d exist in baseline/modified.
+    // Track changed conclusions by comparing strongest status per literal.
+    // This captures both positive->positive changes and positive->negative
+    // transitions (e.g. a literal that becomes unprovable under hypotheticals).
     let mut changed_conclusions = Vec::new();
-    let mut baseline_by_lit: std::collections::HashMap<_, _> = baseline
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| (c.literal.clone(), c.conclusion_type))
-        .collect();
-    for conc in &baseline {
-        if conc.conclusion_type.is_positive()
-            && let Some(old) = baseline_by_lit.get_mut(&conc.literal)
-            && positive_strength(conc.conclusion_type) > positive_strength(*old)
-        {
-            *old = conc.conclusion_type;
-        }
-    }
+    let baseline_by_lit = strongest_conclusions_by_literal(&baseline);
+    let modified_by_lit = strongest_conclusions_by_literal(&modified_conclusions);
 
-    let mut modified_by_lit: std::collections::HashMap<_, _> = modified_conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| (c.literal.clone(), c.conclusion_type))
-        .collect();
-    for conc in &modified_conclusions {
-        if conc.conclusion_type.is_positive()
-            && let Some(old) = modified_by_lit.get_mut(&conc.literal)
-            && positive_strength(conc.conclusion_type) > positive_strength(*old)
+    let mut all_literals: HashSet<Literal> = baseline_by_lit.keys().cloned().collect();
+    all_literals.extend(modified_by_lit.keys().cloned());
+    for lit in all_literals {
+        if let (Some(&old_type), Some(&new_type)) =
+            (baseline_by_lit.get(&lit), modified_by_lit.get(&lit))
+            && old_type != new_type
         {
-            *old = conc.conclusion_type;
-        }
-    }
-
-    for (lit, new_type) in &modified_by_lit {
-        if let Some(&old_type) = baseline_by_lit.get(lit)
-            && old_type != *new_type
-        {
-            changed_conclusions.push((lit.clone(), old_type, *new_type));
+            changed_conclusions.push((lit, old_type, new_type));
         }
     }
 
@@ -1883,6 +1891,16 @@ mod tests {
     }
 
     #[test]
+    fn test_next_hyp_label_skips_existing_rule_labels() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("__hyp_42_1", Literal::simple("a")));
+        theory.add_rule(Rule::fact("__hyp_42_2", Literal::simple("b")));
+
+        let label = next_hyp_label(&theory, 42, 1);
+        assert_eq!(label, "__hyp_42_3");
+    }
+
+    #[test]
     fn test_what_if_changed_conclusions_no_false_positive_when_status_unchanged() {
         // Regression: baseline and modified can both contain +D and +d for the same literal.
         // This should not be reported as a status change.
@@ -1899,6 +1917,32 @@ mod tests {
         assert!(
             result.changed_conclusions.is_empty(),
             "No status change expected for p, got {:?}",
+            result.changed_conclusions
+        );
+    }
+
+    #[test]
+    fn test_what_if_changed_conclusions_includes_becomes_unprovable() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        // Baseline: +d q. Hypothetical ~q fact should block q.
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::negated("q"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        let has_transition = result.changed_conclusions.iter().any(|(lit, old, new)| {
+            lit == &Literal::simple("q")
+                && *old == ConclusionType::DefeasiblyProvable
+                && !new.is_positive()
+        });
+        assert!(
+            has_transition,
+            "Expected q to appear in changed_conclusions when it becomes unprovable, got {:?}",
             result.changed_conclusions
         );
     }

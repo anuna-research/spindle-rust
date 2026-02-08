@@ -340,13 +340,16 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
         break;
     }
 
-    // Process each claimed expression
-    for expr in &args[body_start..] {
+    // Process each claimed expression.
+    // We propagate a best-effort per-expression line by advancing from the
+    // claims line; this preserves useful diagnostics for multi-line blocks.
+    for (expr_idx, expr) in args[body_start..].iter().enumerate() {
+        let expr_line = line + expr_idx + 1;
         let labels_before: std::collections::HashSet<String> =
             theory.rules().map(|r| r.label.clone()).collect();
 
         // Each expression inside claims is processed normally but gets source metadata
-        process_expr_with_line(theory, expr, line)?;
+        process_expr_with_line(theory, expr, expr_line)?;
 
         // Find newly added rule labels, then attach metadata
         let new_labels: Vec<String> = theory
@@ -1046,6 +1049,17 @@ mod tests {
         assert!(
             message.contains("line 2"),
             "Expected error to report line 2 after #lang, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_claims_inner_expression_line_numbers() {
+        let input = "(claims agent:alice\n  (given bird)\n  (bogus something))";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("line 3"),
+            "Expected bad inner claims expression to report line 3, got: {message}"
         );
     }
 }
