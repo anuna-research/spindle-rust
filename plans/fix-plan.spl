@@ -1,0 +1,317 @@
+; Fix Plan: spindle-rust bug hunt remediation
+; Systematic fixes organized by priority and dependency
+; All bugs discovered in the Feb 2026 audit
+
+;; ============================================================
+;; PHASE 1: CORE REASONING ENGINE (Critical - blocks everything)
+;; ============================================================
+
+; Fix 1: Duplicate fact deduplication in reason.rs worklist
+(given task-fix-dedup-facts)
+(given no-deps-fix-dedup-facts)
+(meta task-fix-dedup-facts
+  (agent "core-reason")
+  (description "Fix duplicate fact double-decrement in reason.rs. Add BitSet-based dedup before pushing to worklist so each literal is processed at most once. Also deduplicate conclusions vector. Write regression test with duplicate facts and multi-body rules."))
+
+; Fix 2: Ambiguity blocking in reason.rs (credulous -> skeptical)
+(given task-fix-ambiguity)
+(given depends-fix-ambiguity-on-dedup)
+(meta task-fix-ambiguity
+  (agent "core-reason")
+  (description "Fix credulous semantics in reason.rs to match scalable.rs skeptical/ambiguity-blocking behavior. When conflicting defeasible rules both have satisfied bodies and neither has superiority, block both conclusions. Write regression tests for mutual conflict with and without superiority."))
+
+; Fix 3: Empty-body non-fact rules in reason.rs
+(given task-fix-empty-body)
+(given depends-fix-empty-body-on-dedup)
+(meta task-fix-empty-body
+  (agent "core-reason")
+  (description "Fix empty-body strict/defeasible rules never firing in reason.rs. Add initialization loop that seeds worklist with heads of empty-body rules (matching scalable.rs behavior at lines 170-172). Write regression test."))
+
+; Fix 4: Duplicate fact dedup in scalable.rs
+(given task-fix-scalable-dedup)
+(given no-deps-fix-scalable-dedup)
+(meta task-fix-scalable-dedup
+  (agent "core-scalable")
+  (description "Fix duplicate fact double-decrement in scalable.rs delta closure. Apply same BitSet dedup as reason.rs fix. Write regression test."))
+
+;; ============================================================
+;; PHASE 2: QUERY & EXPLANATION (depends on reasoning fixes)
+;; ============================================================
+
+; Fix 5: why_not defeater detection
+(given task-fix-why-not)
+(given depends-fix-why-not-on-ambiguity)
+(meta task-fix-why-not
+  (agent "query")
+  (description "Fix why_not to detect defeater/superiority blocking. Add Defeated and Contradicted blocking types when rule body is satisfied but conclusion is blocked. Fix misleading output for provable literals. Fix ungrounded theory mismatch by running on prepared theory. Write regression tests."))
+
+; Fix 6: explain() cycle detection
+(given task-fix-explain-cycles)
+(given depends-fix-explain-on-ambiguity)
+(meta task-fix-explain-cycles
+  (agent "query")
+  (description "Add visited set to explain() recursion to prevent stack overflow on cyclic rule dependencies. Return a CyclicDependency node in proof tree when cycle detected. Write regression test with cyclic rules."))
+
+; Fix 7: what_if triple-reasoning and temporal options
+(given task-fix-what-if)
+(given depends-fix-what-if-on-ambiguity)
+(meta task-fix-what-if
+  (agent "query")
+  (description "Fix what_if: reuse reasoning result instead of calling reason() 3x. Add PrepareOptions parameter for temporal support. Fix hypothetical label collision by using UUID-style prefixes. Write regression tests."))
+
+; Fix 8: abduce solution verification
+(given task-fix-abduce)
+(given depends-fix-abduce-on-ambiguity)
+(meta task-fix-abduce
+  (agent "query")
+  (description "Fix abduce to verify solutions by actually running what_if with each candidate solution. Filter out solutions blocked by defeaters. Fix rules_used tracking. Write regression test."))
+
+;; ============================================================
+;; PHASE 3: PARSER FIXES (independent)
+;; ============================================================
+
+; Fix 9: SPL parser claims keyword
+(given task-fix-spl-claims)
+(given no-deps-fix-spl-claims)
+(meta task-fix-spl-claims
+  (agent "parser")
+  (description "Fix SPL parser to handle 'claims' keyword. Add claims block parsing that creates sourced facts with trust metadata. Write regression test."))
+
+; Fix 10: SPL parser auto-label collisions
+(given task-fix-spl-labels)
+(given no-deps-fix-spl-labels)
+(meta task-fix-spl-labels
+  (agent "parser")
+  (description "Fix auto-label generation to use global counter instead of type-specific count. Detect and error on collisions with user-provided labels. Write regression test."))
+
+; Fix 11: SPL parser double-negation
+(given task-fix-spl-double-neg)
+(given no-deps-fix-spl-double-neg)
+(meta task-fix-spl-double-neg
+  (agent "parser")
+  (description "Fix ~~name double-negation parsing bug. Detect double tilde and either strip both (positive) or error. Write regression test."))
+
+; Fix 12: SPL parser line number tracking
+(given task-fix-spl-line-numbers)
+(given no-deps-fix-spl-line-numbers)
+(meta task-fix-spl-line-numbers
+  (agent "parser")
+  (description "Fix line number tracking in SPL parser so errors report actual line numbers instead of always 'line 1'. Write regression test."))
+
+;; ============================================================
+;; PHASE 4: TEMPORAL & SUPPORT (independent)
+;; ============================================================
+
+; Fix 13: Temporal interval validation
+(given task-fix-temporal-validation)
+(given no-deps-fix-temporal-validation)
+(meta task-fix-temporal-validation
+  (agent "temporal")
+  (description "Add validation to Temporal::new() and from_bounds() to reject inverted intervals (start > end). Return Result or swap bounds. Write regression test."))
+
+; Fix 14: Intern resolve() soundness
+(given task-fix-intern-soundness)
+(given no-deps-fix-intern-soundness)
+(meta task-fix-intern-soundness
+  (agent "core-support")
+  (description "Fix intern.rs resolve() unsound transmute. Replace Vec<String> with a stable-address collection (e.g., Vec<Pin<Box<str>>>) or return owned String instead of &'static str. Add debug_assert for AtomId/SymbolId overflow. Write regression test."))
+
+; Fix 15: LiteralBitSet post-index atom handling
+(given task-fix-bitset-sizing)
+(given no-deps-fix-bitset-sizing)
+(meta task-fix-bitset-sizing
+  (agent "core-support")
+  (description "Fix LiteralBitSet to handle atoms interned after initial sizing. Either resize dynamically on insert, or ensure all atoms are interned before BitSet creation. Write regression test."))
+
+;; ============================================================
+;; PHASE 5: WASM PARITY (depends on core fixes)
+;; ============================================================
+
+; Fix 16: WASM evaluated_at format
+(given task-fix-wasm-evalat)
+(given depends-fix-wasm-on-core)
+(meta task-fix-wasm-evalat
+  (agent "wasm")
+  (description "Fix WASM evaluated_at to use RFC 3339 format matching CLI. Use to_rfc3339() instead of to_string(). Write regression test."))
+
+; Fix 17: WASM conclusion sorting
+(given task-fix-wasm-sort)
+(given depends-fix-wasm-sort-on-core)
+(meta task-fix-wasm-sort
+  (agent "wasm")
+  (description "Sort WASM conclusions by literal_spl then conclusion_type to match CLI behavior. Write regression test."))
+
+; Fix 18: WASM query grounding
+(given task-fix-wasm-query-grounding)
+(given depends-fix-wasm-query-on-core)
+(meta task-fix-wasm-query-grounding
+  (agent "wasm")
+  (description "Fix WASM query/what_if/why_not/abduce methods to call prepare() on theory before passing to query functions. Add temporal/as-of API parameter. Write regression test."))
+
+; Fix 19: WASM parse_literal enhancement
+(given task-fix-wasm-parse-literal)
+(given no-deps-fix-wasm-parse-literal)
+(meta task-fix-wasm-parse-literal
+  (agent "wasm")
+  (description "Fix WASM parse_literal to handle predicate arguments and (not ...) syntax matching CLI behavior. Write regression test."))
+
+; Fix 20: WASM result completeness
+(given task-fix-wasm-results)
+(given depends-fix-wasm-results-on-core)
+(meta task-fix-wasm-results
+  (agent "wasm")
+  (description "Fix WASM JsAbductionResult to include confidence/rules_used. Fix JsWhyNotResult to include structured blocker type/rule. Fix JsWhatIfResult to include changed_conclusions. Write regression tests."))
+
+;; ============================================================
+;; PHASE 6: EDGE CASES & HARDENING
+;; ============================================================
+
+; Fix 21: Circular superiority detection
+(given task-fix-circular-sup)
+(given no-deps-fix-circular-sup)
+(meta task-fix-circular-sup
+  (agent "core-support")
+  (description "Add circular superiority detection in SuperiorityIndex::add(). Warn or error when prefer(r1,r2) and prefer(r2,r1) both exist. Write regression test."))
+
+; Fix 22: Contradictory strict rule detection
+(given task-fix-strict-contradiction)
+(given depends-fix-strict-on-ambiguity)
+(meta task-fix-strict-contradiction
+  (agent "core-reason")
+  (description "Detect and warn when contradictory strict rules prove both +D p and +D ~p. Add inconsistency field to reasoning result. Write regression test."))
+
+; Fix 23: Non-deterministic rule ordering
+(given task-fix-rule-ordering)
+(given depends-fix-ordering-on-ambiguity)
+(meta task-fix-rule-ordering
+  (agent "core-reason")
+  (description "Replace HashMap iteration with deterministic ordering (BTreeMap or sorted Vec) for rule processing in both reason.rs and theory.rs. Write determinism regression test."))
+
+;; ============================================================
+;; READINESS RULES
+;; ============================================================
+
+; Phase 1: Core reasoning (immediately ready or sequential)
+(normally r-ready-fix-dedup-facts
+  (and task-fix-dedup-facts no-deps-fix-dedup-facts)
+  ready-fix-dedup-facts)
+
+(normally r-ready-fix-ambiguity
+  (and task-fix-ambiguity completed-fix-dedup-facts)
+  ready-fix-ambiguity)
+
+(normally r-ready-fix-empty-body
+  (and task-fix-empty-body completed-fix-dedup-facts)
+  ready-fix-empty-body)
+
+(normally r-ready-fix-scalable-dedup
+  (and task-fix-scalable-dedup no-deps-fix-scalable-dedup)
+  ready-fix-scalable-dedup)
+
+; Phase 2: Query fixes (depend on ambiguity fix)
+(normally r-ready-fix-why-not
+  (and task-fix-why-not completed-fix-ambiguity)
+  ready-fix-why-not)
+
+(normally r-ready-fix-explain-cycles
+  (and task-fix-explain-cycles completed-fix-ambiguity)
+  ready-fix-explain-cycles)
+
+(normally r-ready-fix-what-if
+  (and task-fix-what-if completed-fix-ambiguity)
+  ready-fix-what-if)
+
+(normally r-ready-fix-abduce
+  (and task-fix-abduce completed-fix-ambiguity)
+  ready-fix-abduce)
+
+; Phase 3: Parser fixes (immediately ready)
+(normally r-ready-fix-spl-claims
+  (and task-fix-spl-claims no-deps-fix-spl-claims)
+  ready-fix-spl-claims)
+
+(normally r-ready-fix-spl-labels
+  (and task-fix-spl-labels no-deps-fix-spl-labels)
+  ready-fix-spl-labels)
+
+(normally r-ready-fix-spl-double-neg
+  (and task-fix-spl-double-neg no-deps-fix-spl-double-neg)
+  ready-fix-spl-double-neg)
+
+(normally r-ready-fix-spl-line-numbers
+  (and task-fix-spl-line-numbers no-deps-fix-spl-line-numbers)
+  ready-fix-spl-line-numbers)
+
+; Phase 4: Temporal & support (immediately ready)
+(normally r-ready-fix-temporal-validation
+  (and task-fix-temporal-validation no-deps-fix-temporal-validation)
+  ready-fix-temporal-validation)
+
+(normally r-ready-fix-intern-soundness
+  (and task-fix-intern-soundness no-deps-fix-intern-soundness)
+  ready-fix-intern-soundness)
+
+(normally r-ready-fix-bitset-sizing
+  (and task-fix-bitset-sizing no-deps-fix-bitset-sizing)
+  ready-fix-bitset-sizing)
+
+; Phase 5: WASM (depend on core fixes)
+(normally r-ready-fix-wasm-evalat
+  (and task-fix-wasm-evalat completed-fix-ambiguity)
+  ready-fix-wasm-evalat)
+
+(normally r-ready-fix-wasm-sort
+  (and task-fix-wasm-sort completed-fix-ambiguity)
+  ready-fix-wasm-sort)
+
+(normally r-ready-fix-wasm-query-grounding
+  (and task-fix-wasm-query-grounding completed-fix-ambiguity)
+  ready-fix-wasm-query-grounding)
+
+(normally r-ready-fix-wasm-parse-literal
+  (and task-fix-wasm-parse-literal no-deps-fix-wasm-parse-literal)
+  ready-fix-wasm-parse-literal)
+
+(normally r-ready-fix-wasm-results
+  (and task-fix-wasm-results completed-fix-ambiguity)
+  ready-fix-wasm-results)
+
+; Phase 6: Edge cases
+(normally r-ready-fix-circular-sup
+  (and task-fix-circular-sup no-deps-fix-circular-sup)
+  ready-fix-circular-sup)
+
+(normally r-ready-fix-strict-contradiction
+  (and task-fix-strict-contradiction completed-fix-ambiguity)
+  ready-fix-strict-contradiction)
+
+(normally r-ready-fix-rule-ordering
+  (and task-fix-rule-ordering completed-fix-ambiguity)
+  ready-fix-rule-ordering)
+
+;; ============================================================
+;; PRIORITY ORDERING
+;; ============================================================
+
+; Core reasoning fixes are highest priority
+(prefer r-ready-fix-dedup-facts r-ready-fix-spl-claims)
+(prefer r-ready-fix-dedup-facts r-ready-fix-temporal-validation)
+(prefer r-ready-fix-dedup-facts r-ready-fix-intern-soundness)
+(prefer r-ready-fix-dedup-facts r-ready-fix-circular-sup)
+(prefer r-ready-fix-scalable-dedup r-ready-fix-spl-claims)
+
+; Phase 1 core fixes beat parser fixes
+(prefer r-ready-fix-ambiguity r-ready-fix-spl-claims)
+(prefer r-ready-fix-empty-body r-ready-fix-spl-claims)
+
+; Query fixes beat WASM fixes
+(prefer r-ready-fix-why-not r-ready-fix-wasm-evalat)
+(prefer r-ready-fix-explain-cycles r-ready-fix-wasm-evalat)
+
+; Parser fixes beat edge case fixes
+(prefer r-ready-fix-spl-claims r-ready-fix-circular-sup)
+(prefer r-ready-fix-spl-labels r-ready-fix-circular-sup)
+
+(claims agent:core-reason
+  :at "2026-20-70T16:80:25Z"
+  (given claimed-fix-dedup-facts))
