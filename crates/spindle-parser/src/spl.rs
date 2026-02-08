@@ -56,7 +56,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
 
     // Parse all top-level expressions, tracking positions for line numbers
     let (remaining, expr_positions) = parse_expressions_with_positions(&cleaned).map_err(|e| {
-        let line = line_of_from_error(input, &cleaned, &e);
+        let line = line_of_from_error(&cleaned, &e);
         ParseError::ParserError {
             line,
             message: format!("SPL parse error: {e:?}"),
@@ -64,7 +64,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     })?;
 
     if !remaining.trim().is_empty() {
-        let line = line_of_offset(input, cleaned.len() - remaining.len());
+        let line = line_of_offset(&cleaned, cleaned.len() - remaining.len());
         return Err(ParseError::ParserError {
             line,
             message: format!("Unparsed input remaining: {}", remaining.trim()),
@@ -73,7 +73,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
 
     // Process expressions with line number tracking
     for (expr, offset) in expr_positions {
-        let line = line_of_offset(input, offset);
+        let line = line_of_offset(&cleaned, offset);
         process_expr_with_line(&mut theory, &expr, line)?;
     }
 
@@ -86,18 +86,17 @@ fn line_of_offset(input: &str, offset: usize) -> usize {
     input[..clamped].chars().filter(|&c| c == '\n').count() + 1
 }
 
-/// Calculate line number from a nom parse error on cleaned input, mapped back to original.
+/// Calculate line number from a nom parse error on cleaned input.
 ///
-/// Extracts the remaining (unparsed) input length from the nom error,
-/// computes the byte offset into the cleaned string, then maps to the
-/// original input's line number.
-fn line_of_from_error(original: &str, cleaned: &str, err: &nom::Err<Error<&str>>) -> usize {
+/// Extracts the remaining (unparsed) input length from the nom error and
+/// computes the byte offset into the cleaned string.
+fn line_of_from_error(cleaned: &str, err: &nom::Err<Error<&str>>) -> usize {
     let remaining_len = match err {
         nom::Err::Error(e) | nom::Err::Failure(e) => e.input.len(),
         nom::Err::Incomplete(_) => 0,
     };
     let offset = cleaned.len().saturating_sub(remaining_len);
-    line_of_offset(original, offset)
+    line_of_offset(cleaned, offset)
 }
 
 /// Remove semicolon comments and #lang directives from input, respecting quotes
@@ -321,11 +320,20 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
     while body_start < args.len() {
         if let Some(kw) = args[body_start].as_atom()
             && kw == ":at"
-            && body_start + 1 < args.len()
         {
-            if let Some(ts) = args[body_start + 1].as_atom() {
-                timestamp = Some(ts.to_string());
+            if body_start + 1 >= args.len() {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: "claims :at requires a timestamp atom".to_string(),
+                });
             }
+            let ts = args[body_start + 1]
+                .as_atom()
+                .ok_or_else(|| ParseError::ParserError {
+                    line,
+                    message: "claims :at requires a timestamp atom".to_string(),
+                })?;
+            timestamp = Some(ts.to_string());
             body_start += 2;
             continue;
         }
@@ -1018,5 +1026,26 @@ mod tests {
             MetaValue::String(s) => assert_eq!(s, "agent:bob"),
             other => panic!("Expected String source for r1, got: {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_claims_at_requires_atom_timestamp() {
+        let err = parse_spl("(claims agent:alice :at (given bird))").unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("claims :at requires a timestamp atom"),
+            "Expected malformed :at value to fail, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_line_numbers_with_lang_directive() {
+        let input = "#lang spindle\n(bogus something)";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("line 2"),
+            "Expected error to report line 2 after #lang, got: {message}"
+        );
     }
 }
