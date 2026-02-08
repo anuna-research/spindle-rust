@@ -1,0 +1,21 @@
+; Test: Predicate arguments
+; Coverage: unary, binary predicates, argument discrimination
+
+; Unary predicates
+(given (tall alice))
+(given (tall bob))
+(given (short carol))
+
+; Rule using unary predicate
+(normally r1 (tall ?x) (can-reach-shelf ?x))
+
+; Binary predicate
+(given (likes alice bob))
+(normally r2 (likes ?x ?y) (friend ?x ?y))
+
+; Argument discrimination: tall(alice) != short(alice)
+; EXPECT: +d can-reach-shelf(alice)
+; EXPECT: +d can-reach-shelf(bob)
+; EXPECT-NOT: +d can-reach-shelf(carol)
+; EXPECT: +d friend(alice, bob)
+; EXPECT-NOT: +d friend(bob, alice)

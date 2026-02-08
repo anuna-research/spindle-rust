@@ -1,0 +1,31 @@
+; Test: Defeasible rules
+; Coverage: simple defeasible, defeasible chain, negation in head
+; Defeasible rules produce +d but NOT +D for derived literals
+
+; Simple defeasible
+(given bird)
+(normally r1 bird flies)
+
+; Chain of defeasible
+(given student)
+(normally r2 student studies)
+(normally r3 studies learns)
+
+; Negation in head
+(given vampire)
+(normally r4 vampire (not alive))
+
+; EXPECT: +D bird
+; EXPECT: +d bird
+; EXPECT: +d flies
+; EXPECT: -D flies
+; EXPECT: +D student
+; EXPECT: +d student
+; EXPECT: +d studies
+; EXPECT: +d learns
+; EXPECT: -D studies
+; EXPECT: -D learns
+; EXPECT: +D vampire
+; EXPECT: +d vampire
+; EXPECT: +d ~alive
+; EXPECT: -D ~alive

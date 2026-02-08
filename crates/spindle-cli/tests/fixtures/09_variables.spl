@@ -1,0 +1,11 @@
+; Test: Variables and grounding
+; Coverage: simple variable, multi-instance grounding
+
+; Parent-ancestor with variables
+(given (parent alice bob))
+(given (parent bob carol))
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+
+; EXPECT: +d ancestor(alice, bob)
+; EXPECT: +d ancestor(bob, carol)
+; EXPECT-NOT: +d ancestor(alice, carol)

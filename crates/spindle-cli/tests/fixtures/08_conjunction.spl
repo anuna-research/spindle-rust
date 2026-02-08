@@ -1,0 +1,35 @@
+; Test: Conjunction (multi-body rules)
+; Coverage: satisfied conjunction, unsatisfied conjunction
+
+; Fully satisfied conjunction
+(given sunny)
+(given warm)
+(normally r1 (and sunny warm) beach-day)
+
+; Partially satisfied conjunction (should NOT fire)
+(given rainy)
+; no (given cold) so this shouldn't fire:
+(normally r2 (and rainy cold) stay-home)
+
+; Three-way conjunction
+(given flour)
+(given sugar)
+(given eggs)
+(normally r3 (and flour sugar eggs) cake)
+
+; EXPECT: +D sunny
+; EXPECT: +d sunny
+; EXPECT: +D warm
+; EXPECT: +d warm
+; EXPECT: +d beach-day
+; EXPECT: -D beach-day
+; EXPECT: +D rainy
+; EXPECT: +d rainy
+; EXPECT: -d stay-home
+; EXPECT: +D flour
+; EXPECT: +d flour
+; EXPECT: +D sugar
+; EXPECT: +d sugar
+; EXPECT: +D eggs
+; EXPECT: +d eggs
+; EXPECT: +d cake

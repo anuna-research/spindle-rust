@@ -1,0 +1,16 @@
+; Test: Superiority relations
+; Coverage: simple prefer, resolving conflicts
+
+; Classic penguin: bird flies, penguin doesn't, penguin > bird
+(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
+
+; EXPECT: +D bird
+; EXPECT: +d bird
+; EXPECT: +D penguin
+; EXPECT: +d penguin
+; EXPECT: +d ~flies
+; EXPECT: -d flies

@@ -1,0 +1,21 @@
+; Test: Negation
+; Coverage: explicit negation in facts, rule bodies, rule heads
+
+; Negated fact
+(given (not dangerous))
+
+; Rule with negated body: if not dangerous then safe
+(normally r1 (not dangerous) safe)
+
+; Rule with negated head
+(given cat)
+(normally r2 cat (not aquatic))
+
+; EXPECT: +D ~dangerous
+; EXPECT: +d ~dangerous
+; EXPECT: +d safe
+; EXPECT: -D safe
+; EXPECT: +D cat
+; EXPECT: +d cat
+; EXPECT: +d ~aquatic
+; EXPECT: -D ~aquatic

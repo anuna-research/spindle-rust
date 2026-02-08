@@ -1,0 +1,198 @@
+; Plan: Create comprehensive SPL test fixtures for the spindle reasoner
+; Goal: Systematic coverage of all reasoning paths through the engine
+; Agent: claude
+
+;; ============================================================
+;; PHASE 1: TEST FIXTURE FILES (independent, parallelizable)
+;; ============================================================
+
+; Test 1: Basic facts only
+(given task-basic-facts)
+(given no-deps-basic-facts)
+(meta task-basic-facts
+  (agent "claude")
+  (description "Create tests/fixtures/01_basic_facts.spl - single fact, multiple facts, negated facts. Expected: all facts in +D and +d. Verify ground truth."))
+
+; Test 2: Strict rules
+(given task-strict-rules)
+(given no-deps-strict-rules)
+(meta task-strict-rules
+  (agent "claude")
+  (description "Create tests/fixtures/02_strict_rules.spl - strict rule chains, empty-body strict, multi-premise strict. Expected: +D conclusions for all derived literals."))
+
+; Test 3: Defeasible rules
+(given task-defeasible-rules)
+(given no-deps-defeasible-rules)
+(meta task-defeasible-rules
+  (agent "claude")
+  (description "Create tests/fixtures/03_defeasible_rules.spl - simple defeasible, chains, with negation in head. Expected: +d but not +D for derived, -D for defeasible."))
+
+; Test 4: Defeaters
+(given task-defeaters)
+(given no-deps-defeaters)
+(meta task-defeaters
+  (agent "claude")
+  (description "Create tests/fixtures/04_defeaters.spl - defeater blocking a defeasible conclusion. Expected: -d for blocked literal, defeater itself not proving negation."))
+
+; Test 5: Superiority relations
+(given task-superiority)
+(given no-deps-superiority)
+(meta task-superiority
+  (agent "claude")
+  (description "Create tests/fixtures/05_superiority.spl - simple prefer, transitive chain, multiple superiorities. Expected: winning rule's conclusion in +d, losing in -d."))
+
+; Test 6: Ambiguity blocking
+(given task-ambiguity)
+(given no-deps-ambiguity)
+(meta task-ambiguity
+  (agent "claude")
+  (description "Create tests/fixtures/06_ambiguity.spl - conflicting defeasible rules with NO superiority. Expected: both conclusions blocked (-d p, -d ~p)."))
+
+; Test 7: Negation
+(given task-negation)
+(given no-deps-negation)
+(meta task-negation
+  (agent "claude")
+  (description "Create tests/fixtures/07_negation.spl - explicit negation (not x), negated facts, negated rule heads. Expected: correct polarity in conclusions."))
+
+; Test 8: Conjunction (multi-body rules)
+(given task-conjunction)
+(given no-deps-conjunction)
+(meta task-conjunction
+  (agent "claude")
+  (description "Create tests/fixtures/08_conjunction.spl - (and a b) bodies, partial satisfaction, full satisfaction. Expected: rule fires only when all body literals hold."))
+
+; Test 9: Variables and grounding
+(given task-variables)
+(given no-deps-variables)
+(meta task-variables
+  (agent "claude")
+  (description "Create tests/fixtures/09_variables.spl - simple variables, multi-var, grounding with multiple instances. Expected: correct instantiation and reasoning per ground instance."))
+
+; Test 10: Predicate arguments
+(given task-predicates)
+(given no-deps-predicates)
+(meta task-predicates
+  (agent "claude")
+  (description "Create tests/fixtures/10_predicates.spl - unary, binary, ternary predicates. Expected: argument discrimination (p(a) != p(b)), correct matching."))
+
+; Test 11: Empty body rules
+(given task-empty-body)
+(given no-deps-empty-body)
+(meta task-empty-body
+  (agent "claude")
+  (description "Create tests/fixtures/11_empty_body.spl - empty-body strict and defeasible rules. Expected: conclusions fire unconditionally."))
+
+; Test 12: Long chains
+(given task-chains)
+(given no-deps-chains)
+(meta task-chains
+  (agent "claude")
+  (description "Create tests/fixtures/12_chains.spl - fact->rule->rule->conclusion chains, 3-4 levels deep. Expected: all intermediate and final conclusions derived."))
+
+; Test 13: Mixed rule types
+(given task-mixed-rules)
+(given no-deps-mixed-rules)
+(meta task-mixed-rules
+  (agent "claude")
+  (description "Create tests/fixtures/13_mixed_rules.spl - strict + defeasible + defeater interactions. Expected: strict beats defeasible, defeaters block, superiority resolves."))
+
+; Test 14: Diamond dependencies
+(given task-diamond)
+(given no-deps-diamond)
+(meta task-diamond
+  (agent "claude")
+  (description "Create tests/fixtures/14_diamond.spl - diamond-shaped rule dependencies where two paths lead to same/conflicting conclusions. Expected: correct conflict resolution."))
+
+; Test 15: Team defeat / preemption
+(given task-team-defeat)
+(given no-deps-team-defeat)
+(meta task-team-defeat
+  (agent "claude")
+  (description "Create tests/fixtures/15_team_defeat.spl - multiple rules supporting one side vs one rule on the other. Expected: superiority still required, team doesn't auto-win."))
+
+;; ============================================================
+;; PHASE 2: TEST HARNESS (depends on fixtures)
+;; ============================================================
+
+; Test harness file
+(given task-harness)
+(given depends-harness-on-fixtures)
+(meta task-harness
+  (agent "claude")
+  (description "Create tests/fixture_tests.rs - integration test that reads each .spl fixture, runs reason --scalable, and verifies expected conclusions from comment annotations in files."))
+
+;; ============================================================
+;; READINESS RULES
+;; ============================================================
+
+; All fixture tasks are immediately ready
+(normally r-ready-basic-facts
+  (and task-basic-facts no-deps-basic-facts)
+  ready-basic-facts)
+
+(normally r-ready-strict-rules
+  (and task-strict-rules no-deps-strict-rules)
+  ready-strict-rules)
+
+(normally r-ready-defeasible-rules
+  (and task-defeasible-rules no-deps-defeasible-rules)
+  ready-defeasible-rules)
+
+(normally r-ready-defeaters
+  (and task-defeaters no-deps-defeaters)
+  ready-defeaters)
+
+(normally r-ready-superiority
+  (and task-superiority no-deps-superiority)
+  ready-superiority)
+
+(normally r-ready-ambiguity
+  (and task-ambiguity no-deps-ambiguity)
+  ready-ambiguity)
+
+(normally r-ready-negation
+  (and task-negation no-deps-negation)
+  ready-negation)
+
+(normally r-ready-conjunction
+  (and task-conjunction no-deps-conjunction)
+  ready-conjunction)
+
+(normally r-ready-variables
+  (and task-variables no-deps-variables)
+  ready-variables)
+
+(normally r-ready-predicates
+  (and task-predicates no-deps-predicates)
+  ready-predicates)
+
+(normally r-ready-empty-body
+  (and task-empty-body no-deps-empty-body)
+  ready-empty-body)
+
+(normally r-ready-chains
+  (and task-chains no-deps-chains)
+  ready-chains)
+
+(normally r-ready-mixed-rules
+  (and task-mixed-rules no-deps-mixed-rules)
+  ready-mixed-rules)
+
+(normally r-ready-diamond
+  (and task-diamond no-deps-diamond)
+  ready-diamond)
+
+(normally r-ready-team-defeat
+  (and task-team-defeat no-deps-team-defeat)
+  ready-team-defeat)
+
+; Harness depends on all fixtures being done
+(normally r-ready-harness
+  (and task-harness completed-basic-facts completed-strict-rules
+       completed-defeasible-rules completed-defeaters completed-superiority
+       completed-ambiguity completed-negation completed-conjunction
+       completed-variables completed-predicates completed-empty-body
+       completed-chains completed-mixed-rules completed-diamond
+       completed-team-defeat)
+  ready-harness)

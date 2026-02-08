@@ -1,0 +1,29 @@
+; Test: Diamond dependency pattern
+; Coverage: two paths converge to the same conclusion
+
+; Diamond: a -> b, a -> c, b -> d, c -> d
+(given a)
+(normally r1 a b)
+(normally r2 a c)
+(normally r3 b d)
+(normally r4 c d)
+
+; Both paths should derive d (no conflict, same polarity)
+; EXPECT: +d a
+; EXPECT: +d b
+; EXPECT: +d c
+; EXPECT: +d d
+
+; Conflicting diamond: two paths, opposite conclusions
+(given x)
+(normally r5 x y)
+(normally r6 x z)
+(normally r7 y outcome)
+(normally r8 z (not outcome))
+
+; No superiority => ambiguity on outcome
+; EXPECT: +d x
+; EXPECT: +d y
+; EXPECT: +d z
+; EXPECT: -d outcome
+; EXPECT: -d ~outcome

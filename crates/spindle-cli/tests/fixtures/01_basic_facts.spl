@@ -1,0 +1,14 @@
+; Test: Basic facts
+; Coverage: fact assertion, multiple facts, negated facts
+; All facts should appear as both +D (definitely provable) and +d (defeasibly provable)
+
+(given bird)
+(given penguin)
+(given (not swims))
+
+; EXPECT: +D bird
+; EXPECT: +d bird
+; EXPECT: +D penguin
+; EXPECT: +d penguin
+; EXPECT: +D ~swims
+; EXPECT: +d ~swims

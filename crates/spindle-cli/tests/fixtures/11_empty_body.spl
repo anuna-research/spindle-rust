@@ -1,0 +1,20 @@
+; Test: Strict overrides defeasible
+; Coverage: definite conclusion from strict rule cannot be defeated
+
+; Strict rule proves mortal
+(given human)
+(always s1 human mortal)
+
+; Defeasible rule tries to prove ~mortal (should lose to strict)
+(given immortal-claim)
+(normally r1 immortal-claim (not mortal))
+
+; Strict conclusion +D mortal cannot be overridden
+; The defeasible ~mortal is blocked because mortal is already +D
+; EXPECT: +D human
+; EXPECT: +d human
+; EXPECT: +D mortal
+; EXPECT: +d mortal
+; EXPECT: +D immortal-claim
+; EXPECT: +d immortal-claim
+; EXPECT: -d ~mortal

@@ -1,0 +1,18 @@
+; Test: Team defeat / preemption
+; Coverage: multiple rules supporting one side don't auto-win without superiority
+
+; Two rules for p, one rule for ~p, no superiority
+(given a)
+(given b)
+(given c)
+(normally r1 a p)
+(normally r2 b p)
+(normally r3 c (not p))
+
+; Despite 2 rules for p vs 1 for ~p, skeptical semantics blocks both
+; (superiority is per-rule, not per-team)
+; EXPECT: +d a
+; EXPECT: +d b
+; EXPECT: +d c
+; EXPECT: -d p
+; EXPECT: -d ~p
