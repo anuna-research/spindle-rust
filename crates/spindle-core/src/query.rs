@@ -369,8 +369,6 @@ impl BlockingCondition {
 pub struct WhyNotResult {
     /// The literal queried
     pub literal: Literal,
-    /// Whether the literal is actually provable
-    pub is_provable: bool,
     /// Rule that would derive this literal (if body was satisfied)
     pub would_derive: Option<String>,
     /// Conditions blocking the derivation
@@ -382,10 +380,16 @@ impl WhyNotResult {
     pub fn new(literal: Literal) -> Self {
         Self {
             literal,
-            is_provable: false,
             would_derive: None,
             blocked_by: Vec::new(),
         }
+    }
+
+    /// Check if the literal is actually provable.
+    ///
+    /// A provable literal has a deriving rule but no blockers.
+    pub fn is_provable(&self) -> bool {
+        self.would_derive.is_some() && self.blocked_by.is_empty()
     }
 
     /// Check if there are any blocking conditions
@@ -406,7 +410,7 @@ impl WhyNotResult {
 impl fmt::Display for WhyNotResult {
     /// Convert to human-readable string
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_provable {
+        if self.is_provable() {
             write!(f, "{} is provable", self.literal)?;
             if let Some(ref rule) = self.would_derive {
                 write!(f, " (derived by rule: {rule})")?;
@@ -449,7 +453,6 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     if is_provable {
         // Return a result with would_derive taken from the conclusion's rule_label
         let mut result = WhyNotResult::new(literal.clone());
-        result.is_provable = true;
         result.would_derive = conclusions
             .iter()
             .find(|c| c.literal == *literal && c.conclusion_type.is_positive())

@@ -125,8 +125,6 @@ pub struct JsChangedConclusion {
 pub struct JsWhyNotResult {
     /// The literal
     pub literal: String,
-    /// Whether the literal is actually provable
-    pub is_provable: bool,
     /// Rule that would derive it
     pub would_derive: Option<String>,
     /// Blocking conditions (structured)
@@ -385,7 +383,6 @@ impl Spindle {
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),
-            is_provable: result.is_provable,
             would_derive: result.would_derive,
             blockers: result
                 .blocked_by

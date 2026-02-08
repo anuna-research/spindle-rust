@@ -558,7 +558,7 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option
 
         let output = json!({
             "literal": result.literal.to_string(),
-            "is_provable": result.is_provable,
+            "is_provable": result.is_provable(),
             "would_derive": result.would_derive,
             "blocked_by": blockers
         });
