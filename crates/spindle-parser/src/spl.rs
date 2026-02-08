@@ -32,12 +32,9 @@
 
 use nom::{
     IResult, Parser,
-    branch::alt,
     bytes::complete::take_while1,
-    character::complete::{char, multispace0},
+    character::complete::multispace0,
     error::{Error, ErrorKind},
-    multi::many0,
-    sequence::{delimited, preceded},
 };
 
 use chrono::DateTime;
@@ -74,7 +71,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     // Process expressions with line number tracking
     for (expr, offset) in expr_positions {
         let line = line_of_offset(&cleaned, offset);
-        process_expr_with_line(&mut theory, &expr, line)?;
+        process_expr_with_line(&mut theory, &expr, line, &cleaned)?;
     }
 
     Ok(theory)
@@ -143,22 +140,28 @@ fn remove_comments(input: &str) -> String {
 /// S-expression representation
 #[derive(Debug, Clone, PartialEq)]
 enum SExpr {
-    Atom(String),
-    List(Vec<SExpr>),
+    Atom { value: String, offset: usize },
+    List { items: Vec<SExpr>, offset: usize },
 }
 
 impl SExpr {
     fn as_atom(&self) -> Option<&str> {
         match self {
-            SExpr::Atom(s) => Some(s),
+            SExpr::Atom { value, .. } => Some(value),
             _ => None,
         }
     }
 
     fn as_list(&self) -> Option<&[SExpr]> {
         match self {
-            SExpr::List(v) => Some(v),
+            SExpr::List { items, .. } => Some(items),
             _ => None,
+        }
+    }
+
+    fn offset(&self) -> usize {
+        match self {
+            SExpr::Atom { offset, .. } | SExpr::List { offset, .. } => *offset,
         }
     }
 }
@@ -178,7 +181,7 @@ fn parse_expressions_with_positions(input: &str) -> IResult<&str, Vec<(SExpr, us
         // Record offset before parsing the expression
         let offset = input.len() - after_ws.len();
 
-        match parse_sexpr(after_ws) {
+        match parse_sexpr(input, after_ws) {
             Ok((rest, expr)) => {
                 results.push((expr, offset));
                 remaining = rest;
@@ -194,24 +197,47 @@ fn parse_expressions_with_positions(input: &str) -> IResult<&str, Vec<(SExpr, us
 }
 
 /// Parse a single s-expression
-fn parse_sexpr(input: &str) -> IResult<&str, SExpr> {
-    alt((parse_list, parse_string, parse_atom)).parse(input)
+fn parse_sexpr<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+    parse_sexpr_inner(full_input, input)
 }
 
 /// Parse a list: (...)
-fn parse_list(input: &str) -> IResult<&str, SExpr> {
-    let (input, items) = delimited(
-        char('('),
-        many0(preceded(multispace0, parse_sexpr)),
-        preceded(multispace0, char(')')),
-    )
-    .parse(input)?;
-    Ok((input, SExpr::List(items)))
+fn parse_sexpr_inner<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+    if input.starts_with('(') {
+        parse_list(full_input, input)
+    } else if input.starts_with('"') {
+        parse_string(full_input, input)
+    } else {
+        parse_atom(full_input, input)
+    }
+}
+
+/// Parse a list: (...)
+fn parse_list<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+    let offset = full_input.len() - input.len();
+    let mut remaining = &input[1..]; // skip '('
+    let mut items = Vec::new();
+
+    loop {
+        let (after_ws, _) = multispace0::<&str, Error<&str>>(remaining)?;
+        remaining = after_ws;
+
+        if let Some(rest) = remaining.strip_prefix(')') {
+            return Ok((rest, SExpr::List { items, offset }));
+        }
+
+        let (rest, expr) = parse_sexpr_inner(full_input, remaining)?;
+        items.push(expr);
+        remaining = rest;
+    }
 }
 
 /// Parse a string: "..."
-fn parse_string(input: &str) -> IResult<&str, SExpr> {
-    let (input, _) = char('"').parse(input)?;
+fn parse_string<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+    let Some(input) = input.strip_prefix('"') else {
+        return Err(nom::Err::Error(Error::new(input, ErrorKind::Char)));
+    };
+    let offset = full_input.len() - (input.len() + 1);
     let mut escaped = false;
     let mut out = String::new();
     let mut end_idx = None;
@@ -244,11 +270,12 @@ fn parse_string(input: &str) -> IResult<&str, SExpr> {
     };
 
     let remaining = &input[end_idx + 1..];
-    Ok((remaining, SExpr::Atom(out)))
+    Ok((remaining, SExpr::Atom { value: out, offset }))
 }
 
 /// Parse an atom (identifier, number, variable)
-fn parse_atom(input: &str) -> IResult<&str, SExpr> {
+fn parse_atom<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+    let offset = full_input.len() - input.len();
     let (input, s) = take_while1(|c: char| {
         c.is_alphanumeric()
             || c == '-'
@@ -260,7 +287,13 @@ fn parse_atom(input: &str) -> IResult<&str, SExpr> {
             || c == '+'
     })
     .parse(input)?;
-    Ok((input, SExpr::Atom(s.to_string())))
+    Ok((
+        input,
+        SExpr::Atom {
+            value: s.to_string(),
+            offset,
+        },
+    ))
 }
 
 /// Process an s-expression into theory elements (with line number)
@@ -268,6 +301,7 @@ fn process_expr_with_line(
     theory: &mut Theory,
     expr: &SExpr,
     line: usize,
+    cleaned_input: &str,
 ) -> Result<(), ParseError> {
     let list = expr.as_list().ok_or_else(|| ParseError::ParserError {
         line,
@@ -290,7 +324,7 @@ fn process_expr_with_line(
         "except" => process_rule_with_line(theory, RuleType::Defeater, &list[1..], line),
         "prefer" => process_prefer_with_line(theory, &list[1..], line),
         "meta" => process_meta_with_line(theory, &list[1..], line),
-        "claims" => process_claims(theory, &list[1..], line),
+        "claims" => process_claims(theory, &list[1..], line, cleaned_input),
         "#lang" => Ok(()), // Ignore #lang directive
         _ => Err(ParseError::ParserError {
             line,
@@ -300,7 +334,12 @@ fn process_expr_with_line(
 }
 
 /// Process a claims block: (claims source :at "timestamp" (expr1) (expr2) ...)
-fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+fn process_claims(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+    cleaned_input: &str,
+) -> Result<(), ParseError> {
     if args.is_empty() {
         return Err(ParseError::ParserError {
             line,
@@ -340,16 +379,14 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
         break;
     }
 
-    // Process each claimed expression.
-    // We propagate a best-effort per-expression line by advancing from the
-    // claims line; this preserves useful diagnostics for multi-line blocks.
-    for (expr_idx, expr) in args[body_start..].iter().enumerate() {
-        let expr_line = line + expr_idx + 1;
+    // Process each claimed expression using its true source offset for line tracking.
+    for expr in &args[body_start..] {
+        let expr_line = line_of_offset(cleaned_input, expr.offset());
         let labels_before: std::collections::HashSet<String> =
             theory.rules().map(|r| r.label.clone()).collect();
 
         // Each expression inside claims is processed normally but gets source metadata
-        process_expr_with_line(theory, expr, expr_line)?;
+        process_expr_with_line(theory, expr, expr_line, cleaned_input)?;
 
         // Find newly added rule labels, then attach metadata
         let new_labels: Vec<String> = theory
@@ -480,8 +517,8 @@ fn process_rule_with_line(
 /// Parse a body expression with line number
 fn parse_body_with_line(expr: &SExpr, line: usize) -> Result<Vec<Literal>, ParseError> {
     match expr {
-        SExpr::Atom(_) => Ok(vec![parse_literal_with_line(expr, line)?]),
-        SExpr::List(items) => {
+        SExpr::Atom { .. } => Ok(vec![parse_literal_with_line(expr, line)?]),
+        SExpr::List { items, .. } => {
             if items.is_empty() {
                 return Ok(vec![]);
             }
@@ -503,7 +540,7 @@ fn parse_body_with_line(expr: &SExpr, line: usize) -> Result<Vec<Literal>, Parse
 /// Parse a literal expression with line number tracking
 fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseError> {
     match expr {
-        SExpr::Atom(s) => {
+        SExpr::Atom { value: s, .. } => {
             // Handle double-negation: ~~name -> positive name
             if let Some(name) = s.strip_prefix("~~") {
                 if name.is_empty() {
@@ -521,7 +558,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                 Ok(Literal::simple(s))
             }
         }
-        SExpr::List(items) => {
+        SExpr::List { items, .. } => {
             if items.is_empty() {
                 return Err(ParseError::ParserError {
                     line,
@@ -625,7 +662,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
 
 fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, ParseError> {
     match expr {
-        SExpr::Atom(s) => {
+        SExpr::Atom { value: s, .. } => {
             if s == "-inf" {
                 Ok(TimePoint::NegInf)
             } else if s == "inf" || s == "+inf" {
@@ -639,7 +676,7 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
                 })
             }
         }
-        SExpr::List(items) => {
+        SExpr::List { items, .. } => {
             // (moment "RFC3339") only
             if items.len() == 2 && items[0].as_atom() == Some("moment") {
                 if let Some(s) = items[1].as_atom() {
@@ -705,8 +742,8 @@ fn process_meta_with_line(
 
             // Check if value is a list or single value
             let value = match &prop_list[1] {
-                SExpr::Atom(s) => MetaValue::String(s.clone()),
-                SExpr::List(items) => {
+                SExpr::Atom { value: s, .. } => MetaValue::String(s.clone()),
+                SExpr::List { items, .. } => {
                     // List of strings
                     let strings: Result<Vec<String>, _> = items
                         .iter()
@@ -1060,6 +1097,17 @@ mod tests {
         assert!(
             message.contains("line 3"),
             "Expected bad inner claims expression to report line 3, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_claims_inner_expression_single_line_reports_line_one() {
+        let input = "(claims agent:alice (given bird) (bogus something))";
+        let err = parse_spl(input).unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("line 1"),
+            "Expected bad inner claims expression on single line to report line 1, got: {message}"
         );
     }
 }
