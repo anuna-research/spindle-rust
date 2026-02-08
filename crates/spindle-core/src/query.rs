@@ -198,6 +198,15 @@ impl WhatIfResult {
 /// Global counter for unique hypothetical labels to avoid collision
 static HYP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+#[inline]
+fn positive_strength(ct: ConclusionType) -> u8 {
+    match ct {
+        ConclusionType::DefinitelyProvable => 2,
+        ConclusionType::DefeasiblyProvable => 1,
+        _ => 0,
+    }
+}
+
 /// Perform hypothetical reasoning: "What if we assumed these facts?"
 ///
 /// Creates a copy of the theory with hypothetical facts added,
@@ -253,19 +262,42 @@ pub fn what_if(
         .map(|c| c.literal.clone())
         .collect();
 
-    // Track changed conclusions (baseline had one type, modified has different)
+    // Track changed conclusions by comparing strongest positive status per literal.
+    // This avoids false positives when both +D and +d exist in baseline/modified.
     let mut changed_conclusions = Vec::new();
-    let baseline_by_lit: std::collections::HashMap<_, _> = baseline
+    let mut baseline_by_lit: std::collections::HashMap<_, _> = baseline
+        .iter()
+        .filter(|c| c.conclusion_type.is_positive())
+        .map(|c| (c.literal.clone(), c.conclusion_type))
+        .collect();
+    for conc in &baseline {
+        if conc.conclusion_type.is_positive()
+            && let Some(old) = baseline_by_lit.get_mut(&conc.literal)
+            && positive_strength(conc.conclusion_type) > positive_strength(*old)
+        {
+            *old = conc.conclusion_type;
+        }
+    }
+
+    let mut modified_by_lit: std::collections::HashMap<_, _> = modified_conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
         .map(|c| (c.literal.clone(), c.conclusion_type))
         .collect();
     for conc in &modified_conclusions {
         if conc.conclusion_type.is_positive()
-            && let Some(&old_type) = baseline_by_lit.get(&conc.literal)
-            && old_type != conc.conclusion_type
+            && let Some(old) = modified_by_lit.get_mut(&conc.literal)
+            && positive_strength(conc.conclusion_type) > positive_strength(*old)
         {
-            changed_conclusions.push((conc.literal.clone(), old_type, conc.conclusion_type));
+            *old = conc.conclusion_type;
+        }
+    }
+
+    for (lit, new_type) in &modified_by_lit {
+        if let Some(&old_type) = baseline_by_lit.get(lit)
+            && old_type != *new_type
+        {
+            changed_conclusions.push((lit.clone(), old_type, *new_type));
         }
     }
 
@@ -1848,6 +1880,27 @@ mod tests {
 
         // Should still work correctly despite user having "hyp1" label
         assert!(result.is_provable());
+    }
+
+    #[test]
+    fn test_what_if_changed_conclusions_no_false_positive_when_status_unchanged() {
+        // Regression: baseline and modified can both contain +D and +d for the same literal.
+        // This should not be reported as a status change.
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("irrelevant"))],
+            &Literal::simple("p"),
+        )
+        .unwrap();
+
+        assert!(
+            result.changed_conclusions.is_empty(),
+            "No status change expected for p, got {:?}",
+            result.changed_conclusions
+        );
     }
 
     #[test]
