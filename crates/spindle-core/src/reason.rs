@@ -153,38 +153,44 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
             let head_lit = rule.head_literal().clone();
             let head_id = indexed.intern_literal(&head_lit);
 
-            if enqueued.contains(head_id) {
-                continue;
-            }
-
             match rule.rule_type {
                 RuleType::Strict => {
-                    enqueued.insert(head_id);
-                    definite_proven.insert(head_id);
-                    defeasible_proven.insert(head_id);
-                    conclusions.push(
-                        Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
-                    );
-                    conclusions.push(
-                        Conclusion::defeasibly_provable(head_lit.clone()).with_rule(&rule.label),
-                    );
-                    worklist.push_back(head_lit);
+                    // Even if the literal was already enqueued/proven defeasibly,
+                    // a strict empty-body rule must still upgrade it to definite.
+                    if !definite_proven.contains(head_id) {
+                        definite_proven.insert(head_id);
+                        defeasible_proven.insert(head_id);
+                        conclusions.push(
+                            Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
+                        );
+                        conclusions.push(
+                            Conclusion::defeasibly_provable(head_lit.clone()).with_rule(&rule.label),
+                        );
+                    }
+                    if !enqueued.contains(head_id) {
+                        enqueued.insert(head_id);
+                        worklist.push_back(head_lit);
+                    }
                 }
                 RuleType::Defeasible => {
                     // Empty-body defeasible rules fire immediately but can still be blocked
-                    let blocked = is_blocked_by_superior(
-                        &indexed,
-                        &grounded_theory,
-                        rule,
-                        &defeasible_proven,
-                    );
-                    if !blocked {
-                        enqueued.insert(head_id);
-                        defeasible_proven.insert(head_id);
-                        conclusions.push(
-                            Conclusion::defeasibly_provable(head_lit.clone())
-                                .with_rule(&rule.label),
+                    if !defeasible_proven.contains(head_id) {
+                        let blocked = is_blocked_by_superior(
+                            &indexed,
+                            &grounded_theory,
+                            rule,
+                            &defeasible_proven,
                         );
+                        if !blocked {
+                            defeasible_proven.insert(head_id);
+                            conclusions.push(
+                                Conclusion::defeasibly_provable(head_lit.clone())
+                                    .with_rule(&rule.label),
+                            );
+                        }
+                    }
+                    if defeasible_proven.contains(head_id) && !enqueued.contains(head_id) {
+                        enqueued.insert(head_id);
                         worklist.push_back(head_lit);
                     }
                 }
@@ -1024,6 +1030,44 @@ mod tests {
                     && c.literal.name() == "derived"),
             "Forward chaining should work from empty-body rule heads"
         );
+    }
+
+    #[test]
+    fn test_empty_body_strict_not_lost_when_defeasible_same_head_exists() {
+        // Regression: if an empty-body defeasible rule for `p` is seen before an
+        // empty-body strict rule for `p`, strict derivation must still be emitted.
+        // We iterate labels to avoid depending on HashMap iteration order.
+        use crate::rule::Rule;
+
+        for i in 0..128 {
+            let mut theory = Theory::new();
+            theory.add_rule(Rule::new(
+                format!("d{}", i),
+                RuleType::Defeasible,
+                vec![],
+                vec![Literal::simple("p")],
+            ));
+            theory.add_rule(Rule::new(
+                format!("s{}", i),
+                RuleType::Strict,
+                vec![],
+                vec![Literal::simple("p")],
+            ));
+
+            let conclusions = reason(&theory).unwrap();
+            let has_definite_p = conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            });
+
+            assert!(
+                has_definite_p,
+                "missing +D p for label pair d{} / s{}",
+                i,
+                i
+            );
+        }
     }
 
     // ==========================================================================
