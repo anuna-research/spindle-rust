@@ -317,14 +317,11 @@ impl Spindle {
             .collect())
     }
 
-    /// Query a literal (runs prepare() for grounding/temporal support)
+    /// Query a literal
     #[wasm_bindgen]
     pub fn query(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
-        let result =
-            query::query(&prepared.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+        let result = query::query(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsQueryResult {
             status: match result.status {
@@ -347,10 +344,8 @@ impl Spindle {
             .map(|s| query::HypotheticalClaim::new(parse_literal(s)))
             .collect();
 
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
         let goal_lit = parse_literal(goal);
-        let result = query::what_if(&prepared.theory, hyps, &goal_lit)
+        let result = query::what_if(&self.theory, hyps, &goal_lit)
             .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhatIfResult {
@@ -378,10 +373,7 @@ impl Spindle {
     #[wasm_bindgen(js_name = whyNot)]
     pub fn why_not(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
-        let result =
-            query::why_not(&prepared.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+        let result = query::why_not(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),
@@ -406,9 +398,7 @@ impl Spindle {
     #[wasm_bindgen]
     pub fn abduce(&self, goal: &str, max_solutions: usize) -> Result<JsValue, JsError> {
         let goal_lit = parse_literal(goal);
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
-        let result = query::abduce(&prepared.theory, &goal_lit, max_solutions)
+        let result = query::abduce(&self.theory, &goal_lit, max_solutions)
             .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsAbductionResult {
