@@ -172,6 +172,32 @@ impl SuperiorityIndex {
     pub fn iter(&self) -> impl Iterator<Item = (&RuleLabel, &RuleLabel)> {
         self.pairs.iter().map(|(sup, inf)| (sup, inf))
     }
+
+    /// Find all circular superiority pairs where both prefer(a,b) and prefer(b,a) exist.
+    ///
+    /// Returns pairs `(a, b)` where both directions of superiority are declared.
+    /// These are contradictory and should be flagged as warnings.
+    pub fn find_circular_pairs(&self) -> Vec<(RuleLabel, RuleLabel)> {
+        let mut circular = Vec::new();
+        let mut seen = FxHashSet::default();
+
+        for (sup, inf) in &self.pairs {
+            // Check if the reverse also exists
+            if self.pairs.contains(&(inf.clone(), sup.clone())) {
+                // Normalize order to avoid reporting (a,b) and (b,a) separately
+                let key = if sup < inf {
+                    (sup.clone(), inf.clone())
+                } else {
+                    (inf.clone(), sup.clone())
+                };
+                if seen.insert(key.clone()) {
+                    circular.push(key);
+                }
+            }
+        }
+
+        circular
+    }
 }
 
 #[cfg(test)]
@@ -280,5 +306,33 @@ mod tests {
 
         let pairs: Vec<_> = index.iter().collect();
         assert_eq!(pairs.len(), 2);
+    }
+
+    #[test]
+    fn test_find_circular_pairs() {
+        let sups = vec![
+            Superiority::new("r1", "r2"),
+            Superiority::new("r2", "r1"), // circular with first
+            Superiority::new("r3", "r4"), // no circular
+        ];
+        let index = SuperiorityIndex::build(&sups);
+
+        let circular = index.find_circular_pairs();
+        assert_eq!(circular.len(), 1);
+        // Should contain (r1, r2) in normalized order
+        let (a, b) = &circular[0];
+        assert!(
+            (a == "r1" && b == "r2") || (a == "r2" && b == "r1"),
+            "Expected circular pair (r1, r2), got ({a}, {b})"
+        );
+    }
+
+    #[test]
+    fn test_find_circular_pairs_empty() {
+        let sups = vec![Superiority::new("r1", "r2"), Superiority::new("r2", "r3")];
+        let index = SuperiorityIndex::build(&sups);
+
+        let circular = index.find_circular_pairs();
+        assert!(circular.is_empty());
     }
 }

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::conclusion::Conclusion;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::superiority::{Superiority, SuperiorityIndex};
@@ -99,7 +99,17 @@ impl Theory {
     }
 
     /// Add a superiority relation
+    ///
+    /// Logs a warning to stderr if adding this creates a circular superiority
+    /// (i.e., prefer(a,b) and prefer(b,a) both exist).
     pub fn add_superiority(&mut self, superior: &str, inferior: &str) {
+        // Check for circular superiority before adding
+        if self.sup_index.is_superior(inferior, superior) {
+            eprintln!(
+                "Warning: circular superiority detected: prefer({},{}) conflicts with existing prefer({},{})",
+                superior, inferior, inferior, superior
+            );
+        }
         self.superiorities
             .push(Superiority::new(superior, inferior));
         self.sup_index.add(superior.to_owned(), inferior.to_owned());
@@ -201,6 +211,49 @@ impl Theory {
         crate::reason::reason(self)
     }
 
+    /// Check if the theory has any circular superiority relations
+    /// (where prefer(a,b) and prefer(b,a) both exist).
+    pub fn has_circular_superiority(&self) -> bool {
+        !self.sup_index.find_circular_pairs().is_empty()
+    }
+
+    /// Check theory consistency after reasoning.
+    ///
+    /// Returns a list of warning messages for:
+    /// - Circular superiority relations
+    /// - Contradictory definite conclusions (both +D p and +D ~p)
+    pub fn check_consistency(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        // Check circular superiorities
+        for (a, b) in self.sup_index.find_circular_pairs() {
+            warnings.push(format!(
+                "Circular superiority: prefer({a},{b}) and prefer({b},{a})"
+            ));
+        }
+
+        // Check contradictory strict conclusions
+        if let Ok(conclusions) = self.reason() {
+            let definite: std::collections::HashSet<_> = conclusions
+                .iter()
+                .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
+                .map(|c| &c.literal)
+                .collect();
+
+            for lit in &definite {
+                let comp = lit.complement();
+                if definite.contains(&comp) {
+                    warnings.push(format!(
+                        "Contradictory definite conclusions: both +D {} and +D {}",
+                        lit, comp
+                    ));
+                }
+            }
+        }
+
+        warnings
+    }
+
     /// Generate next auto-label with prefix
     fn next_label(&mut self, prefix: &str) -> String {
         self.label_counter += 1;
@@ -295,5 +348,61 @@ mod tests {
         theory.add_defeasible_rule(&["bird"], "flies");
         let conclusions = theory.reason().unwrap();
         assert!(!conclusions.is_empty());
+    }
+
+    // =========================================================================
+    // REGRESSION TESTS - Bug Hunt Fixes
+    // =========================================================================
+
+    #[test]
+    fn test_circular_superiority_detected() {
+        let mut theory = Theory::new();
+        theory.add_superiority("r1", "r2");
+        theory.add_superiority("r2", "r1"); // circular!
+
+        assert!(theory.has_circular_superiority());
+
+        let warnings = theory.check_consistency();
+        assert!(
+            warnings.iter().any(|w| w.contains("Circular")),
+            "Should detect circular superiority"
+        );
+    }
+
+    #[test]
+    fn test_no_circular_superiority() {
+        let mut theory = Theory::new();
+        theory.add_superiority("r1", "r2");
+        theory.add_superiority("r2", "r3");
+
+        assert!(!theory.has_circular_superiority());
+    }
+
+    #[test]
+    fn test_contradictory_strict_rules_detected() {
+        let mut theory = Theory::new();
+        theory.add_fact("trigger");
+        theory.add_strict_rule(&["trigger"], "p");
+        theory.add_strict_rule(&["trigger"], "~p"); // contradiction!
+
+        let warnings = theory.check_consistency();
+        assert!(
+            warnings.iter().any(|w| w.contains("Contradictory")),
+            "Should detect contradictory definite conclusions, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn test_no_contradictory_conclusions() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_strict_rule(&["bird"], "animal");
+
+        let warnings = theory.check_consistency();
+        assert!(
+            !warnings.iter().any(|w| w.contains("Contradictory")),
+            "No contradictions expected"
+        );
     }
 }
