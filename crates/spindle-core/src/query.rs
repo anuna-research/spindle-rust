@@ -497,13 +497,35 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                         }
 
                         if attacker.rule_type == RuleType::Defeater {
-                            result.blocked_by.push(BlockingCondition::defeated(
+                            // Defeaters block unless the rule is explicitly superior
+                            let rule_superior = theory.is_superior(
                                 &rule.label,
                                 &attacker.label,
-                            ));
-                            blocked = true;
+                            );
+                            if !rule_superior {
+                                result.blocked_by.push(BlockingCondition::defeated(
+                                    &rule.label,
+                                    &attacker.label,
+                                ));
+                                blocked = true;
+                            }
                         } else {
-                            // Contradicted by opposing rule with satisfied body
+                            // For defeasible rules: check superiority both directions
+                            let attacker_superior = theory.is_superior(
+                                &attacker.label,
+                                &rule.label,
+                            );
+                            let rule_superior = theory.is_superior(
+                                &rule.label,
+                                &attacker.label,
+                            );
+
+                            if rule_superior && !attacker_superior {
+                                // Rule is superior — skip this attacker
+                                continue;
+                            }
+
+                            // Report as blocker if attacker is superior or ambiguity
                             result.blocked_by.push(BlockingCondition::contradicted(
                                 &rule.label,
                                 &attacker.label,
@@ -1832,5 +1854,69 @@ mod tests {
 
         assert!(!result.has_blockers());
         assert!(result.would_derive.is_some(), "Should identify deriving rule");
+    }
+
+    #[test]
+    fn test_why_not_respects_superiority() {
+        // r1 > r2: why_not for r1's head should NOT list r2 as blocker
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+        theory.add_superiority(&r1, &r2);
+
+        // flies should be provable since r1 > r2
+        let q = query(&theory, &Literal::simple("flies")).unwrap();
+        assert!(q.is_provable(), "flies should be provable with r1 > r2");
+
+        // why_not should have no blockers (since it IS provable)
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        assert!(
+            !result.has_blockers(),
+            "why_not should not report blockers for provable literal with superior rule"
+        );
+    }
+
+    #[test]
+    fn test_why_not_superiority_inferior_not_blocker() {
+        // When r1 > r2 and flies is NOT provable for other reasons,
+        // r2 should still not be listed as a blocker for r1
+        let mut theory = Theory::new();
+        theory.add_fact("penguin");
+        // bird is NOT a fact, so r1's body is unsatisfied
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+        theory.add_superiority(&r1, &r2);
+
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        assert!(result.has_blockers());
+
+        // The blocker should be missing premise (bird), not r2 as contradicted
+        let has_r2_blocker = result.blocked_by.iter().any(|b| {
+            b.blocking_rule.as_deref() == Some(&r2)
+        });
+        assert!(
+            !has_r2_blocker,
+            "Inferior rule r2 should not be listed as a blocker when r1 > r2"
+        );
+    }
+
+    #[test]
+    fn test_why_not_defeater_not_blocker_when_superior() {
+        // When rule is superior to a defeater, the defeater should not block
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("broken_wing");
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let d1 = theory.add_defeater(&["broken_wing"], "~flies");
+        theory.add_superiority(&r1, &d1);
+
+        let result = why_not(&theory, &Literal::simple("flies")).unwrap();
+        // flies should be provable since r1 > d1
+        assert!(
+            !result.has_blockers(),
+            "Defeater should not block when rule is superior"
+        );
     }
 }

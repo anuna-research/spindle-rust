@@ -57,7 +57,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
     // Parse all top-level expressions, tracking positions for line numbers
     let (remaining, expr_positions) =
         parse_expressions_with_positions(&cleaned).map_err(|e| {
-            let line = line_of(input, &cleaned);
+            let line = line_of_from_error(input, &cleaned, &e);
             ParseError::ParserError {
                 line,
                 message: format!("SPL parse error: {e:?}"),
@@ -87,11 +87,18 @@ fn line_of_offset(input: &str, offset: usize) -> usize {
     input[..clamped].chars().filter(|&c| c == '\n').count() + 1
 }
 
-/// Calculate line number from a position in cleaned input mapped back to original
-fn line_of(original: &str, _cleaned: &str) -> usize {
-    // Fallback: return line 1 if we can't determine position
-    let _ = original;
-    1
+/// Calculate line number from a nom parse error on cleaned input, mapped back to original.
+///
+/// Extracts the remaining (unparsed) input length from the nom error,
+/// computes the byte offset into the cleaned string, then maps to the
+/// original input's line number.
+fn line_of_from_error(original: &str, cleaned: &str, err: &nom::Err<Error<&str>>) -> usize {
+    let remaining_len = match err {
+        nom::Err::Error(e) | nom::Err::Failure(e) => e.input.len(),
+        nom::Err::Incomplete(_) => 0,
+    };
+    let offset = cleaned.len().saturating_sub(remaining_len);
+    line_of_offset(original, offset)
 }
 
 /// Remove semicolon comments and #lang directives from input, respecting quotes
@@ -156,11 +163,6 @@ impl SExpr {
             _ => None,
         }
     }
-}
-
-/// Parse multiple expressions
-fn parse_expressions(input: &str) -> IResult<&str, Vec<SExpr>> {
-    many0(preceded(multispace0, parse_sexpr)).parse(input)
 }
 
 /// Parse multiple expressions, tracking byte offsets for each
@@ -295,11 +297,6 @@ fn process_expr_with_line(theory: &mut Theory, expr: &SExpr, line: usize) -> Res
     }
 }
 
-/// Process an s-expression into theory elements (line=1 fallback)
-fn process_expr(theory: &mut Theory, expr: &SExpr) -> Result<(), ParseError> {
-    process_expr_with_line(theory, expr, 1)
-}
-
 /// Process a claims block: (claims source :at "timestamp" (expr1) (expr2) ...)
 fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
     if args.is_empty() {
@@ -333,13 +330,20 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
 
     // Process each claimed expression
     for expr in &args[body_start..] {
+        let labels_before: std::collections::HashSet<String> =
+            theory.rules().map(|r| r.label.clone()).collect();
+
         // Each expression inside claims is processed normally but gets source metadata
         process_expr_with_line(theory, expr, line)?;
 
-        // Attach source metadata to the last added rule
-        // (the rule just added by process_expr_with_line)
-        if let Some(last_rule) = theory.rules().last() {
-            let label = last_rule.label.clone();
+        // Find newly added rule labels, then attach metadata
+        let new_labels: Vec<String> = theory
+            .rules()
+            .filter(|r| !labels_before.contains(&r.label))
+            .map(|r| r.label.clone())
+            .collect();
+
+        for label in new_labels {
             theory.add_meta_string(&label, "source", source);
             if let Some(ref ts) = timestamp {
                 theory.add_meta_string(&label, "timestamp", ts);
@@ -348,11 +352,6 @@ fn process_claims(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<()
     }
 
     Ok(())
-}
-
-/// Process a fact: (given literal)
-fn process_fact(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
-    process_fact_with_line(theory, args, 1)
 }
 
 /// Process a fact with line number: (given literal)
@@ -402,15 +401,6 @@ fn process_fact_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> R
     let rule = Rule::fact(label, lit);
     theory.add_rule(rule);
     Ok(())
-}
-
-/// Process a rule: (always/normally/except [label] body head)
-fn process_rule(
-    theory: &mut Theory,
-    rule_type: RuleType,
-    args: &[SExpr],
-) -> Result<(), ParseError> {
-    process_rule_with_line(theory, rule_type, args, 1)
 }
 
 /// Process a rule with line number: (always/normally/except [label] body head)
@@ -468,11 +458,6 @@ fn process_rule_with_line(
     Ok(())
 }
 
-/// Parse a body expression (single literal or conjunction)
-fn parse_body(expr: &SExpr) -> Result<Vec<Literal>, ParseError> {
-    parse_body_with_line(expr, 1)
-}
-
 /// Parse a body expression with line number
 fn parse_body_with_line(expr: &SExpr, line: usize) -> Result<Vec<Literal>, ParseError> {
     match expr {
@@ -494,11 +479,6 @@ fn parse_body_with_line(expr: &SExpr, line: usize) -> Result<Vec<Literal>, Parse
             }
         }
     }
-}
-
-/// Parse a literal expression
-fn parse_literal(expr: &SExpr) -> Result<Literal, ParseError> {
-    parse_literal_with_line(expr, 1)
 }
 
 /// Parse a literal expression with line number tracking
@@ -624,10 +604,6 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
     }
 }
 
-fn parse_timepoint(expr: &SExpr) -> Result<TimePoint, ParseError> {
-    parse_timepoint_with_line(expr, 1)
-}
-
 fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, ParseError> {
     match expr {
         SExpr::Atom(s) => {
@@ -676,11 +652,6 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
             }
         }
     }
-}
-
-/// Process meta: (meta label (key "value") (key2 "value2") ...)
-fn process_meta(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
-    process_meta_with_line(theory, args, 1)
 }
 
 /// Process meta with line number
@@ -736,11 +707,6 @@ fn process_meta_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> R
     Ok(())
 }
 
-/// Process prefer: (prefer r1 r2 ...)
-fn process_prefer(theory: &mut Theory, args: &[SExpr]) -> Result<(), ParseError> {
-    process_prefer_with_line(theory, args, 1)
-}
-
 /// Process prefer with line number
 fn process_prefer_with_line(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
     if args.len() < 2 {
@@ -780,28 +746,6 @@ fn generate_unique_label(theory: &Theory, prefix: &str) -> String {
             return label;
         }
         counter += 1;
-    }
-}
-
-// Keep backward-compatible trait for any external callers
-trait TheoryLabelExt {
-    fn next_fact_label(&mut self) -> String;
-    fn next_rule_label(&mut self, rule_type: RuleType) -> String;
-}
-
-impl TheoryLabelExt for Theory {
-    fn next_fact_label(&mut self) -> String {
-        generate_unique_label(self, "f")
-    }
-
-    fn next_rule_label(&mut self, rule_type: RuleType) -> String {
-        let prefix = match rule_type {
-            RuleType::Fact => "f",
-            RuleType::Strict => "s",
-            RuleType::Defeasible => "r",
-            RuleType::Defeater => "d",
-        };
-        generate_unique_label(self, prefix)
     }
 }
 
@@ -995,5 +939,65 @@ mod tests {
             !message.contains("line 1") || message.contains("line 5"),
             "Error on line 5 should not report line 1, got: {message}"
         );
+    }
+
+    // =========================================================================
+    // Reviewer Fix Tests
+    // =========================================================================
+
+    #[test]
+    fn test_claims_timestamp_attached() {
+        // Fix 2: verify "timestamp" metadata key is set when :at is provided
+        let input = r#"(claims agent:alice :at "2024-06-15T12:00:00Z" (given sunny))"#;
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.rule_count(), 1);
+
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label);
+        assert!(meta.is_some(), "Should have metadata");
+
+        let meta_map = meta.unwrap();
+        assert!(
+            meta_map.properties.contains_key("timestamp"),
+            "Should have 'timestamp' metadata key"
+        );
+        let ts_val = &meta_map.properties["timestamp"];
+        match ts_val {
+            MetaValue::String(s) => assert_eq!(s, "2024-06-15T12:00:00Z"),
+            other => panic!("Expected String metadata for timestamp, got: {:?}", other),
+        }
+
+        assert!(
+            meta_map.properties.contains_key("source"),
+            "Should have 'source' metadata key"
+        );
+    }
+
+    #[test]
+    fn test_claims_prefer_no_wrong_metadata() {
+        // Fix 3: claims block with prefer inside — metadata should only attach to actual rules
+        let input = r#"(claims agent:bob (given bird) (normally r1 bird flies) (prefer r1 r2) (given fish))"#;
+        let theory = parse_spl(input).unwrap();
+
+        // Should have 3 rules: bird fact, r1, fish fact
+        assert_eq!(theory.rule_count(), 3);
+
+        // All 3 rules should have source metadata
+        for rule in theory.rules() {
+            let meta = theory.get_meta(&rule.label);
+            assert!(
+                meta.is_some() && meta.unwrap().properties.contains_key("source"),
+                "Rule {} should have source metadata",
+                rule.label
+            );
+        }
+
+        // The prefer expression should NOT have attached metadata to the wrong rule.
+        // Specifically, r1's source should be "agent:bob" (from claims), not duplicated.
+        let r1_meta = theory.get_meta("r1").unwrap();
+        match &r1_meta.properties["source"] {
+            MetaValue::String(s) => assert_eq!(s, "agent:bob"),
+            other => panic!("Expected String source for r1, got: {:?}", other),
+        }
     }
 }
