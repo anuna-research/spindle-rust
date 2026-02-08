@@ -55,12 +55,13 @@ impl LiteralBitSet {
     }
 
     /// Mark a literal as proven.
+    ///
+    /// Automatically grows the bitset if needed, preventing silent data loss
+    /// when new atoms are interned after the bitset is initially sized.
     #[inline]
     fn insert(&mut self, id: LitId) {
         let idx = Self::to_index(id);
-        if idx < self.bits.len() {
-            self.bits.insert(idx);
-        }
+        self.bits.grow_and_insert(idx);
     }
 }
 
@@ -1408,6 +1409,53 @@ mod tests {
         assert!(
             conclusions.iter().any(|c| c.is_positive()),
             "should have positive conclusions"
+        );
+    }
+
+    // ==========================================================================
+    // REGRESSION TESTS: LiteralBitSet auto-grow
+    // ==========================================================================
+
+    #[test]
+    fn test_bitset_grows_on_insert_beyond_capacity() {
+        use crate::index::AtomId;
+
+        // Create a small bitset (capacity for 2 atoms = 4 bits)
+        let mut bitset = LiteralBitSet::new(2);
+
+        // Insert at atom 10, well beyond initial capacity
+        let lit_id = LitId::new(AtomId::from_raw(10), false);
+        bitset.insert(lit_id);
+
+        assert!(
+            bitset.contains(lit_id),
+            "Bitset should contain the inserted literal after growing"
+        );
+    }
+
+    #[test]
+    fn test_bitset_preserves_existing_on_grow() {
+        use crate::index::AtomId;
+
+        let mut bitset = LiteralBitSet::new(2);
+
+        // Insert at atom 0
+        let lit_0 = LitId::new(AtomId::from_raw(0), false);
+        bitset.insert(lit_0);
+        assert!(bitset.contains(lit_0));
+
+        // Grow by inserting at atom 10
+        let lit_10 = LitId::new(AtomId::from_raw(10), true);
+        bitset.insert(lit_10);
+
+        // Atom 0 should still be present
+        assert!(
+            bitset.contains(lit_0),
+            "Existing bit at atom 0 should be preserved after grow"
+        );
+        assert!(
+            bitset.contains(lit_10),
+            "New bit at atom 10 should be present after grow"
         );
     }
 }

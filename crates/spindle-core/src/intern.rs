@@ -92,9 +92,9 @@ impl std::fmt::Display for SymbolId {
 /// O(1) average-case interning.
 struct Interner {
     /// Map from string to its ID
-    map: FxHashMap<String, SymbolId>,
+    map: FxHashMap<&'static str, SymbolId>,
     /// Vec for ID -> string resolution (index = ID)
-    strings: Vec<String>,
+    strings: Vec<&'static str>,
 }
 
 impl Interner {
@@ -104,8 +104,8 @@ impl Interner {
             strings: Vec::with_capacity(1024),
         };
         // Reserve index 0 for empty string (SymbolId::EMPTY)
-        interner.strings.push(String::new());
-        interner.map.insert(String::new(), SymbolId::EMPTY);
+        interner.strings.push("");
+        interner.map.insert("", SymbolId::EMPTY);
         interner
     }
 
@@ -115,16 +115,16 @@ impl Interner {
         }
 
         let id = SymbolId(self.strings.len() as u32);
-        let owned = s.to_owned();
-        self.strings.push(owned.clone());
-        self.map.insert(owned, id);
+        let leaked: &'static str = Box::leak(s.to_owned().into_boxed_str());
+        self.strings.push(leaked);
+        self.map.insert(leaked, id);
         id
     }
 
-    fn resolve(&self, id: SymbolId) -> &str {
+    fn resolve(&self, id: SymbolId) -> &'static str {
         self.strings
             .get(id.0 as usize)
-            .map(|s| s.as_str())
+            .copied()
             .unwrap_or("")
     }
 
@@ -222,15 +222,7 @@ pub fn intern(s: &str) -> SymbolId {
 /// ```
 #[inline]
 pub fn resolve(id: SymbolId) -> &'static str {
-    // SAFETY: We return a reference to the string in the global interner.
-    // The interner never removes strings, so this reference is valid for 'static.
-    // We use a read lock to ensure the interner isn't being modified.
-    with_interner(|interner| {
-        let s = interner.resolve(id);
-        // SAFETY: The string is stored in the global interner which has 'static lifetime.
-        // The interner never removes or reallocates existing strings.
-        unsafe { std::mem::transmute::<&str, &'static str>(s) }
-    })
+    with_interner(|interner| interner.resolve(id))
 }
 
 /// Get the number of interned strings.
@@ -588,5 +580,34 @@ mod tests {
         assert!(pos_debug.contains("LiteralId"));
         assert!(pos_debug.contains("debug_lit"));
         assert!(neg_debug.contains("~"));
+    }
+
+    #[test]
+    fn test_resolve_stable_after_growth() {
+        // Intern a string, then intern many more to trigger Vec growth,
+        // and verify the original pointer is unchanged (Box::leak guarantees this).
+        let id = intern("stable_growth_test");
+        let ptr_before = resolve(id).as_ptr();
+
+        for i in 0..100 {
+            intern(&format!("growth_filler_{}", i));
+        }
+
+        let ptr_after = resolve(id).as_ptr();
+        assert_eq!(ptr_before, ptr_after, "resolve pointer should be stable after Vec growth");
+        assert_eq!(resolve(id), "stable_growth_test");
+    }
+
+    #[test]
+    fn test_batch_resolve_correctness() {
+        let ids: Vec<SymbolId> = (0..50)
+            .map(|i| intern(&format!("batch_{}", i)))
+            .collect();
+
+        let resolved: Vec<&'static str> = ids.iter().map(|&id| resolve(id)).collect();
+
+        for (i, s) in resolved.iter().enumerate() {
+            assert_eq!(*s, format!("batch_{}", i));
+        }
     }
 }
