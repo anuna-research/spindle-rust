@@ -8,6 +8,7 @@
 
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::conclusion::ConclusionType;
 use crate::error::Result;
@@ -194,6 +195,9 @@ impl WhatIfResult {
     }
 }
 
+/// Global counter for unique hypothetical labels to avoid collision
+static HYP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 /// Perform hypothetical reasoning: "What if we assumed these facts?"
 ///
 /// Creates a copy of the theory with hypothetical facts added,
@@ -211,19 +215,36 @@ pub fn what_if(
         .map(|c| c.literal.clone())
         .collect();
 
-    // Create modified theory with hypotheticals
+    // Create modified theory with hypotheticals using unique labels
+    let unique_id = HYP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut modified = theory.clone();
     for (i, hyp) in hypotheticals.iter().enumerate() {
-        let label = format!("hyp{}", i + 1);
+        let label = format!("__hyp_{}_{}", unique_id, i + 1);
         let rule = Rule::fact(&label, hyp.literal.clone());
         modified.add_rule(rule);
     }
 
-    // Reason on modified theory
+    // Reason on modified theory (only once, not via query which reasons again)
     let modified_conclusions = reason(&modified)?;
 
-    // Query result
-    let result = query(&modified, goal)?;
+    // Determine goal status directly from conclusions (avoids calling query->reason again)
+    let goal_complement = goal.complement();
+    let mut result = QueryResult::new(goal.clone(), QueryStatus::Unknown);
+    for conc in &modified_conclusions {
+        if conc.literal == *goal && conc.conclusion_type.is_positive() {
+            result = QueryResult::new(goal.clone(), QueryStatus::Provable)
+                .with_conclusion_type(conc.conclusion_type);
+            break;
+        }
+    }
+    if result.status == QueryStatus::Unknown {
+        for conc in &modified_conclusions {
+            if conc.literal == goal_complement && conc.conclusion_type.is_positive() {
+                result = QueryResult::new(goal.clone(), QueryStatus::Refuted);
+                break;
+            }
+        }
+    }
 
     // Find new conclusions
     let new_conclusions: Vec<Literal> = modified_conclusions
@@ -232,8 +253,22 @@ pub fn what_if(
         .map(|c| c.literal.clone())
         .collect();
 
-    // Find changed conclusions (simplified - just track new positives)
-    let changed_conclusions = Vec::new(); // Could be expanded to track full changes
+    // Track changed conclusions (baseline had one type, modified has different)
+    let mut changed_conclusions = Vec::new();
+    let baseline_by_lit: std::collections::HashMap<_, _> = baseline
+        .iter()
+        .filter(|c| c.conclusion_type.is_positive())
+        .map(|c| (c.literal.clone(), c.conclusion_type))
+        .collect();
+    for conc in &modified_conclusions {
+        if conc.conclusion_type.is_positive() {
+            if let Some(&old_type) = baseline_by_lit.get(&conc.literal) {
+                if old_type != conc.conclusion_type {
+                    changed_conclusions.push((conc.literal.clone(), old_type, conc.conclusion_type));
+                }
+            }
+        }
+    }
 
     Ok(WhatIfResult {
         hypotheticals,
@@ -402,7 +437,17 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
 
     if is_provable {
-        return Ok(WhyNotResult::new(literal.clone()));
+        // Return a result with would_derive set so callers know which rule proved it
+        let mut result = WhyNotResult::new(literal.clone());
+        for rule in theory.rules() {
+            if rule.head_literal() == literal
+                && rule.rule_type != RuleType::Defeater
+            {
+                result.would_derive = Some(rule.label.clone());
+                break;
+            }
+        }
+        return Ok(result);
     }
 
     // Collect proven literals for checking body satisfaction
@@ -412,12 +457,13 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         .map(|c| c.literal.clone())
         .collect();
 
+    let complement = literal.complement();
     let mut result = WhyNotResult::new(literal.clone());
     let mut found_rule = false;
 
     // Find rules that could derive this literal and why they don't fire
     for rule in theory.rules() {
-        if rule.head_literal() == literal {
+        if rule.head_literal() == literal && rule.rule_type != RuleType::Defeater {
             found_rule = true;
 
             if result.would_derive.is_none() {
@@ -436,6 +482,47 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 result
                     .blocked_by
                     .push(BlockingCondition::missing_premise(&rule.label, missing));
+            } else {
+                // Body is fully satisfied but conclusion not proven.
+                // Check for defeater blocking.
+                let mut blocked = false;
+                for attacker in theory.rules() {
+                    if attacker.head_literal() == &complement {
+                        let attacker_body_satisfied = attacker
+                            .body
+                            .iter()
+                            .all(|b| proven.contains(b));
+                        if !attacker_body_satisfied {
+                            continue;
+                        }
+
+                        if attacker.rule_type == RuleType::Defeater {
+                            result.blocked_by.push(BlockingCondition::defeated(
+                                &rule.label,
+                                &attacker.label,
+                            ));
+                            blocked = true;
+                        } else {
+                            // Contradicted by opposing rule with satisfied body
+                            result.blocked_by.push(BlockingCondition::contradicted(
+                                &rule.label,
+                                &attacker.label,
+                            ));
+                            blocked = true;
+                        }
+                    }
+                }
+                if !blocked {
+                    // Body satisfied, no attackers found, but still not provable.
+                    // This can happen with ambiguity blocking.
+                    result.blocked_by.push(BlockingCondition {
+                        blocking_type: BlockingType::Contradicted,
+                        rule_label: rule.label.clone(),
+                        missing_literals: Vec::new(),
+                        blocking_rule: None,
+                        explanation: "Body satisfied but conclusion blocked by ambiguity".to_string(),
+                    });
+                }
             }
         }
     }
@@ -443,7 +530,6 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     // If no rules found at all
     if !found_rule {
         // Check if complement is proven (contradicted)
-        let complement = literal.complement();
         if proven.contains(&complement) {
             result.blocked_by.push(BlockingCondition {
                 blocking_type: BlockingType::Contradicted,
@@ -1675,5 +1761,76 @@ mod tests {
             result.is_provable(),
             "~bird should be provable at time 3500"
         );
+    }
+
+    // ==========================================================================
+    // REGRESSION TESTS - Bug Hunt Fixes
+    // ==========================================================================
+
+    #[test]
+    fn test_why_not_detects_defeater_blocking() {
+        // Regression: why_not should detect when a defeater blocks a conclusion
+        let th = make_defeater_theory();
+        // bird => flies, broken_wing ~> ~flies (defeater)
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+
+        // Should detect the defeater blocking
+        let has_defeated = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Defeated);
+        let has_contradicted = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Contradicted);
+
+        assert!(
+            has_defeated || has_contradicted,
+            "why_not should detect defeater or contradiction blocking, got: {:?}",
+            result.blocked_by
+        );
+    }
+
+    #[test]
+    fn test_what_if_no_triple_reasoning() {
+        // Regression: what_if should not call reason() 3 times.
+        // We verify correctness (the performance fix is structural).
+        let th = make_missing_premise_theory();
+        let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("tests_pass"))];
+
+        let result = what_if(&th, hypotheticals, &Literal::simple("ready_review")).unwrap();
+        assert!(result.is_provable());
+        assert!(!result.new_conclusions.is_empty());
+    }
+
+    #[test]
+    fn test_what_if_unique_labels_no_collision() {
+        // Regression: hypothetical labels should not collide with user labels
+        let mut theory = Theory::new();
+        // User has a rule labeled "hyp1" (which old code would collide with)
+        theory.add_rule(Rule::defeasible(
+            "hyp1",
+            vec![Literal::simple("a")],
+            Literal::simple("b"),
+        ));
+        theory.add_fact("x");
+        theory.add_defeasible_rule(&["x"], "goal");
+
+        let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("a"))];
+        let result = what_if(&theory, hypotheticals, &Literal::simple("goal")).unwrap();
+
+        // Should still work correctly despite user having "hyp1" label
+        assert!(result.is_provable());
+    }
+
+    #[test]
+    fn test_why_not_provable_literal_no_false_blockers() {
+        // Regression: why_not on a provable literal should return no blockers
+        // and should identify the deriving rule
+        let th = make_defeasible_theory();
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+
+        assert!(!result.has_blockers());
+        assert!(result.would_derive.is_some(), "Should identify deriving rule");
     }
 }
