@@ -1,0 +1,32 @@
+; Test: Mixed rule types
+; Coverage: strict + defeasible + defeater interactions
+
+; Strict rule establishes base
+(given vertebrate)
+(always s1 vertebrate animal)
+
+; Defeasible rule from strict conclusion
+(normally r1 animal breathes)
+
+; Another defeasible with conflicting conclusion + superiority
+(given fish)
+(normally r2 fish (not breathes))
+; Assume fish breathes = gills, not-breathes = doesn't breathe air
+; No superiority => ambiguity on breathes
+
+; Defeater blocks a different conclusion
+(given tame)
+(normally r3 animal wild)
+(except d1 tame (not wild))
+
+; EXPECT: +D vertebrate
+; EXPECT: +D animal
+; EXPECT: +d animal
+; EXPECT: -d breathes
+; EXPECT: -d ~breathes
+; EXPECT: +D fish
+; EXPECT: +d fish
+; EXPECT: +D tame
+; EXPECT: +d tame
+; EXPECT: -d wild
+; EXPECT: -d ~wild

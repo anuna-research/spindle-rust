@@ -1,0 +1,34 @@
+; Test: Long chains
+; Coverage: multi-step derivation through chained rules
+
+; 4-level strict chain
+(given atom)
+(always s1 atom molecule)
+(always s2 molecule cell)
+(always s3 cell organism)
+
+; 3-level defeasible chain
+(given egg)
+(normally r1 egg larva)
+(normally r2 larva pupa)
+(normally r3 pupa adult)
+
+; Mixed chain: strict then defeasible
+(given iron)
+(always s4 iron metal)
+(normally r4 metal conducts)
+
+; EXPECT: +D atom
+; EXPECT: +D molecule
+; EXPECT: +D cell
+; EXPECT: +D organism
+; EXPECT: +d organism
+; EXPECT: +D egg
+; EXPECT: +d larva
+; EXPECT: +d pupa
+; EXPECT: +d adult
+; EXPECT: -D adult
+; EXPECT: +D iron
+; EXPECT: +D metal
+; EXPECT: +d conducts
+; EXPECT: -D conducts

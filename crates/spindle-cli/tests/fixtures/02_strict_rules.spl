@@ -1,0 +1,30 @@
+; Test: Strict rules
+; Coverage: strict implication, chained strict, multi-premise strict
+; Strict rules produce +D (definitely provable) conclusions
+
+; Simple strict rule
+(given human)
+(always s1 human mortal)
+
+; Chained strict rules
+(given water)
+(always s2 water liquid)
+(always s3 liquid flows)
+
+; Multi-premise strict rule
+(given hot)
+(given dry)
+(always s4 (and hot dry) fire-risk)
+
+; EXPECT: +D human
+; EXPECT: +D mortal
+; EXPECT: +D water
+; EXPECT: +D liquid
+; EXPECT: +D flows
+; EXPECT: +D hot
+; EXPECT: +D dry
+; EXPECT: +D fire-risk
+; EXPECT: +d mortal
+; EXPECT: +d liquid
+; EXPECT: +d flows
+; EXPECT: +d fire-risk

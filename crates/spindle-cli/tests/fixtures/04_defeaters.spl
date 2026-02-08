@@ -1,0 +1,17 @@
+; Test: Defeaters
+; Coverage: defeater blocking a defeasible conclusion
+; Defeaters prevent conclusions but do NOT prove the negation
+
+; Basic defeater: bird normally flies, but wounded blocks flying
+(given bird)
+(given wounded)
+(normally r1 bird flies)
+(except d1 wounded (not flies))
+
+; Defeater does NOT prove ~flies, it only blocks +d flies
+; EXPECT: +D bird
+; EXPECT: +d bird
+; EXPECT: +D wounded
+; EXPECT: +d wounded
+; EXPECT: -d flies
+; EXPECT: -d ~flies

@@ -1,0 +1,16 @@
+; Test: Ambiguity blocking (skeptical semantics)
+; Coverage: conflicting defeasible rules with NO superiority
+; Both conclusions should be blocked under skeptical semantics
+
+(given quaker)
+(given republican)
+(normally r1 quaker pacifist)
+(normally r2 republican (not pacifist))
+
+; No superiority => ambiguity => both blocked
+; EXPECT: +D quaker
+; EXPECT: +d quaker
+; EXPECT: +D republican
+; EXPECT: +d republican
+; EXPECT: -d pacifist
+; EXPECT: -d ~pacifist
