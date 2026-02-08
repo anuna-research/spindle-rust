@@ -31,6 +31,7 @@ use crate::intern::{SymbolId, resolve};
 #[cfg(test)]
 use crate::intern::intern;
 use crate::literal::Literal;
+use crate::mode::Mode;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::theory::Theory;
 
@@ -58,6 +59,11 @@ pub fn has_variables(rule: &Rule) -> bool {
 pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution> {
     // Check negation matches
     if pattern.negation != ground.negation {
+        return None;
+    }
+
+    // Check mode matches
+    if pattern.mode != ground.mode {
         return None;
     }
 
@@ -173,22 +179,22 @@ fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitut
 
 /// Create a key for indexing facts (using interned SymbolId, zero allocation)
 #[inline]
-fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize) {
-    (lit.name_id(), lit.negation, lit.predicate_ids().len())
+fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
+    (lit.name_id(), lit.negation, lit.predicate_ids().len(), lit.mode.clone())
 }
 
 /// Create a key for deduplicating literals (using interned IDs, minimal allocation)
 ///
-/// Returns (name_id, negation, predicate_ids) - all Copy types except the Vec
+/// Returns (name_id, negation, predicate_ids, mode) - all Copy types except the Vec and Mode
 #[inline]
-fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<SymbolId>) {
-    (lit.name_id(), lit.negation, lit.predicate_ids().to_vec())
+fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<SymbolId>, Mode) {
+    (lit.name_id(), lit.negation, lit.predicate_ids().to_vec(), lit.mode.clone())
 }
 
 /// Match body literals against facts, returning all valid substitutions
 fn match_body_against_facts(
     body: &[Literal],
-    fact_index: &FxHashMap<(SymbolId, bool, usize), Vec<Literal>>,
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     all_facts: &[Literal],
 ) -> Vec<Substitution> {
     if body.is_empty() {
@@ -233,8 +239,8 @@ fn match_body_against_facts(
 /// Match body with at least one delta (new) fact
 fn match_body_with_delta(
     body: &[Literal],
-    fact_index: &FxHashMap<(SymbolId, bool, usize), Vec<Literal>>,
-    delta_index: &FxHashMap<(SymbolId, bool, usize), Vec<Literal>>,
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+    delta_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     all_facts: &[Literal],
     delta_facts: &[Literal],
 ) -> Vec<Substitution> {
@@ -311,9 +317,9 @@ pub fn ground_theory_with_limit(
     }
 
     // Track facts using interned types (minimal allocation)
-    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<SymbolId>)> = FxHashSet::default();
+    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<SymbolId>, Mode)> = FxHashSet::default();
     let mut facts_list: Vec<Literal> = Vec::new();
-    let mut fact_index: FxHashMap<(SymbolId, bool, usize), Vec<Literal>> = FxHashMap::default();
+    let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> = FxHashMap::default();
 
     // Initialize with ground facts
     for rule in theory.facts() {
@@ -350,7 +356,7 @@ pub fn ground_theory_with_limit(
         let mut new_rules_this_round: Vec<Rule> = Vec::new();
 
         // Build delta index (using interned types)
-        let mut delta_index: FxHashMap<(SymbolId, bool, usize), Vec<Literal>> =
+        let mut delta_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
             FxHashMap::default();
         for lit in &facts_new {
             delta_index
@@ -1286,5 +1292,164 @@ mod tests {
             .filter(|r| r.head.iter().any(|h| h.name() == "visited"))
             .count();
         assert!(visited_rules >= 2);
+    }
+
+    // =========================================================================
+    // MODE-AWARE GROUNDING TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_match_literal_mode_mismatch() {
+        // [O]pay(?x) vs pay(alice) (no mode) → None
+        let pattern = Literal::new(
+            "pay",
+            false,
+            Mode::obligation(),
+            Default::default(),
+            vec!["?x".to_string()],
+        );
+        let ground = Literal::new(
+            "pay",
+            false,
+            Mode::empty(),
+            Default::default(),
+            vec!["alice".to_string()],
+        );
+        assert!(
+            match_literal(&pattern, &ground).is_none(),
+            "[O]pay(?x) should not match pay(alice) with no mode"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_mode_match() {
+        // [O]pay(?x) vs [O]pay(alice) → Some
+        let pattern = Literal::new(
+            "pay",
+            false,
+            Mode::obligation(),
+            Default::default(),
+            vec!["?x".to_string()],
+        );
+        let ground = Literal::new(
+            "pay",
+            false,
+            Mode::obligation(),
+            Default::default(),
+            vec!["alice".to_string()],
+        );
+        let result = match_literal(&pattern, &ground);
+        assert!(
+            result.is_some(),
+            "[O]pay(?x) should match [O]pay(alice)"
+        );
+        let subst = result.unwrap();
+        let x_id = intern("?x");
+        let alice_id = intern("alice");
+        assert_eq!(subst.get(&x_id), Some(&alice_id));
+    }
+
+    #[test]
+    fn test_ground_theory_mode_discrimination() {
+        // Theory with [O]pay(alice) fact and non-modal rule pay(?x) => paid(?x)
+        // The rule should NOT be grounded because modes don't match
+        let mut theory = Theory::new();
+
+        // Fact: [O]pay(alice)
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "pay",
+                false,
+                Mode::obligation(),
+                Default::default(),
+                vec!["alice".to_string()],
+            ),
+        ));
+
+        // Rule: pay(?x) => paid(?x)  (no mode on body literal)
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![Literal::new(
+                "pay",
+                false,
+                Mode::empty(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            Literal::new(
+                "paid",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        let grounded = ground_theory(&theory);
+
+        // Should NOT have any grounded instance of r1 since modes don't match
+        let has_grounded_r1 = grounded
+            .rules()
+            .any(|r| r.label.starts_with("r1_"));
+        assert!(
+            !has_grounded_r1,
+            "Rule with non-modal body should not match [O] fact"
+        );
+    }
+
+    #[test]
+    fn test_ground_theory_same_mode_matches() {
+        // Both fact and rule use [O] mode → grounded correctly
+        let mut theory = Theory::new();
+
+        // Fact: [O]pay(alice)
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "pay",
+                false,
+                Mode::obligation(),
+                Default::default(),
+                vec!["alice".to_string()],
+            ),
+        ));
+
+        // Rule: [O]pay(?x) => paid(?x)
+        let r1 = Rule::defeasible(
+            "r1",
+            vec![Literal::new(
+                "pay",
+                false,
+                Mode::obligation(),
+                Default::default(),
+                vec!["?x".to_string()],
+            )],
+            Literal::new(
+                "paid",
+                false,
+                Default::default(),
+                Default::default(),
+                vec!["?x".to_string()],
+            ),
+        );
+        theory.add_rule(r1);
+
+        let grounded = ground_theory(&theory);
+
+        // Should have a grounded instance of r1
+        let has_grounded_r1 = grounded
+            .rules()
+            .any(|r| {
+                r.label.starts_with("r1_")
+                    && r.head
+                        .iter()
+                        .any(|h| h.name() == "paid" && h.predicates() == vec!["alice"])
+            });
+        assert!(
+            has_grounded_r1,
+            "Rule with [O] body should match [O] fact and produce paid(alice)"
+        );
     }
 }
