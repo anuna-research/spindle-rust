@@ -17,6 +17,308 @@ use spindle_core::temporal::TimePoint;
 use spindle_parser::spl::parse_spl as parse_spl_str;
 use spindle_parser::{parse_dfl, parse_spl};
 
+// =============================================================================
+// CENTRALIZED CONTRACT TYPES (NEW)
+// =============================================================================
+
+/// Theory source enum - exactly one source per invocation (per contract §5.1)
+#[derive(Debug)]
+enum TheorySource {
+    File(PathBuf),
+    Stdin,
+}
+
+/// Structured CLI error with contract-compliant exit codes
+/// Per contract §8.1: 2=user, 3=execution, 4=resource
+#[derive(Debug)]
+struct CliError {
+    exit_code: i32,
+    code: String,
+    message: String,
+    details: serde_json::Value,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl CliError {
+    /// Exit code 2: validation/user input error (per contract §8.1)
+    fn validation(code: impl Into<String>, message: impl Into<String>) -> Self {
+        let code = code.into();
+        let message = message.into();
+        Self {
+            exit_code: 2,
+            code: code.clone(),
+            message: message.clone(),
+            details: serde_json::json!({}),
+            diagnostics: vec![Diagnostic::error(&code, &message)],
+        }
+    }
+
+    /// Exit code 2: parse error (per contract §8.1)
+    fn parse(code: impl Into<String>, message: impl Into<String>) -> Self {
+        let code = code.into();
+        let message = message.into();
+        Self {
+            exit_code: 2,
+            code: code.clone(),
+            message: message.clone(),
+            details: serde_json::json!({}),
+            diagnostics: vec![Diagnostic::error(&code, &message)],
+        }
+    }
+
+    /// Exit code 3: execution/internal error (per contract §8.1)
+    fn execution(code: impl Into<String>, message: impl Into<String>) -> Self {
+        let code = code.into();
+        let message = message.into();
+        Self {
+            exit_code: 3,
+            code: code.clone(),
+            message: message.clone(),
+            details: serde_json::json!({}),
+            diagnostics: vec![Diagnostic::error(&code, &message)],
+        }
+    }
+
+    /// Exit code 4: resource/limit error (per contract §8.1)
+    #[allow(dead_code)]
+    fn resource(code: impl Into<String>, message: impl Into<String>) -> Self {
+        let code = code.into();
+        let message = message.into();
+        Self {
+            exit_code: 4,
+            code: code.clone(),
+            message: message.clone(),
+            details: serde_json::json!({}),
+            diagnostics: vec![Diagnostic::error(&code, &message)],
+        }
+    }
+
+    /// Add details to the error (must be an object per contract §8.3)
+    fn with_details(mut self, details: serde_json::Value) -> Self {
+        // Ensure details is an object
+        if !details.is_object() {
+            self.details = serde_json::json!({});
+        } else {
+            self.details = details;
+        }
+        self
+    }
+}
+
+/// Command output variants - either JSON-serializable or text
+#[derive(Debug)]
+enum CommandOutput {
+    Json(serde_json::Value),
+    Text(String),
+}
+
+impl CommandOutput {
+    fn json(value: impl serde::Serialize) -> Self {
+        match serde_json::to_value(value) {
+            Ok(v) => Self::Json(v),
+            Err(e) => Self::Text(format!("JSON serialization error: {e}")),
+        }
+    }
+
+    fn text(s: impl Into<String>) -> Self {
+        Self::Text(s.into())
+    }
+}
+
+/// A diagnostic message for the output envelope (per contract §6.1)
+#[derive(serde::Serialize, Debug, Clone)]
+struct Diagnostic {
+    severity: String,
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
+}
+
+impl Diagnostic {
+    fn warning(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            severity: "warning".to_string(),
+            code: code.into(),
+            message: message.into(),
+            details: None,
+        }
+    }
+
+    fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            severity: "error".to_string(),
+            code: code.into(),
+            message: message.into(),
+            details: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn info(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            severity: "info".to_string(),
+            code: code.into(),
+            message: message.into(),
+            details: None,
+        }
+    }
+}
+
+// =============================================================================
+// CENTRALIZED BOUNDARY FUNCTION (NEW)
+// Single place where all output and exit happens
+// =============================================================================
+
+/// Centralized output boundary - the ONLY place that calls std::process::exit
+/// Per contract §6.1 and §8.3
+fn emit_and_exit(
+    result: Result<CommandOutput, CliError>,
+    schema_version: Option<&str>,
+    json: bool,
+) -> ! {
+    match result {
+        Ok(output) => {
+            match output {
+                CommandOutput::Json(value) => {
+                    println!("{}", serde_json::to_string_pretty(&value).unwrap());
+                }
+                CommandOutput::Text(text) => {
+                    println!("{}", text);
+                }
+            }
+            std::process::exit(0);
+        }
+        Err(err) => {
+            if json {
+                // Build JSON error envelope per contract §8.3
+                let mut envelope = serde_json::Map::new();
+
+                // schema_version if provided
+                if let Some(sv) = schema_version {
+                    envelope.insert(
+                        "schema_version".to_string(),
+                        serde_json::Value::String(sv.to_string()),
+                    );
+                }
+
+                // error object with code, message, details (per contract §8.3)
+                let mut error_obj = serde_json::Map::new();
+                error_obj.insert(
+                    "code".to_string(),
+                    serde_json::Value::String(err.code.clone()),
+                );
+                error_obj.insert(
+                    "message".to_string(),
+                    serde_json::Value::String(err.message.clone()),
+                );
+                // details MUST be present and be an object (per contract §8.3)
+                error_obj.insert("details".to_string(), err.details.clone());
+                envelope.insert("error".to_string(), serde_json::Value::Object(error_obj));
+
+                // diagnostics always present (per contract §8.3)
+                let diagnostics: Vec<serde_json::Value> = err
+                    .diagnostics
+                    .iter()
+                    .map(|d| serde_json::to_value(d).unwrap())
+                    .collect();
+                envelope.insert(
+                    "diagnostics".to_string(),
+                    serde_json::Value::Array(diagnostics),
+                );
+
+                println!("{}", serde_json::to_string_pretty(&envelope).unwrap());
+            } else {
+                eprintln!("Error: {}", err.message);
+            }
+            std::process::exit(err.exit_code);
+        }
+    }
+}
+
+// =============================================================================
+// SHARED THEORY SOURCE RESOLVER (NEW)
+// Per contract §5.1: exactly one theory source per invocation
+// =============================================================================
+
+/// Resolve theory source with mutual exclusivity validation
+/// Returns error if both file and stdin provided, or neither provided
+fn resolve_theory_source(
+    file: Option<&PathBuf>,
+    stdin: bool,
+) -> Result<TheorySource, CliError> {
+    match (file, stdin) {
+        (Some(f), true) => Err(CliError::validation(
+            "CONFLICTING_INPUT_SOURCES",
+            format!("Cannot specify both file '{}' and --stdin", f.display()),
+        )
+        .with_details(serde_json::json!({
+            "file": f.to_string_lossy().to_string(),
+            "stdin": true
+        }))),
+        (Some(f), false) => Ok(TheorySource::File(f.clone())),
+        (None, true) => Ok(TheorySource::Stdin),
+        (None, false) => Err(CliError::validation(
+            "MISSING_INPUT_SOURCE",
+            "Must specify either a file or --stdin",
+        )
+        .with_details(serde_json::json!({
+            "hint": "Provide a file path or use --stdin to read theory from standard input"
+        }))),
+    }
+}
+
+/// Load theory from resolved source
+fn load_theory_source(source: &TheorySource) -> Result<spindle_core::Theory, CliError> {
+    match source {
+        TheorySource::File(path) => load_theory_from_file(path),
+        TheorySource::Stdin => load_theory_from_stdin(),
+    }
+}
+
+fn load_theory_from_file(file: &PathBuf) -> Result<spindle_core::Theory, CliError> {
+    let content = fs::read_to_string(file).map_err(|e| {
+        CliError::validation(
+            "FILE_READ_ERROR",
+            format!("Error reading file '{}': {}", file.display(), e),
+        )
+    })?;
+    parse_theory_content(&content, Some(file))
+}
+
+fn load_theory_from_stdin() -> Result<spindle_core::Theory, CliError> {
+    use std::io::{self, Read};
+
+    let mut content = String::new();
+    io::stdin()
+        .read_to_string(&mut content)
+        .map_err(|e| CliError::validation("STDIN_READ_ERROR", format!("Error reading stdin: {e}")))?;
+    parse_theory_content(&content, None)
+}
+
+fn parse_theory_content(
+    content: &str,
+    file: Option<&PathBuf>,
+) -> Result<spindle_core::Theory, CliError> {
+    // Auto-detect SPL vs DFL based on file extension or content
+    let is_spl = file
+        .map(|f| f.extension().is_some_and(|ext| ext == "spl"))
+        .unwrap_or(false)
+        || content.trim().starts_with("#lang")
+        || content.trim().starts_with('(')
+        || content.trim().starts_with(';');
+
+    if is_spl {
+        parse_spl(content).map_err(|e| CliError::parse("SPL_PARSE_ERROR", format!("SPL parse error: {e}")))
+    } else {
+        parse_dfl(content).map_err(|e| CliError::parse("DFL_PARSE_ERROR", format!("DFL parse error: {e}")))
+    }
+}
+
+// =============================================================================
+// CLI STRUCTS
+// =============================================================================
+
 /// Spindle - Defeasible Logic Reasoning Engine
 #[derive(Parser, Debug)]
 #[command(name = "spindle")]
@@ -68,13 +370,19 @@ enum Commands {
     },
     /// Validate a theory file
     Validate {
-        /// Input file
-        file: PathBuf,
+        /// Input file (mutually exclusive with --stdin)
+        file: Option<PathBuf>,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Show theory statistics
     Stats {
-        /// Input file
-        file: PathBuf,
+        /// Input file (mutually exclusive with --stdin)
+        file: Option<PathBuf>,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Query if a literal holds in the theory
     Query {
@@ -127,36 +435,9 @@ enum Commands {
     },
 }
 
-/// A diagnostic message for the output envelope
-#[derive(serde::Serialize)]
-struct Diagnostic {
-    severity: String,
-    code: String,
-    message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<serde_json::Value>,
-}
-
-impl Diagnostic {
-    fn warning(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            severity: "warning".to_string(),
-            code: code.into(),
-            message: message.into(),
-            details: None,
-        }
-    }
-
-    #[allow(dead_code)]
-    fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            severity: "error".to_string(),
-            code: code.into(),
-            message: message.into(),
-            details: None,
-        }
-    }
-}
+// =============================================================================
+// TRUST AND JSON STRUCTS
+// =============================================================================
 
 /// Trust payload structure
 #[derive(serde::Serialize)]
@@ -172,11 +453,6 @@ struct TrustContributor {
     weight: f64,
     impact: f64,
 }
-
-// =============================================================================
-// CLI-specific JSON structs for contract-compliant serialization
-// These convert core types to schema-compliant JSON (e.g., NegInf/PosInf -> null)
-// =============================================================================
 
 /// JSON-serializable literal structure (contract-compliant)
 #[derive(serde::Serialize)]
@@ -240,201 +516,27 @@ impl From<&spindle_core::temporal::Temporal> for TemporalJson {
     }
 }
 
-fn main() {
-    let cli = Cli::parse();
-
-    // Parse reference time if provided
-    let reference_time = if let Some(ref s) = cli.at {
-        match DateTime::parse_from_rfc3339(s) {
-            Ok(dt) => Some(TimePoint::from_millis(dt.timestamp_millis())),
-            Err(e) => {
-                eprintln!("Error parsing time '{s}': {e}");
-                std::process::exit(2);
-            }
-        }
-    } else {
-        None
-    };
-
-    match cli.command {
-        Some(Commands::Reason {
-            file,
-            scalable,
-            positive,
-            json,
-        }) => {
-            run_reason(
-                file.as_ref(),
-                scalable,
-                positive,
-                json,
-                cli.stdin,
-                reference_time,
-            );
-        }
-        Some(Commands::Validate { file }) => {
-            run_validate(&file);
-        }
-        Some(Commands::Stats { file }) => {
-            run_stats(&file);
-        }
-        Some(Commands::Query {
-            literal,
-            file,
-            json,
-        }) => {
-            run_query(file.as_ref(), &literal, json, cli.stdin, reference_time);
-        }
-        Some(Commands::Explain {
-            literal,
-            file,
-            json,
-        }) => {
-            run_explain(file.as_ref(), &literal, json, cli.stdin, reference_time);
-        }
-        Some(Commands::WhyNot {
-            literal,
-            file,
-            json,
-        }) => {
-            run_why_not(file.as_ref(), &literal, json, cli.stdin, reference_time);
-        }
-        Some(Commands::Requires {
-            literal,
-            file,
-            max,
-            json,
-        }) => {
-            run_requires(file.as_ref(), &literal, max, json, cli.stdin, reference_time);
-        }
-        Some(Commands::Capabilities { json }) => {
-            run_capabilities(json);
-        }
-        None => {
-            // Check for mutual exclusivity between --stdin and file input
-            if cli.stdin && cli.input.is_some() {
-                eprintln!("Error: cannot specify both a file and --stdin");
-                std::process::exit(2);
-            }
-            
-            if cli.stdin {
-                // When --stdin is used without a file
-                run_reason(None, cli.scalable, cli.positive, cli.json, true, reference_time);
-            } else if let Some(ref file) = cli.input {
-                run_reason(Some(file), cli.scalable, cli.positive, cli.json, false, reference_time);
-            } else {
-                println!("Spindle v0.1.0 - Defeasible Logic Reasoning Engine");
-                println!("Ported from SPINdle-Racket v1.7.0");
-                println!();
-                println!("Usage: spindle [OPTIONS] [FILE]");
-                println!("       spindle reason [FILE]");
-                println!("       spindle validate <FILE>");
-                println!("       spindle stats <FILE>");
-                println!("       spindle query <LITERAL> [FILE]");
-                println!("       spindle explain <LITERAL> [FILE]");
-                println!("       spindle why-not <LITERAL> [FILE]");
-                println!("       spindle requires <LITERAL> [FILE]");
-                println!("       spindle capabilities");
-                println!();
-                println!("Use --help for more information");
-            }
-        }
-    }
-}
-
-fn load_theory_from_file(file: &PathBuf) -> spindle_core::Theory {
-    let content = match fs::read_to_string(file) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error reading file: {e}");
-            std::process::exit(2);
-        }
-    };
-    parse_theory_content(&content, Some(file))
-}
-
-fn load_theory_from_stdin() -> spindle_core::Theory {
-    use std::io::{self, Read};
-    
-    let mut content = String::new();
-    if let Err(e) = io::stdin().read_to_string(&mut content) {
-        eprintln!("Error reading from stdin: {e}");
-        std::process::exit(2);
-    }
-    parse_theory_content(&content, None)
-}
-
-/// Resolve theory source with mutual exclusivity between file and --stdin.
-/// Per contract §5.1: exactly one theory source per invocation.
-fn load_theory(file: Option<&PathBuf>, stdin: bool) -> spindle_core::Theory {
-    match (file, stdin) {
-        (Some(f), true) => {
-            eprintln!(
-                "Error: cannot specify both file '{}' and --stdin",
-                f.display()
-            );
-            std::process::exit(2);
-        }
-        (Some(f), false) => load_theory_from_file(f),
-        (None, true) => load_theory_from_stdin(),
-        (None, false) => {
-            eprintln!("Error: must specify either a file or --stdin");
-            std::process::exit(2);
-        }
-    }
-}
-
-fn parse_theory_content(content: &str, file: Option<&PathBuf>) -> spindle_core::Theory {
-    // Auto-detect SPL vs DFL based on file extension or content
-    let is_spl = file.map(|f| f.extension().is_some_and(|ext| ext == "spl")).unwrap_or(false)
-        || content.trim().starts_with("#lang")
-        || content.trim().starts_with('(')
-        || content.trim().starts_with(';');
-
-    if is_spl {
-        match parse_spl(content) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("SPL parse error: {e}");
-                std::process::exit(2);
-            }
-        }
-    } else {
-        match parse_dfl(content) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("DFL parse error: {e}");
-                std::process::exit(2);
-            }
-        }
-    }
-}
-
-fn parse_literal_arg(s: &str) -> Literal {
+fn parse_literal_arg(s: &str) -> Result<Literal, CliError> {
     // If it looks like an SPL expression (starts with paren), try to parse it as a dummy fact
-    // to extract the literal.
-    // e.g. (gap_instance "..." ...)
     if s.trim().starts_with('(') {
-        // Wrap in (given ...) so the full parser can handle it
         let dummy_spl = format!("(given {s})");
-        if let Ok(theory) = parse_spl_str(&dummy_spl)
-            && let Some(fact) = theory.facts().next()
-        {
-            // Return the literal from the first fact
-            if let Some(head) = fact.head.first() {
-                return head.clone();
+        if let Ok(theory) = parse_spl_str(&dummy_spl) {
+            if let Some(fact) = theory.facts().next() {
+                if let Some(head) = fact.head.first() {
+                    return Ok(head.clone());
+                }
             }
         }
     }
 
-    // Fallback to simple parsing logic if SPL parse fails or it's not parenthesized
+    // Fallback to simple parsing logic
     if s.starts_with("(not ") && s.ends_with(')') {
         let inner = &s[5..s.len() - 1];
-        Literal::negated(inner)
+        Ok(Literal::negated(inner))
     } else if let Some(stripped) = s.strip_prefix('~') {
-        Literal::negated(stripped)
+        Ok(Literal::negated(stripped))
     } else {
-        Literal::simple(s)
+        Ok(Literal::simple(s))
     }
 }
 
@@ -479,40 +581,31 @@ fn run_reason(
     file: Option<&PathBuf>,
     scalable: bool,
     positive_only: bool,
-    json_output: bool,
+    json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
-) {
-    let theory = load_theory(file, stdin);
+) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
 
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
     };
 
-    let pipeline_result = match prepare(&theory, opts) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Error during preparation: {e}");
-            std::process::exit(3);
-        }
-    };
+    let pipeline_result = prepare(&theory, opts)
+        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
 
     let conclusions = if scalable {
         let indexed = spindle_core::index::IndexedTheory::build(&pipeline_result.theory);
         let result = spindle_core::scalable::reason_scalable(&indexed);
         result.to_conclusions(&indexed)
     } else {
-        match spindle_core::reason::reason(&pipeline_result.theory) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Error during reasoning: {e}");
-                std::process::exit(3);
-            }
-        }
+        spindle_core::reason::reason(&pipeline_result.theory)
+            .map_err(|e| CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}")))?
     };
 
-    if json_output {
+    if json {
         let mut output_conclusions: Vec<ConclusionStruct> = conclusions
             .into_iter()
             .filter(|c| !positive_only || c.is_positive())
@@ -549,10 +642,10 @@ fn run_reason(
             }),
         };
 
-        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        Ok(CommandOutput::json(output))
     } else {
-        println!("Conclusions:");
-        println!();
+        let mut text = String::new();
+        text.push_str("Conclusions:\n\n");
 
         for c in conclusions {
             if positive_only && !c.is_positive() {
@@ -566,8 +659,10 @@ fn run_reason(
                 ConclusionType::DefeasiblyNotProvable => "-d",
             };
 
-            println!("  {} {}", symbol, c.literal);
+            text.push_str(&format!("  {} {}\n", symbol, c.literal));
         }
+
+        Ok(CommandOutput::text(text))
     }
 }
 
@@ -575,17 +670,19 @@ fn run_reason(
 // VALIDATE COMMAND
 // =============================================================================
 
-fn run_validate(file: &PathBuf) {
-    let _theory = load_theory_from_file(file);
-    println!("Valid theory file");
+fn run_validate(file: Option<&PathBuf>, stdin: bool) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let _theory = load_theory_source(&source)?;
+    Ok(CommandOutput::text("Valid theory file"))
 }
 
 // =============================================================================
 // STATS COMMAND
 // =============================================================================
 
-fn run_stats(file: &PathBuf) {
-    let theory = load_theory_from_file(file);
+fn run_stats(file: Option<&PathBuf>, stdin: bool) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
 
     let facts = theory.facts().count();
     let strict = theory
@@ -598,13 +695,16 @@ fn run_stats(file: &PathBuf) {
         .rules_by_type(spindle_core::rule::RuleType::Defeater)
         .count();
 
-    println!("Theory Statistics:");
-    println!("  Total rules: {}", theory.rule_count());
-    println!("    Facts:      {facts}");
-    println!("    Strict:     {strict}");
-    println!("    Defeasible: {defeasible}");
-    println!("    Defeaters:  {defeaters}");
-    println!("  Superiorities: {}", theory.superiorities().len());
+    let mut text = String::new();
+    text.push_str("Theory Statistics:\n");
+    text.push_str(&format!("  Total rules: {}\n", theory.rule_count()));
+    text.push_str(&format!("    Facts:      {facts}\n"));
+    text.push_str(&format!("    Strict:     {strict}\n"));
+    text.push_str(&format!("    Defeasible: {defeasible}\n"));
+    text.push_str(&format!("    Defeaters:  {defeaters}\n"));
+    text.push_str(&format!("  Superiorities: {}", theory.superiorities().len()));
+
+    Ok(CommandOutput::text(text))
 }
 
 // =============================================================================
@@ -629,29 +729,20 @@ fn run_query(
     json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
-) {
-    let theory = load_theory(file, stdin);
+) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
 
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
     };
-    let prepared = match prepare(&theory, opts) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Error during preparation: {e}");
-            std::process::exit(3);
-        }
-    };
+    let prepared = prepare(&theory, opts)
+        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
 
-    let lit = parse_literal_arg(literal);
-    let result = match query(&prepared.theory, &lit) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Error querying literal: {e}");
-            std::process::exit(3);
-        }
-    };
+    let lit = parse_literal_arg(literal)?;
+    let result = query(&prepared.theory, &lit)
+        .map_err(|e| CliError::execution("QUERY_ERROR", format!("Error querying literal: {e}")))?;
 
     if json {
         let status = match result.status {
@@ -669,28 +760,26 @@ fn run_query(
             status: status.to_string(),
             conclusion_type,
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            trust: None, // Trust not implemented in v1 yet
+            trust: None,
             diagnostics: vec![],
         };
 
-        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        Ok(CommandOutput::json(output))
     } else {
-        match result.status {
+        let text = match result.status {
             QueryStatus::Provable => {
                 let ct = result.conclusion_type.unwrap();
-                println!("{} {}", ct.symbol(), result.literal);
+                format!("{} {}", ct.symbol(), result.literal)
             }
             QueryStatus::Refuted => {
-                println!("Refuted: {}", result.literal);
+                format!("Refuted: {}", result.literal)
             }
             QueryStatus::Unknown => {
-                println!("Unknown: {}", result.literal);
+                format!("Unknown: {}", result.literal)
             }
-        }
+        };
+        Ok(CommandOutput::text(text))
     }
-
-    // Exit code 0 for all logical outcomes per contract §8.2
-    std::process::exit(0);
 }
 
 // =============================================================================
@@ -715,31 +804,22 @@ fn run_explain(
     json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
-) {
-    let theory = load_theory(file, stdin);
+) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
 
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
     };
-    let prepared = match prepare(&theory, opts) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Error during preparation: {e}");
-            std::process::exit(3);
-        }
-    };
+    let prepared = prepare(&theory, opts)
+        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
 
-    let lit = parse_literal_arg(literal);
+    let lit = parse_literal_arg(literal)?;
 
     // First query to get the status
-    let query_result = match query(&prepared.theory, &lit) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Error querying literal: {e}");
-            std::process::exit(3);
-        }
-    };
+    let query_result = query(&prepared.theory, &lit)
+        .map_err(|e| CliError::execution("QUERY_ERROR", format!("Error querying literal: {e}")))?;
 
     let status = match query_result.status {
         QueryStatus::Provable => "provable",
@@ -760,20 +840,19 @@ fn run_explain(
                     trust: None,
                     diagnostics: vec![],
                 };
-                println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                Ok(CommandOutput::json(output))
             } else {
-                println!("{}", explanation.to_natural_language());
+                Ok(CommandOutput::text(explanation.to_natural_language()))
             }
         }
         Ok(None) => {
             if json {
                 // Per contract §8.2: explain with no proof tree is exit code 0
-                let mut diagnostics = vec![];
-                diagnostics.push(Diagnostic::warning(
+                let diagnostics = vec![Diagnostic::warning(
                     "NOT_PROVABLE",
-                    format!("Literal {} is not provable", lit)
-                ));
-                
+                    format!("Literal {} is not provable", lit),
+                )];
+
                 let output = ExplainOutput {
                     schema_version: "spindle.explain.v1".to_string(),
                     literal_spl: lit.to_spl(),
@@ -784,18 +863,16 @@ fn run_explain(
                     trust: None,
                     diagnostics,
                 };
-                println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                Ok(CommandOutput::json(output))
             } else {
-                println!("{lit} is not provable.");
-                println!("Use 'spindle why-not' to see why.");
+                let text = format!("{lit} is not provable.\nUse 'spindle why-not' to see why.");
+                Ok(CommandOutput::text(text))
             }
-            // Exit code 0 per contract §8.2
-            std::process::exit(0);
         }
-        Err(e) => {
-            eprintln!("Error explaining literal: {e}");
-            std::process::exit(3);
-        }
+        Err(e) => Err(CliError::execution(
+            "EXPLANATION_ERROR",
+            format!("Error explaining literal: {e}"),
+        )),
     }
 }
 
@@ -829,45 +906,31 @@ fn run_why_not(
     json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
-) {
-    let theory = load_theory(file, stdin);
+) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
 
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
     };
-    let prepared = match prepare(&theory, opts) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Error during preparation: {e}");
-            std::process::exit(3);
-        }
-    };
+    let prepared = prepare(&theory, opts)
+        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
 
-    let lit = parse_literal_arg(literal);
-    
-    // Query to get the actual status (provable|refuted|unknown)
-    let query_result = match query(&prepared.theory, &lit) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Error querying literal: {e}");
-            std::process::exit(3);
-        }
-    };
-    
+    let lit = parse_literal_arg(literal)?;
+
+    // Query to get the actual status
+    let query_result = query(&prepared.theory, &lit)
+        .map_err(|e| CliError::execution("QUERY_ERROR", format!("Error querying literal: {e}")))?;
+
     let status = match query_result.status {
         QueryStatus::Provable => "provable",
         QueryStatus::Refuted => "refuted",
         QueryStatus::Unknown => "unknown",
     };
-    
-    let result = match why_not(&prepared.theory, &lit) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Error checking why-not: {e}");
-            std::process::exit(3);
-        }
-    };
+
+    let result = why_not(&prepared.theory, &lit)
+        .map_err(|e| CliError::execution("WHY_NOT_ERROR", format!("Error checking why-not: {e}")))?;
 
     if json {
         let blockers: Vec<_> = result
@@ -890,13 +953,10 @@ fn run_why_not(
             trust: None,
             diagnostics: vec![],
         };
-        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        Ok(CommandOutput::json(output))
     } else {
-        println!("{result}");
+        Ok(CommandOutput::text(format!("{result}")))
     }
-
-    // Exit code 0 for all logical outcomes
-    std::process::exit(0);
 }
 
 // =============================================================================
@@ -919,9 +979,7 @@ struct RequiresOutput {
 
 #[derive(serde::Serialize)]
 struct RequiresSolution {
-    // Facts as strings (per schema, must be homogeneous - all strings or all struct)
     facts: Vec<String>,
-    // Score (not confidence) per contract
     score: f64,
 }
 
@@ -937,67 +995,48 @@ fn run_requires(
     json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
-) {
+) -> Result<CommandOutput, CliError> {
     // Validate max parameter - must be at least 1 to satisfy contract
     if max == 0 {
-        if json {
-            let output = serde_json::json!({
-                "schema_version": "spindle.requires.v1",
-                "error": {
-                    "code": "INVALID_ARGUMENT",
-                    "message": "--max must be at least 1"
-                },
-                "diagnostics": [{
-                    "severity": "error",
-                    "code": "INVALID_ARGUMENT",
-                    "message": "--max must be at least 1",
-                    "details": {}
-                }]
-            });
-            println!("{}", serde_json::to_string_pretty(&output).unwrap());
-        } else {
-            eprintln!("Error: --max must be at least 1");
-        }
-        std::process::exit(2);
+        return Err(CliError::validation(
+            "INVALID_ARGUMENT",
+            "--max must be at least 1",
+        )
+        .with_details(serde_json::json!({
+            "argument": "--max",
+            "provided": 0,
+            "minimum": 1
+        })));
     }
 
-    let theory = load_theory(file, stdin);
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
 
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
     };
-    let prepared = match prepare(&theory, opts) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("Error during preparation: {e}");
-            std::process::exit(3);
-        }
-    };
+    let prepared = prepare(&theory, opts)
+        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
 
-    let lit = parse_literal_arg(literal);
+    let lit = parse_literal_arg(literal)?;
     let abduce_limit = if json { max.saturating_add(1) } else { max };
-    let result = match abduce(&prepared.theory, &lit, abduce_limit) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Error finding requirements: {e}");
-            std::process::exit(3);
-        }
-    };
+    let result = abduce(&prepared.theory, &lit, abduce_limit)
+        .map_err(|e| CliError::execution("ABDUCTION_ERROR", format!("Error finding requirements: {e}")))?;
 
     if json {
         // Per contract §6.3: satisfied=true => solutions=[], satisfied=false => solutions non-empty
         let satisfied = result.is_already_provable();
-        
+
         let mut diagnostics = vec![];
         let mut truncated = None;
-        
+
         // Check if we hit the limit
         let solutions_limit_hit = result.solutions.len() > max;
         let solutions_to_show: Vec<_> = if solutions_limit_hit {
             diagnostics.push(Diagnostic::warning(
                 "SOLUTIONS_LIMIT_HIT",
-                format!("Results limited to {} solutions", max)
+                format!("Results limited to {} solutions", max),
             ));
             truncated = Some(TruncatedInfo { solutions: true });
             result.solutions.iter().take(max).collect()
@@ -1016,10 +1055,9 @@ fn run_requires(
                     // Sort facts lexically for determinism (per spec §7)
                     let mut facts = facts;
                     facts.sort();
-                    
+
                     RequiresSolution {
                         facts,
-                        // Use confidence as score (renamed per contract)
                         score: s.confidence,
                     }
                 })
@@ -1028,11 +1066,9 @@ fn run_requires(
 
         // Sort solutions by set size then lexical order (per spec §7)
         let mut solutions = solutions;
-        solutions.sort_by(|a, b| {
-            match a.facts.len().cmp(&b.facts.len()) {
-                std::cmp::Ordering::Equal => a.facts.cmp(&b.facts),
-                other => other,
-            }
+        solutions.sort_by(|a, b| match a.facts.len().cmp(&b.facts.len()) {
+            std::cmp::Ordering::Equal => a.facts.cmp(&b.facts),
+            other => other,
         });
 
         let output = RequiresOutput {
@@ -1047,13 +1083,10 @@ fn run_requires(
             diagnostics,
         };
 
-        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        Ok(CommandOutput::json(output))
     } else {
-        println!("{result}");
+        Ok(CommandOutput::text(format!("{result}")))
     }
-
-    // Exit code 0 per contract §8.2
-    std::process::exit(0);
 }
 
 // =============================================================================
@@ -1087,7 +1120,7 @@ struct SchemasInfo {
     why_not: String,
 }
 
-fn run_capabilities(json: bool) {
+fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
     if json {
         let output = CapabilitiesOutput {
             schema_version: "spindle.capabilities.v1".to_string(),
@@ -1100,9 +1133,9 @@ fn run_capabilities(json: bool) {
             ],
             features: FeaturesInfo {
                 stdin: true,
-                given_flags: false, // Not yet implemented
-                trust_overlay_v1: false, // Not yet implemented
-                trust_explain_v1: false, // Not yet implemented
+                given_flags: false,
+                trust_overlay_v1: false,
+                trust_explain_v1: false,
                 at: true,
                 reason_json: true,
             },
@@ -1114,24 +1147,143 @@ fn run_capabilities(json: bool) {
                 why_not: "spindle.why_not.v1".to_string(),
             },
         };
-        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        Ok(CommandOutput::json(output))
     } else {
-        println!("Spindle Capabilities:");
-        println!();
-        println!("Commands: reason, query, requires, explain, why-not");
-        println!();
-        println!("Features:");
-        println!("  --stdin: yes");
-        println!("  --at: yes");
-        println!("  --json: yes");
-        println!("  Trust overlay: no");
-        println!("  Given flags: no");
-        println!();
-        println!("Schema versions:");
-        println!("  reason: spindle.reason.v1");
-        println!("  query: spindle.query.v1");
-        println!("  requires: spindle.requires.v1");
-        println!("  explain: spindle.explain.v1");
-        println!("  why-not: spindle.why_not.v1");
+        let mut text = String::new();
+        text.push_str("Spindle Capabilities:\n\n");
+        text.push_str("Commands: reason, query, requires, explain, why-not\n\n");
+        text.push_str("Features:\n");
+        text.push_str("  --stdin: yes\n");
+        text.push_str("  --at: yes\n");
+        text.push_str("  --json: yes\n");
+        text.push_str("  Trust overlay: no\n");
+        text.push_str("  Given flags: no\n\n");
+        text.push_str("Schema versions:\n");
+        text.push_str("  reason: spindle.reason.v1\n");
+        text.push_str("  query: spindle.query.v1\n");
+        text.push_str("  requires: spindle.requires.v1\n");
+        text.push_str("  explain: spindle.explain.v1\n");
+        text.push_str("  why-not: spindle.why_not.v1");
+        Ok(CommandOutput::text(text))
     }
+}
+
+// =============================================================================
+// MAIN ENTRY POINT
+// =============================================================================
+
+fn main() {
+    let cli = Cli::parse();
+
+    // Determine schema version and json flag based on the command before we move out of cli.command
+    let (schema_version, json_flag) = cli.command.as_ref().map(|cmd| {
+        let sv = match cmd {
+            Commands::Reason { .. } => Some("spindle.reason.v1"),
+            Commands::Query { .. } => Some("spindle.query.v1"),
+            Commands::Explain { .. } => Some("spindle.explain.v1"),
+            Commands::WhyNot { .. } => Some("spindle.why_not.v1"),
+            Commands::Requires { .. } => Some("spindle.requires.v1"),
+            Commands::Validate { .. } | Commands::Stats { .. } => None, // Non-schema commands
+            Commands::Capabilities { .. } => Some("spindle.capabilities.v1"),
+        };
+        
+        let jf = match cmd {
+            Commands::Reason { json, .. } => *json,
+            Commands::Query { json, .. } => *json,
+            Commands::Explain { json, .. } => *json,
+            Commands::WhyNot { json, .. } => *json,
+            Commands::Requires { json, .. } => *json,
+            Commands::Capabilities { json, .. } => *json,
+            _ => cli.json,
+        };
+        
+        (sv, jf)
+    }).unwrap_or((None, cli.json));
+
+    // Parse reference time if provided (after determining json_flag so errors use correct format)
+    let reference_time = if let Some(ref s) = cli.at {
+        match DateTime::parse_from_rfc3339(s) {
+            Ok(dt) => Some(TimePoint::from_millis(dt.timestamp_millis())),
+            Err(e) => {
+                emit_and_exit(
+                    Err(CliError::parse(
+                        "INVALID_TIME_FORMAT",
+                        format!("Error parsing time '{s}': {e}"),
+                    )),
+                    schema_version,
+                    json_flag,
+                );
+            }
+        }
+    } else {
+        None
+    };
+
+    let result: Result<CommandOutput, CliError> = match cli.command {
+        Some(Commands::Reason {
+            file,
+            scalable,
+            positive,
+            json: _,
+        }) => run_reason(file.as_ref(), scalable, positive, json_flag, cli.stdin, reference_time),
+        Some(Commands::Validate { file, stdin }) => {
+            run_validate(file.as_ref(), stdin)
+        }
+        Some(Commands::Stats { file, stdin }) => {
+            run_stats(file.as_ref(), stdin)
+        }
+        Some(Commands::Query {
+            literal,
+            file,
+            json: _,
+        }) => run_query(file.as_ref(), &literal, json_flag, cli.stdin, reference_time),
+        Some(Commands::Explain {
+            literal,
+            file,
+            json: _,
+        }) => run_explain(file.as_ref(), &literal, json_flag, cli.stdin, reference_time),
+        Some(Commands::WhyNot {
+            literal,
+            file,
+            json: _,
+        }) => run_why_not(file.as_ref(), &literal, json_flag, cli.stdin, reference_time),
+        Some(Commands::Requires {
+            literal,
+            file,
+            max,
+            json: _,
+        }) => run_requires(file.as_ref(), &literal, max, json_flag, cli.stdin, reference_time),
+        Some(Commands::Capabilities { json: _ }) => run_capabilities(json_flag),
+        None => {
+            // Handle legacy positional form
+            if cli.stdin && cli.input.is_some() {
+                Err(CliError::validation(
+                    "CONFLICTING_INPUT_SOURCES",
+                    "Cannot specify both a file and --stdin",
+                ))
+            } else if cli.stdin {
+                run_reason(None, cli.scalable, cli.positive, json_flag, true, reference_time)
+            } else if let Some(ref file) = cli.input {
+                run_reason(Some(file), cli.scalable, cli.positive, json_flag, false, reference_time)
+            } else {
+                let help_text = r#"Spindle v0.1.0 - Defeasible Logic Reasoning Engine
+Ported from SPINdle-Racket v1.7.0
+
+Usage: spindle [OPTIONS] [FILE]
+       spindle reason [FILE]
+       spindle validate <FILE>
+       spindle stats <FILE>
+       spindle query <LITERAL> [FILE]
+       spindle explain <LITERAL> [FILE]
+       spindle why-not <LITERAL> [FILE]
+       spindle requires <LITERAL> [FILE]
+       spindle capabilities
+
+Use --help for more information"#;
+                Ok(CommandOutput::text(help_text))
+            }
+        }
+    };
+
+    emit_and_exit(result, schema_version, json_flag);
 }
