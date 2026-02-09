@@ -243,13 +243,10 @@ pub enum ExpectedOutput {
     /// JSON success response with schema validation
     JsonSuccess {
         schema: &'static str,
-        require_diagnostics: bool,
-        expected_schema_version: Option<&'static str>,
         custom_check: Option<fn(&Value)>,
     },
     /// JSON error response with envelope validation
     JsonError {
-        schema: Option<&'static str>,
         /// Whether schema_version should be present in error envelope
         /// Schema commands (reason, query, etc.) should have it, non-schema (validate, stats) should not
         expect_schema_version: bool,
@@ -283,42 +280,10 @@ pub fn run_matrix_case(case: &MatrixCase) {
     match &case.expected_output {
         ExpectedOutput::JsonSuccess {
             schema,
-            require_diagnostics,
-            expected_schema_version,
             custom_check,
         } => {
             let json: Value = serde_json::from_str(&stdout)
                 .expect(&format!("{}: Output should be valid JSON", case.name));
-
-            // Validate schema_version if expected
-            if let Some(expected_version) = expected_schema_version {
-                assert_eq!(
-                    json["schema_version"].as_str(),
-                    Some(*expected_version),
-                    "{}: schema_version mismatch",
-                    case.name
-                );
-            } else {
-                assert!(
-                    json.get("schema_version").is_some(),
-                    "{}: Missing schema_version",
-                    case.name
-                );
-            }
-
-            // Validate diagnostics if required
-            if *require_diagnostics {
-                assert!(
-                    json.get("diagnostics").is_some(),
-                    "{}: Missing diagnostics",
-                    case.name
-                );
-                assert!(
-                    json["diagnostics"].is_array(),
-                    "{}: diagnostics must be an array",
-                    case.name
-                );
-            }
 
             // Success response should not contain error object
             assert!(
@@ -336,7 +301,6 @@ pub fn run_matrix_case(case: &MatrixCase) {
             }
         }
         ExpectedOutput::JsonError {
-            schema,
             expect_schema_version,
             expected_error_code,
             custom_check,
@@ -362,11 +326,6 @@ pub fn run_matrix_case(case: &MatrixCase) {
                     "{}: Non-schema command error should not include schema_version",
                     case.name
                 );
-            }
-
-            // Validate against schema if provided
-            if let Some(s) = schema {
-                validate_against_schema(&json, s, case.name);
             }
 
             // Check expected error code

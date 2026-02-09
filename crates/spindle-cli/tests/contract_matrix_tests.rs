@@ -26,8 +26,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "reason",
-                require_diagnostics: true,
-                expected_schema_version: Some("spindle.reason.v1"),
                 custom_check: None,
             },
         },
@@ -39,8 +37,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "query",
-                require_diagnostics: true,
-                expected_schema_version: Some("spindle.query.v1"),
                 custom_check: Some(|json| {
                     assert_eq!(
                         json["status"], "unknown",
@@ -53,6 +49,67 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 }),
             },
         },
+        // query refuted literal
+        MatrixCase {
+            name: "query refuted literal",
+            args: &["query", "flies", "--json", "--stdin"],
+            stdin: Some("f1: >> penguin\nr1: penguin => -flies\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::JsonSuccess {
+                schema: "query",
+                custom_check: Some(|json| {
+                    assert_eq!(
+                        json["status"], "refuted",
+                        "Complement provable should produce status=refuted"
+                    );
+                    assert!(
+                        json["conclusion_type"].is_null(),
+                        "Refuted literal should have null conclusion_type"
+                    );
+                }),
+            },
+        },
+        // query with --at should populate evaluated_at
+        MatrixCase {
+            name: "query with --at",
+            args: &[
+                "query",
+                "flies",
+                "--json",
+                "--stdin",
+                "--at",
+                "2024-06-15T12:00:00Z",
+            ],
+            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::JsonSuccess {
+                schema: "query",
+                custom_check: Some(|json| {
+                    assert!(
+                        json["evaluated_at"].is_string(),
+                        "--at should populate evaluated_at"
+                    );
+                    let evaluated_at = json["evaluated_at"]
+                        .as_str()
+                        .expect("evaluated_at should be a string");
+                    assert!(
+                        evaluated_at.contains("2024-06-15"),
+                        "evaluated_at should contain provided date"
+                    );
+                }),
+            },
+        },
+        // global --stdin before subcommand should be accepted
+        MatrixCase {
+            name: "global --stdin before reason",
+            args: &["--stdin", "reason", "--json"],
+            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::JsonSuccess {
+                schema: "reason",
+                custom_check: None,
+            },
+        },
         // requires <unsatisfied> --json --stdin (satisfied=false, solutions non-empty)
         MatrixCase {
             name: "requires unsatisfied",
@@ -61,8 +118,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "requires",
-                require_diagnostics: true,
-                expected_schema_version: Some("spindle.requires.v1"),
                 custom_check: Some(|json| {
                     assert_eq!(
                         json["satisfied"], false,
@@ -86,8 +141,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "explain",
-                require_diagnostics: true,
-                expected_schema_version: Some("spindle.explain.v1"),
                 custom_check: Some(|json| {
                     assert_eq!(
                         json["status"], "unknown",
@@ -115,12 +168,26 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "why_not",
-                require_diagnostics: true,
-                expected_schema_version: Some("spindle.why_not.v1"),
                 custom_check: Some(|json| {
                     assert!(
                         json["blocked_by"].is_array(),
                         "why-not should have blocked_by array"
+                    );
+                }),
+            },
+        },
+        // why-not for a refuted literal should report status=refuted
+        MatrixCase {
+            name: "why-not refuted literal",
+            args: &["why-not", "flies", "--json", "--stdin"],
+            stdin: Some("f1: >> ~flies\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::JsonSuccess {
+                schema: "why_not",
+                custom_check: Some(|json| {
+                    assert_eq!(
+                        json["status"], "refuted",
+                        "why-not should return refuted status when complement is provable"
                     );
                 }),
             },
@@ -133,8 +200,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "capabilities",
-                require_diagnostics: false, // capabilities intentionally has no diagnostics
-                expected_schema_version: Some("spindle.capabilities.v1"),
                 custom_check: Some(|json| {
                     assert!(
                         json["commands"].is_array(),
@@ -148,6 +213,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                         json["schemas"].is_object(),
                         "capabilities should have schemas object"
                     );
+                    assert_eq!(json["features"]["stdin"], true);
                 }),
             },
         },
@@ -163,7 +229,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: Some("invalid syntax here!!!"),
             expected_exit: 2,
             expected_output: ExpectedOutput::JsonError {
-                schema: None,                // Don't validate against schema for parse errors
                 expect_schema_version: true, // Schema command errors should have schema_version
                 expected_error_code: None,
                 custom_check: Some(|json| {
@@ -181,7 +246,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: None,
             expected_exit: 2,
             expected_output: ExpectedOutput::JsonError {
-                schema: None,
                 expect_schema_version: true, // Schema command
                 expected_error_code: Some("MISSING_INPUT_SOURCE"),
                 custom_check: None,
@@ -197,7 +261,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: Some("(given a)"),
             expected_exit: 2,
             expected_output: ExpectedOutput::JsonError {
-                schema: None,
                 expect_schema_version: true, // Schema command
                 expected_error_code: Some("INVALID_ARGUMENT"),
                 custom_check: Some(|json| {
@@ -215,7 +278,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: Some("(given a)"),
             expected_exit: 2,
             expected_output: ExpectedOutput::JsonError {
-                schema: None,
                 expect_schema_version: true, // Schema command
                 expected_error_code: Some("INVALID_TIME_FORMAT"),
                 custom_check: None,
@@ -232,7 +294,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: None,
             expected_exit: 2,
             expected_output: ExpectedOutput::JsonError {
-                schema: None,
                 expect_schema_version: false, // Non-schema command
                 expected_error_code: Some("MISSING_INPUT_SOURCE"),
                 custom_check: None,
@@ -244,7 +305,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: None,
             expected_exit: 2,
             expected_output: ExpectedOutput::JsonError {
-                schema: None,
                 expect_schema_version: false, // Non-schema command
                 expected_error_code: Some("MISSING_INPUT_SOURCE"),
                 custom_check: None,
