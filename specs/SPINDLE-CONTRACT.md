@@ -77,6 +77,11 @@ Global/command flags required for integration:
 12. `--max-input-bytes <n>`
 13. `--max-trust-contributors <n>`
 
+CLI ergonomics requirements:
+
+1. Flag placement must be order-independent for equivalent invocations.
+2. For theory-consuming commands, placing `--stdin` before or after the subcommand must produce identical source resolution behavior.
+
 ## 5. Input Model and Precedence (Normative)
 
 ### 5.1 Theory Source
@@ -90,6 +95,7 @@ If both are provided, return a validation error.
 If neither is provided, return a validation error.
 
 This rule applies to all commands that consume theory input, including utility commands such as `validate` and `stats`.
+Flag placement does not change this rule; `--stdin` must behave identically whether parsed from the top-level or subcommand position.
 
 ### 5.2 Givens Merge Semantics
 
@@ -270,7 +276,8 @@ On failures with `--json`:
 4. `error.details` is required and must be an object (may be empty).
 5. Schema-bearing commands include `schema_version` on error responses.
 6. Non-schema utility commands (`validate`, `stats`) omit `schema_version` on error responses.
-7. When present, `error` has shape:
+7. Internal serialization/envelope-construction failures are treated as internal errors (exit code `3`) and must still return a JSON error envelope.
+8. When present, `error` has shape:
 
 ```json
 {
@@ -280,7 +287,14 @@ On failures with `--json`:
 }
 ```
 
-### 8.4 Limit/Truncation Semantics
+### 8.4 Human-Friendly Non-JSON Errors
+
+When `--json` is not requested:
+
+1. Errors are emitted as text.
+2. If a concrete remediation is known (for example, missing or conflicting theory source), include an actionable hint in the error output.
+
+### 8.5 Limit/Truncation Semantics
 
 If `--max-solutions` truncates output:
 

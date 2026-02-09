@@ -81,7 +81,8 @@ Deliverables:
 Acceptance:
 
 1. Input order does not affect reasoning/trust results.
-2. Conflicting trust duplicate keys fail with validation diagnostics.
+2. Flag placement is order-independent for theory source resolution (`spindle --stdin <cmd>` and `spindle <cmd> --stdin` are equivalent).
+3. Conflicting trust duplicate keys fail with validation diagnostics.
 
 ## Phase 3: Operational Limits and Optional RPC
 
@@ -128,6 +129,7 @@ This matrix owns:
 2. JSON error envelope validation for non-zero exits.
 3. Exit-code contract behavior for non-JSON outcomes.
 4. Determinism checks (same input -> byte-identical output).
+5. CLIG-aligned ergonomics checks for equivalent flag order.
 
 Keep supplementary tests only for behavior that cannot be represented cleanly in the matrix.
 
@@ -145,11 +147,13 @@ This is the anti-whackamole baseline. Contract changes are not complete until al
    - Model every command/edge case as `MatrixCase` entries.
    - Every `JsonSuccess` case must validate against the corresponding JSON schema, not ad-hoc required-field checks.
    - Success invariants must be schema-aware per command (for example, capabilities has a different shape than query/reason outputs).
+   - Include paired cases for order-independent invocations (for example, top-level vs subcommand `--stdin`) and assert identical behavior.
 2. Shared schema + runner helpers:
    - File: `crates/spindle-cli/tests/common/mod.rs`
    - Centralize binary invocation (`cargo_bin_cmd!`), schema loading, and strict JSON Schema validation.
    - Missing/unreadable schema files must fail fast (panic), never warn-and-skip.
    - JSON error envelope assertions (`diagnostics` + `error.code/message/details`) are centralized here.
+   - Ensure `--json` parse/load/validation failures are validated through the same envelope assertions.
 3. Structural guard tests:
    - File: `crates/spindle-cli/tests/contract_guard_tests.rs`
    - Enforce boundary rules (no direct `std::process::exit` outside boundary emitter, no `eprintln!` in handlers, no deprecated `Command::cargo_bin` usage).
@@ -157,6 +161,7 @@ This is the anti-whackamole baseline. Contract changes are not complete until al
 4. Authoring workflow for every contract fix:
    - Add or update matrix case first.
    - Add targeted guard assertion if the bug came from an architectural bypass.
+   - If the fix touches error handling, add a non-zero `--json` case that verifies the standard envelope path.
    - Implement fix in CLI code.
    - Run `cargo test -p spindle-cli --test contract_matrix_tests --test contract_guard_tests`.
 
