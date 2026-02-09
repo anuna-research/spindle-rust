@@ -1,7 +1,7 @@
 //! Integration tests for the spindle CLI
 
-use assert_cmd::Command;
 use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -319,8 +319,12 @@ r1: bird => flies
         .arg("--json")
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"literal\""))
-        .stdout(predicate::str::contains("\"status\""));
+        .stdout(predicate::str::contains("\"schema_version\""))
+        .stdout(predicate::str::contains("spindle.query.v1"))
+        .stdout(predicate::str::contains("\"literal_spl\""))
+        .stdout(predicate::str::contains("\"literal_struct\""))
+        .stdout(predicate::str::contains("\"status\""))
+        .stdout(predicate::str::contains("\"diagnostics\""));
 }
 
 #[test]
@@ -371,12 +375,13 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
+    // Per contract §8.2: explain with no proof tree returns exit code 0
     spindle()
         .arg("explain")
         .arg(&path)
         .arg("swims")
         .assert()
-        .failure()
+        .success()
         .stdout(predicate::str::contains("not provable"));
 }
 
@@ -405,15 +410,20 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
+    // Per contract §8.2: explain with no proof tree returns exit code 0
     spindle()
         .arg("explain")
         .arg(&path)
         .arg("swims")
         .arg("--json")
         .assert()
-        .failure()
-        .stdout(predicate::str::contains("\"error\""))
-        .stdout(predicate::str::contains("not provable"));
+        .success()
+        .stdout(predicate::str::contains("\"schema_version\""))
+        .stdout(predicate::str::contains("spindle.explain.v1"))
+        .stdout(predicate::str::contains("\"literal_spl\""))
+        .stdout(predicate::str::contains("\"literal_struct\""))
+        .stdout(predicate::str::contains("\"status\""))
+        .stdout(predicate::str::contains("\"diagnostics\""));
 }
 
 // ============================================================================
@@ -451,9 +461,13 @@ r1: bird => flies
         .arg("--json")
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"literal\""))
-        .stdout(predicate::str::contains("\"would_derive\""))
-        .stdout(predicate::str::contains("\"blocked_by\""));
+        .stdout(predicate::str::contains("\"schema_version\""))
+        .stdout(predicate::str::contains("spindle.why_not.v1"))
+        .stdout(predicate::str::contains("\"literal_spl\""))
+        .stdout(predicate::str::contains("\"literal_struct\""))
+        .stdout(predicate::str::contains("\"status\""))
+        .stdout(predicate::str::contains("\"blocked_by\""))
+        .stdout(predicate::str::contains("\"diagnostics\""));
 }
 
 // ============================================================================
@@ -507,8 +521,42 @@ r1: bird => flies
         .arg("--json")
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"goal\""))
-        .stdout(predicate::str::contains("\"solutions\""));
+        .stdout(predicate::str::contains("\"schema_version\""))
+        .stdout(predicate::str::contains("spindle.requires.v1"))
+        .stdout(predicate::str::contains("\"goal_spl\""))
+        .stdout(predicate::str::contains("\"goal_struct\""))
+        .stdout(predicate::str::contains("\"satisfied\""))
+        .stdout(predicate::str::contains("\"solutions\""))
+        .stdout(predicate::str::contains("\"diagnostics\""));
+}
+
+// ============================================================================
+// Capabilities command
+// ============================================================================
+
+#[test]
+fn test_capabilities_command() {
+    spindle()
+        .arg("capabilities")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Spindle Capabilities:"))
+        .stdout(predicate::str::contains("Commands:"))
+        .stdout(predicate::str::contains("Features:"));
+}
+
+#[test]
+fn test_capabilities_json() {
+    spindle()
+        .arg("capabilities")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"schema_version\""))
+        .stdout(predicate::str::contains("spindle.capabilities.v1"))
+        .stdout(predicate::str::contains("\"commands\""))
+        .stdout(predicate::str::contains("\"features\""))
+        .stdout(predicate::str::contains("\"schemas\""));
 }
 
 // ============================================================================

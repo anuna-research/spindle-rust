@@ -115,6 +115,58 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Show spindle capabilities
+    Capabilities {
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// A diagnostic message for the output envelope
+#[derive(serde::Serialize)]
+struct Diagnostic {
+    severity: String,
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
+}
+
+impl Diagnostic {
+    fn warning(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            severity: "warning".to_string(),
+            code: code.into(),
+            message: message.into(),
+            details: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            severity: "error".to_string(),
+            code: code.into(),
+            message: message.into(),
+            details: None,
+        }
+    }
+}
+
+/// Trust payload structure
+#[derive(serde::Serialize)]
+struct TrustPayload {
+    score: f64,
+    contributors: Vec<TrustContributor>,
+    explain: String,
+}
+
+#[derive(serde::Serialize)]
+struct TrustContributor {
+    source_id: String,
+    weight: f64,
+    impact: f64,
 }
 
 fn main() {
@@ -126,7 +178,7 @@ fn main() {
             Ok(dt) => Some(TimePoint::from_millis(dt.timestamp_millis())),
             Err(e) => {
                 eprintln!("Error parsing time '{s}': {e}");
-                std::process::exit(1);
+                std::process::exit(2);
             }
         }
     } else {
@@ -177,6 +229,9 @@ fn main() {
         }) => {
             run_requires(&file, &literal, max, json, reference_time);
         }
+        Some(Commands::Capabilities { json }) => {
+            run_capabilities(json);
+        }
         None => {
             if let Some(file) = cli.input {
                 run_reason(&file, cli.scalable, cli.positive, cli.json, reference_time);
@@ -192,6 +247,7 @@ fn main() {
                 println!("       spindle explain <FILE> <LITERAL>");
                 println!("       spindle why-not <FILE> <LITERAL>");
                 println!("       spindle requires <FILE> <LITERAL>");
+                println!("       spindle capabilities");
                 println!();
                 println!("Use --help for more information");
             }
@@ -199,35 +255,50 @@ fn main() {
     }
 }
 
-fn load_theory(file: &PathBuf) -> spindle_core::Theory {
+fn load_theory_from_file(file: &PathBuf) -> spindle_core::Theory {
     let content = match fs::read_to_string(file) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error reading file: {e}");
-            std::process::exit(1);
+            std::process::exit(2);
         }
     };
+    parse_theory_content(&content, Some(file))
+}
 
+#[allow(dead_code)]
+fn load_theory_from_stdin() -> spindle_core::Theory {
+    use std::io::{self, Read};
+    
+    let mut content = String::new();
+    if let Err(e) = io::stdin().read_to_string(&mut content) {
+        eprintln!("Error reading from stdin: {e}");
+        std::process::exit(2);
+    }
+    parse_theory_content(&content, None)
+}
+
+fn parse_theory_content(content: &str, file: Option<&PathBuf>) -> spindle_core::Theory {
     // Auto-detect SPL vs DFL based on file extension or content
-    let is_spl = file.extension().is_some_and(|ext| ext == "spl")
+    let is_spl = file.map(|f| f.extension().is_some_and(|ext| ext == "spl")).unwrap_or(false)
         || content.trim().starts_with("#lang")
         || content.trim().starts_with('(')
         || content.trim().starts_with(';');
 
     if is_spl {
-        match parse_spl(&content) {
+        match parse_spl(content) {
             Ok(t) => t,
             Err(e) => {
                 eprintln!("SPL parse error: {e}");
-                std::process::exit(1);
+                std::process::exit(2);
             }
         }
     } else {
-        match parse_dfl(&content) {
+        match parse_dfl(content) {
             Ok(t) => t,
             Err(e) => {
                 eprintln!("DFL parse error: {e}");
-                std::process::exit(1);
+                std::process::exit(2);
             }
         }
     }
@@ -261,13 +332,19 @@ fn parse_literal_arg(s: &str) -> Literal {
     }
 }
 
+// =============================================================================
+// REASON COMMAND
+// =============================================================================
+
 #[derive(serde::Serialize)]
 struct ReasonOutput {
     schema_version: String,
     evaluated_at: Option<String>,
     grounding: GroundingStats,
     conclusions: Vec<ConclusionStruct>,
-    stats: TheoryStats,
+    diagnostics: Vec<Diagnostic>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stats: Option<TheoryStats>,
 }
 
 #[derive(serde::Serialize)]
@@ -299,20 +376,18 @@ fn run_reason(
     json_output: bool,
     reference_time: Option<TimePoint>,
 ) {
-    let theory = load_theory(file);
+    let theory = load_theory_from_file(file);
 
     let opts = PrepareOptions {
         reference_time,
         ..Default::default()
     };
 
-    // Run the pipeline (validation, temporal filtering, grounding)
-    // This enforces range restriction and other checks
     let pipeline_result = match prepare(&theory, opts) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error during preparation: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
@@ -321,13 +396,11 @@ fn run_reason(
         let result = spindle_core::scalable::reason_scalable(&indexed);
         result.to_conclusions(&indexed)
     } else {
-        // Pass the prepared theory. reason() will call prepare() again,
-        // but since it's already grounded, it will be a fast no-op for grounding.
         match spindle_core::reason::reason(&pipeline_result.theory) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("Error during reasoning: {e}");
-                std::process::exit(1);
+                std::process::exit(3);
             }
         }
     };
@@ -344,8 +417,7 @@ fn run_reason(
             })
             .collect();
 
-        // Sort conclusions for deterministic output (per spec §3.5)
-        // Sort by literal_spl first, then by conclusion_type for stability
+        // Sort conclusions for deterministic output (per spec §7)
         output_conclusions.sort_by(|a, b| match a.literal_spl.cmp(&b.literal_spl) {
             std::cmp::Ordering::Equal => a.conclusion_type.cmp(&b.conclusion_type),
             other => other,
@@ -355,7 +427,7 @@ fn run_reason(
             schema_version: "spindle.reason.v1".to_string(),
             evaluated_at: pipeline_result
                 .evaluated_at
-                .and_then(|t: TimePoint| t.to_rfc3339()), // Use RFC3339 format per spec
+                .and_then(|t: TimePoint| t.to_rfc3339()),
             grounding: GroundingStats {
                 performed: pipeline_result.grounding_report.performed,
                 had_variables: pipeline_result.grounding_report.had_variables,
@@ -363,10 +435,11 @@ fn run_reason(
                 limit_hit: pipeline_result.grounding_report.limit_hit,
             },
             conclusions: output_conclusions,
-            stats: TheoryStats {
+            diagnostics: vec![],
+            stats: Some(TheoryStats {
                 rule_count: pipeline_result.theory.rule_count(),
                 fact_count: pipeline_result.theory.facts().count(),
-            },
+            }),
         };
 
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
@@ -374,7 +447,7 @@ fn run_reason(
         println!("Conclusions:");
         println!();
 
-        for c in &conclusions {
+        for c in conclusions {
             if positive_only && !c.is_positive() {
                 continue;
             }
@@ -391,14 +464,21 @@ fn run_reason(
     }
 }
 
+// =============================================================================
+// VALIDATE COMMAND
+// =============================================================================
+
 fn run_validate(file: &PathBuf) {
-    let _theory = load_theory(file);
-    // If load_theory returns, parsing succeeded
+    let _theory = load_theory_from_file(file);
     println!("Valid theory file");
 }
 
+// =============================================================================
+// STATS COMMAND
+// =============================================================================
+
 fn run_stats(file: &PathBuf) {
-    let theory = load_theory(file);
+    let theory = load_theory_from_file(file);
 
     let facts = theory.facts().count();
     let strict = theory
@@ -420,8 +500,29 @@ fn run_stats(file: &PathBuf) {
     println!("  Superiorities: {}", theory.superiorities().len());
 }
 
-fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
-    let theory = load_theory(file);
+// =============================================================================
+// QUERY COMMAND
+// =============================================================================
+
+#[derive(serde::Serialize)]
+struct QueryOutput {
+    schema_version: String,
+    literal_spl: String,
+    literal_struct: LiteralStruct,
+    status: String,
+    conclusion_type: Option<String>,
+    evaluated_at: Option<String>,
+    trust: Option<TrustPayload>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+fn run_query(
+    file: &PathBuf,
+    literal: &str,
+    json: bool,
+    reference_time: Option<TimePoint>,
+) {
+    let theory = load_theory_from_file(file);
 
     let opts = PrepareOptions {
         reference_time,
@@ -431,7 +532,7 @@ fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<T
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error during preparation: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
@@ -440,17 +541,30 @@ fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<T
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error querying literal: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
     if json {
-        use serde_json::json;
-        let output = json!({
-            "literal": result.literal.to_string(),
-            "status": result.status.to_string(),
-            "conclusion_type": result.conclusion_type.map(|ct| ct.symbol()),
-        });
+        let status = match result.status {
+            QueryStatus::Provable => "provable",
+            QueryStatus::Refuted => "refuted",
+            QueryStatus::Unknown => "unknown",
+        };
+
+        let conclusion_type = result.conclusion_type.map(|ct| ct.symbol().to_string());
+
+        let output = QueryOutput {
+            schema_version: "spindle.query.v1".to_string(),
+            literal_spl: result.literal.to_spl(),
+            literal_struct: LiteralStruct::from(&result.literal),
+            status: status.to_string(),
+            conclusion_type,
+            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+            trust: None, // Trust not implemented in v1 yet
+            diagnostics: vec![],
+        };
+
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
         match result.status {
@@ -466,10 +580,34 @@ fn run_query(file: &PathBuf, literal: &str, json: bool, reference_time: Option<T
             }
         }
     }
+
+    // Exit code 0 for all logical outcomes per contract §8.2
+    std::process::exit(0);
 }
 
-fn run_explain(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
-    let theory = load_theory(file);
+// =============================================================================
+// EXPLAIN COMMAND
+// =============================================================================
+
+#[derive(serde::Serialize)]
+struct ExplainOutput {
+    schema_version: String,
+    literal_spl: String,
+    literal_struct: LiteralStruct,
+    status: String,
+    proof_tree: Option<serde_json::Value>,
+    evaluated_at: Option<String>,
+    trust: Option<TrustPayload>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+fn run_explain(
+    file: &PathBuf,
+    literal: &str,
+    json: bool,
+    reference_time: Option<TimePoint>,
+) {
+    let theory = load_theory_from_file(file);
 
     let opts = PrepareOptions {
         reference_time,
@@ -479,47 +617,110 @@ fn run_explain(file: &PathBuf, literal: &str, json: bool, reference_time: Option
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error during preparation: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
     let lit = parse_literal_arg(literal);
 
+    // First query to get the status
+    let query_result = match query(&prepared.theory, &lit) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error querying literal: {e}");
+            std::process::exit(3);
+        }
+    };
+
+    let status = match query_result.status {
+        QueryStatus::Provable => "provable",
+        QueryStatus::Refuted => "refuted",
+        QueryStatus::Unknown => "unknown",
+    };
+
     match explain(&prepared.theory, &lit) {
         Ok(Some(explanation)) => {
             if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&explanation.to_json()).unwrap()
-                );
+                let output = ExplainOutput {
+                    schema_version: "spindle.explain.v1".to_string(),
+                    literal_spl: lit.to_spl(),
+                    literal_struct: LiteralStruct::from(&lit),
+                    status: status.to_string(),
+                    proof_tree: Some(explanation.to_json()),
+                    evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+                    trust: None,
+                    diagnostics: vec![],
+                };
+                println!("{}", serde_json::to_string_pretty(&output).unwrap());
             } else {
                 println!("{}", explanation.to_natural_language());
             }
         }
         Ok(None) => {
             if json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "error": "Literal is not provable",
-                        "literal": lit.to_string()
-                    })
-                );
+                // Per contract §8.2: explain with no proof tree is exit code 0
+                let mut diagnostics = vec![];
+                diagnostics.push(Diagnostic::warning(
+                    "NOT_PROVABLE",
+                    format!("Literal {} is not provable", lit)
+                ));
+                
+                let output = ExplainOutput {
+                    schema_version: "spindle.explain.v1".to_string(),
+                    literal_spl: lit.to_spl(),
+                    literal_struct: LiteralStruct::from(&lit),
+                    status: status.to_string(),
+                    proof_tree: None,
+                    evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+                    trust: None,
+                    diagnostics,
+                };
+                println!("{}", serde_json::to_string_pretty(&output).unwrap());
             } else {
                 println!("{lit} is not provable.");
                 println!("Use 'spindle why-not' to see why.");
             }
-            std::process::exit(1);
+            // Exit code 0 per contract §8.2
+            std::process::exit(0);
         }
         Err(e) => {
             eprintln!("Error explaining literal: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     }
 }
 
-fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option<TimePoint>) {
-    let theory = load_theory(file);
+// =============================================================================
+// WHY-NOT COMMAND
+// =============================================================================
+
+#[derive(serde::Serialize)]
+struct WhyNotOutput {
+    schema_version: String,
+    literal_spl: String,
+    literal_struct: LiteralStruct,
+    status: String,
+    blocked_by: Vec<BlockedByItem>,
+    evaluated_at: Option<String>,
+    trust: Option<TrustPayload>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(serde::Serialize)]
+struct BlockedByItem {
+    #[serde(rename = "type")]
+    blocking_type: String,
+    rule: String,
+    explanation: String,
+}
+
+fn run_why_not(
+    file: &PathBuf,
+    literal: &str,
+    json: bool,
+    reference_time: Option<TimePoint>,
+) {
+    let theory = load_theory_from_file(file);
 
     let opts = PrepareOptions {
         reference_time,
@@ -529,43 +730,94 @@ fn run_why_not(file: &PathBuf, literal: &str, json: bool, reference_time: Option
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error during preparation: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
     let lit = parse_literal_arg(literal);
+    
+    // Query to get the actual status (provable|refuted|unknown)
+    let query_result = match query(&prepared.theory, &lit) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error querying literal: {e}");
+            std::process::exit(3);
+        }
+    };
+    
+    let status = match query_result.status {
+        QueryStatus::Provable => "provable",
+        QueryStatus::Refuted => "refuted",
+        QueryStatus::Unknown => "unknown",
+    };
+    
     let result = match why_not(&prepared.theory, &lit) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error checking why-not: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
     if json {
-        use serde_json::json;
         let blockers: Vec<_> = result
             .blocked_by
             .iter()
-            .map(|b| {
-                json!({
-                    "type": b.blocking_type.to_string(),
-                    "rule": b.rule_label,
-                    "explanation": b.explanation
-                })
+            .map(|b| BlockedByItem {
+                blocking_type: b.blocking_type.to_string(),
+                rule: b.rule_label.clone(),
+                explanation: b.explanation.clone(),
             })
             .collect();
 
-        let output = json!({
-            "literal": result.literal.to_string(),
-            "is_provable": result.is_provable(),
-            "would_derive": result.would_derive,
-            "blocked_by": blockers
-        });
+        let output = WhyNotOutput {
+            schema_version: "spindle.why_not.v1".to_string(),
+            literal_spl: result.literal.to_spl(),
+            literal_struct: LiteralStruct::from(&result.literal),
+            status: status.to_string(),
+            blocked_by: blockers,
+            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+            trust: None,
+            diagnostics: vec![],
+        };
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
         println!("{result}");
     }
+
+    // Exit code 0 for all logical outcomes
+    std::process::exit(0);
+}
+
+// =============================================================================
+// REQUIRES COMMAND
+// =============================================================================
+
+#[derive(serde::Serialize)]
+struct RequiresOutput {
+    schema_version: String,
+    goal_spl: String,
+    goal_struct: LiteralStruct,
+    satisfied: bool,
+    solutions: Vec<RequiresSolution>,
+    evaluated_at: Option<String>,
+    trust: Option<TrustPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    truncated: Option<TruncatedInfo>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(serde::Serialize)]
+struct RequiresSolution {
+    // Facts as strings (per schema, must be homogeneous - all strings or all struct)
+    facts: Vec<String>,
+    // Score (not confidence) per contract
+    score: f64,
+}
+
+#[derive(serde::Serialize)]
+struct TruncatedInfo {
+    solutions: bool,
 }
 
 fn run_requires(
@@ -575,7 +827,30 @@ fn run_requires(
     json: bool,
     reference_time: Option<TimePoint>,
 ) {
-    let theory = load_theory(file);
+    // Validate max parameter - must be at least 1 to satisfy contract
+    if max == 0 {
+        if json {
+            let output = serde_json::json!({
+                "schema_version": "spindle.requires.v1",
+                "error": {
+                    "code": "INVALID_ARGUMENT",
+                    "message": "--max must be at least 1"
+                },
+                "diagnostics": [{
+                    "severity": "error",
+                    "code": "INVALID_ARGUMENT",
+                    "message": "--max must be at least 1",
+                    "details": {}
+                }]
+            });
+            println!("{}", serde_json::to_string_pretty(&output).unwrap());
+        } else {
+            eprintln!("Error: --max must be at least 1");
+        }
+        std::process::exit(2);
+    }
+
+    let theory = load_theory_from_file(file);
 
     let opts = PrepareOptions {
         reference_time,
@@ -585,39 +860,166 @@ fn run_requires(
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error during preparation: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
     let lit = parse_literal_arg(literal);
-    let result = match abduce(&prepared.theory, &lit, max) {
+    let result = match abduce(&prepared.theory, &lit, max + 1) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error finding requirements: {e}");
-            std::process::exit(1);
+            std::process::exit(3);
         }
     };
 
     if json {
-        use serde_json::json;
-        let solutions: Vec<_> = result
-            .solutions
-            .iter()
-            .map(|s| {
-                let facts: Vec<_> = s.facts.iter().map(|l| l.to_string()).collect();
-                json!({
-                    "facts": facts,
-                    "confidence": s.confidence
-                })
-            })
-            .collect();
+        // Per contract §6.3: satisfied=true => solutions=[], satisfied=false => solutions non-empty
+        let satisfied = result.is_already_provable();
+        
+        let mut diagnostics = vec![];
+        let mut truncated = None;
+        
+        // Check if we hit the limit
+        let solutions_limit_hit = result.solutions.len() > max;
+        let solutions_to_show: Vec<_> = if solutions_limit_hit {
+            diagnostics.push(Diagnostic::warning(
+                "SOLUTIONS_LIMIT_HIT",
+                format!("Results limited to {} solutions", max)
+            ));
+            truncated = Some(TruncatedInfo { solutions: true });
+            result.solutions.iter().take(max).collect()
+        } else {
+            result.solutions.iter().collect()
+        };
 
-        let output = json!({
-            "goal": result.goal.to_string(),
-            "solutions": solutions
+        // Build solutions - only include if not satisfied
+        let solutions: Vec<_> = if satisfied {
+            vec![]
+        } else {
+            solutions_to_show
+                .iter()
+                .map(|s| {
+                    let facts: Vec<_> = s.facts.iter().map(|l| l.to_spl()).collect();
+                    // Sort facts lexically for determinism (per spec §7)
+                    let mut facts = facts;
+                    facts.sort();
+                    
+                    RequiresSolution {
+                        facts,
+                        // Use confidence as score (renamed per contract)
+                        score: s.confidence,
+                    }
+                })
+                .collect()
+        };
+
+        // Sort solutions by set size then lexical order (per spec §7)
+        let mut solutions = solutions;
+        solutions.sort_by(|a, b| {
+            match a.facts.len().cmp(&b.facts.len()) {
+                std::cmp::Ordering::Equal => a.facts.cmp(&b.facts),
+                other => other,
+            }
         });
+
+        let output = RequiresOutput {
+            schema_version: "spindle.requires.v1".to_string(),
+            goal_spl: result.goal.to_spl(),
+            goal_struct: LiteralStruct::from(&result.goal),
+            satisfied,
+            solutions,
+            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+            trust: None,
+            truncated,
+            diagnostics,
+        };
+
         println!("{}", serde_json::to_string_pretty(&output).unwrap());
     } else {
         println!("{result}");
+    }
+
+    // Exit code 0 per contract §8.2
+    std::process::exit(0);
+}
+
+// =============================================================================
+// CAPABILITIES COMMAND
+// =============================================================================
+
+#[derive(serde::Serialize)]
+struct CapabilitiesOutput {
+    schema_version: String,
+    commands: Vec<String>,
+    features: FeaturesInfo,
+    schemas: SchemasInfo,
+}
+
+#[derive(serde::Serialize)]
+struct FeaturesInfo {
+    stdin: bool,
+    given_flags: bool,
+    trust_overlay_v1: bool,
+    trust_explain_v1: bool,
+    at: bool,
+    reason_json: bool,
+}
+
+#[derive(serde::Serialize)]
+struct SchemasInfo {
+    reason: String,
+    query: String,
+    requires: String,
+    explain: String,
+    why_not: String,
+}
+
+fn run_capabilities(json: bool) {
+    if json {
+        let output = CapabilitiesOutput {
+            schema_version: "spindle.capabilities.v1".to_string(),
+            commands: vec![
+                "reason".to_string(),
+                "query".to_string(),
+                "requires".to_string(),
+                "explain".to_string(),
+                "why-not".to_string(),
+            ],
+            features: FeaturesInfo {
+                stdin: false, // Not yet implemented
+                given_flags: false, // Not yet implemented
+                trust_overlay_v1: false, // Not yet implemented
+                trust_explain_v1: false, // Not yet implemented
+                at: true,
+                reason_json: true,
+            },
+            schemas: SchemasInfo {
+                reason: "spindle.reason.v1".to_string(),
+                query: "spindle.query.v1".to_string(),
+                requires: "spindle.requires.v1".to_string(),
+                explain: "spindle.explain.v1".to_string(),
+                why_not: "spindle.why_not.v1".to_string(),
+            },
+        };
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    } else {
+        println!("Spindle Capabilities:");
+        println!();
+        println!("Commands: reason, query, requires, explain, why-not");
+        println!();
+        println!("Features:");
+        println!("  --stdin: no");
+        println!("  --at: yes");
+        println!("  --json: yes");
+        println!("  Trust overlay: no");
+        println!("  Given flags: no");
+        println!();
+        println!("Schema versions:");
+        println!("  reason: spindle.reason.v1");
+        println!("  query: spindle.query.v1");
+        println!("  requires: spindle.requires.v1");
+        println!("  explain: spindle.explain.v1");
+        println!("  why-not: spindle.why_not.v1");
     }
 }
