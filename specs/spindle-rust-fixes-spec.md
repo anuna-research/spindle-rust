@@ -3,7 +3,7 @@
 **Status:** Draft (proposed)  
 **Primary drivers:** correctness, spec/doc alignment, integrator ergonomics  
 **Scope:** `spindle-core`, `spindle-parser`, `spindle-cli`, `spindle-wasm`  
-**Context:** Issues surfaced while planning integration into `/Users/davidfactor/JakeLaw/gleg` + cross-checking `/Users/davidfactor/JakeLaw/famfamfamfam`.
+**Context:** Issues surfaced while planning integration into `../gleg` + cross-checking `../famfamfamfam`.
 
 ---
 
@@ -49,8 +49,8 @@ These are the recommended defaults for v1 of this refactor (chosen for workflow-
 **Root cause:** rule triggering and proven-sets are keyed by **name+negation only**, ignoring predicate args (and mode).
 
 Contributing implementation details:
-- `Literal::literal_id()` ignores predicate args + mode: `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-core/src/literal.rs:197`
-- `IndexedTheory` indexes by `literal_id()`: `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-core/src/index.rs:39`
+- `Literal::literal_id()` ignores predicate args + mode: `crates/spindle-core/src/literal.rs:197`
+- `IndexedTheory` indexes by `literal_id()`: `crates/spindle-core/src/index.rs:39`
 - Both `reason.rs` and `scalable.rs` use `literal_id()` in the hot path.
 
 **History note:** even the initial port used `canonical_name()` for indexing/proven sets, which also ignored predicate args (see `git show 6f6f627:.../literal.rs` and `.../index.rs`), so this is a design gap, not a regression from the perf commits—though perf work entrenched the same assumption.
@@ -61,20 +61,20 @@ Contributing implementation details:
 
 ### 1.3 Grounding, as implemented, does not preserve superiority semantics across instances
 **Observed by inspection:** `ground_theory_with_limit()` appends `_N` to labels for instances, but copies superiority relations unchanged (`r2 > r1`), which no longer reference actual instance labels.  
-- Copying superiorities without remap: `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-core/src/grounding.rs:409`  
-- Reasoner checks superiority by rule labels: `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-core/src/reason.rs:249`
+- Copying superiorities without remap: `crates/spindle-core/src/grounding.rs:409`  
+- Reasoner checks superiority by rule labels: `crates/spindle-core/src/reason.rs:249`
 
 Docs explicitly state “superiority applies to the rule template, affecting all ground instances”, but current behavior cannot achieve that once grounding is wired.
 
 ### 1.4 CLI JSON contract drift
 - CLI has a global `--json` flag (`Cli.json`), docs say `spindle --json penguin.dfl` outputs JSON, but `run_reason()` ignores json and always prints text.  
-  - Flag: `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-cli/src/main.rs:39`  
-  - Reason path: `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-cli/src/main.rs:156` and `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-cli/src/main.rs:240`  
-  - Docs claim JSON: `/Users/davidfactor/JakeLaw/spindle-rust/docs/src/getting-started.md:137`
+  - Flag: `crates/spindle-cli/src/main.rs:39`  
+  - Reason path: `crates/spindle-cli/src/main.rs:156` and `crates/spindle-cli/src/main.rs:240`  
+  - Docs claim JSON: `docs/src/getting-started.md:137`
 
 ### 1.5 Parser/doc mismatches (modal + temporal)
 Docs show nested forms like `(must (report-hours ?x))` and `(during (employed alice acme) (moment 2020) (moment 2022))`.  
-But SPL parser currently requires all predicate args be atoms (no nested lists): `/Users/davidfactor/JakeLaw/spindle-rust/crates/spindle-parser/src/spl.rs:348`.  
+But SPL parser currently requires all predicate args be atoms (no nested lists): `crates/spindle-parser/src/spl.rs:348`.  
 Separately, temporal default values produce noisy `[-inf,-inf]` suffixes due to using `Default::default()` instead of `Temporal::empty()` in SPL parsing.
 
 ---
@@ -234,7 +234,7 @@ Supported time expressions (v1):
 - `NUMBER` (epoch millis)
 - `(moment "2026-02-06T10:00:00Z")` (RFC3339)
 
-**Doc alignment note (important):** current docs include forms like `(during bird ?t)` (single interval variable) in examples (e.g. `/Users/davidfactor/JakeLaw/spindle-rust/docs/src/guides/temporal.md:125`), but the supported/implemented model is `(during <lit> <start> <end>)`. This RFC requires updating docs to remove or correct the single-arg interval-variable form.
+**Doc alignment note (important):** current docs include forms like `(during bird ?t)` (single interval variable) in examples (e.g. `docs/src/guides/temporal.md:125`), but the supported/implemented model is `(during <lit> <start> <end>)`. This RFC requires updating docs to remove or correct the single-arg interval-variable form.
 
 **Allen relations (`before/overlaps/...`)**
 - **Decision (v1):** treat Allen relations as *deferred*. Without a concrete representation of interval variables inside the core, they cannot be evaluated soundly.
@@ -334,7 +334,7 @@ Add `reference_time` to `prepare()` / public APIs so callers can ask “what is 
   - A rule can only derive a **head** literal that is active at `t` (inactive head literals are ignored at that timepoint).
   - Conflicts/defeat only apply between complements that are both active at `t`.
 - This yields correct workflow behavior for “overlap ⇒ conflict / disjoint ⇒ distinct evidence” *at a timepoint*, without needing interval unions/splitting.
-- This matches workflow engines that already carry an explicit `reference_time` (e.g. `/Users/davidfactor/JakeLaw/gleg/specs/WORKFLOW-ENGINE-SPEC.md:78`).
+- This matches workflow engines that already carry an explicit `reference_time` (e.g. `../gleg/specs/WORKFLOW-ENGINE-SPEC.md:78`).
 
 **Phase T2 (follow-on RFC): Interval-aware inference**
 If/when needed for doc goals (“derive temporally bounded conclusions, propagate intersections, overlap-gate conflicts across intervals”), implement interval-aware propagation:
