@@ -54,7 +54,8 @@ struct Cli {
 enum Commands {
     /// Show reasoning conclusions from a theory file
     Reason {
-        /// Input file (or use --stdin)
+        /// Input file (mutually exclusive with --stdin)
+        #[arg(required_unless_present = "stdin")]
         file: Option<PathBuf>,
         /// Use scalable mode
         #[arg(long)]
@@ -81,47 +82,47 @@ enum Commands {
     },
     /// Query if a literal holds in the theory
     Query {
-        /// Input file (or use --stdin)
-        file: Option<PathBuf>,
+        /// Input file (use "-" as placeholder with --stdin)
+        file: PathBuf,
         /// Literal to query
         literal: String,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
-        /// Read theory from stdin
+        /// Read theory from stdin (file arg is ignored)
         #[arg(long)]
         stdin: bool,
     },
     /// Explain why a conclusion holds
     Explain {
-        /// Input file (or use --stdin)
-        file: Option<PathBuf>,
+        /// Input file (use "-" as placeholder with --stdin)
+        file: PathBuf,
         /// Literal to explain
         literal: String,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
-        /// Read theory from stdin
+        /// Read theory from stdin (file arg is ignored)
         #[arg(long)]
         stdin: bool,
     },
     /// Explain why a conclusion does NOT hold
     WhyNot {
-        /// Input file (or use --stdin)
-        file: Option<PathBuf>,
+        /// Input file (use "-" as placeholder with --stdin)
+        file: PathBuf,
         /// Literal to check
         literal: String,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
-        /// Read theory from stdin
+        /// Read theory from stdin (file arg is ignored)
         #[arg(long)]
         stdin: bool,
     },
     /// Find facts needed to derive a literal
     Requires {
-        /// Input file (or use --stdin)
-        file: Option<PathBuf>,
+        /// Input file (use "-" as placeholder with --stdin)
+        file: PathBuf,
         /// Goal literal
         literal: String,
         /// Max solutions
@@ -130,7 +131,7 @@ enum Commands {
         /// Output in JSON format
         #[arg(long)]
         json: bool,
-        /// Read theory from stdin
+        /// Read theory from stdin (file arg is ignored)
         #[arg(long)]
         stdin: bool,
     },
@@ -293,7 +294,7 @@ fn main() {
             json,
             stdin,
         }) => {
-            run_query(file.as_ref(), &literal, json, stdin, reference_time);
+            run_query(Some(&file), &literal, json, stdin, reference_time);
         }
         Some(Commands::Explain {
             file,
@@ -301,7 +302,7 @@ fn main() {
             json,
             stdin,
         }) => {
-            run_explain(file.as_ref(), &literal, json, stdin, reference_time);
+            run_explain(Some(&file), &literal, json, stdin, reference_time);
         }
         Some(Commands::WhyNot {
             file,
@@ -309,7 +310,7 @@ fn main() {
             json,
             stdin,
         }) => {
-            run_why_not(file.as_ref(), &literal, json, stdin, reference_time);
+            run_why_not(Some(&file), &literal, json, stdin, reference_time);
         }
         Some(Commands::Requires {
             file,
@@ -318,7 +319,7 @@ fn main() {
             json,
             stdin,
         }) => {
-            run_requires(file.as_ref(), &literal, max, json, stdin, reference_time);
+            run_requires(Some(&file), &literal, max, json, stdin, reference_time);
         }
         Some(Commands::Capabilities { json }) => {
             run_capabilities(json);
@@ -370,12 +371,22 @@ fn load_theory_from_stdin() -> spindle_core::Theory {
     parse_theory_content(&content, None)
 }
 
-/// Load theory from file or stdin with mutual exclusivity check
+/// Resolve theory source with mutual exclusivity between file and --stdin.
+/// Per contract §5.1: exactly one theory source per invocation.
+///
+/// For subcommands with two positional args (query, explain, why-not, requires),
+/// clap requires the file positional even with --stdin. Users should pass "-"
+/// as the file placeholder. If a real file path is passed alongside --stdin,
+/// we still use stdin (the file is ignored when --stdin is set).
 fn load_theory(file: Option<&PathBuf>, stdin: bool) -> spindle_core::Theory {
     match (file, stdin) {
-        (Some(_), true) => {
-            eprintln!("Error: cannot specify both a file and --stdin");
-            std::process::exit(2);
+        (Some(f), true) => {
+            // For two-positional subcommands, file is always present due to clap.
+            // Accept "-" as a placeholder; warn if a real path was provided.
+            if f.as_os_str() != "-" && f.exists() {
+                eprintln!("Warning: --stdin specified; ignoring file argument '{}'", f.display());
+            }
+            load_theory_from_stdin()
         }
         (Some(f), false) => load_theory_from_file(f),
         (None, true) => load_theory_from_stdin(),

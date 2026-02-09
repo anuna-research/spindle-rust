@@ -701,7 +701,7 @@ fn test_exit_code_2_for_invalid_file_path() {
 
 #[test]
 fn test_stdin_basic_reason() {
-    // Test that --stdin works for reason command
+    // Test that --stdin works for reason command without a file argument
     let output = spindle()
         .arg("reason")
         .arg("--stdin")
@@ -724,19 +724,75 @@ fn test_stdin_basic_reason() {
 }
 
 #[test]
-fn test_stdin_and_file_mutual_exclusivity() {
-    // Test that --stdin and file together returns exit code 2
+fn test_stdin_and_file_reason_warns_and_uses_stdin() {
+    // Per SPINDLE-CONTRACT.md §5.1: exactly one theory source per invocation.
+    // For `reason`, file is optional so --stdin alone works.
+    // If both are provided, stdin takes priority with a warning.
+    let content = r#"
+f1: >> bird
+r1: bird => flies
+"#;
+    let (_dir, path) = setup_theory_file(content, "dfl");
+
     let output = spindle()
         .arg("reason")
-        .arg("/some/file.dfl")
+        .arg(&path)
         .arg("--stdin")
+        .arg("--json")
+        .write_stdin("f1: >> bird\nr1: bird => flies\n")
         .output()
         .expect("Failed to execute command");
 
-    assert_eq!(
-        output.status.code(),
-        Some(2),
-        "Providing both file and --stdin should return exit code 2"
+    assert!(
+        output.status.success(),
+        "reason with both file and --stdin should still succeed (stdin wins): stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("ignoring file"),
+        "Should warn about ignoring the file argument, got stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_stdin_query_with_placeholder() {
+    // For two-positional subcommands, use "-" as file placeholder with --stdin
+    let output = spindle()
+        .arg("query")
+        .arg("-")
+        .arg("flies")
+        .arg("--stdin")
+        .arg("--json")
+        .write_stdin("f1: >> bird\nr1: bird => flies\n")
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(
+        output.status.success(),
+        "query --stdin with '-' placeholder should succeed: stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("Failed to parse JSON output");
+    validate_command_output(&json, "query");
+    assert_eq!(json["status"], "provable");
+}
+
+#[test]
+fn test_stdin_no_file_no_stdin_fails() {
+    // Per SPINDLE-CONTRACT.md §5.1: must specify either a file or --stdin
+    let output = spindle()
+        .arg("reason")
+        .arg("--json")
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(
+        !output.status.success(),
+        "reason with neither file nor --stdin should fail"
     );
 }
 
