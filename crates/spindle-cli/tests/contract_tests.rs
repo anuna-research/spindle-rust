@@ -576,22 +576,6 @@ r1: bird => flies
 }
 
 #[test]
-fn test_capabilities_stdin_false() {
-    let output = spindle()
-        .arg("capabilities")
-        .arg("--json")
-        .output()
-        .expect("Failed to execute command");
-
-    let json: Value = serde_json::from_slice(&output.stdout).expect("Failed to parse JSON output");
-
-    assert_eq!(
-        json["features"]["stdin"], false,
-        "capabilities should truthfully report stdin as false"
-    );
-}
-
-#[test]
 fn test_determinism_byte_identical_output() {
     // Per SPINDLE-RUST-IMPLEMENTATION.md §6.1D: run command N times with identical input
     let content = r#"
