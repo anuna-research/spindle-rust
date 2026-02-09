@@ -1,0 +1,22 @@
+when:
+  - event: [push, pull_request]
+
+steps:
+  - name: check
+    image: rust:1.84-bookworm
+    commands:
+      - rustup component add rustfmt clippy
+      - cargo fmt --all -- --check
+      - cargo clippy --all -- -D warnings
+
+  - name: test
+    image: rust:1.84-bookworm
+    commands:
+      - cargo test --all
+
+  - name: wasm
+    image: rust:1.84-bookworm
+    commands:
+      - rustup target add wasm32-unknown-unknown
+      - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - cd crates/spindle-wasm && wasm-pack build --target web --release
