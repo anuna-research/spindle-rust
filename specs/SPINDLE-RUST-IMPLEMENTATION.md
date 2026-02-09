@@ -177,7 +177,31 @@ Extend `reason_json_contract_tests.rs` patterns:
 ### 6.2 Test Infrastructure
 
 1.  Add `jsonschema = "0.17"` (or newer) to `dev-dependencies`.
-2.  Create shared test helpers in `crates/spindle-cli/tests/helpers.rs` to deduplicate `setup_theory_file`.
+2.  Keep shared test helpers in `crates/spindle-cli/tests/common/mod.rs` to deduplicate command execution and schema/error validation logic.
+
+### 6.3 Matrix/Guard Strategy (Required to Avoid Regressions)
+
+This is the anti-whackamole baseline. Contract changes are not complete until all three layers are updated.
+
+1. Data-driven matrix coverage:
+   - File: `crates/spindle-cli/tests/contract_matrix_tests.rs`
+   - Model every command/edge case as `MatrixCase` entries.
+   - Every `JsonSuccess` case must validate against the corresponding JSON schema, not ad-hoc required-field checks.
+   - Success invariants must be schema-aware per command (for example, capabilities has a different shape than query/reason outputs).
+2. Shared schema + runner helpers:
+   - File: `crates/spindle-cli/tests/common/mod.rs`
+   - Centralize binary invocation (`cargo_bin_cmd!`), schema loading, and strict JSON Schema validation.
+   - Missing/unreadable schema files must fail fast (panic), never warn-and-skip.
+   - JSON error envelope assertions (`diagnostics` + `error.code/message/details`) are centralized here.
+3. Structural guard tests:
+   - File: `crates/spindle-cli/tests/contract_guard_tests.rs`
+   - Enforce boundary rules (no direct `std::process::exit` outside boundary emitter, no `eprintln!` in handlers, no deprecated `Command::cargo_bin` usage).
+   - Test-file scans must recurse through nested test modules (for example, `tests/common/mod.rs`).
+4. Authoring workflow for every contract fix:
+   - Add or update matrix case first.
+   - Add targeted guard assertion if the bug came from an architectural bypass.
+   - Implement fix in CLI code.
+   - Run `cargo test -p spindle-cli --test contract_matrix_tests --test contract_guard_tests`.
 
 ## 7. Non-Goals in This Plan
 

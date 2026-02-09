@@ -26,3 +26,20 @@ This file is non-normative.
 `specs/spindle-rust-fixes-spec.md` remains a deep technical RFC for engine correctness and parser/reasoner internals. It is implementation guidance, not the authoritative wire contract for gleg integration.
 
 If `specs/spindle-rust-fixes-spec.md` and `specs/SPINDLE-CONTRACT.md` disagree on observable CLI/schema behavior, `specs/SPINDLE-CONTRACT.md` wins.
+
+## Contract Verification Workflow (Informative)
+
+Use this workflow to avoid one-off contract regressions:
+
+1. Encode behavior in the matrix first:
+   - `crates/spindle-cli/tests/contract_matrix_tests.rs`
+2. Keep schema/error validation centralized:
+   - `crates/spindle-cli/tests/common/mod.rs`
+3. Keep structural boundaries guarded:
+   - `crates/spindle-cli/tests/contract_guard_tests.rs`
+
+Recommended validation command:
+
+```bash
+cargo test -p spindle-cli --test contract_matrix_tests --test contract_guard_tests
+```

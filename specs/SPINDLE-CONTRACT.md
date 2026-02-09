@@ -55,6 +55,12 @@ Command positional forms:
 4. `explain <LITERAL> [FILE]`
 5. `why-not <LITERAL> [FILE]`
 
+Non-schema utility commands may exist (currently `validate` and `stats`).
+They are not schema-bearing v1 responses, but they must still follow:
+
+1. theory source resolution rules in Section 5.1.
+2. JSON error envelope rules in Section 8.3 when `--json` is requested.
+
 Global/command flags required for integration:
 
 1. `--json` (structured output)
@@ -83,6 +89,8 @@ Exactly one theory source per invocation:
 If both are provided, return a validation error.
 If neither is provided, return a validation error.
 
+This rule applies to all commands that consume theory input, including utility commands such as `validate` and `stats`.
+
 ### 5.2 Givens Merge Semantics
 
 1. All givens are merged with set semantics using canonical literal identity.
@@ -109,8 +117,10 @@ For event-sourced systems:
 
 With `--json`, all command responses include:
 
-1. `schema_version` (required).
-2. `diagnostics` (required array; empty if none).
+1. `schema_version` is required for schema-bearing responses (Section 6.3).
+2. `diagnostics` is required for schema-bearing responses that define it in their schema.
+3. `diagnostics` is always required in JSON error envelopes (Section 8.3), including non-schema commands.
+4. Non-schema utility commands (`validate`, `stats`) must not emit an empty/placeholder `schema_version`.
 
 Diagnostic shape:
 
@@ -254,9 +264,13 @@ Logical outcomes are not process failures:
 
 On failures with `--json`:
 
-1. `diagnostics` is always present.
-2. Top-level `error` is present only when exit code is non-zero.
-3. When present, `error` has shape:
+1. A JSON object is emitted to stdout, including parse/load/validation failures (no plain-text-only error path).
+2. `diagnostics` is always present.
+3. Top-level `error` is present only when exit code is non-zero.
+4. `error.details` is required and must be an object (may be empty).
+5. Schema-bearing commands include `schema_version` on error responses.
+6. Non-schema utility commands (`validate`, `stats`) omit `schema_version` on error responses.
+7. When present, `error` has shape:
 
 ```json
 {
