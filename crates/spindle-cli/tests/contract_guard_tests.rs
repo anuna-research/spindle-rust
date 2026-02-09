@@ -401,18 +401,25 @@ fn test_command_handler_signatures() {
 
 /// Find all Rust test files in the tests directory
 fn find_test_files() -> Vec<PathBuf> {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("tests");
+    let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    root.push("tests");
 
     let mut files = Vec::new();
-    if let Ok(entries) = fs::read_dir(&path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "rs") {
-                files.push(path);
+    let mut stack = vec![root];
+
+    while let Some(dir) = stack.pop() {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    files.push(path);
+                }
             }
         }
     }
+
     files
 }
 
