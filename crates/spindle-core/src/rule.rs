@@ -15,7 +15,7 @@ use std::fmt;
 
 use smallvec::SmallVec;
 
-use crate::literal::Literal;
+use crate::literal::{Literal, render_spl_atom};
 use crate::mode::Mode;
 use crate::temporal::Temporal;
 
@@ -162,6 +162,31 @@ impl Rule {
     pub fn template_label(&self) -> &str {
         self.template_label.as_deref().unwrap_or(&self.label)
     }
+
+    /// Render this rule in SPL s-expression format
+    pub fn to_spl(&self) -> String {
+        let keyword = match self.rule_type {
+            RuleType::Fact => "given",
+            RuleType::Strict => "always",
+            RuleType::Defeasible => "normally",
+            RuleType::Defeater => "except",
+        };
+        if self.is_fact() {
+            format!("({keyword} {})", self.head[0].to_spl())
+        } else {
+            let body_spl = if self.body.len() == 1 {
+                self.body[0].to_spl()
+            } else {
+                let parts: Vec<String> = self.body.iter().map(|l| l.to_spl()).collect();
+                format!("(and {})", parts.join(" "))
+            };
+            format!(
+                "({keyword} {} {body_spl} {})",
+                render_spl_atom(&self.label),
+                self.head[0].to_spl()
+            )
+        }
+    }
 }
 
 impl fmt::Display for Rule {
@@ -279,6 +304,55 @@ mod tests {
     fn test_rule_display_fact() {
         let fact = Rule::fact("f1", Literal::simple("bird"));
         assert_eq!(format!("{fact}"), "f1: >> bird");
+    }
+
+    #[test]
+    fn test_to_spl_fact() {
+        let fact = Rule::fact("f1", Literal::simple("bird"));
+        assert_eq!(fact.to_spl(), "(given (bird))");
+    }
+
+    #[test]
+    fn test_to_spl_defeasible() {
+        let rule = Rule::defeasible(
+            "r1",
+            vec![Literal::simple("bird")],
+            Literal::simple("flies"),
+        );
+        assert_eq!(rule.to_spl(), "(normally r1 (bird) (flies))");
+    }
+
+    #[test]
+    fn test_to_spl_strict() {
+        let rule = Rule::strict(
+            "s1",
+            vec![Literal::simple("mammal")],
+            Literal::simple("animal"),
+        );
+        assert_eq!(rule.to_spl(), "(always s1 (mammal) (animal))");
+    }
+
+    #[test]
+    fn test_to_spl_defeater() {
+        let rule = Rule::defeater(
+            "d1",
+            vec![Literal::simple("penguin")],
+            Literal::negated("flies"),
+        );
+        assert_eq!(rule.to_spl(), "(except d1 (penguin) (not (flies)))");
+    }
+
+    #[test]
+    fn test_to_spl_multi_body() {
+        let rule = Rule::defeasible(
+            "r1",
+            vec![Literal::simple("bird"), Literal::simple("healthy")],
+            Literal::simple("flies"),
+        );
+        assert_eq!(
+            rule.to_spl(),
+            "(normally r1 (and (bird) (healthy)) (flies))"
+        );
     }
 
     #[test]

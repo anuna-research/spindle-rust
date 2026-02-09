@@ -287,7 +287,7 @@ fn is_spl_atom_char(c: char) -> bool {
         || c == '+'
 }
 
-fn render_spl_atom(atom: &str) -> String {
+pub(crate) fn render_spl_atom(atom: &str) -> String {
     let needs_quotes = atom.is_empty() || atom.chars().any(|c| !is_spl_atom_char(c));
     if !needs_quotes {
         return atom.to_string();

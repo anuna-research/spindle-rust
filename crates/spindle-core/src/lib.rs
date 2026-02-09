@@ -40,6 +40,7 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod claims;
 pub mod conclusion;
 pub mod error;
 pub mod explanation;
@@ -62,6 +63,7 @@ pub mod worklist;
 
 /// Prelude module for convenient imports
 pub mod prelude {
+    pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{Result, SpindleError};
     pub use crate::intern::{
