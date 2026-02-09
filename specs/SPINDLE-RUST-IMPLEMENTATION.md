@@ -64,7 +64,9 @@ Acceptance:
 Deliverables:
 
 1. Theory input parity:
-   - positional file or `--stdin` with mutual exclusivity checks.
+   - `reason [FILE]` or `--stdin`.
+   - `query|requires|explain|why-not <LITERAL> [FILE]` or `--stdin`.
+   - enforce exactly one theory source (`FILE` xor `--stdin`).
 2. Givens flags:
    - `--given`
    - `--givens-file`

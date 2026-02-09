@@ -58,10 +58,15 @@ Recommended migration:
 
 This operation is explicitly two-step unless spindle later provides an atomic operation:
 
-1. Call `spindle query --json <goal>`.
+1. Call `spindle query <goal> --json --stdin`.
 2. If `status=provable`, return `satisfied=true, missing=[]`.
-3. Else call `spindle requires --json <goal>`.
+3. Else call `spindle requires <goal> --json --stdin`.
 4. Return abductive solutions as `missing`.
+
+When gleg provides projected theory via stdin, use:
+
+1. `spindle query <goal> --json --stdin`
+2. `spindle requires <goal> --json --stdin`
 
 This composition is intentional and part of gleg adapter behavior.
 Both calls use the same generated input snapshot, so there is no cross-call state race.

@@ -183,8 +183,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -211,8 +211,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("unknown_literal")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -234,8 +234,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -262,8 +262,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -285,8 +285,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -311,8 +311,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("explain")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -339,8 +339,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("explain")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -364,8 +364,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("why-not")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -410,8 +410,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("unknown_literal")
+        .arg(&path)
         .output()
         .expect("Failed to execute command");
 
@@ -430,8 +430,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .output()
         .expect("Failed to execute command");
 
@@ -451,8 +451,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("explain")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .output()
         .expect("Failed to execute command");
 
@@ -475,8 +475,8 @@ r1: bird => flies
     for (literal, expected_status) in cases {
         let output = spindle()
             .arg("query")
-            .arg(&path)
             .arg(literal)
+            .arg(&path)
             .arg("--json")
             .output()
             .expect("Failed to execute command");
@@ -501,8 +501,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -532,8 +532,8 @@ f1: >> ~flies
 
     let output = spindle()
         .arg("why-not")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -555,8 +555,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--max")
         .arg("0")
         .arg("--json")
@@ -623,8 +623,8 @@ r1: bird => flies
 
     let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .arg("--at")
         .arg("2024-06-15T12:00:00Z")
@@ -659,8 +659,8 @@ r1: penguin => -flies
 
     let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .output()
         .expect("Failed to execute command");
@@ -757,11 +757,10 @@ r1: bird => flies
 }
 
 #[test]
-fn test_stdin_query_with_placeholder() {
-    // For two-positional subcommands, use "-" as file placeholder with --stdin
+fn test_stdin_query_without_placeholder() {
+    // Query with --stdin should not require any file placeholder.
     let output = spindle()
         .arg("query")
-        .arg("-")
         .arg("flies")
         .arg("--stdin")
         .arg("--json")
@@ -771,7 +770,7 @@ fn test_stdin_query_with_placeholder() {
 
     assert!(
         output.status.success(),
-        "query --stdin with '-' placeholder should succeed: stderr: {}",
+        "query --stdin should succeed without file placeholder: stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
 

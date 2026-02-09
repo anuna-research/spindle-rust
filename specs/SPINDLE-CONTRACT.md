@@ -47,6 +47,14 @@ Supported commands:
 5. `why-not`
 6. `capabilities`
 
+Command positional forms:
+
+1. `reason [FILE]`
+2. `query <LITERAL> [FILE]`
+3. `requires <LITERAL> [FILE]`
+4. `explain <LITERAL> [FILE]`
+5. `why-not <LITERAL> [FILE]`
+
 Global/command flags required for integration:
 
 1. `--json` (structured output)
@@ -69,10 +77,11 @@ Global/command flags required for integration:
 
 Exactly one theory source per invocation:
 
-1. Positional file.
-2. `--stdin`.
+1. Positional file (when present in the command form above).
+2. `--stdin` (theory from stdin).
 
 If both are provided, return a validation error.
+If neither is provided, return a validation error.
 
 ### 5.2 Givens Merge Semantics
 
@@ -343,7 +352,7 @@ Theory passed via stdin:
 Invocation:
 
 ```bash
-cat <<'SPL' | spindle query --stdin "(needs_classify doc_1 h1)" \
+cat <<'SPL' | spindle query "(needs_classify doc_1 h1)" --stdin \
   --json \
   --given "(doc_uploaded doc_1 h1)" \
   --given "(from_source doc_1 primary_registry)" \
@@ -383,7 +392,7 @@ Response (abridged):
 `requires` example (unsatisfied):
 
 ```bash
-cat <<'SPL' | spindle requires --stdin "(ready_for_review doc_1)" \
+cat <<'SPL' | spindle requires "(ready_for_review doc_1)" --stdin \
   --json \
   --given "(doc_uploaded doc_1 h1)"
 #lang spindle

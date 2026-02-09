@@ -78,40 +78,40 @@ enum Commands {
     },
     /// Query if a literal holds in the theory
     Query {
-        /// Input file (use "-" as placeholder with --stdin)
-        file: PathBuf,
         /// Literal to query
         literal: String,
+        /// Input file (mutually exclusive with --stdin)
+        file: Option<PathBuf>,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
     },
     /// Explain why a conclusion holds
     Explain {
-        /// Input file (use "-" as placeholder with --stdin)
-        file: PathBuf,
         /// Literal to explain
         literal: String,
+        /// Input file (mutually exclusive with --stdin)
+        file: Option<PathBuf>,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
     },
     /// Explain why a conclusion does NOT hold
     WhyNot {
-        /// Input file (use "-" as placeholder with --stdin)
-        file: PathBuf,
         /// Literal to check
         literal: String,
+        /// Input file (mutually exclusive with --stdin)
+        file: Option<PathBuf>,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
     },
     /// Find facts needed to derive a literal
     Requires {
-        /// Input file (use "-" as placeholder with --stdin)
-        file: PathBuf,
         /// Goal literal
         literal: String,
+        /// Input file (mutually exclusive with --stdin)
+        file: Option<PathBuf>,
         /// Max solutions
         #[arg(long, default_value = "10")]
         max: usize,
@@ -279,33 +279,33 @@ fn main() {
             run_stats(&file);
         }
         Some(Commands::Query {
-            file,
             literal,
+            file,
             json,
         }) => {
-            run_query(Some(&file), &literal, json, cli.stdin, reference_time);
+            run_query(file.as_ref(), &literal, json, cli.stdin, reference_time);
         }
         Some(Commands::Explain {
-            file,
             literal,
+            file,
             json,
         }) => {
-            run_explain(Some(&file), &literal, json, cli.stdin, reference_time);
+            run_explain(file.as_ref(), &literal, json, cli.stdin, reference_time);
         }
         Some(Commands::WhyNot {
-            file,
             literal,
+            file,
             json,
         }) => {
-            run_why_not(Some(&file), &literal, json, cli.stdin, reference_time);
+            run_why_not(file.as_ref(), &literal, json, cli.stdin, reference_time);
         }
         Some(Commands::Requires {
-            file,
             literal,
+            file,
             max,
             json,
         }) => {
-            run_requires(Some(&file), &literal, max, json, cli.stdin, reference_time);
+            run_requires(file.as_ref(), &literal, max, json, cli.stdin, reference_time);
         }
         Some(Commands::Capabilities { json }) => {
             run_capabilities(json);
@@ -319,14 +319,14 @@ fn main() {
                 println!("Spindle v0.1.0 - Defeasible Logic Reasoning Engine");
                 println!("Ported from SPINdle-Racket v1.7.0");
                 println!();
-                println!("Usage: spindle [OPTIONS] <FILE>");
-                println!("       spindle reason <FILE>");
+                println!("Usage: spindle [OPTIONS] [FILE]");
+                println!("       spindle reason [FILE]");
                 println!("       spindle validate <FILE>");
                 println!("       spindle stats <FILE>");
-                println!("       spindle query <FILE> <LITERAL>");
-                println!("       spindle explain <FILE> <LITERAL>");
-                println!("       spindle why-not <FILE> <LITERAL>");
-                println!("       spindle requires <FILE> <LITERAL>");
+                println!("       spindle query <LITERAL> [FILE]");
+                println!("       spindle explain <LITERAL> [FILE]");
+                println!("       spindle why-not <LITERAL> [FILE]");
+                println!("       spindle requires <LITERAL> [FILE]");
                 println!("       spindle capabilities");
                 println!();
                 println!("Use --help for more information");
@@ -359,23 +359,14 @@ fn load_theory_from_stdin() -> spindle_core::Theory {
 
 /// Resolve theory source with mutual exclusivity between file and --stdin.
 /// Per contract §5.1: exactly one theory source per invocation.
-///
-/// For subcommands with two positional args (query, explain, why-not, requires),
-/// clap requires the file positional even with --stdin. Users should pass "-"
-/// as the file placeholder.
 fn load_theory(file: Option<&PathBuf>, stdin: bool) -> spindle_core::Theory {
     match (file, stdin) {
         (Some(f), true) => {
-            // For two-positional subcommands, file is always present due to clap.
-            // Accept "-" as the explicit stdin placeholder.
-            if f.as_os_str() != "-" {
-                eprintln!(
-                    "Error: cannot specify both file '{}' and --stdin",
-                    f.display()
-                );
-                std::process::exit(2);
-            }
-            load_theory_from_stdin()
+            eprintln!(
+                "Error: cannot specify both file '{}' and --stdin",
+                f.display()
+            );
+            std::process::exit(2);
         }
         (Some(f), false) => load_theory_from_file(f),
         (None, true) => load_theory_from_stdin(),

@@ -280,8 +280,8 @@ r1: bird => flies
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("flies"));
@@ -297,8 +297,8 @@ r1: bird => flies
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("Unknown"));
@@ -314,8 +314,8 @@ r1: bird => flies
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .assert()
         .success()
@@ -340,8 +340,8 @@ r2 > r1
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("~flies")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("~flies"));
@@ -361,8 +361,8 @@ r1: bird => flies
 
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .assert()
         .success();
 }
@@ -378,8 +378,8 @@ r1: bird => flies
     // Per contract §8.2: explain with no proof tree returns exit code 0
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("not provable"));
@@ -395,8 +395,8 @@ r1: bird => flies
 
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .assert()
         .success();
@@ -413,8 +413,8 @@ r1: bird => flies
     // Per contract §8.2: explain with no proof tree returns exit code 0
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .arg("--json")
         .assert()
         .success()
@@ -440,8 +440,8 @@ r1: bird => flies
 
     spindle()
         .arg("why-not")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .assert()
         .success();
 }
@@ -456,8 +456,8 @@ r1: bird => flies
 
     spindle()
         .arg("why-not")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .arg("--json")
         .assert()
         .success()
@@ -483,8 +483,8 @@ r1: bird => flies
 
     spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .assert()
         .success();
 }
@@ -499,8 +499,8 @@ r2: plane => flies
 
     spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--max")
         .arg("5")
         .assert()
@@ -516,8 +516,8 @@ r1: bird => flies
 
     spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .assert()
         .success()
@@ -575,10 +575,7 @@ fn test_reason_missing_file_arg() {
 
 #[test]
 fn test_query_missing_literal_arg() {
-    let content = "f1: >> bird";
-    let (_dir, path) = setup_theory_file(content, "dfl");
-
-    spindle().arg("query").arg(&path).assert().failure();
+    spindle().arg("query").assert().failure();
 }
 
 // ============================================================================
