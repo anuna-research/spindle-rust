@@ -333,7 +333,7 @@ fn process_expr_with_line(
     }
 }
 
-/// Process a claims block: (claims source :at "timestamp" (expr1) (expr2) ...)
+/// Process a claims block: (claims source [:at "timestamp"] [:sig "signature"] [:id "block-id"] [:note "annotation"] (expr1) (expr2) ...)
 fn process_claims(
     theory: &mut Theory,
     args: &[SExpr],
@@ -353,26 +353,34 @@ fn process_claims(
     })?;
 
     let mut timestamp: Option<String> = None;
+    let mut signature: Option<String> = None;
+    let mut id: Option<String> = None;
+    let mut note: Option<String> = None;
     let mut body_start = 1;
 
-    // Parse optional :at "timestamp"
+    // Parse optional keyword fields: :at, :sig, :id, :note
     while body_start < args.len() {
-        if let Some(kw) = args[body_start].as_atom()
-            && kw == ":at"
-        {
+        if let Some(kw) = args[body_start].as_atom() {
+            let (field_name, target) = match kw {
+                ":at" => ("timestamp", &mut timestamp),
+                ":sig" => ("signature", &mut signature),
+                ":id" => ("id", &mut id),
+                ":note" => ("note", &mut note),
+                _ => break,
+            };
             if body_start + 1 >= args.len() {
                 return Err(ParseError::ParserError {
                     line,
-                    message: "claims :at requires a timestamp atom".to_string(),
+                    message: format!("claims {kw} requires a {field_name} atom"),
                 });
             }
-            let ts = args[body_start + 1]
+            let val = args[body_start + 1]
                 .as_atom()
                 .ok_or_else(|| ParseError::ParserError {
                     line,
-                    message: "claims :at requires a timestamp atom".to_string(),
+                    message: format!("claims {kw} requires a {field_name} atom"),
                 })?;
-            timestamp = Some(ts.to_string());
+            *target = Some(val.to_string());
             body_start += 2;
             continue;
         }
@@ -399,6 +407,15 @@ fn process_claims(
             theory.add_meta_string(&label, "source", source);
             if let Some(ref ts) = timestamp {
                 theory.add_meta_string(&label, "timestamp", ts);
+            }
+            if let Some(ref sig) = signature {
+                theory.add_meta_string(&label, "signature", sig);
+            }
+            if let Some(ref id) = id {
+                theory.add_meta_string(&label, "id", id);
+            }
+            if let Some(ref n) = note {
+                theory.add_meta_string(&label, "note", n);
             }
         }
     }
@@ -1108,6 +1125,101 @@ mod tests {
         assert!(
             message.contains("line 1"),
             "Expected bad inner claims expression on single line to report line 1, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_claims_sig_attached() {
+        let input = r#"(claims agent:alice :sig "abc123" (given sunny))"#;
+        let theory = parse_spl(input).unwrap();
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label).unwrap();
+        match &meta.properties["signature"] {
+            MetaValue::String(s) => assert_eq!(s, "abc123"),
+            other => panic!("Expected String metadata for signature, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_claims_id_attached() {
+        let input = r#"(claims agent:alice :id "claim-001" (given sunny))"#;
+        let theory = parse_spl(input).unwrap();
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label).unwrap();
+        match &meta.properties["id"] {
+            MetaValue::String(s) => assert_eq!(s, "claim-001"),
+            other => panic!("Expected String metadata for id, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_claims_note_attached() {
+        let input = r#"(claims agent:alice :note "scan results" (given sunny))"#;
+        let theory = parse_spl(input).unwrap();
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label).unwrap();
+        match &meta.properties["note"] {
+            MetaValue::String(s) => assert_eq!(s, "scan results"),
+            other => panic!("Expected String metadata for note, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_claims_all_metadata() {
+        let input = r#"(claims agent:alice :at "2024-06-15T12:00:00Z" :sig "sig456" :id "block-1" :note "full test" (given sunny))"#;
+        let theory = parse_spl(input).unwrap();
+        let fact = theory.facts().next().unwrap();
+        let meta = theory.get_meta(&fact.label).unwrap();
+
+        match &meta.properties["source"] {
+            MetaValue::String(s) => assert_eq!(s, "agent:alice"),
+            other => panic!("Expected String for source, got: {other:?}"),
+        }
+        match &meta.properties["timestamp"] {
+            MetaValue::String(s) => assert_eq!(s, "2024-06-15T12:00:00Z"),
+            other => panic!("Expected String for timestamp, got: {other:?}"),
+        }
+        match &meta.properties["signature"] {
+            MetaValue::String(s) => assert_eq!(s, "sig456"),
+            other => panic!("Expected String for signature, got: {other:?}"),
+        }
+        match &meta.properties["id"] {
+            MetaValue::String(s) => assert_eq!(s, "block-1"),
+            other => panic!("Expected String for id, got: {other:?}"),
+        }
+        match &meta.properties["note"] {
+            MetaValue::String(s) => assert_eq!(s, "full test"),
+            other => panic!("Expected String for note, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_claims_sig_requires_atom() {
+        let err = parse_spl("(claims agent:alice :sig (given bird))").unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("claims :sig requires a signature atom"),
+            "Expected malformed :sig value to fail, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_claims_id_requires_atom() {
+        let err = parse_spl("(claims agent:alice :id (given bird))").unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("claims :id requires a id atom"),
+            "Expected malformed :id value to fail, got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_claims_note_requires_atom() {
+        let err = parse_spl("(claims agent:alice :note (given bird))").unwrap_err();
+        let message = format!("{err}");
+        assert!(
+            message.contains("claims :note requires a note atom"),
+            "Expected malformed :note value to fail, got: {message}"
         );
     }
 }

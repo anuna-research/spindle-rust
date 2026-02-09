@@ -47,6 +47,7 @@ The `claims` block attributes statements to a source identity:
 |--------|--------------------------------------|----------------------------------|
 | `:at`  | ISO 8601 timestamp                   | `:at "2026-01-20T09:00:00Z"`    |
 | `:sig` | Cryptographic signature              | `:sig "abc123signature"`         |
+| `:id`  | Claims block identifier              | `:id "claim-001"`               |
 | `:note`| Human-readable annotation            | `:note "CI pipeline results"`    |
 
 **Allowed inner statements**:
