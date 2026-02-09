@@ -184,7 +184,7 @@ fn emit_and_exit(
                     println!("{}", serde_json::to_string_pretty(&value).unwrap());
                 }
                 CommandOutput::Text(text) => {
-                    println!("{}", text);
+                    println!("{text}");
                 }
             }
             std::process::exit(0);
@@ -519,12 +519,11 @@ fn parse_literal_arg(s: &str) -> Result<Literal, CliError> {
     // If it looks like an SPL expression (starts with paren), try to parse it as a dummy fact
     if s.trim().starts_with('(') {
         let dummy_spl = format!("(given {s})");
-        if let Ok(theory) = parse_spl_str(&dummy_spl) {
-            if let Some(fact) = theory.facts().next() {
-                if let Some(head) = fact.head.first() {
-                    return Ok(head.clone());
-                }
-            }
+        if let Ok(theory) = parse_spl_str(&dummy_spl)
+            && let Some(fact) = theory.facts().next()
+            && let Some(head) = fact.head.first()
+        {
+            return Ok(head.clone());
         }
     }
 
@@ -865,7 +864,7 @@ fn run_explain(
                 // Per contract §8.2: explain with no proof tree is exit code 0
                 let diagnostics = vec![Diagnostic::warning(
                     "NOT_PROVABLE",
-                    format!("Literal {} is not provable", lit),
+                    format!("Literal {lit} is not provable"),
                 )];
 
                 let output = ExplainOutput {
@@ -1064,7 +1063,7 @@ fn run_requires(
         let solutions_to_show: Vec<_> = if solutions_limit_hit {
             diagnostics.push(Diagnostic::warning(
                 "SOLUTIONS_LIMIT_HIT",
-                format!("Results limited to {} solutions", max),
+                format!("Results limited to {max} solutions"),
             ));
             truncated = Some(TruncatedInfo { solutions: true });
             result.solutions.iter().take(max).collect()
