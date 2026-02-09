@@ -760,7 +760,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("l0");
         for i in 0..10 {
-            theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
+            theory.add_defeasible_rule(&[&format!("l{i}")], &format!("l{}", i + 1));
         }
 
         let standard = reason(&theory).unwrap();
@@ -770,7 +770,7 @@ mod tests {
         let std_def = extract_defeasible_provable(&standard);
 
         for i in 0..=10 {
-            let lit = format!("l{}", i);
+            let lit = format!("l{i}");
             assert!(std_def.contains(&lit));
             assert!(scalable.contains_partial(&indexed, &lit));
         }
@@ -780,8 +780,8 @@ mod tests {
     fn test_semantic_wide_theory() {
         let mut theory = Theory::new();
         for i in 0..20 {
-            theory.add_fact(&format!("fact{}", i));
-            theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
+            theory.add_fact(&format!("fact{i}"));
+            theory.add_defeasible_rule(&[&format!("fact{i}")], &format!("derived{i}"));
         }
 
         let standard = reason(&theory).unwrap();
@@ -791,8 +791,8 @@ mod tests {
         let std_def = extract_defeasible_provable(&standard);
 
         for i in 0..20 {
-            let fact = format!("fact{}", i);
-            let derived = format!("derived{}", i);
+            let fact = format!("fact{i}");
+            let derived = format!("derived{i}");
 
             assert!(std_def.contains(&fact));
             assert!(std_def.contains(&derived));
@@ -826,7 +826,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("l0");
         for i in 0..100 {
-            theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
+            theory.add_defeasible_rule(&[&format!("l{i}")], &format!("l{}", i + 1));
         }
 
         let indexed = IndexedTheory::build(&theory);
@@ -839,8 +839,8 @@ mod tests {
     fn test_scalable_wide_theory_performance() {
         let mut theory = Theory::new();
         for i in 0..200 {
-            theory.add_fact(&format!("fact{}", i));
-            theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
+            theory.add_fact(&format!("fact{i}"));
+            theory.add_defeasible_rule(&[&format!("fact{i}")], &format!("derived{i}"));
         }
 
         let indexed = IndexedTheory::build(&theory);
@@ -854,8 +854,8 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("trigger");
         for i in 0..50 {
-            let r1 = theory.add_defeasible_rule(&["trigger"], &format!("q{}", i));
-            let r2 = theory.add_defeasible_rule(&["trigger"], &format!("~q{}", i));
+            let r1 = theory.add_defeasible_rule(&["trigger"], &format!("q{i}"));
+            let r2 = theory.add_defeasible_rule(&["trigger"], &format!("~q{i}"));
             theory.add_superiority(&r1, &r2);
         }
 
@@ -863,8 +863,8 @@ mod tests {
         let result = reason_scalable(&indexed);
 
         for i in 0..50 {
-            assert!(result.contains_partial(&indexed, &format!("q{}", i)));
-            assert!(!result.contains_partial(&indexed, &format!("~q{}", i)));
+            assert!(result.contains_partial(&indexed, &format!("q{i}")));
+            assert!(!result.contains_partial(&indexed, &format!("~q{i}")));
         }
     }
 

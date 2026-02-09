@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn test_conclusion_display() {
         let c = Conclusion::definitely_provable(Literal::simple("bird"));
-        assert_eq!(format!("{}", c), "+D bird");
+        assert_eq!(format!("{c}"), "+D bird");
     }
 
     #[test]

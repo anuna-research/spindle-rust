@@ -560,8 +560,7 @@ mod tests {
                     .iter()
                     .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
                         && c.literal.name() == *lit_name),
-                "{} should be defeasibly provable via chain",
-                lit_name
+                "{lit_name} should be defeasibly provable via chain"
             );
         }
     }
@@ -784,7 +783,7 @@ mod tests {
         theory.add_fact("l0");
 
         for i in 0..50 {
-            theory.add_defeasible_rule(&[&format!("l{}", i)], &format!("l{}", i + 1));
+            theory.add_defeasible_rule(&[&format!("l{i}")], &format!("l{}", i + 1));
         }
 
         let conclusions = reason(&theory).unwrap();
@@ -805,8 +804,8 @@ mod tests {
 
         // 100 independent facts and derived conclusions
         for i in 0..100 {
-            theory.add_fact(&format!("fact{}", i));
-            theory.add_defeasible_rule(&[&format!("fact{}", i)], &format!("derived{}", i));
+            theory.add_fact(&format!("fact{i}"));
+            theory.add_defeasible_rule(&[&format!("fact{i}")], &format!("derived{i}"));
         }
 
         let conclusions = reason(&theory).unwrap();
@@ -817,9 +816,8 @@ mod tests {
                 conclusions
                     .iter()
                     .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
-                        && c.literal.name() == format!("derived{}", i)),
-                "derived{} should be defeasibly provable",
-                i
+                        && c.literal.name() == format!("derived{i}")),
+                "derived{i} should be defeasibly provable"
             );
         }
     }
@@ -829,7 +827,7 @@ mod tests {
         let mut theory = Theory::new();
 
         for i in 0..100 {
-            theory.add_fact(&format!("p{}", i));
+            theory.add_fact(&format!("p{i}"));
         }
 
         let conclusions = reason(&theory).unwrap();
@@ -1044,13 +1042,13 @@ mod tests {
         for i in 0..128 {
             let mut theory = Theory::new();
             theory.add_rule(Rule::new(
-                format!("d{}", i),
+                format!("d{i}"),
                 RuleType::Defeasible,
                 vec![],
                 vec![Literal::simple("p")],
             ));
             theory.add_rule(Rule::new(
-                format!("s{}", i),
+                format!("s{i}"),
                 RuleType::Strict,
                 vec![],
                 vec![Literal::simple("p")],
@@ -1063,11 +1061,7 @@ mod tests {
                     && !c.literal.negation
             });
 
-            assert!(
-                has_definite_p,
-                "missing +D p for label pair d{} / s{}",
-                i, i
-            );
+            assert!(has_definite_p, "missing +D p for label pair d{i} / s{i}");
         }
     }
 
@@ -1190,8 +1184,7 @@ mod tests {
 
         assert_eq!(
             bird_definite_count, 1,
-            "Duplicate facts should produce exactly one +D conclusion, got {}",
-            bird_definite_count
+            "Duplicate facts should produce exactly one +D conclusion, got {bird_definite_count}"
         );
     }
 
@@ -1400,8 +1393,7 @@ mod tests {
                     .iter()
                     .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
                         && c.literal.name() == *lit_name),
-                "{} should be defeasibly provable via chain",
-                lit_name
+                "{lit_name} should be defeasibly provable via chain"
             );
         }
     }

@@ -415,10 +415,10 @@ mod tests {
     #[test]
     fn test_display() {
         let lit = Literal::simple("bird");
-        assert_eq!(format!("{}", lit), "bird");
+        assert_eq!(format!("{lit}"), "bird");
 
         let neg = Literal::negated("flies");
-        assert_eq!(format!("{}", neg), "~flies");
+        assert_eq!(format!("{neg}"), "~flies");
     }
 
     #[test]
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn test_display_with_mode() {
         let modal = Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]);
-        assert_eq!(format!("{}", modal), "[O]pay");
+        assert_eq!(format!("{modal}"), "[O]pay");
     }
 
     #[test]
@@ -555,7 +555,7 @@ mod tests {
             Temporal::empty(),
             vec!["alice".to_string(), "bob".to_string()],
         );
-        assert_eq!(format!("{}", pred), "parent(alice, bob)");
+        assert_eq!(format!("{pred}"), "parent(alice, bob)");
     }
 
     #[test]
@@ -567,7 +567,7 @@ mod tests {
             Temporal::new(TimePoint::Moment(2024), TimePoint::Moment(2025)),
             vec![],
         );
-        let display = format!("{}", temporal);
+        let display = format!("{temporal}");
         assert!(display.contains("valid"));
         assert!(display.contains("["));
     }

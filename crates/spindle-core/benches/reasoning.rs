@@ -40,7 +40,7 @@ use std::time::Duration;
 fn create_fact_theory(n: usize) -> Theory {
     let mut theory = Theory::new();
     for i in 0..n {
-        let fact = Rule::fact(format!("f{}", i), Literal::simple(format!("prop{}", i)));
+        let fact = Rule::fact(format!("f{i}"), Literal::simple(format!("prop{i}")));
         theory.add_rule(fact);
     }
     theory
@@ -56,8 +56,8 @@ fn create_chain_theory(n: usize) -> Theory {
     // Chain of defeasible rules
     for i in 0..n {
         let rule = Rule::defeasible(
-            format!("r{}", i),
-            vec![Literal::simple(format!("p{}", i))],
+            format!("r{i}"),
+            vec![Literal::simple(format!("p{i}"))],
             Literal::simple(format!("p{}", i + 1)),
         );
         theory.add_rule(rule);
@@ -71,27 +71,27 @@ fn create_wide_theory(n: usize) -> Theory {
 
     for i in 0..n {
         // Each group has a fact and two conflicting rules
-        let base = format!("base{}", i);
-        let prop = format!("prop{}", i);
+        let base = format!("base{i}");
+        let prop = format!("prop{i}");
 
-        theory.add_rule(Rule::fact(format!("f{}", i), Literal::simple(&base)));
+        theory.add_rule(Rule::fact(format!("f{i}"), Literal::simple(&base)));
 
         // r_i: base_i => prop_i
         theory.add_rule(Rule::defeasible(
-            format!("r{}", i),
+            format!("r{i}"),
             vec![Literal::simple(&base)],
             Literal::simple(&prop),
         ));
 
         // s_i: base_i => ~prop_i
         theory.add_rule(Rule::defeasible(
-            format!("s{}", i),
+            format!("s{i}"),
             vec![Literal::simple(&base)],
             Literal::negated(&prop),
         ));
 
         // r_i > s_i (resolve conflict)
-        theory.add_superiority(&format!("r{}", i), &format!("s{}", i));
+        theory.add_superiority(&format!("r{i}"), &format!("s{i}"));
     }
     theory
 }
@@ -104,24 +104,24 @@ fn create_conflict_theory(n: usize) -> Theory {
     theory.add_rule(Rule::fact("f0", Literal::simple("base")));
 
     for i in 0..n {
-        let prop = format!("prop{}", i);
+        let prop = format!("prop{i}");
 
         // r_i: base => prop_i
         theory.add_rule(Rule::defeasible(
-            format!("r{}", i),
+            format!("r{i}"),
             vec![Literal::simple("base")],
             Literal::simple(&prop),
         ));
 
         // s_i: base => ~prop_i
         theory.add_rule(Rule::defeasible(
-            format!("s{}", i),
+            format!("s{i}"),
             vec![Literal::simple("base")],
             Literal::negated(&prop),
         ));
 
         // r_i > s_i
-        theory.add_superiority(&format!("r{}", i), &format!("s{}", i));
+        theory.add_superiority(&format!("r{i}"), &format!("s{i}"));
     }
     theory
 }
@@ -133,7 +133,7 @@ fn create_grounding_theory(n_entities: usize, n_rules: usize) -> Theory {
     // Add ground facts: person(entity_i) for each entity
     for i in 0..n_entities {
         theory.add_rule(Rule::fact(
-            format!("f_person_{}", i),
+            format!("f_person_{i}"),
             Literal::new(
                 "person",
                 false,
@@ -149,7 +149,7 @@ fn create_grounding_theory(n_entities: usize, n_rules: usize) -> Theory {
         for j in 0..n_entities {
             if i != j && (i + j) % 3 == 0 {
                 theory.add_rule(Rule::fact(
-                    format!("f_knows_{}_{}", i, j),
+                    format!("f_knows_{i}_{j}"),
                     Literal::new(
                         "knows",
                         false,
@@ -166,7 +166,7 @@ fn create_grounding_theory(n_entities: usize, n_rules: usize) -> Theory {
     for i in 0..n_rules {
         // Rule: person(?x), knows(?x, ?y) => connected(?x, ?y)
         theory.add_rule(Rule::defeasible(
-            format!("r_connected_{}", i),
+            format!("r_connected_{i}"),
             vec![
                 Literal::new(
                     "person",
@@ -184,7 +184,7 @@ fn create_grounding_theory(n_entities: usize, n_rules: usize) -> Theory {
                 ),
             ],
             Literal::new(
-                format!("connected{}", i),
+                format!("connected{i}"),
                 false,
                 Mode::empty(),
                 Temporal::empty(),
@@ -241,12 +241,12 @@ fn generate_dfl(n: usize) -> String {
 
     // Facts
     for i in 0..n {
-        dfl.push_str(&format!("f{}: >> prop{}\n", i, i));
+        dfl.push_str(&format!("f{i}: >> prop{i}\n"));
     }
 
     // Rules
     for i in 0..n {
-        dfl.push_str(&format!("r{}: prop{} => derived{}\n", i, i, i));
+        dfl.push_str(&format!("r{i}: prop{i} => derived{i}\n"));
     }
 
     // Some superiorities
@@ -263,12 +263,12 @@ fn generate_spl(n: usize) -> String {
 
     // Facts
     for i in 0..n {
-        spl.push_str(&format!("(given prop{})\n", i));
+        spl.push_str(&format!("(given prop{i})\n"));
     }
 
     // Rules
     for i in 0..n {
-        spl.push_str(&format!("(normally r{} prop{} derived{})\n", i, i, i));
+        spl.push_str(&format!("(normally r{i} prop{i} derived{i})\n"));
     }
 
     // Some superiorities
@@ -310,7 +310,7 @@ fn bench_literal_operations(c: &mut Criterion) {
     let mut str_set: HashSet<String> = HashSet::new();
 
     for i in 0..1000 {
-        let l = Literal::simple(format!("lit{}", i));
+        let l = Literal::simple(format!("lit{i}"));
         id_set.insert(l.name_literal_id());
         str_set.insert(l.canonical_name());
     }
@@ -342,7 +342,7 @@ fn bench_superiority_lookup(c: &mut Criterion) {
             b.iter(|| {
                 // Check all superiority relations
                 for i in 0..*size {
-                    black_box(theory.is_superior(&format!("r{}", i), &format!("s{}", i)));
+                    black_box(theory.is_superior(&format!("r{i}"), &format!("s{i}")));
                 }
             })
         });
@@ -610,8 +610,8 @@ fn bench_trust(c: &mut Criterion) {
 /// Build a trust derivation tree of given depth
 fn build_trust_tree(depth: usize) -> TrustDerivationNode {
     fn build_level(depth: usize, trust: f64) -> TrustDerivationNode {
-        let node = TrustDerivationNode::new(Literal::simple(format!("level{}", depth)), trust)
-            .with_source(Source::new(format!("source{}", depth)));
+        let node = TrustDerivationNode::new(Literal::simple(format!("level{depth}")), trust)
+            .with_source(Source::new(format!("source{depth}")));
 
         if depth == 0 {
             node

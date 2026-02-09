@@ -23,24 +23,24 @@ fn create_wide_theory(n: usize) -> Theory {
     let mut theory = Theory::new();
 
     for i in 0..n {
-        let base = format!("base{}", i);
-        let prop = format!("prop{}", i);
+        let base = format!("base{i}");
+        let prop = format!("prop{i}");
 
-        theory.add_rule(Rule::fact(format!("f{}", i), Literal::simple(&base)));
+        theory.add_rule(Rule::fact(format!("f{i}"), Literal::simple(&base)));
 
         theory.add_rule(Rule::defeasible(
-            format!("r{}", i),
+            format!("r{i}"),
             vec![Literal::simple(&base)],
             Literal::simple(&prop),
         ));
 
         theory.add_rule(Rule::defeasible(
-            format!("s{}", i),
+            format!("s{i}"),
             vec![Literal::simple(&base)],
             Literal::negated(&prop),
         ));
 
-        theory.add_superiority(&format!("r{}", i), &format!("s{}", i));
+        theory.add_superiority(&format!("r{i}"), &format!("s{i}"));
     }
     theory
 }
@@ -52,8 +52,8 @@ fn create_chain_theory(n: usize) -> Theory {
 
     for i in 0..n {
         theory.add_rule(Rule::defeasible(
-            format!("r{}", i),
-            vec![Literal::simple(format!("p{}", i))],
+            format!("r{i}"),
+            vec![Literal::simple(format!("p{i}"))],
             Literal::simple(format!("p{}", i + 1)),
         ));
     }
@@ -66,7 +66,7 @@ fn create_grounding_theory(n_entities: usize) -> Theory {
 
     for i in 0..n_entities {
         theory.add_rule(Rule::fact(
-            format!("f_person_{}", i),
+            format!("f_person_{i}"),
             Literal::new(
                 "person",
                 false,
@@ -81,7 +81,7 @@ fn create_grounding_theory(n_entities: usize) -> Theory {
         for j in 0..n_entities {
             if i != j && (i + j) % 3 == 0 {
                 theory.add_rule(Rule::fact(
-                    format!("f_knows_{}_{}", i, j),
+                    format!("f_knows_{i}_{j}"),
                     Literal::new(
                         "knows",
                         false,

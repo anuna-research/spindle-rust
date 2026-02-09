@@ -304,7 +304,7 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
 fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
     let name = if lit.name() == "_" {
         *counter += 1;
-        format!("?_w{}", counter)
+        format!("?_w{counter}")
     } else {
         lit.name().to_string()
     };
@@ -315,7 +315,7 @@ fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
         .map(|p| {
             if *p == "_" {
                 *counter += 1;
-                format!("?_w{}", counter)
+                format!("?_w{counter}")
             } else {
                 p.to_string()
             }

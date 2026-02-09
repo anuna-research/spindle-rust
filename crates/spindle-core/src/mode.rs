@@ -131,18 +131,18 @@ mod tests {
     #[test]
     fn test_mode_display_with_name() {
         let mode = Mode::obligation();
-        assert_eq!(format!("{}", mode), "[O]");
+        assert_eq!(format!("{mode}"), "[O]");
     }
 
     #[test]
     fn test_mode_display_negated() {
         let mode = Mode::obligation().complement();
-        assert_eq!(format!("{}", mode), "[-O]");
+        assert_eq!(format!("{mode}"), "[-O]");
     }
 
     #[test]
     fn test_mode_display_empty() {
         let mode = Mode::empty();
-        assert_eq!(format!("{}", mode), "");
+        assert_eq!(format!("{mode}"), "");
     }
 }

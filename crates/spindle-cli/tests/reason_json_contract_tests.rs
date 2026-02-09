@@ -249,8 +249,7 @@ fn test_reason_json_conclusions_sorted_by_literal_spl_then_conclusion_type() {
     // Should have both +D and +d for bird (as a fact)
     assert!(
         bird_conclusions.len() >= 2,
-        "expected multiple conclusion types for bird, got {:?}",
-        bird_conclusions
+        "expected multiple conclusion types for bird, got {bird_conclusions:?}"
     );
 
     // Verify conclusion types are sorted

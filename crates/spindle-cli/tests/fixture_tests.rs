@@ -70,8 +70,7 @@ fn run_fixture(name: &str) {
     let (expects, expect_nots) = parse_expectations(&content);
     assert!(
         !expects.is_empty(),
-        "fixture {} has no EXPECT annotations",
-        name
+        "fixture {name} has no EXPECT annotations"
     );
 
     let output = run_reason(&fixture_path);

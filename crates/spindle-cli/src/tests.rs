@@ -152,7 +152,7 @@ fn parse_literal_arg(s: &str) -> Literal {
     // Replicate CLI parsing logic
     if s.trim().starts_with('(') {
         // Try SPL parsing
-        let dummy_spl = format!("(given {})", s);
+        let dummy_spl = format!("(given {s})");
         if let Ok(theory) = parse_spl(&dummy_spl)
             && let Some(fact) = theory.facts().next()
             && let Some(head) = fact.head.first()
@@ -349,7 +349,7 @@ fn test_why_not_no_rules_for_literal() {
 fn test_why_not_display_format() {
     let theory = make_missing_premise_theory();
     let result = why_not(&theory, &Literal::simple("ready_review")).unwrap();
-    let display = format!("{}", result);
+    let display = format!("{result}");
     assert!(display.contains("ready_review"));
     assert!(display.contains("not provable"));
 }

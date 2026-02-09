@@ -199,7 +199,7 @@ r2 > r1
         let result = parse_dfl("this is not valid dfl syntax");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(format!("{:?}", err).contains("could not parse"));
+        assert!(format!("{err:?}").contains("could not parse"));
     }
 
     #[test]
@@ -209,6 +209,6 @@ r2 > r1
         assert!(result.is_err());
         let err = result.unwrap_err();
         // Should report line 2
-        assert!(format!("{:?}", err).contains("2"));
+        assert!(format!("{err:?}").contains("2"));
     }
 }

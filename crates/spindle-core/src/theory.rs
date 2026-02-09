@@ -106,8 +106,7 @@ impl Theory {
         // Check for circular superiority before adding
         if self.sup_index.is_superior(inferior, superior) {
             eprintln!(
-                "Warning: circular superiority detected: prefer({},{}) conflicts with existing prefer({},{})",
-                superior, inferior, inferior, superior
+                "Warning: circular superiority detected: prefer({superior},{inferior}) conflicts with existing prefer({inferior},{superior})"
             );
         }
         self.superiorities
@@ -244,8 +243,7 @@ impl Theory {
                 let comp = lit.complement();
                 if definite.contains(&comp) {
                     warnings.push(format!(
-                        "Contradictory definite conclusions: both +D {} and +D {}",
-                        lit, comp
+                        "Contradictory definite conclusions: both +D {lit} and +D {comp}"
                     ));
                 }
             }
@@ -388,8 +386,7 @@ mod tests {
         let warnings = theory.check_consistency();
         assert!(
             warnings.iter().any(|w| w.contains("Contradictory")),
-            "Should detect contradictory definite conclusions, got: {:?}",
-            warnings
+            "Should detect contradictory definite conclusions, got: {warnings:?}"
         );
     }
 

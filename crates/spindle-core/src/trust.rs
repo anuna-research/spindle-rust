@@ -390,10 +390,10 @@ mod tests {
     #[test]
     fn test_source_display() {
         let source = Source::new("agent:coder");
-        assert_eq!(format!("{}", source), "agent:coder");
+        assert_eq!(format!("{source}"), "agent:coder");
 
         let labeled = Source::with_label("agent:security", "Security Team");
-        assert_eq!(format!("{}", labeled), "Security Team (agent:security)");
+        assert_eq!(format!("{labeled}"), "Security Team (agent:security)");
     }
 
     #[test]
@@ -976,7 +976,7 @@ mod tests {
         let mut current = TrustDerivationNode::new(Literal::simple("level5"), 0.95);
         for i in (1..5).rev() {
             let trust = 0.8 + (i as f64 * 0.02); // 0.82, 0.84, 0.86, 0.88
-            current = TrustDerivationNode::new(Literal::simple(format!("level{}", i)), trust)
+            current = TrustDerivationNode::new(Literal::simple(format!("level{i}")), trust)
                 .with_children(vec![current]);
         }
 

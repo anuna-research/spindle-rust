@@ -209,7 +209,7 @@ mod tests {
         let sup = Superiority::new("r2", "r1");
         assert_eq!(sup.superior, "r2");
         assert_eq!(sup.inferior, "r1");
-        assert_eq!(format!("{}", sup), "r2 > r1");
+        assert_eq!(format!("{sup}"), "r2 > r1");
     }
 
     #[test]

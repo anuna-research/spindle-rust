@@ -672,7 +672,7 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
             } else {
                 Err(ParseError::ParserError {
                     line,
-                    message: format!("Invalid timepoint: {}", s),
+                    message: format!("Invalid timepoint: {s}"),
                 })
             }
         }
@@ -687,7 +687,7 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
 
                     Err(ParseError::ParserError {
                         line,
-                        message: format!("Invalid RFC3339 timepoint for moment: {}", s),
+                        message: format!("Invalid RFC3339 timepoint for moment: {s}"),
                     })
                 } else {
                     Err(ParseError::ParserError {
@@ -1031,7 +1031,7 @@ mod tests {
         let ts_val = &meta_map.properties["timestamp"];
         match ts_val {
             MetaValue::String(s) => assert_eq!(s, "2024-06-15T12:00:00Z"),
-            other => panic!("Expected String metadata for timestamp, got: {:?}", other),
+            other => panic!("Expected String metadata for timestamp, got: {other:?}"),
         }
 
         assert!(
@@ -1064,7 +1064,7 @@ mod tests {
         let r1_meta = theory.get_meta("r1").unwrap();
         match &r1_meta.properties["source"] {
             MetaValue::String(s) => assert_eq!(s, "agent:bob"),
-            other => panic!("Expected String source for r1, got: {:?}", other),
+            other => panic!("Expected String source for r1, got: {other:?}"),
         }
     }
 

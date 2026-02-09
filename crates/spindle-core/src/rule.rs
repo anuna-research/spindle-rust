@@ -272,13 +272,13 @@ mod tests {
             vec![Literal::simple("bird")],
             Literal::simple("flies"),
         );
-        assert_eq!(format!("{}", rule), "r1: bird => flies");
+        assert_eq!(format!("{rule}"), "r1: bird => flies");
     }
 
     #[test]
     fn test_rule_display_fact() {
         let fact = Rule::fact("f1", Literal::simple("bird"));
-        assert_eq!(format!("{}", fact), "f1: >> bird");
+        assert_eq!(format!("{fact}"), "f1: >> bird");
     }
 
     #[test]

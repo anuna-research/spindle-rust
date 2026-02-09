@@ -228,7 +228,7 @@ fn strongest_conclusions_by_literal(
 fn next_hyp_label(theory: &Theory, unique_id: u64, start_index: usize) -> String {
     let mut index = start_index.max(1);
     loop {
-        let candidate = format!("__hyp_{}_{}", unique_id, index);
+        let candidate = format!("__hyp_{unique_id}_{index}");
         if theory.get_rule(&candidate).is_none() {
             return candidate;
         }

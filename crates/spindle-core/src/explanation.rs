@@ -1715,8 +1715,7 @@ mod tests {
         let edge_count = dot.matches("->").count();
         assert!(
             edge_count >= 2,
-            "Expected at least 2 edges, found {}",
-            edge_count
+            "Expected at least 2 edges, found {edge_count}"
         );
     }
 

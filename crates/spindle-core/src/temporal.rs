@@ -806,7 +806,7 @@ mod tests {
         let a = Temporal::from_bounds(0, 10);
         let b = Temporal::from_bounds(5, 15);
 
-        let relations = vec![
+        let relations = [
             a.before(&b),
             a.after(&b),
             a.meets(&b),
@@ -825,8 +825,7 @@ mod tests {
         let true_count = relations.iter().filter(|&&r| r).count();
         assert_eq!(
             true_count, 1,
-            "Exactly one Allen relation should hold, got {}",
-            true_count
+            "Exactly one Allen relation should hold, got {true_count}"
         );
     }
 

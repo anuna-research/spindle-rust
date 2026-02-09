@@ -495,15 +495,15 @@ mod tests {
         let pos = intern_literal("bird");
         let neg = intern_literal("~flies");
 
-        assert_eq!(format!("{}", pos), "bird");
-        assert_eq!(format!("{}", neg), "~flies");
+        assert_eq!(format!("{pos}"), "bird");
+        assert_eq!(format!("{neg}"), "~flies");
     }
 
     #[test]
     fn test_many_symbols() {
         let mut ids = Vec::new();
         for i in 0..1000 {
-            ids.push(intern(&format!("symbol_{}", i)));
+            ids.push(intern(&format!("symbol_{i}")));
         }
 
         // Verify all are unique
@@ -512,7 +512,7 @@ mod tests {
 
         // Verify all resolve correctly
         for (i, id) in ids.iter().enumerate() {
-            assert_eq!(resolve(*id), format!("symbol_{}", i));
+            assert_eq!(resolve(*id), format!("symbol_{i}"));
         }
     }
 
@@ -536,7 +536,7 @@ mod tests {
     #[test]
     fn test_symbol_id_debug() {
         let id = intern("debug_test");
-        let debug_str = format!("{:?}", id);
+        let debug_str = format!("{id:?}");
         assert!(debug_str.contains("SymbolId"));
         assert!(debug_str.contains("debug_test"));
     }
@@ -544,7 +544,7 @@ mod tests {
     #[test]
     fn test_symbol_id_display() {
         let id = intern("display_test");
-        let display_str = format!("{}", id);
+        let display_str = format!("{id}");
         assert_eq!(display_str, "display_test");
     }
 
@@ -571,8 +571,8 @@ mod tests {
         let pos = intern_literal("debug_lit");
         let neg = intern_literal("~debug_lit");
 
-        let pos_debug = format!("{:?}", pos);
-        let neg_debug = format!("{:?}", neg);
+        let pos_debug = format!("{pos:?}");
+        let neg_debug = format!("{neg:?}");
 
         assert!(pos_debug.contains("LiteralId"));
         assert!(pos_debug.contains("debug_lit"));
@@ -587,7 +587,7 @@ mod tests {
         let ptr_before = resolve(id).as_ptr();
 
         for i in 0..100 {
-            intern(&format!("growth_filler_{}", i));
+            intern(&format!("growth_filler_{i}"));
         }
 
         let ptr_after = resolve(id).as_ptr();
@@ -600,12 +600,12 @@ mod tests {
 
     #[test]
     fn test_batch_resolve_correctness() {
-        let ids: Vec<SymbolId> = (0..50).map(|i| intern(&format!("batch_{}", i))).collect();
+        let ids: Vec<SymbolId> = (0..50).map(|i| intern(&format!("batch_{i}"))).collect();
 
         let resolved: Vec<&'static str> = ids.iter().map(|&id| resolve(id)).collect();
 
         for (i, s) in resolved.iter().enumerate() {
-            assert_eq!(*s, format!("batch_{}", i));
+            assert_eq!(*s, format!("batch_{i}"));
         }
     }
 }
