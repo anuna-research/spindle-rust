@@ -121,58 +121,15 @@ We follow a TDD workflow: write failing contract tests first, then implement the
 
 ### 6.1 Rust-Side Contract Conformance Tests
 
-Create `crates/spindle-cli/tests/contract_tests.rs`. This file is the primary gate for Phase 1.
+Use `crates/spindle-cli/tests/contract_matrix_tests.rs` as the primary conformance gate.
+This matrix owns:
 
-**A. Schema Field Verification (Per Command)**
+1. Schema validation for all JSON success cases.
+2. JSON error envelope validation for non-zero exits.
+3. Exit-code contract behavior for non-JSON outcomes.
+4. Determinism checks (same input -> byte-identical output).
 
-For each command (`reason`, `query`, `requires`, `explain`, `why-not`), implement tests that assert:
-
-1.  **Envelope integrity**: `schema_version` is correct, `diagnostics` array exists.
-2.  **Required fields**: All fields marked required in `specs/SPINDLE-CONTRACT.md` are present.
-3.  **Field shapes**:
-    *   `literal_struct` matches `{ functor, args, negated, mode, temporal }`.
-    *   `grounding` matches `{ performed, had_variables, instances, limit_hit }`.
-4.  **Data mapping**:
-    *   `status` is exactly `provable|refuted|unknown` (no legacy `proven`/`true`).
-    *   `conclusion_type` is `+D|+d|-D|-d` or null.
-    *   `trust` is `null` when no trust input is provided.
-
-**B. JSON Schema Validation (High ROI)**
-
-Use the `jsonschema` crate to validate CLI output against the official gleg schemas.
-This mechanically enforces the contract.
-
-*   **Setup**: Copy or symlink `gleg/contracts/spindle/v1/schemas/*.schema.json` into `crates/spindle-cli/tests/schemas/`.
-*   **Test**:
-    ```rust
-    #[test]
-    fn test_query_output_validates_against_schema() {
-        let output = run_spindle_query(...);
-        validate_against_schema(&output, "tests/schemas/spindle.query.v1.schema.json");
-    }
-    ```
-*   **Coverage**:
-    *   `query`: provable, refuted, unknown.
-    *   `requires`: satisfied, unsatisfied.
-    *   (Future) `reason`, `explain`, `why-not`, `capabilities` once schemas exist.
-
-**C. Exit Code Tests**
-
-Create `crates/spindle-cli/tests/exit_code_tests.rs`.
-Verify strict adherence to Section 8 of the contract:
-
-1.  `query` returning `unknown` -> **Exit 0** (Logic outcome, not system failure).
-2.  `requires` returning unsatisfied -> **Exit 0**.
-3.  `explain` on unprovable literal -> **Exit 0** (currently fails with 1).
-4.  Invalid file path / Syntax error -> **Exit 2**.
-5.  Internal panic -> **Exit 3**.
-
-**D. Determinism Tests**
-
-Extend `reason_json_contract_tests.rs` patterns:
-
-1.  **Sorting**: `conclusions`, `solutions`, `facts`, `trust.contributors` must be sorted.
-2.  **Stability**: Run command N times with identical input; assert byte-identical JSON output.
+Keep supplementary tests only for behavior that cannot be represented cleanly in the matrix.
 
 ### 6.2 Test Infrastructure
 

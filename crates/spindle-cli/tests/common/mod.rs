@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use tempfile::NamedTempFile;
 
 /// Get a Command for the spindle binary using non-deprecated cargo_bin_cmd!
 pub fn spindle_cmd() -> Command {
@@ -253,8 +254,20 @@ pub enum ExpectedOutput {
         expected_error_code: Option<&'static str>,
         custom_check: Option<fn(&Value)>,
     },
+    /// Non-JSON case where only process status (and optionally output fragments) matter
+    ExitOnly {
+        stdout_contains: Option<&'static str>,
+        stderr_contains: Option<&'static str>,
+    },
     /// Plain text output
     Text { contains: &'static [&'static str] },
+}
+
+/// Runtime case inputs that need dynamic args (for example temp file paths).
+pub struct MatrixRuntime {
+    pub args: Vec<String>,
+    pub stdin: Option<String>,
+    pub _temp_files: Vec<NamedTempFile>,
 }
 
 /// Matrix test case definition
@@ -265,11 +278,18 @@ pub struct MatrixCase {
     pub stdin: Option<&'static str>,
     pub expected_exit: i32,
     pub expected_output: ExpectedOutput,
+    pub setup: Option<fn() -> MatrixRuntime>,
 }
 
 /// Run a single matrix test case
 pub fn run_matrix_case(case: &MatrixCase) {
-    let (exit_code, stdout, _stderr) = run_with_stdin(case.args, case.stdin);
+    let runtime = case.setup.map(|setup| setup());
+    let (exit_code, stdout, stderr) = if let Some(runtime) = runtime.as_ref() {
+        let args_ref: Vec<&str> = runtime.args.iter().map(String::as_str).collect();
+        run_with_stdin(&args_ref, runtime.stdin.as_deref())
+    } else {
+        run_with_stdin(case.args, case.stdin)
+    };
 
     assert_eq!(
         exit_code, case.expected_exit,
@@ -355,6 +375,27 @@ pub fn run_matrix_case(case: &MatrixCase) {
                 assert!(
                     stdout.contains(expected),
                     "{}: Expected output to contain '{}'",
+                    case.name,
+                    expected
+                );
+            }
+        }
+        ExpectedOutput::ExitOnly {
+            stdout_contains,
+            stderr_contains,
+        } => {
+            if let Some(expected) = stdout_contains {
+                assert!(
+                    stdout.contains(expected),
+                    "{}: Expected stdout to contain '{}'",
+                    case.name,
+                    expected
+                );
+            }
+            if let Some(expected) = stderr_contains {
+                assert!(
+                    stderr.contains(expected),
+                    "{}: Expected stderr to contain '{}'",
                     case.name,
                     expected
                 );

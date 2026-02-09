@@ -3,13 +3,61 @@
 //! Data-driven contract harness that validates real JSON Schema semantics
 //! for every schema-bearing success response and every JSON error envelope.
 
-use serde_json::Value;
 use tempfile::NamedTempFile;
 
 mod common;
-use common::{
-    ExpectedOutput, MatrixCase, run_matrix_case, run_with_stdin, validate_error_envelope,
-};
+use common::{ExpectedOutput, MatrixCase, MatrixRuntime, run_matrix_case};
+
+fn setup_reason_conflicting_sources_case() -> MatrixRuntime {
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    std::fs::write(&temp_file, "(given a)").expect("Failed to write temp file");
+    let file_path = temp_file.path().to_str().unwrap().to_string();
+
+    MatrixRuntime {
+        args: vec![
+            "reason".to_string(),
+            "--json".to_string(),
+            "--stdin".to_string(),
+            file_path,
+        ],
+        stdin: Some("(given a)".to_string()),
+        _temp_files: vec![temp_file],
+    }
+}
+
+fn setup_validate_conflicting_sources_case() -> MatrixRuntime {
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    std::fs::write(&temp_file, "(given a)").expect("Failed to write temp file");
+    let file_path = temp_file.path().to_str().unwrap().to_string();
+
+    MatrixRuntime {
+        args: vec![
+            "--json".to_string(),
+            "validate".to_string(),
+            file_path,
+            "--stdin".to_string(),
+        ],
+        stdin: Some("(given b)".to_string()),
+        _temp_files: vec![temp_file],
+    }
+}
+
+fn setup_stats_conflicting_sources_case() -> MatrixRuntime {
+    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+    std::fs::write(&temp_file, "(given a)").expect("Failed to write temp file");
+    let file_path = temp_file.path().to_str().unwrap().to_string();
+
+    MatrixRuntime {
+        args: vec![
+            "--json".to_string(),
+            "stats".to_string(),
+            file_path,
+            "--stdin".to_string(),
+        ],
+        stdin: Some("(given b)".to_string()),
+        _temp_files: vec![temp_file],
+    }
+}
 
 /// Single source of truth for all matrix test cases
 fn get_matrix_cases() -> Vec<MatrixCase> {
@@ -28,6 +76,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 schema: "reason",
                 custom_check: None,
             },
+            setup: None,
         },
         // query <unknown> --json --stdin (status = unknown)
         MatrixCase {
@@ -48,6 +97,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // query refuted literal
         MatrixCase {
@@ -68,6 +118,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // query with --at should populate evaluated_at
         MatrixCase {
@@ -98,6 +149,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // global --stdin before subcommand should be accepted
         MatrixCase {
@@ -109,6 +161,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 schema: "reason",
                 custom_check: None,
             },
+            setup: None,
         },
         // requires <unsatisfied> --json --stdin (satisfied=false, solutions non-empty)
         MatrixCase {
@@ -132,6 +185,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // explain <unprovable> --json --stdin (proof_tree=null, diagnostics warning)
         MatrixCase {
@@ -159,6 +213,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // why-not <literal> --json --stdin (blocked_by array present)
         MatrixCase {
@@ -168,13 +223,9 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "why_not",
-                custom_check: Some(|json| {
-                    assert!(
-                        json["blocked_by"].is_array(),
-                        "why-not should have blocked_by array"
-                    );
-                }),
+                custom_check: None,
             },
+            setup: None,
         },
         // why-not for a refuted literal should report status=refuted
         MatrixCase {
@@ -191,6 +242,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // capabilities --json (no diagnostics required)
         MatrixCase {
@@ -201,21 +253,10 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "capabilities",
                 custom_check: Some(|json| {
-                    assert!(
-                        json["commands"].is_array(),
-                        "capabilities should have commands array"
-                    );
-                    assert!(
-                        json["features"].is_object(),
-                        "capabilities should have features object"
-                    );
-                    assert!(
-                        json["schemas"].is_object(),
-                        "capabilities should have schemas object"
-                    );
                     assert_eq!(json["features"]["stdin"], true);
                 }),
             },
+            setup: None,
         },
         // ============================================================================
         // Error cases (non-zero, JSON envelope invariants)
@@ -238,6 +279,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     );
                 }),
             },
+            setup: None,
         },
         // reason --json with missing source (exit 2)
         MatrixCase {
@@ -250,10 +292,21 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expected_error_code: Some("MISSING_INPUT_SOURCE"),
                 custom_check: None,
             },
+            setup: None,
         },
         // reason --json --stdin <file> conflicting sources (exit 2)
-        // Note: This test requires a temp file, handled separately
-
+        MatrixCase {
+            name: "reason conflicting sources",
+            args: &[],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::JsonError {
+                expect_schema_version: true,
+                expected_error_code: Some("CONFLICTING_INPUT_SOURCES"),
+                custom_check: None,
+            },
+            setup: Some(setup_reason_conflicting_sources_case),
+        },
         // requires ... --json --max 0 --stdin (exit 2, error.details has argument metadata)
         MatrixCase {
             name: "requires max 0",
@@ -270,6 +323,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                     assert_eq!(details["minimum"], 1);
                 }),
             },
+            setup: None,
         },
         // reason --json --at invalid-time --stdin (exit 2)
         MatrixCase {
@@ -282,11 +336,38 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expected_error_code: Some("INVALID_TIME_FORMAT"),
                 custom_check: None,
             },
+            setup: None,
         },
         // ============================================================================
         // Non-schema command error cases (validate, stats)
         // ============================================================================
 
+        // validate conflicting sources (non-schema command)
+        MatrixCase {
+            name: "validate conflicting sources",
+            args: &[],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::JsonError {
+                expect_schema_version: false,
+                expected_error_code: Some("CONFLICTING_INPUT_SOURCES"),
+                custom_check: None,
+            },
+            setup: Some(setup_validate_conflicting_sources_case),
+        },
+        // stats conflicting sources (non-schema command)
+        MatrixCase {
+            name: "stats conflicting sources",
+            args: &[],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::JsonError {
+                expect_schema_version: false,
+                expected_error_code: Some("CONFLICTING_INPUT_SOURCES"),
+                custom_check: None,
+            },
+            setup: Some(setup_stats_conflicting_sources_case),
+        },
         // Non-schema commands should not have schema_version even with --json
         MatrixCase {
             name: "validate --json with missing source",
@@ -298,6 +379,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expected_error_code: Some("MISSING_INPUT_SOURCE"),
                 custom_check: None,
             },
+            setup: None,
         },
         MatrixCase {
             name: "stats --json with missing source",
@@ -309,6 +391,54 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expected_error_code: Some("MISSING_INPUT_SOURCE"),
                 custom_check: None,
             },
+            setup: None,
+        },
+        // ============================================================================
+        // Exit-code only cases (non-JSON domain outcomes)
+        // ============================================================================
+        MatrixCase {
+            name: "reason invalid file path exits 2",
+            args: &["reason", "/nonexistent/path/that/does/not/exist.dfl"],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::ExitOnly {
+                stdout_contains: None,
+                stderr_contains: None,
+            },
+            setup: None,
+        },
+        MatrixCase {
+            name: "query unknown exits 0 without json",
+            args: &["query", "unknown_literal", "--stdin"],
+            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::ExitOnly {
+                stdout_contains: None,
+                stderr_contains: None,
+            },
+            setup: None,
+        },
+        MatrixCase {
+            name: "requires unsatisfied exits 0 without json",
+            args: &["requires", "(missing)", "--stdin"],
+            stdin: Some("(given a)\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::ExitOnly {
+                stdout_contains: None,
+                stderr_contains: None,
+            },
+            setup: None,
+        },
+        MatrixCase {
+            name: "explain unprovable exits 0 without json",
+            args: &["explain", "(missing)", "--stdin"],
+            stdin: Some("(given a)\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::ExitOnly {
+                stdout_contains: None,
+                stderr_contains: None,
+            },
+            setup: None,
         },
         // ============================================================================
         // Text output cases
@@ -321,6 +451,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_output: ExpectedOutput::Text {
                 contains: &["Commands:", "Features:", "Schema versions:"],
             },
+            setup: None,
         },
     ]
 }
@@ -333,99 +464,6 @@ fn test_matrix_all_cases() {
     for case in &cases {
         run_matrix_case(case);
     }
-}
-
-/// Test conflicting input sources with reason command
-#[test]
-fn test_matrix_reason_conflicting_sources() {
-    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
-    std::fs::write(&temp_file, "(given a)").expect("Failed to write temp file");
-
-    let file_path = temp_file.path().to_str().unwrap();
-    let args: Vec<String> = vec![
-        "reason".to_string(),
-        "--json".to_string(),
-        "--stdin".to_string(),
-        file_path.to_string(),
-    ];
-    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-
-    let (exit_code, stdout, _) = run_with_stdin(&args_ref, Some("(given a)"));
-
-    assert_eq!(
-        exit_code, 2,
-        "reason --json conflicting sources: Expected exit code 2"
-    );
-
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["error"]["code"], "CONFLICTING_INPUT_SOURCES");
-    validate_error_envelope(&json, "reason --json conflicting sources");
-}
-
-/// Test conflicting input sources with validate command
-#[test]
-fn test_matrix_validate_conflicting_sources() {
-    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
-    std::fs::write(&temp_file, "(given a)").expect("Failed to write temp file");
-
-    let file_path = temp_file.path().to_str().unwrap();
-    let args: Vec<String> = vec![
-        "--json".to_string(), // Global --json flag
-        "validate".to_string(),
-        file_path.to_string(),
-        "--stdin".to_string(),
-    ];
-    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-
-    let (exit_code, stdout, _) = run_with_stdin(&args_ref, Some("(given b)"));
-
-    assert_eq!(
-        exit_code, 2,
-        "validate conflicting sources: Expected exit code 2"
-    );
-
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["error"]["code"], "CONFLICTING_INPUT_SOURCES");
-    validate_error_envelope(&json, "validate conflicting sources");
-
-    // Non-schema command errors should not have schema_version
-    assert!(
-        json.get("schema_version").is_none(),
-        "Non-schema command error should not have schema_version"
-    );
-}
-
-/// Test conflicting input sources with stats command
-#[test]
-fn test_matrix_stats_conflicting_sources() {
-    let temp_file = NamedTempFile::new().expect("Failed to create temp file");
-    std::fs::write(&temp_file, "(given a)").expect("Failed to write temp file");
-
-    let file_path = temp_file.path().to_str().unwrap();
-    let args: Vec<String> = vec![
-        "--json".to_string(), // Global --json flag
-        "stats".to_string(),
-        file_path.to_string(),
-        "--stdin".to_string(),
-    ];
-    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-
-    let (exit_code, stdout, _) = run_with_stdin(&args_ref, Some("(given b)"));
-
-    assert_eq!(
-        exit_code, 2,
-        "stats conflicting sources: Expected exit code 2"
-    );
-
-    let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["error"]["code"], "CONFLICTING_INPUT_SOURCES");
-    validate_error_envelope(&json, "stats conflicting sources");
-
-    // Non-schema command errors should not have schema_version
-    assert!(
-        json.get("schema_version").is_none(),
-        "Non-schema command error should not have schema_version"
-    );
 }
 
 /// Test determinism - same input should produce same output
