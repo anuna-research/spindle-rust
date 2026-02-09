@@ -110,11 +110,7 @@ fn extract_fn_name(line: &str) -> Option<String> {
         .take_while(|&c| c.is_alphanumeric() || c == '_')
         .collect();
 
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() { None } else { Some(name) }
 }
 
 /// Check if a line is inside the emit_and_exit function

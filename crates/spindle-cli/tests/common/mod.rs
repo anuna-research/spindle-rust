@@ -1,7 +1,7 @@
 //! Test helpers module for spindle-cli contract tests
 
-use assert_cmd::cargo::cargo_bin_cmd;
 use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;

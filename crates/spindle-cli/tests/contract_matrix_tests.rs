@@ -8,7 +8,7 @@ use tempfile::NamedTempFile;
 
 mod common;
 use common::{
-    run_matrix_case, run_with_stdin, validate_error_envelope, ExpectedOutput, MatrixCase,
+    ExpectedOutput, MatrixCase, run_matrix_case, run_with_stdin, validate_error_envelope,
 };
 
 /// Single source of truth for all matrix test cases

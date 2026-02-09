@@ -243,10 +243,7 @@ fn emit_and_exit(
 
 /// Resolve theory source with mutual exclusivity validation
 /// Returns error if both file and stdin provided, or neither provided
-fn resolve_theory_source(
-    file: Option<&PathBuf>,
-    stdin: bool,
-) -> Result<TheorySource, CliError> {
+fn resolve_theory_source(file: Option<&PathBuf>, stdin: bool) -> Result<TheorySource, CliError> {
     match (file, stdin) {
         (Some(f), true) => Err(CliError::validation(
             "CONFLICTING_INPUT_SOURCES",
@@ -290,9 +287,9 @@ fn load_theory_from_stdin() -> Result<spindle_core::Theory, CliError> {
     use std::io::{self, Read};
 
     let mut content = String::new();
-    io::stdin()
-        .read_to_string(&mut content)
-        .map_err(|e| CliError::validation("STDIN_READ_ERROR", format!("Error reading stdin: {e}")))?;
+    io::stdin().read_to_string(&mut content).map_err(|e| {
+        CliError::validation("STDIN_READ_ERROR", format!("Error reading stdin: {e}"))
+    })?;
     parse_theory_content(&content, None)
 }
 
@@ -309,9 +306,11 @@ fn parse_theory_content(
         || content.trim().starts_with(';');
 
     if is_spl {
-        parse_spl(content).map_err(|e| CliError::parse("SPL_PARSE_ERROR", format!("SPL parse error: {e}")))
+        parse_spl(content)
+            .map_err(|e| CliError::parse("SPL_PARSE_ERROR", format!("SPL parse error: {e}")))
     } else {
-        parse_dfl(content).map_err(|e| CliError::parse("DFL_PARSE_ERROR", format!("DFL parse error: {e}")))
+        parse_dfl(content)
+            .map_err(|e| CliError::parse("DFL_PARSE_ERROR", format!("DFL parse error: {e}")))
     }
 }
 
@@ -593,16 +592,21 @@ fn run_reason(
         ..Default::default()
     };
 
-    let pipeline_result = prepare(&theory, opts)
-        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
+    let pipeline_result = prepare(&theory, opts).map_err(|e| {
+        CliError::execution(
+            "PREPARATION_ERROR",
+            format!("Error during preparation: {e}"),
+        )
+    })?;
 
     let conclusions = if scalable {
         let indexed = spindle_core::index::IndexedTheory::build(&pipeline_result.theory);
         let result = spindle_core::scalable::reason_scalable(&indexed);
         result.to_conclusions(&indexed)
     } else {
-        spindle_core::reason::reason(&pipeline_result.theory)
-            .map_err(|e| CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}")))?
+        spindle_core::reason::reason(&pipeline_result.theory).map_err(|e| {
+            CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
+        })?
     };
 
     if json {
@@ -702,7 +706,10 @@ fn run_stats(file: Option<&PathBuf>, stdin: bool) -> Result<CommandOutput, CliEr
     text.push_str(&format!("    Strict:     {strict}\n"));
     text.push_str(&format!("    Defeasible: {defeasible}\n"));
     text.push_str(&format!("    Defeaters:  {defeaters}\n"));
-    text.push_str(&format!("  Superiorities: {}", theory.superiorities().len()));
+    text.push_str(&format!(
+        "  Superiorities: {}",
+        theory.superiorities().len()
+    ));
 
     Ok(CommandOutput::text(text))
 }
@@ -737,8 +744,12 @@ fn run_query(
         reference_time,
         ..Default::default()
     };
-    let prepared = prepare(&theory, opts)
-        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
+    let prepared = prepare(&theory, opts).map_err(|e| {
+        CliError::execution(
+            "PREPARATION_ERROR",
+            format!("Error during preparation: {e}"),
+        )
+    })?;
 
     let lit = parse_literal_arg(literal)?;
     let result = query(&prepared.theory, &lit)
@@ -812,8 +823,12 @@ fn run_explain(
         reference_time,
         ..Default::default()
     };
-    let prepared = prepare(&theory, opts)
-        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
+    let prepared = prepare(&theory, opts).map_err(|e| {
+        CliError::execution(
+            "PREPARATION_ERROR",
+            format!("Error during preparation: {e}"),
+        )
+    })?;
 
     let lit = parse_literal_arg(literal)?;
 
@@ -914,8 +929,12 @@ fn run_why_not(
         reference_time,
         ..Default::default()
     };
-    let prepared = prepare(&theory, opts)
-        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
+    let prepared = prepare(&theory, opts).map_err(|e| {
+        CliError::execution(
+            "PREPARATION_ERROR",
+            format!("Error during preparation: {e}"),
+        )
+    })?;
 
     let lit = parse_literal_arg(literal)?;
 
@@ -929,8 +948,9 @@ fn run_why_not(
         QueryStatus::Unknown => "unknown",
     };
 
-    let result = why_not(&prepared.theory, &lit)
-        .map_err(|e| CliError::execution("WHY_NOT_ERROR", format!("Error checking why-not: {e}")))?;
+    let result = why_not(&prepared.theory, &lit).map_err(|e| {
+        CliError::execution("WHY_NOT_ERROR", format!("Error checking why-not: {e}"))
+    })?;
 
     if json {
         let blockers: Vec<_> = result
@@ -998,15 +1018,15 @@ fn run_requires(
 ) -> Result<CommandOutput, CliError> {
     // Validate max parameter - must be at least 1 to satisfy contract
     if max == 0 {
-        return Err(CliError::validation(
-            "INVALID_ARGUMENT",
-            "--max must be at least 1",
-        )
-        .with_details(serde_json::json!({
-            "argument": "--max",
-            "provided": 0,
-            "minimum": 1
-        })));
+        return Err(
+            CliError::validation("INVALID_ARGUMENT", "--max must be at least 1").with_details(
+                serde_json::json!({
+                    "argument": "--max",
+                    "provided": 0,
+                    "minimum": 1
+                }),
+            ),
+        );
     }
 
     let source = resolve_theory_source(file, stdin)?;
@@ -1016,13 +1036,21 @@ fn run_requires(
         reference_time,
         ..Default::default()
     };
-    let prepared = prepare(&theory, opts)
-        .map_err(|e| CliError::execution("PREPARATION_ERROR", format!("Error during preparation: {e}")))?;
+    let prepared = prepare(&theory, opts).map_err(|e| {
+        CliError::execution(
+            "PREPARATION_ERROR",
+            format!("Error during preparation: {e}"),
+        )
+    })?;
 
     let lit = parse_literal_arg(literal)?;
     let abduce_limit = if json { max.saturating_add(1) } else { max };
-    let result = abduce(&prepared.theory, &lit, abduce_limit)
-        .map_err(|e| CliError::execution("ABDUCTION_ERROR", format!("Error finding requirements: {e}")))?;
+    let result = abduce(&prepared.theory, &lit, abduce_limit).map_err(|e| {
+        CliError::execution(
+            "ABDUCTION_ERROR",
+            format!("Error finding requirements: {e}"),
+        )
+    })?;
 
     if json {
         // Per contract §6.3: satisfied=true => solutions=[], satisfied=false => solutions non-empty
@@ -1176,29 +1204,33 @@ fn main() {
     let cli = Cli::parse();
 
     // Determine schema version and json flag based on the command before we move out of cli.command
-    let (schema_version, json_flag) = cli.command.as_ref().map(|cmd| {
-        let sv = match cmd {
-            Commands::Reason { .. } => Some("spindle.reason.v1"),
-            Commands::Query { .. } => Some("spindle.query.v1"),
-            Commands::Explain { .. } => Some("spindle.explain.v1"),
-            Commands::WhyNot { .. } => Some("spindle.why_not.v1"),
-            Commands::Requires { .. } => Some("spindle.requires.v1"),
-            Commands::Validate { .. } | Commands::Stats { .. } => None, // Non-schema commands
-            Commands::Capabilities { .. } => Some("spindle.capabilities.v1"),
-        };
-        
-        let jf = match cmd {
-            Commands::Reason { json, .. } => *json,
-            Commands::Query { json, .. } => *json,
-            Commands::Explain { json, .. } => *json,
-            Commands::WhyNot { json, .. } => *json,
-            Commands::Requires { json, .. } => *json,
-            Commands::Capabilities { json, .. } => *json,
-            _ => cli.json,
-        };
-        
-        (sv, jf)
-    }).unwrap_or((None, cli.json));
+    let (schema_version, json_flag) = cli
+        .command
+        .as_ref()
+        .map(|cmd| {
+            let sv = match cmd {
+                Commands::Reason { .. } => Some("spindle.reason.v1"),
+                Commands::Query { .. } => Some("spindle.query.v1"),
+                Commands::Explain { .. } => Some("spindle.explain.v1"),
+                Commands::WhyNot { .. } => Some("spindle.why_not.v1"),
+                Commands::Requires { .. } => Some("spindle.requires.v1"),
+                Commands::Validate { .. } | Commands::Stats { .. } => None, // Non-schema commands
+                Commands::Capabilities { .. } => Some("spindle.capabilities.v1"),
+            };
+
+            let jf = match cmd {
+                Commands::Reason { json, .. } => *json,
+                Commands::Query { json, .. } => *json,
+                Commands::Explain { json, .. } => *json,
+                Commands::WhyNot { json, .. } => *json,
+                Commands::Requires { json, .. } => *json,
+                Commands::Capabilities { json, .. } => *json,
+                _ => cli.json,
+            };
+
+            (sv, jf)
+        })
+        .unwrap_or((None, cli.json));
 
     // Parse reference time if provided (after determining json_flag so errors use correct format)
     let reference_time = if let Some(ref s) = cli.at {
@@ -1225,34 +1257,62 @@ fn main() {
             scalable,
             positive,
             json: _,
-        }) => run_reason(file.as_ref(), scalable, positive, json_flag, cli.stdin, reference_time),
-        Some(Commands::Validate { file, stdin }) => {
-            run_validate(file.as_ref(), stdin)
-        }
-        Some(Commands::Stats { file, stdin }) => {
-            run_stats(file.as_ref(), stdin)
-        }
+        }) => run_reason(
+            file.as_ref(),
+            scalable,
+            positive,
+            json_flag,
+            cli.stdin,
+            reference_time,
+        ),
+        Some(Commands::Validate { file, stdin }) => run_validate(file.as_ref(), stdin),
+        Some(Commands::Stats { file, stdin }) => run_stats(file.as_ref(), stdin),
         Some(Commands::Query {
             literal,
             file,
             json: _,
-        }) => run_query(file.as_ref(), &literal, json_flag, cli.stdin, reference_time),
+        }) => run_query(
+            file.as_ref(),
+            &literal,
+            json_flag,
+            cli.stdin,
+            reference_time,
+        ),
         Some(Commands::Explain {
             literal,
             file,
             json: _,
-        }) => run_explain(file.as_ref(), &literal, json_flag, cli.stdin, reference_time),
+        }) => run_explain(
+            file.as_ref(),
+            &literal,
+            json_flag,
+            cli.stdin,
+            reference_time,
+        ),
         Some(Commands::WhyNot {
             literal,
             file,
             json: _,
-        }) => run_why_not(file.as_ref(), &literal, json_flag, cli.stdin, reference_time),
+        }) => run_why_not(
+            file.as_ref(),
+            &literal,
+            json_flag,
+            cli.stdin,
+            reference_time,
+        ),
         Some(Commands::Requires {
             literal,
             file,
             max,
             json: _,
-        }) => run_requires(file.as_ref(), &literal, max, json_flag, cli.stdin, reference_time),
+        }) => run_requires(
+            file.as_ref(),
+            &literal,
+            max,
+            json_flag,
+            cli.stdin,
+            reference_time,
+        ),
         Some(Commands::Capabilities { json: _ }) => run_capabilities(json_flag),
         None => {
             // Handle legacy positional form
@@ -1262,9 +1322,23 @@ fn main() {
                     "Cannot specify both a file and --stdin",
                 ))
             } else if cli.stdin {
-                run_reason(None, cli.scalable, cli.positive, json_flag, true, reference_time)
+                run_reason(
+                    None,
+                    cli.scalable,
+                    cli.positive,
+                    json_flag,
+                    true,
+                    reference_time,
+                )
             } else if let Some(ref file) = cli.input {
-                run_reason(Some(file), cli.scalable, cli.positive, json_flag, false, reference_time)
+                run_reason(
+                    Some(file),
+                    cli.scalable,
+                    cli.positive,
+                    json_flag,
+                    false,
+                    reference_time,
+                )
             } else {
                 let help_text = r#"Spindle v0.1.0 - Defeasible Logic Reasoning Engine
 Ported from SPINdle-Racket v1.7.0
