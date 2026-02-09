@@ -4,7 +4,7 @@ when:
 
 steps:
   - name: build-executables
-    image: rust:1.84-bookworm
+    image: rust:1.85-bookworm
     commands:
       # Install system dependencies for cross-compilation
       - apt-get update && apt-get install -y zip gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
