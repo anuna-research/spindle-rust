@@ -508,6 +508,26 @@ r2: plane => flies
 }
 
 #[test]
+fn test_requires_with_max_respected_in_text_output() {
+    let content = r#"
+r1: bird => flies
+r2: plane => flies
+"#;
+    let (_dir, path) = setup_theory_file(content, "dfl");
+
+    spindle()
+        .arg("requires")
+        .arg("flies")
+        .arg(&path)
+        .arg("--max")
+        .arg("1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("  1."))
+        .stdout(predicate::str::contains("\n  2.").not());
+}
+
+#[test]
 fn test_requires_json() {
     let content = r#"
 r1: bird => flies

@@ -311,7 +311,14 @@ fn main() {
             run_capabilities(json);
         }
         None => {
+            // Check for mutual exclusivity between --stdin and file input
+            if cli.stdin && cli.input.is_some() {
+                eprintln!("Error: cannot specify both a file and --stdin");
+                std::process::exit(2);
+            }
+            
             if cli.stdin {
+                // When --stdin is used without a file
                 run_reason(None, cli.scalable, cli.positive, cli.json, true, reference_time);
             } else if let Some(ref file) = cli.input {
                 run_reason(Some(file), cli.scalable, cli.positive, cli.json, false, reference_time);
@@ -969,8 +976,8 @@ fn run_requires(
     };
 
     let lit = parse_literal_arg(literal);
-    let probe_max = max.saturating_add(1);
-    let result = match abduce(&prepared.theory, &lit, probe_max) {
+    let abduce_limit = if json { max.saturating_add(1) } else { max };
+    let result = match abduce(&prepared.theory, &lit, abduce_limit) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error finding requirements: {e}");
