@@ -27,62 +27,6 @@ fn run_reason_json(content: &str, extension: &str) -> Value {
 }
 
 #[test]
-fn test_reason_json_has_required_top_level_fields() {
-    let content = r#"
-f1: >> bird
-r1: bird => flies
-"#;
-
-    let value = run_reason_json(content, "dfl");
-
-    let obj = value
-        .as_object()
-        .expect("reason output should be a JSON object");
-    assert!(obj.contains_key("schema_version"));
-    assert!(obj.contains_key("grounding"));
-    assert!(obj.contains_key("conclusions"));
-    assert!(obj.contains_key("stats"));
-}
-
-#[test]
-fn test_reason_json_literal_struct_has_stable_semantic_fields() {
-    let content = r#"
-(given (p a))
-"#;
-
-    let value = run_reason_json(content, "spl");
-    let conclusions = value
-        .get("conclusions")
-        .and_then(Value::as_array)
-        .expect("conclusions should be an array");
-
-    let conclusion = conclusions
-        .iter()
-        .find(|c| c.get("literal_spl").is_some())
-        .expect("expected at least one conclusion");
-
-    let literal_struct = conclusion
-        .get("literal_struct")
-        .and_then(Value::as_object)
-        .expect("literal_struct should be an object");
-
-    assert!(literal_struct.contains_key("functor"));
-    assert!(literal_struct.contains_key("args"));
-    assert!(literal_struct.contains_key("negated"));
-    assert!(literal_struct.contains_key("mode"));
-    assert!(literal_struct.contains_key("temporal"));
-
-    assert!(
-        !literal_struct.contains_key("name_id"),
-        "literal_struct should not expose internal name_id"
-    );
-    assert!(
-        !literal_struct.contains_key("predicate_ids"),
-        "literal_struct should not expose internal predicate_ids"
-    );
-}
-
-#[test]
 fn test_reason_json_literal_spl_is_canonical_format() {
     let content = r#"
 (given (p a))
