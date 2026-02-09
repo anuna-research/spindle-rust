@@ -113,11 +113,13 @@ enum CommandOutput {
 }
 
 impl CommandOutput {
-    fn json(value: impl serde::Serialize) -> Self {
-        match serde_json::to_value(value) {
-            Ok(v) => Self::Json(v),
-            Err(e) => Self::Text(format!("JSON serialization error: {e}")),
-        }
+    fn json(value: impl serde::Serialize) -> Result<Self, CliError> {
+        serde_json::to_value(value).map(Self::Json).map_err(|e| {
+            CliError::execution(
+                "JSON_SERIALIZATION_ERROR",
+                format!("Failed to serialize JSON response: {e}"),
+            )
+        })
     }
 
     fn text(s: impl Into<String>) -> Self {
@@ -177,59 +179,120 @@ fn emit_and_exit(
     schema_version: Option<&str>,
     json: bool,
 ) -> ! {
-    match result {
-        Ok(output) => {
-            match output {
-                CommandOutput::Json(value) => {
-                    println!("{}", serde_json::to_string_pretty(&value).unwrap());
-                }
-                CommandOutput::Text(text) => {
-                    println!("{text}");
-                }
-            }
-            std::process::exit(0);
+    fn print_json_error_envelope(err: &CliError, schema_version: Option<&str>) {
+        let mut envelope = serde_json::Map::new();
+
+        if let Some(sv) = schema_version {
+            envelope.insert(
+                "schema_version".to_string(),
+                serde_json::Value::String(sv.to_string()),
+            );
         }
+
+        let mut error_obj = serde_json::Map::new();
+        error_obj.insert(
+            "code".to_string(),
+            serde_json::Value::String(err.code.clone()),
+        );
+        error_obj.insert(
+            "message".to_string(),
+            serde_json::Value::String(err.message.clone()),
+        );
+        error_obj.insert("details".to_string(), err.details.clone());
+        envelope.insert("error".to_string(), serde_json::Value::Object(error_obj));
+
+        let diagnostics: Vec<serde_json::Value> = err
+            .diagnostics
+            .iter()
+            .map(|d| {
+                serde_json::to_value(d).unwrap_or_else(|_| {
+                    serde_json::json!({
+                        "severity": "error",
+                        "code": "DIAGNOSTIC_SERIALIZATION_ERROR",
+                        "message": "Failed to serialize diagnostic"
+                    })
+                })
+            })
+            .collect();
+        envelope.insert(
+            "diagnostics".to_string(),
+            serde_json::Value::Array(diagnostics),
+        );
+
+        match serde_json::to_string_pretty(&envelope) {
+            Ok(serialized) => println!("{serialized}"),
+            Err(_) => {
+                let mut fallback = serde_json::json!({
+                    "error": {
+                        "code": "JSON_SERIALIZATION_ERROR",
+                        "message": "Failed to serialize JSON error envelope",
+                        "details": {}
+                    },
+                    "diagnostics": [{
+                        "severity": "error",
+                        "code": "JSON_SERIALIZATION_ERROR",
+                        "message": "Failed to serialize JSON error envelope"
+                    }]
+                });
+                if let Some(sv) = schema_version {
+                    fallback["schema_version"] = serde_json::Value::String(sv.to_string());
+                }
+                let fallback_str = serde_json::to_string(&fallback).unwrap_or_else(|_| {
+                    "{\"error\":{\"code\":\"JSON_SERIALIZATION_ERROR\",\"message\":\"Failed to serialize JSON error envelope\",\"details\":{}},\"diagnostics\":[]}".to_string()
+                });
+                println!("{fallback_str}");
+            }
+        }
+    }
+
+    fn print_non_json_error(err: &CliError) {
+        eprintln!("Error: {}", err.message);
+        if let Some(hint) = err.details.get("hint").and_then(|v| v.as_str()) {
+            eprintln!("Hint: {hint}");
+        }
+    }
+
+    match result {
+        Ok(output) => match output {
+            CommandOutput::Json(value) => match serde_json::to_string_pretty(&value) {
+                Ok(serialized) => {
+                    println!("{serialized}");
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    let err = CliError::execution(
+                        "JSON_SERIALIZATION_ERROR",
+                        format!("Failed to serialize successful JSON response: {e}"),
+                    );
+                    if json {
+                        print_json_error_envelope(&err, schema_version);
+                    } else {
+                        print_non_json_error(&err);
+                    }
+                    std::process::exit(err.exit_code);
+                }
+            },
+            CommandOutput::Text(text) => {
+                if json {
+                    let err = CliError::execution(
+                        "JSON_OUTPUT_EXPECTED",
+                        "Expected JSON output but command returned text",
+                    )
+                    .with_details(serde_json::json!({
+                        "hint": "This is an internal CLI bug. Please report it."
+                    }));
+                    print_json_error_envelope(&err, schema_version);
+                    std::process::exit(err.exit_code);
+                }
+                println!("{text}");
+                std::process::exit(0);
+            }
+        },
         Err(err) => {
             if json {
-                // Build JSON error envelope per contract §8.3
-                let mut envelope = serde_json::Map::new();
-
-                // schema_version if provided
-                if let Some(sv) = schema_version {
-                    envelope.insert(
-                        "schema_version".to_string(),
-                        serde_json::Value::String(sv.to_string()),
-                    );
-                }
-
-                // error object with code, message, details (per contract §8.3)
-                let mut error_obj = serde_json::Map::new();
-                error_obj.insert(
-                    "code".to_string(),
-                    serde_json::Value::String(err.code.clone()),
-                );
-                error_obj.insert(
-                    "message".to_string(),
-                    serde_json::Value::String(err.message.clone()),
-                );
-                // details MUST be present and be an object (per contract §8.3)
-                error_obj.insert("details".to_string(), err.details.clone());
-                envelope.insert("error".to_string(), serde_json::Value::Object(error_obj));
-
-                // diagnostics always present (per contract §8.3)
-                let diagnostics: Vec<serde_json::Value> = err
-                    .diagnostics
-                    .iter()
-                    .map(|d| serde_json::to_value(d).unwrap())
-                    .collect();
-                envelope.insert(
-                    "diagnostics".to_string(),
-                    serde_json::Value::Array(diagnostics),
-                );
-
-                println!("{}", serde_json::to_string_pretty(&envelope).unwrap());
+                print_json_error_envelope(&err, schema_version);
             } else {
-                eprintln!("Error: {}", err.message);
+                print_non_json_error(&err);
             }
             std::process::exit(err.exit_code);
         }
@@ -251,7 +314,8 @@ fn resolve_theory_source(file: Option<&PathBuf>, stdin: bool) -> Result<TheorySo
         )
         .with_details(serde_json::json!({
             "file": f.to_string_lossy().to_string(),
-            "stdin": true
+            "stdin": true,
+            "hint": "Use either a file path or --stdin, but not both."
         }))),
         (Some(f), false) => Ok(TheorySource::File(f.clone())),
         (None, true) => Ok(TheorySource::Stdin),
@@ -645,7 +709,7 @@ fn run_reason(
             }),
         };
 
-        Ok(CommandOutput::json(output))
+        CommandOutput::json(output)
     } else {
         let mut text = String::new();
         text.push_str("Conclusions:\n\n");
@@ -774,7 +838,7 @@ fn run_query(
             diagnostics: vec![],
         };
 
-        Ok(CommandOutput::json(output))
+        CommandOutput::json(output)
     } else {
         let text = match result.status {
             QueryStatus::Provable => {
@@ -854,7 +918,7 @@ fn run_explain(
                     trust: None,
                     diagnostics: vec![],
                 };
-                Ok(CommandOutput::json(output))
+                CommandOutput::json(output)
             } else {
                 Ok(CommandOutput::text(explanation.to_natural_language()))
             }
@@ -877,7 +941,7 @@ fn run_explain(
                     trust: None,
                     diagnostics,
                 };
-                Ok(CommandOutput::json(output))
+                CommandOutput::json(output)
             } else {
                 let text = format!("{lit} is not provable.\nUse 'spindle why-not' to see why.");
                 Ok(CommandOutput::text(text))
@@ -972,7 +1036,7 @@ fn run_why_not(
             trust: None,
             diagnostics: vec![],
         };
-        Ok(CommandOutput::json(output))
+        CommandOutput::json(output)
     } else {
         Ok(CommandOutput::text(format!("{result}")))
     }
@@ -1110,7 +1174,7 @@ fn run_requires(
             diagnostics,
         };
 
-        Ok(CommandOutput::json(output))
+        CommandOutput::json(output)
     } else {
         Ok(CommandOutput::text(format!("{result}")))
     }
@@ -1174,7 +1238,7 @@ fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
                 why_not: "spindle.why_not.v1".to_string(),
             },
         };
-        Ok(CommandOutput::json(output))
+        CommandOutput::json(output)
     } else {
         let mut text = String::new();
         text.push_str("Spindle Capabilities:\n\n");
@@ -1264,8 +1328,8 @@ fn main() {
             cli.stdin,
             reference_time,
         ),
-        Some(Commands::Validate { file, stdin }) => run_validate(file.as_ref(), stdin),
-        Some(Commands::Stats { file, stdin }) => run_stats(file.as_ref(), stdin),
+        Some(Commands::Validate { file, stdin }) => run_validate(file.as_ref(), stdin || cli.stdin),
+        Some(Commands::Stats { file, stdin }) => run_stats(file.as_ref(), stdin || cli.stdin),
         Some(Commands::Query {
             literal,
             file,
