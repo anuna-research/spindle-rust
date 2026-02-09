@@ -724,10 +724,9 @@ fn test_stdin_basic_reason() {
 }
 
 #[test]
-fn test_stdin_and_file_reason_warns_and_uses_stdin() {
+fn test_stdin_and_file_reason_fails_validation() {
     // Per SPINDLE-CONTRACT.md §5.1: exactly one theory source per invocation.
-    // For `reason`, file is optional so --stdin alone works.
-    // If both are provided, stdin takes priority with a warning.
+    // If both are provided, command must fail with a validation error.
     let content = r#"
 f1: >> bird
 r1: bird => flies
@@ -743,16 +742,16 @@ r1: bird => flies
         .output()
         .expect("Failed to execute command");
 
-    assert!(
-        output.status.success(),
-        "reason with both file and --stdin should still succeed (stdin wins): stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "reason with both file and --stdin should fail with exit code 2"
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("ignoring file"),
-        "Should warn about ignoring the file argument, got stderr: {}",
+        stderr.contains("cannot specify both file"),
+        "Should report source conflict, got stderr: {}",
         stderr
     );
 }
@@ -779,6 +778,27 @@ fn test_stdin_query_with_placeholder() {
     let json: Value = serde_json::from_slice(&output.stdout).expect("Failed to parse JSON output");
     validate_command_output(&json, "query");
     assert_eq!(json["status"], "provable");
+}
+
+#[test]
+fn test_global_stdin_before_reason_subcommand_works() {
+    // --stdin is global and should satisfy reason's missing file case.
+    let output = spindle()
+        .arg("--stdin")
+        .arg("reason")
+        .arg("--json")
+        .write_stdin("f1: >> bird\nr1: bird => flies\n")
+        .output()
+        .expect("Failed to execute command");
+
+    assert!(
+        output.status.success(),
+        "global --stdin before reason should succeed: stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("Failed to parse JSON output");
+    validate_command_output(&json, "reason");
 }
 
 #[test]
