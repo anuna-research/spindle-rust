@@ -2,12 +2,12 @@
 
 ## 1. Purpose and Audience
 
-This is the authoritative contract for data exchanged between gleg and spindle.
+This is the authoritative contract for data exchanged between spindle and its consumers.
 
 Audience:
 
 1. Spindle maintainers implementing CLI/schema behavior.
-2. gleg maintainers consuming spindle CLI outputs.
+2. Maintainers consuming spindle CLI outputs.
 
 This document is normative unless marked otherwise.
 
@@ -24,7 +24,7 @@ In scope:
 Out of scope:
 
 1. Spindle internal implementation design details.
-2. gleg workflow policy (including verification gating).
+2. Consumer workflow policy (including verification gating).
 
 ## 3. Core Semantics (Normative)
 

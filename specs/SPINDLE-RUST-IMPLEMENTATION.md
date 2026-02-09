@@ -1,4 +1,4 @@
-# Spindle-Rust Implementation Plan for gleg Contract
+# Spindle-Rust Implementation Plan for the v1 Contract
 
 ## 1. Purpose and Audience
 
@@ -162,6 +162,6 @@ This is the anti-whackamole baseline. Contract changes are not complete until al
 
 ## 7. Non-Goals in This Plan
 
-1. gleg workflow verification/gating logic.
+1. Consumer workflow verification/gating logic.
 2. UI semantics for pending/verified state.
-3. gleg adapter throw/diagnostic policy details (covered in gleg doc).
+3. Downstream adapter throw/diagnostic policy details.

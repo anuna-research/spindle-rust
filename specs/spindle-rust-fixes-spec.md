@@ -3,7 +3,7 @@
 **Status:** Draft (proposed)  
 **Primary drivers:** correctness, spec/doc alignment, integrator ergonomics  
 **Scope:** `spindle-core`, `spindle-parser`, `spindle-cli`, `spindle-wasm`  
-**Context:** Issues surfaced while planning integration into `../gleg` + cross-checking `../famfamfamfam`.
+**Context:** Issues surfaced while planning external workflow integration + cross-checking related implementations.
 
 ---
 
@@ -334,7 +334,7 @@ Add `reference_time` to `prepare()` / public APIs so callers can ask “what is 
   - A rule can only derive a **head** literal that is active at `t` (inactive head literals are ignored at that timepoint).
   - Conflicts/defeat only apply between complements that are both active at `t`.
 - This yields correct workflow behavior for “overlap ⇒ conflict / disjoint ⇒ distinct evidence” *at a timepoint*, without needing interval unions/splitting.
-- This matches workflow engines that already carry an explicit `reference_time` (e.g. `../gleg/specs/WORKFLOW-ENGINE-SPEC.md:78`).
+- This matches workflow engines that already carry an explicit `reference_time`.
 
 **Phase T2 (follow-on RFC): Interval-aware inference**
 If/when needed for doc goals (“derive temporally bounded conclusions, propagate intersections, overlap-gate conflicts across intervals”), implement interval-aware propagation:

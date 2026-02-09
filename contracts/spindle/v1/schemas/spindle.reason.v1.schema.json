@@ -1,6 +1,6 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"$id": "https://gleg.local/specs/schemas/spindle.reason.v1.schema.json",
+	"$id": "https://spindle.local/specs/schemas/spindle.reason.v1.schema.json",
 	"title": "spindle.reason.v1",
 	"type": "object",
 	"additionalProperties": false,
