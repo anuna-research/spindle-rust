@@ -10,7 +10,7 @@ use chrono::DateTime;
 use clap::{Parser, Subcommand};
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
-use spindle_core::literal::{Literal, LiteralStruct};
+use spindle_core::literal::Literal;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{QueryStatus, abduce, query, why_not};
 use spindle_core::temporal::TimePoint;
@@ -44,14 +44,18 @@ struct Cli {
     /// Reference time for "as-of" reasoning (ISO 8601)
     #[arg(long, global = true)]
     at: Option<String>,
+
+    /// Read theory from stdin
+    #[arg(long, global = true)]
+    stdin: bool,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Show reasoning conclusions from a theory file
     Reason {
-        /// Input file
-        file: PathBuf,
+        /// Input file (or use --stdin)
+        file: Option<PathBuf>,
         /// Use scalable mode
         #[arg(long)]
         scalable: bool,
@@ -61,6 +65,9 @@ enum Commands {
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Validate a theory file
     Validate {
@@ -74,38 +81,47 @@ enum Commands {
     },
     /// Query if a literal holds in the theory
     Query {
-        /// Input file
-        file: PathBuf,
+        /// Input file (or use --stdin)
+        file: Option<PathBuf>,
         /// Literal to query
         literal: String,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Explain why a conclusion holds
     Explain {
-        /// Input file
-        file: PathBuf,
+        /// Input file (or use --stdin)
+        file: Option<PathBuf>,
         /// Literal to explain
         literal: String,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Explain why a conclusion does NOT hold
     WhyNot {
-        /// Input file
-        file: PathBuf,
+        /// Input file (or use --stdin)
+        file: Option<PathBuf>,
         /// Literal to check
         literal: String,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Find facts needed to derive a literal
     Requires {
-        /// Input file
-        file: PathBuf,
+        /// Input file (or use --stdin)
+        file: Option<PathBuf>,
         /// Goal literal
         literal: String,
         /// Max solutions
@@ -114,6 +130,9 @@ enum Commands {
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+        /// Read theory from stdin
+        #[arg(long)]
+        stdin: bool,
     },
     /// Show spindle capabilities
     Capabilities {
@@ -169,6 +188,73 @@ struct TrustContributor {
     impact: f64,
 }
 
+// =============================================================================
+// CLI-specific JSON structs for contract-compliant serialization
+// These convert core types to schema-compliant JSON (e.g., NegInf/PosInf -> null)
+// =============================================================================
+
+/// JSON-serializable literal structure (contract-compliant)
+#[derive(serde::Serialize)]
+struct LiteralStructJson {
+    mode: ModeJson,
+    negated: bool,
+    functor: String,
+    args: Vec<String>,
+    temporal: TemporalJson,
+}
+
+impl From<&Literal> for LiteralStructJson {
+    fn from(literal: &Literal) -> Self {
+        Self {
+            mode: ModeJson::from(&literal.mode),
+            negated: literal.negation,
+            functor: literal.name().to_string(),
+            args: literal.predicates().iter().map(|s| s.to_string()).collect(),
+            temporal: TemporalJson::from(&literal.temporal),
+        }
+    }
+}
+
+/// JSON-serializable mode structure
+#[derive(serde::Serialize)]
+struct ModeJson {
+    name: Option<String>,
+    negation: bool,
+}
+
+impl From<&spindle_core::mode::Mode> for ModeJson {
+    fn from(mode: &spindle_core::mode::Mode) -> Self {
+        Self {
+            name: mode.name.clone(),
+            negation: mode.negation,
+        }
+    }
+}
+
+/// JSON-serializable temporal structure
+/// Maps NegInf/PosInf to null per contract schema
+#[derive(serde::Serialize)]
+struct TemporalJson {
+    start: Option<i64>,
+    end: Option<i64>,
+}
+
+impl From<&spindle_core::temporal::Temporal> for TemporalJson {
+    fn from(temporal: &spindle_core::temporal::Temporal) -> Self {
+        use spindle_core::temporal::TimePoint;
+        Self {
+            start: match temporal.start {
+                TimePoint::Moment(v) => Some(v),
+                TimePoint::NegInf | TimePoint::PosInf => None,
+            },
+            end: match temporal.end {
+                TimePoint::Moment(v) => Some(v),
+                TimePoint::NegInf | TimePoint::PosInf => None,
+            },
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -191,8 +277,9 @@ fn main() {
             scalable,
             positive,
             json,
+            stdin,
         }) => {
-            run_reason(&file, scalable, positive, json, reference_time);
+            run_reason(file.as_ref(), scalable, positive, json, stdin, reference_time);
         }
         Some(Commands::Validate { file }) => {
             run_validate(&file);
@@ -204,37 +291,43 @@ fn main() {
             file,
             literal,
             json,
+            stdin,
         }) => {
-            run_query(&file, &literal, json, reference_time);
+            run_query(file.as_ref(), &literal, json, stdin, reference_time);
         }
         Some(Commands::Explain {
             file,
             literal,
             json,
+            stdin,
         }) => {
-            run_explain(&file, &literal, json, reference_time);
+            run_explain(file.as_ref(), &literal, json, stdin, reference_time);
         }
         Some(Commands::WhyNot {
             file,
             literal,
             json,
+            stdin,
         }) => {
-            run_why_not(&file, &literal, json, reference_time);
+            run_why_not(file.as_ref(), &literal, json, stdin, reference_time);
         }
         Some(Commands::Requires {
             file,
             literal,
             max,
             json,
+            stdin,
         }) => {
-            run_requires(&file, &literal, max, json, reference_time);
+            run_requires(file.as_ref(), &literal, max, json, stdin, reference_time);
         }
         Some(Commands::Capabilities { json }) => {
             run_capabilities(json);
         }
         None => {
-            if let Some(file) = cli.input {
-                run_reason(&file, cli.scalable, cli.positive, cli.json, reference_time);
+            if cli.stdin {
+                run_reason(None, cli.scalable, cli.positive, cli.json, true, reference_time);
+            } else if let Some(ref file) = cli.input {
+                run_reason(Some(file), cli.scalable, cli.positive, cli.json, false, reference_time);
             } else {
                 println!("Spindle v0.1.0 - Defeasible Logic Reasoning Engine");
                 println!("Ported from SPINdle-Racket v1.7.0");
@@ -266,7 +359,6 @@ fn load_theory_from_file(file: &PathBuf) -> spindle_core::Theory {
     parse_theory_content(&content, Some(file))
 }
 
-#[allow(dead_code)]
 fn load_theory_from_stdin() -> spindle_core::Theory {
     use std::io::{self, Read};
     
@@ -276,6 +368,22 @@ fn load_theory_from_stdin() -> spindle_core::Theory {
         std::process::exit(2);
     }
     parse_theory_content(&content, None)
+}
+
+/// Load theory from file or stdin with mutual exclusivity check
+fn load_theory(file: Option<&PathBuf>, stdin: bool) -> spindle_core::Theory {
+    match (file, stdin) {
+        (Some(_), true) => {
+            eprintln!("Error: cannot specify both a file and --stdin");
+            std::process::exit(2);
+        }
+        (Some(f), false) => load_theory_from_file(f),
+        (None, true) => load_theory_from_stdin(),
+        (None, false) => {
+            eprintln!("Error: must specify either a file or --stdin");
+            std::process::exit(2);
+        }
+    }
 }
 
 fn parse_theory_content(content: &str, file: Option<&PathBuf>) -> spindle_core::Theory {
@@ -359,7 +467,7 @@ struct GroundingStats {
 struct ConclusionStruct {
     conclusion_type: String,
     literal_spl: String,
-    literal_struct: LiteralStruct,
+    literal_struct: LiteralStructJson,
     positive: bool,
 }
 
@@ -370,13 +478,14 @@ struct TheoryStats {
 }
 
 fn run_reason(
-    file: &PathBuf,
+    file: Option<&PathBuf>,
     scalable: bool,
     positive_only: bool,
     json_output: bool,
+    stdin: bool,
     reference_time: Option<TimePoint>,
 ) {
-    let theory = load_theory_from_file(file);
+    let theory = load_theory(file, stdin);
 
     let opts = PrepareOptions {
         reference_time,
@@ -412,7 +521,7 @@ fn run_reason(
             .map(|c| ConclusionStruct {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
                 literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStruct::from(&c.literal),
+                literal_struct: LiteralStructJson::from(&c.literal),
                 positive: c.is_positive(),
             })
             .collect();
@@ -508,7 +617,7 @@ fn run_stats(file: &PathBuf) {
 struct QueryOutput {
     schema_version: String,
     literal_spl: String,
-    literal_struct: LiteralStruct,
+    literal_struct: LiteralStructJson,
     status: String,
     conclusion_type: Option<String>,
     evaluated_at: Option<String>,
@@ -517,12 +626,13 @@ struct QueryOutput {
 }
 
 fn run_query(
-    file: &PathBuf,
+    file: Option<&PathBuf>,
     literal: &str,
     json: bool,
+    stdin: bool,
     reference_time: Option<TimePoint>,
 ) {
-    let theory = load_theory_from_file(file);
+    let theory = load_theory(file, stdin);
 
     let opts = PrepareOptions {
         reference_time,
@@ -557,7 +667,7 @@ fn run_query(
         let output = QueryOutput {
             schema_version: "spindle.query.v1".to_string(),
             literal_spl: result.literal.to_spl(),
-            literal_struct: LiteralStruct::from(&result.literal),
+            literal_struct: LiteralStructJson::from(&result.literal),
             status: status.to_string(),
             conclusion_type,
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
@@ -593,7 +703,7 @@ fn run_query(
 struct ExplainOutput {
     schema_version: String,
     literal_spl: String,
-    literal_struct: LiteralStruct,
+    literal_struct: LiteralStructJson,
     status: String,
     proof_tree: Option<serde_json::Value>,
     evaluated_at: Option<String>,
@@ -602,12 +712,13 @@ struct ExplainOutput {
 }
 
 fn run_explain(
-    file: &PathBuf,
+    file: Option<&PathBuf>,
     literal: &str,
     json: bool,
+    stdin: bool,
     reference_time: Option<TimePoint>,
 ) {
-    let theory = load_theory_from_file(file);
+    let theory = load_theory(file, stdin);
 
     let opts = PrepareOptions {
         reference_time,
@@ -644,7 +755,7 @@ fn run_explain(
                 let output = ExplainOutput {
                     schema_version: "spindle.explain.v1".to_string(),
                     literal_spl: lit.to_spl(),
-                    literal_struct: LiteralStruct::from(&lit),
+                    literal_struct: LiteralStructJson::from(&lit),
                     status: status.to_string(),
                     proof_tree: Some(explanation.to_json()),
                     evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
@@ -668,7 +779,7 @@ fn run_explain(
                 let output = ExplainOutput {
                     schema_version: "spindle.explain.v1".to_string(),
                     literal_spl: lit.to_spl(),
-                    literal_struct: LiteralStruct::from(&lit),
+                    literal_struct: LiteralStructJson::from(&lit),
                     status: status.to_string(),
                     proof_tree: None,
                     evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
@@ -698,7 +809,7 @@ fn run_explain(
 struct WhyNotOutput {
     schema_version: String,
     literal_spl: String,
-    literal_struct: LiteralStruct,
+    literal_struct: LiteralStructJson,
     status: String,
     blocked_by: Vec<BlockedByItem>,
     evaluated_at: Option<String>,
@@ -715,12 +826,13 @@ struct BlockedByItem {
 }
 
 fn run_why_not(
-    file: &PathBuf,
+    file: Option<&PathBuf>,
     literal: &str,
     json: bool,
+    stdin: bool,
     reference_time: Option<TimePoint>,
 ) {
-    let theory = load_theory_from_file(file);
+    let theory = load_theory(file, stdin);
 
     let opts = PrepareOptions {
         reference_time,
@@ -773,7 +885,7 @@ fn run_why_not(
         let output = WhyNotOutput {
             schema_version: "spindle.why_not.v1".to_string(),
             literal_spl: result.literal.to_spl(),
-            literal_struct: LiteralStruct::from(&result.literal),
+            literal_struct: LiteralStructJson::from(&result.literal),
             status: status.to_string(),
             blocked_by: blockers,
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
@@ -797,7 +909,7 @@ fn run_why_not(
 struct RequiresOutput {
     schema_version: String,
     goal_spl: String,
-    goal_struct: LiteralStruct,
+    goal_struct: LiteralStructJson,
     satisfied: bool,
     solutions: Vec<RequiresSolution>,
     evaluated_at: Option<String>,
@@ -821,10 +933,11 @@ struct TruncatedInfo {
 }
 
 fn run_requires(
-    file: &PathBuf,
+    file: Option<&PathBuf>,
     literal: &str,
     max: usize,
     json: bool,
+    stdin: bool,
     reference_time: Option<TimePoint>,
 ) {
     // Validate max parameter - must be at least 1 to satisfy contract
@@ -850,7 +963,7 @@ fn run_requires(
         std::process::exit(2);
     }
 
-    let theory = load_theory_from_file(file);
+    let theory = load_theory(file, stdin);
 
     let opts = PrepareOptions {
         reference_time,
@@ -926,7 +1039,7 @@ fn run_requires(
         let output = RequiresOutput {
             schema_version: "spindle.requires.v1".to_string(),
             goal_spl: result.goal.to_spl(),
-            goal_struct: LiteralStruct::from(&result.goal),
+            goal_struct: LiteralStructJson::from(&result.goal),
             satisfied,
             solutions,
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
@@ -987,7 +1100,7 @@ fn run_capabilities(json: bool) {
                 "why-not".to_string(),
             ],
             features: FeaturesInfo {
-                stdin: false, // Not yet implemented
+                stdin: true,
                 given_flags: false, // Not yet implemented
                 trust_overlay_v1: false, // Not yet implemented
                 trust_explain_v1: false, // Not yet implemented
@@ -1009,7 +1122,7 @@ fn run_capabilities(json: bool) {
         println!("Commands: reason, query, requires, explain, why-not");
         println!();
         println!("Features:");
-        println!("  --stdin: no");
+        println!("  --stdin: yes");
         println!("  --at: yes");
         println!("  --json: yes");
         println!("  Trust overlay: no");
