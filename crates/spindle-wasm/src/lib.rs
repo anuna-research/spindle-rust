@@ -373,7 +373,8 @@ impl Spindle {
     #[wasm_bindgen(js_name = whyNot)]
     pub fn why_not(&self, literal: &str) -> Result<JsValue, JsError> {
         let lit = parse_literal(literal);
-        let result = query::why_not(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+        let result =
+            query::why_not(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),

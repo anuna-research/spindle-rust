@@ -161,10 +161,12 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
                         definite_proven.insert(head_id);
                         defeasible_proven.insert(head_id);
                         conclusions.push(
-                            Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
+                            Conclusion::definitely_provable(head_lit.clone())
+                                .with_rule(&rule.label),
                         );
                         conclusions.push(
-                            Conclusion::defeasibly_provable(head_lit.clone()).with_rule(&rule.label),
+                            Conclusion::defeasibly_provable(head_lit.clone())
+                                .with_rule(&rule.label),
                         );
                     }
                     if !enqueued.contains(head_id) {
@@ -1064,8 +1066,7 @@ mod tests {
             assert!(
                 has_definite_p,
                 "missing +D p for label pair d{} / s{}",
-                i,
-                i
+                i, i
             );
         }
     }

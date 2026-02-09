@@ -1979,9 +1979,10 @@ mod tests {
         .unwrap();
 
         // p should go from +d (baseline) to +D (modified) — a real change
-        let p_change = result.changed_conclusions.iter().find(|(lit, _, _)| {
-            lit.name() == "p" && !lit.negation
-        });
+        let p_change = result
+            .changed_conclusions
+            .iter()
+            .find(|(lit, _, _)| lit.name() == "p" && !lit.negation);
         assert!(
             p_change.is_some(),
             "Should detect p upgrading from +d to +D, got: {:?}",
