@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | SPEC-010 |
 | Title | Dedicated Error Module for Consistent, Best-Practice Error Messages |
-| Version | 0.3.0 |
+| Version | 0.2.0 |
 | Status | Draft |
 | Created | 2026-02-09 |
 | Last Updated | 2026-02-10 |
@@ -86,7 +86,6 @@ Functional Requirements:
 - REQ-108: The Error module SHALL support diagnostics for non-fatal conditions (e.g., truncation, timeouts) without converting them into errors.
 - REQ-109: Library error types SHALL implement `std::error::Error` (via `thiserror`) with correct `source()` chains to preserve causal context during propagation.
 - REQ-110: The Error module SHALL provide `From` trait implementations to enable `?`-based conversion between library error types and the presentation `ProblemDetails` type.
-- REQ-111: The Error module SHALL include a `pipeline_trace` extension member containing the ordered list of pipeline stages completed before the error occurred. This member is always present when the error originates from the pipeline.
 
 Non-Functional Requirements:
 
@@ -271,12 +270,6 @@ pub struct ProblemExtensions {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_name: Option<String>,
-
-    /// Ordered list of pipeline stages completed before the error.
-    /// e.g., ["parse_spl", "validate", "temporal_filter", "ground"]
-    /// Present whenever the error originates from the pipeline.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pipeline_trace: Option<Vec<String>>,
 }
 
 /// Wraps ProblemDetails with diagnostics for the full JSON envelope.
@@ -335,7 +328,6 @@ impl From<&SpindleError> for ProblemDetails {
                 column: extract_column(err),
                 hint: category.default_hint(),
                 source_name: None,
-                pipeline_trace: None, // set by pipeline caller
             },
         }
     }
@@ -405,7 +397,6 @@ Error model:
     - `column` (integer, optional): source column number.
     - `hint` (string, optional): actionable suggestion for the user.
     - `source_name` (string, optional): input source identifier (e.g., filename, `"stdin"`).
-    - `pipeline_trace` (array of strings, optional): ordered list of pipeline stages completed before the error (e.g., `["parse_spl", "validate", "ground"]`). Present whenever the error originates from the pipeline.
 
 Note: The RFC 9457 `status` field is intentionally omitted. It is defined as an HTTP status code and does not apply to CLI tooling. CLI exit codes are carried in the `exit_code` extension member (see ADR-105).
 
@@ -453,8 +444,7 @@ Error model:
         "line": 5,
         "column": 13,
         "hint": "Check the rule syntax near the arrow.",
-        "source_name": "stdin",
-        "pipeline_trace": ["parse_dfl"]
+        "source_name": "stdin"
       }
     }
   }
@@ -536,14 +526,13 @@ Human-readable CLI errors:
 - Format: `Error: {title}` followed by optional `at line {line}, column {column}` and a `Hint: {hint}` line.
 - `detail` is shown only when it provides actionable guidance.
 - Sensitive details are redacted unless `--debug-errors` is enabled.
-- When `--debug-errors` is enabled, the full `source()` error chain and `pipeline_trace` are printed.
+- When `--debug-errors` is enabled, the full `source()` error chain is printed.
 
 JSON errors:
 
 - Always include `diagnostics` (may be empty array).
 - `error.details.problem` is required when `error` is present.
 - `exit_code` extension reflects the CLI exit code.
-- `pipeline_trace` is included whenever the error originates from the pipeline.
 - The RFC 9457 `status` field is not emitted (see ADR-105).
 
 Diagnostics:
@@ -574,8 +563,6 @@ TEST-105: Diagnostics-only cases (e.g., truncation) emit no `error` object and e
 TEST-106: `source()` chain is preserved through `From` conversions (e.g., `ParseError` -> `SpindleError::Parse` -> `ProblemDetails`).
 TEST-107: `From<&SpindleError> for ProblemDetails` and `From<&ParseError> for ProblemDetails` produce valid RFC 9457-compatible output.
 TEST-108: Extension member names conform to RFC 9457 naming rules (ALPHA start, ALPHA/DIGIT/underscore body).
-TEST-109: `pipeline_trace` contains the correct ordered sequence of completed stages for errors originating from the pipeline (e.g., a grounding error after successful parse and validation includes `["parse_spl", "validate", "temporal_filter", "wildcard_rewrite"]`).
-TEST-110: `pipeline_trace` is absent (not an empty array) for errors that do not originate from the pipeline (e.g., direct `ParseError` before pipeline entry).
 
 ## 14. Traceability
 
@@ -591,7 +578,6 @@ Trace links:
 - REQ-108 → CON-103 → TEST-105
 - REQ-109 → CON-101 → TEST-106
 - REQ-110 → CON-102 → TEST-107
-- REQ-111 → CON-102, CON-103 → TEST-109, TEST-110
 
 ---
 
@@ -601,7 +587,6 @@ Trace links:
 |---|---|---|---|
 | 0.1.0 | 2026-02-09 | Codex (AI agent) | Initial draft |
 | 0.2.0 | 2026-02-10 | Claude (AI agent) | RFC 9457 alignment, Rust error handling architecture, migration strategy, taxonomy mapping |
-| 0.3.0 | 2026-02-10 | Claude (AI agent) | Add pipeline_trace extension for execution path debugging |
 
 ---
 
