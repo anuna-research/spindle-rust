@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | SPEC-010 |
 | Title | Dedicated Error Module for Consistent, Best-Practice Error Messages |
-| Version | 0.5.0 |
+| Version | 0.6.0 |
 | Status | Draft |
 | Created | 2026-02-09 |
 | Last Updated | 2026-02-10 |
@@ -74,7 +74,7 @@ This specification uses RFC 9457 as the structural model for rendered output whi
 
 ### Message Quality Principles
 
-Research on error message quality — notably Brown's study of compiler diagnostics [Brown 1983], Horning's principles for compiler-user communication [Horning 1974], and Wrenn & Krishnamurthi's classifier model for error report evaluation [Wrenn 2017] — identifies recurring failure modes and evaluation criteria that this specification aims to address:
+Research on error message quality — notably Brown's study of compiler diagnostics [Brown 1983], Horning's principles for compiler-user communication [Horning 1974], Wrenn & Krishnamurthi's classifier model for error report evaluation [Wrenn 2017], and Becker et al.'s comprehensive survey of 307 papers synthesizing six decades of guidelines [Becker 2019] — identifies recurring failure modes and evaluation criteria that this specification aims to address:
 
 1. **Diagnostic uncertainty.** The system detects inconsistency but does not know the user's intent. As Horning observes: "Two (or more) pieces of information have been found to be inconsistent, but it cannot be said with certainty where the error lies." Messages SHOULD express this uncertainty rather than making definitive but potentially wrong claims (e.g., "expected `)` after argument list" is preferable to "missing semicolon" when the real error is a missing parenthesis).
 
@@ -94,12 +94,21 @@ Research on error message quality — notably Brown's study of compiler diagnost
 
 9. **Highlight for repair, not detection.** Source location data (`line`, `column`, `source_context`) SHOULD identify the program fragment most relevant to *repairing* the error, not merely the point where the system first detected the inconsistency. Users treat highlighted code as an edit target. Pointing at irrelevant or immutable code actively harms the user's ability to fix the problem.
 
+10. **Positive, non-blaming tone.** Becker et al. [2019] find universal agreement in the literature that error messages should have a positive tone. Messages MUST NOT blame the user, use accusatory language ("you failed to", "illegal input"), or anthropomorphize the system ("I expected", "the compiler thinks"). Preferred phrasing is neutral and constructive: "expected X" rather than "illegal Y"; "missing delimiter" rather than "you forgot a delimiter." Negative-valence words like "illegal", "forbidden", and "invalid" SHOULD be avoided in user-facing text when a neutral alternative exists.
+
+11. **Reduce cognitive load.** Cognitive Load Theory research shows that minimizing extraneous information in error reports helps users process them efficiently [Becker 2019, guideline 2]. Concretely: (a) `title` and `detail` SHOULD NOT repeat the same text — `title` is the stable summary while `detail` adds occurrence-specific information; (b) information relevant to the error SHOULD be placed near the offending code (via `source_context`), not in a separate location; (c) when multiple errors are reported, each should be self-contained.
+
+12. **Causal narrative.** Following Barik's "rational reconstructions" framework [Barik 2018, cited in Becker 2019 guideline 9], error reports for non-trivial errors SHOULD present a coherent causal narrative connecting the user's input to the violated constraint — not just isolated facts. For defeasible logic errors involving rule conflicts or derivation chains, the `detail` text should walk from cause to symptom (e.g., "rule `r1` and rule `r2` both derive `~p`, but no superiority relation resolves the conflict").
+
+13. **Tiered verbosity.** Becker et al. [2019, guideline 7] note that systems providing multiple levels of detail help users at different expertise levels. The Error module SHOULD support an `--explain CODE` mechanism (complementing `--debug-errors`) that provides expanded explanations, examples of correct usage, and references to documentation for each stable error code. This follows the pattern established by Rust's `--explain` and Scala/Dotty's `-explain` flags.
+
 These principles inform the requirements (Section 5), rendering rules (Section 11), and hint-quality guidelines throughout this specification.
 
 **References:**
 - Brown, P.J. "Error Messages: The Neglected Area of the Man/Machine Interface?" *Communications of the ACM*, 26(4), April 1983, pp. 246-249.
 - Horning, J.J. "What the Compiler Should Tell the User." In Bauer and Eickel (eds.), *Compiler Construction*, Springer-Verlag, 1974, pp. 525-548.
 - Wrenn, J. and Krishnamurthi, S. "Error Messages Are Classifiers: A Process to Design and Evaluate Error Messages." In *Proceedings of the 2017 ACM SIGPLAN International Symposium on New Ideas, New Paradigms, and Reflections on Programming and Software (Onward! '17)*, 2017, pp. 134-147.
+- Becker, B.A., Denny, P., Pettit, R. et al. "Compiler Error Messages Considered Unhelpful: The Landscape of Text-Based Programming Error Message Research." In *ITiCSE-WGR '19*, ACM, 2019, pp. 177-210.
 
 ## 5. Requirements
 
@@ -125,6 +134,10 @@ Functional Requirements:
 - REQ-118: The `hint` extension member, when present, SHALL suggest a specific corrective action rather than restating the error. Hints SHOULD be omitted when no actionable suggestion can be made with reasonable confidence.
 - REQ-119: The `detail` text SHOULD communicate the violated constraint — the semantic rule or expectation that makes the input invalid — not just the location or symptom. For DFL/SPL errors, this means stating what the grammar or logic requires (e.g., "a strict rule requires exactly one head literal") rather than only what was found.
 - REQ-120: Source location data (`line`, `column`, `source_context`) SHALL identify the program fragment most relevant to *repairing* the error, not merely the point where the system first detected the inconsistency. When the detection point differs from the likely repair site, the location SHOULD favor the repair site.
+- REQ-121: User-facing error messages SHALL use neutral or constructive language. Messages MUST NOT blame the user ("you failed to", "illegal input") or anthropomorphize the system ("I expected", "the compiler found"). Negative-valence words ("illegal", "forbidden") SHOULD be replaced with neutral alternatives ("unexpected", "unrecognized", "missing") in `title`, `detail`, and `hint` text.
+- REQ-122: The `title` and `detail` fields SHALL NOT repeat the same text. `title` provides the stable per-type summary; `detail` adds occurrence-specific information (location, values, constraint) that goes beyond the title.
+- REQ-123: For non-trivial errors involving multiple interacting rules or derivation chains, the `detail` text SHOULD present a causal narrative connecting the user's input to the violated constraint, rather than isolated facts.
+- REQ-124: The Error module SHOULD support an `--explain CODE` mechanism that provides expanded explanations, examples of correct DFL/SPL usage, and references to documentation for each stable error code. This is separate from `--debug-errors` (which exposes the `source()` chain for developers).
 
 Non-Functional Requirements:
 
@@ -494,6 +507,10 @@ Implements:
 - REQ-118
 - REQ-119
 - REQ-120
+- REQ-121
+- REQ-122
+- REQ-123
+- REQ-124
 
 Verified by:
 
@@ -504,6 +521,8 @@ Verified by:
 - TEST-113
 - TEST-114
 - TEST-115
+- TEST-116
+- TEST-117
 
 CON-103: CLI JSON Error Envelope (Compatibility Contract)
 
@@ -655,6 +674,14 @@ These principles (derived from Brown 1983, Horning 1974, and Wrenn & Krishnamurt
 
 9. **Repair-relevant location.** The `line`/`column` pointer and `source_context` highlight SHALL target the fragment the user needs to edit, not the token where the parser happened to detect the inconsistency. When these differ (e.g., a missing token is detected at the *next* token), the location should favor the repair site.
 
+10. **Positive, non-blaming tone (REQ-121).** Messages use neutral, constructive language. Bad: "illegal literal `foo`". Good: "unrecognized literal `foo`". Bad: "you forgot to close the parenthesis". Good: "missing closing parenthesis". Avoid words with negative valence ("illegal", "forbidden", "invalid") when neutral alternatives exist ("unexpected", "unrecognized", "missing").
+
+11. **Non-redundant title/detail (REQ-122).** The `title` is the stable per-type summary; `detail` adds occurrence-specific context. Repeating the same text in both wastes the user's cognitive budget. Bad: title "parse error", detail "parse error". Good: title "DFL parse error", detail "unexpected end of rule at column 13 — a rule body requires at least one literal after the arrow."
+
+12. **Causal narrative for complex errors (REQ-123).** For errors involving rule conflicts, derivation chains, or multi-step validation, `detail` presents a coherent cause-to-symptom narrative rather than isolated facts. Example: "rule `r1: a => b` and rule `r2: a => ~b` both fire, but no superiority relation `r1 > r2` or `r2 > r1` is declared to resolve the conflict."
+
+13. **Tiered verbosity via `--explain` (REQ-124).** `--explain CODE` provides an expanded explanation for a stable error code: what the error means, common causes, a correct usage example, and a reference to documentation. This complements `--debug-errors` (which prints the `source()` chain for developers). Example: `spindle --explain DFL_PARSE_ERROR`.
+
 ### 11.2. Human-Readable CLI Errors
 
 - Format: `Error: {title}` followed by a location block and optional `Hint:` line.
@@ -707,6 +734,8 @@ TEST-112: Human-readable rendering uses the same template format for all error c
 TEST-113: `hint` values, when present, contain actionable corrective suggestions — not restatements of the error `title` or `detail`.
 TEST-114: For each error variant, the `detail` text communicates the violated constraint (the semantic rule or grammar expectation that was not satisfied), not just the symptom or location.
 TEST-115: Source location (`line`, `column`, `source_context`) points to the program fragment most relevant to repairing the error. When the detection point differs from the repair site, location favors the repair site.
+TEST-116: User-facing `title`, `detail`, and `hint` text does not contain blame language ("you failed", "illegal") or anthropomorphism ("I expected"). Negative-valence words are replaced with neutral alternatives.
+TEST-117: For each error variant, `title` and `detail` do not repeat the same text. `detail` provides occurrence-specific information beyond the stable `title`.
 
 ## 14. Traceability
 
@@ -732,6 +761,10 @@ Trace links:
 - REQ-118 → CON-102 → TEST-113
 - REQ-119 → CON-102 → TEST-114
 - REQ-120 → CON-102 → TEST-115
+- REQ-121 → CON-102 → TEST-116
+- REQ-122 → CON-102 → TEST-117
+- REQ-123 → CON-102 → (rendering guideline, verified by review)
+- REQ-124 → CON-102 → (future feature, verified by integration test)
 
 ---
 
@@ -745,6 +778,7 @@ Trace links:
 | 0.3.1 | 2026-02-10 | Claude (AI agent) | Fix INTERNAL_ERROR exit code: 4 → 3 per contract Section 8.1 |
 | 0.4.0 | 2026-02-10 | Claude (AI agent) | Message quality principles from Brown 1983 / Horning 1974: diagnostic uncertainty, source context window, hint quality, uniform rendering, no-internal-jargon (REQ-114 through REQ-118, TEST-111 through TEST-113, SourceContext type) |
 | 0.5.0 | 2026-02-10 | Claude (AI agent) | Classifier model from Wrenn & Krishnamurthi 2017: precision/recall evaluation, three-source information model (terms/values/constraints), repair-relevant highlighting, "edit here" mentality (REQ-119, REQ-120, TEST-114, TEST-115) |
+| 0.6.0 | 2026-02-10 | Claude (AI agent) | Evidence-backed guidelines from Becker et al. 2019 survey: positive tone, cognitive load reduction, causal narrative, tiered verbosity via --explain (REQ-121 through REQ-124, TEST-116, TEST-117) |
 
 ---
 

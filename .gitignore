@@ -21,5 +21,8 @@ __pycache__/
 bench/__pycache__/
 bench/compiled/
 
+# misc
+/private
+
 .env
 .aider*
