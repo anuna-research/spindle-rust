@@ -2,6 +2,52 @@
 
 use thiserror::Error;
 
+/// Error category for taxonomy mapping (SPEC-010 §10.1).
+///
+/// Maps error variants to exit codes and default titles. Used by
+/// presentation crates to convert library errors into `ProblemDetails`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ErrorCategory {
+    /// Input parsing failures (DFL/SPL lexer or parser errors). Exit code 2.
+    ParseError,
+    /// Structural or semantic validation failures. Exit code 2.
+    ValidationError,
+    /// Reasoning or query execution failures. Exit code 3.
+    ExecutionError,
+    /// Timeouts, size limits, or truncation errors. Exit code 4.
+    ResourceLimit,
+    /// Unexpected failures with no safe recovery path. Exit code 3.
+    InternalError,
+}
+
+impl ErrorCategory {
+    /// Returns the CLI exit code for this category.
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Self::ParseError | Self::ValidationError => 2,
+            Self::ExecutionError | Self::InternalError => 3,
+            Self::ResourceLimit => 4,
+        }
+    }
+
+    /// Returns the default title for this category.
+    pub fn default_title(&self) -> &'static str {
+        match self {
+            Self::ParseError => "Parse Error",
+            Self::ValidationError => "Validation Error",
+            Self::ExecutionError => "Execution Error",
+            Self::ResourceLimit => "Resource Limit Exceeded",
+            Self::InternalError => "Internal Error",
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.default_title())
+    }
+}
+
 /// Spindle error type
 #[derive(Error, Debug)]
 pub enum SpindleError {
