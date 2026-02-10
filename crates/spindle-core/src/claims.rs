@@ -195,16 +195,16 @@ impl ClaimsBlock {
         let mut out = format!("(claims {}", render_spl_atom(&self.source));
 
         if let Some(ref ts) = self.timestamp {
-            out.push_str(&format!("\n  :at \"{ts}\""));
+            out.push_str(&format!("\n  :at {}", escape_spl_metadata(ts)));
         }
         if let Some(ref sig) = self.signature {
-            out.push_str(&format!("\n  :sig \"{sig}\""));
+            out.push_str(&format!("\n  :sig {}", escape_spl_metadata(sig)));
         }
         if let Some(ref id) = self.id {
-            out.push_str(&format!("\n  :id \"{id}\""));
+            out.push_str(&format!("\n  :id {}", escape_spl_metadata(id)));
         }
         if let Some(ref note) = self.note {
-            out.push_str(&format!("\n  :note \"{note}\""));
+            out.push_str(&format!("\n  :note {}", escape_spl_metadata(note)));
         }
 
         for stmt in &self.statements {
@@ -241,13 +241,13 @@ impl ClaimsBlock {
 
         // Metadata in alphabetical order, excluding :sig
         if let Some(ref ts) = self.timestamp {
-            out.push_str(&format!("\n:at \"{ts}\""));
+            out.push_str(&format!("\n:at {}", escape_spl_metadata(ts)));
         }
         if let Some(ref id) = self.id {
-            out.push_str(&format!("\n:id \"{id}\""));
+            out.push_str(&format!("\n:id {}", escape_spl_metadata(id)));
         }
         if let Some(ref note) = self.note {
-            out.push_str(&format!("\n:note \"{note}\""));
+            out.push_str(&format!("\n:note {}", escape_spl_metadata(note)));
         }
 
         // Separate statements by kind
@@ -287,6 +287,23 @@ impl ClaimsBlock {
         out.push(')');
         out
     }
+}
+
+/// Render a metadata value as a quoted, escaped SPL string.
+///
+/// Always wraps in double quotes, escaping `\` and `"` within the value.
+fn escape_spl_metadata(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for c in value.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// Render a single statement as SPL.
@@ -522,5 +539,67 @@ mod tests {
 
         let canonical = block.to_canonical_spl();
         assert_eq!(canonical, "(claims agent:empty)");
+    }
+
+    #[test]
+    fn test_metadata_escapes_quotes() {
+        let block = ClaimsBlock::new("agent:a")
+            .with_note("he said \"hello\"")
+            .with_id("id-with-\"quotes\"");
+
+        let spl = block.to_spl();
+        assert!(
+            spl.contains(r#":note "he said \"hello\""#),
+            "to_spl should escape quotes in :note, got: {spl}"
+        );
+        assert!(
+            spl.contains(r#":id "id-with-\"quotes\""#),
+            "to_spl should escape quotes in :id, got: {spl}"
+        );
+
+        let canonical = block.to_canonical_spl();
+        assert!(
+            canonical.contains(r#":note "he said \"hello\""#),
+            "to_canonical_spl should escape quotes in :note, got: {canonical}"
+        );
+        assert!(
+            canonical.contains(r#":id "id-with-\"quotes\""#),
+            "to_canonical_spl should escape quotes in :id, got: {canonical}"
+        );
+    }
+
+    #[test]
+    fn test_metadata_escapes_backslashes() {
+        let block = ClaimsBlock::new("agent:a")
+            .with_timestamp(r"path\to\file")
+            .with_signature(r"sig\with\slashes");
+
+        let spl = block.to_spl();
+        assert!(
+            spl.contains(r#":at "path\\to\\file"#),
+            "to_spl should escape backslashes in :at, got: {spl}"
+        );
+        assert!(
+            spl.contains(r#":sig "sig\\with\\slashes"#),
+            "to_spl should escape backslashes in :sig, got: {spl}"
+        );
+    }
+
+    #[test]
+    fn test_metadata_escapes_mixed() {
+        let block = ClaimsBlock::new("agent:a")
+            .with_note(r#"a "b\" c"#);
+
+        let spl = block.to_spl();
+        assert!(
+            spl.contains(r#":note "a \"b\\\" c"#),
+            "to_spl should escape mixed quotes and backslashes, got: {spl}"
+        );
+
+        let canonical = block.to_canonical_spl();
+        assert!(
+            canonical.contains(r#":note "a \"b\\\" c"#),
+            "to_canonical_spl should escape mixed, got: {canonical}"
+        );
     }
 }
