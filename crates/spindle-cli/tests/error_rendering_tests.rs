@@ -197,6 +197,11 @@ fn test_redaction_no_abs_paths_in_normal_mode() {
         !stderr.contains("--> /tmp/"),
         "Normal mode should redact absolute path prefix from location, got: {stderr}"
     );
+    // Should NOT contain any absolute path in the detail message either
+    assert!(
+        !stderr.contains("/tmp/nonexistent_spindle_test_file.dfl"),
+        "Normal mode should redact absolute paths in detail message, got: {stderr}"
+    );
 }
 
 #[test]
@@ -397,5 +402,33 @@ fn test_json_envelope_no_schema_version_for_non_schema() {
     assert!(
         json.get("schema_version").is_none(),
         "Non-schema command error should not include schema_version"
+    );
+}
+
+#[test]
+fn test_json_details_preserves_structured_metadata() {
+    // CONFLICTING_INPUT_SOURCES passes file and stdin fields in with_details()
+    // These should appear in error.details alongside problem
+    let (exit, stdout, _stderr) = run_with_stdin(
+        &["reason", "--json", "--stdin", "dummy.dfl"],
+        Some("r1: a => b"),
+    );
+    assert_eq!(exit, 2);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Error output should be valid JSON");
+
+    let details = &json["error"]["details"];
+    assert!(
+        details["problem"].is_object(),
+        "Should have problem in details"
+    );
+    // The structured metadata (file, stdin) should be present alongside problem
+    assert!(
+        details.get("file").is_some(),
+        "Structured details should preserve 'file' field, got details: {details}"
+    );
+    assert!(
+        details.get("stdin").is_some(),
+        "Structured details should preserve 'stdin' field, got details: {details}"
     );
 }

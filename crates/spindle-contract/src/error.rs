@@ -95,6 +95,10 @@ pub struct ErrorEnvelope {
 pub struct ErrorDetails {
     /// RFC 9457 problem details
     pub problem: ProblemDetails,
+    /// Additional structured metadata from call sites (e.g., file, argument, stdin).
+    /// Flattened into the details object alongside `problem`.
+    #[serde(flatten)]
+    pub metadata: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A diagnostic message for error reports.
@@ -243,7 +247,10 @@ impl ErrorReport {
             error: ErrorEnvelope {
                 code: err.code().to_string(),
                 message: err.to_string(),
-                details: ErrorDetails { problem },
+                details: ErrorDetails {
+                    problem,
+                    metadata: serde_json::Map::new(),
+                },
             },
         }
     }
@@ -261,9 +268,21 @@ impl ErrorReport {
             error: ErrorEnvelope {
                 code: code.into(),
                 message: message.into(),
-                details: ErrorDetails { problem },
+                details: ErrorDetails {
+                    problem,
+                    metadata: serde_json::Map::new(),
+                },
             },
         }
+    }
+
+    /// Merge additional metadata into `error.details` alongside `problem`.
+    pub fn with_details_metadata(
+        mut self,
+        metadata: serde_json::Map<String, serde_json::Value>,
+    ) -> Self {
+        self.error.details.metadata = metadata;
+        self
     }
 
     /// Add diagnostics to the report.

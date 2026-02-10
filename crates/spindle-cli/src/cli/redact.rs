@@ -43,6 +43,32 @@ pub(crate) fn redact_os_errors(message: &str) -> String {
     message.to_string()
 }
 
+/// Redact absolute paths embedded in a message string.
+///
+/// Replaces quoted absolute paths like `'/Users/alice/theory.dfl'` or
+/// `"/Users/alice/theory.dfl"` with just the filename component.
+pub(crate) fn redact_paths_in_text(message: &str) -> String {
+    let mut result = message.to_string();
+    // Redact single-quoted absolute paths: '/abs/path/file' -> 'file'
+    for quote in ['\'', '"'] {
+        let pattern = format!("{quote}/");
+        while let Some(start) = result.find(&pattern) {
+            if let Some(end) = result[start + 1..].find(quote) {
+                let path = &result[start + 1..start + 1 + end];
+                let redacted = redact_path(path);
+                result = format!(
+                    "{}{quote}{redacted}{quote}{}",
+                    &result[..start],
+                    &result[start + 1 + end + 1..]
+                );
+            } else {
+                break;
+            }
+        }
+    }
+    result
+}
+
 /// Apply all redaction rules to an error detail message.
 ///
 /// This is the main entry point -- call with `debug=false` to redact,
@@ -51,7 +77,8 @@ pub(crate) fn redact_detail(message: &str, debug: bool) -> String {
     if debug {
         return message.to_string();
     }
-    redact_os_errors(message)
+    let message = redact_paths_in_text(message);
+    redact_os_errors(&message)
 }
 
 /// Apply path redaction to a source_name, unless in debug mode.
@@ -99,6 +126,38 @@ mod tests {
     }
 
     #[test]
+    fn test_redact_paths_in_text_single_quoted() {
+        assert_eq!(
+            redact_paths_in_text("Error reading file '/Users/alice/theory.dfl': something"),
+            "Error reading file 'theory.dfl': something"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_double_quoted() {
+        assert_eq!(
+            redact_paths_in_text("Error reading file \"/tmp/data/test.spl\": something"),
+            "Error reading file \"test.spl\": something"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_no_path() {
+        assert_eq!(
+            redact_paths_in_text("normal error message"),
+            "normal error message"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_relative_path_unchanged() {
+        assert_eq!(
+            redact_paths_in_text("Error reading file 'theory.dfl': something"),
+            "Error reading file 'theory.dfl': something"
+        );
+    }
+
+    #[test]
     fn test_redact_detail_debug_passthrough() {
         let msg = "Error reading '/tmp/foo.dfl': No such file (os error 2)";
         assert_eq!(redact_detail(msg, true), msg);
@@ -109,6 +168,17 @@ mod tests {
         assert_eq!(
             redact_detail("Error: No such file or directory (os error 2)", false),
             "Error: No such file or directory"
+        );
+    }
+
+    #[test]
+    fn test_redact_detail_strips_paths_and_os_errors() {
+        assert_eq!(
+            redact_detail(
+                "Error reading file '/Users/alice/theory.dfl': No such file or directory (os error 2)",
+                false
+            ),
+            "Error reading file 'theory.dfl': No such file or directory"
         );
     }
 

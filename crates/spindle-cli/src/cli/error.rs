@@ -18,6 +18,8 @@ pub(crate) struct CliError {
     pub(crate) message: String,
     pub(crate) problem: Box<ProblemDetails>,
     pub(crate) diagnostics: Vec<Diagnostic>,
+    /// Structured metadata from `with_details` call sites, merged into JSON output.
+    pub(crate) details_metadata: serde_json::Map<String, serde_json::Value>,
 }
 
 impl CliError {
@@ -32,6 +34,7 @@ impl CliError {
             message: message.clone(),
             problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
+            details_metadata: serde_json::Map::new(),
         }
     }
 
@@ -46,6 +49,7 @@ impl CliError {
             message: message.clone(),
             problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
+            details_metadata: serde_json::Map::new(),
         }
     }
 
@@ -60,6 +64,7 @@ impl CliError {
             message: message.clone(),
             problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
+            details_metadata: serde_json::Map::new(),
         }
     }
 
@@ -76,18 +81,26 @@ impl CliError {
             message: message.clone(),
             problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
+            details_metadata: serde_json::Map::new(),
         }
     }
 
     /// Add details to the error.
     ///
-    /// Extracts `hint` from the details object and sets it on the ProblemDetails.
-    /// Per contract §8.3.
+    /// Extracts `hint` into ProblemDetails and stores the full details map
+    /// for inclusion in JSON output. Per contract §8.3.
     pub(crate) fn with_details(mut self, details: serde_json::Value) -> Self {
-        if let Some(obj) = details.as_object()
-            && let Some(hint) = obj.get("hint").and_then(|v| v.as_str())
-        {
-            self.problem.extensions.hint = Some(hint.to_string());
+        if let Some(obj) = details.as_object() {
+            if let Some(hint) = obj.get("hint").and_then(|v| v.as_str()) {
+                self.problem.extensions.hint = Some(hint.to_string());
+            }
+            // Store all fields (except hint, which is already on ProblemDetails)
+            // for merging into ErrorReport.error.details
+            for (key, value) in obj {
+                if key != "hint" {
+                    self.details_metadata.insert(key.clone(), value.clone());
+                }
+            }
         }
         self
     }
@@ -133,6 +146,7 @@ impl CliError {
             &self.message,
             (*self.problem).clone(),
         )
+        .with_details_metadata(self.details_metadata.clone())
         .with_diagnostics(contract_diagnostics)
     }
 }
