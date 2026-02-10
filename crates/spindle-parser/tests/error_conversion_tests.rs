@@ -150,6 +150,7 @@ fn test_parse_error_line_accessor() {
 }
 
 // Compile-time assertion: ParseError must be Send + Sync + 'static (REQ-112)
+#[allow(dead_code)]
 const _: () = {
     fn assert_send_sync_static<T: Send + Sync + 'static>() {}
     fn assertions() {

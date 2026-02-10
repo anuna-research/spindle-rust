@@ -1,5 +1,7 @@
 //! Test helpers module for spindle-cli contract tests
 
+#![allow(dead_code)]
+
 use assert_cmd::Command;
 use assert_cmd::cargo::cargo_bin_cmd;
 use serde_json::Value;
