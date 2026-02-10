@@ -195,7 +195,7 @@ steps:
         spindle reason theory.dfl
 
         # JSON output
-        spindle reason theory.dfl --format json
+        spindle reason theory.dfl --json
 
         # Show help
         spindle --help
