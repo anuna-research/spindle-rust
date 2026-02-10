@@ -1,0 +1,138 @@
+//! Reason command implementation
+
+use std::path::PathBuf;
+
+use spindle_core::conclusion::ConclusionType;
+use spindle_core::pipeline::{PrepareOptions, prepare};
+use spindle_core::temporal::TimePoint;
+
+use crate::cli::error::{CliError, Diagnostic};
+use crate::cli::input::{load_theory_source, resolve_theory_source};
+use crate::cli::output::{CommandOutput, LiteralStructJson};
+
+#[derive(serde::Serialize)]
+pub(crate) struct ReasonOutput {
+    schema_version: String,
+    evaluated_at: Option<String>,
+    grounding: GroundingStats,
+    conclusions: Vec<ConclusionStruct>,
+    diagnostics: Vec<Diagnostic>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stats: Option<TheoryStats>,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct GroundingStats {
+    performed: bool,
+    had_variables: bool,
+    instances: usize,
+    limit_hit: bool,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct ConclusionStruct {
+    conclusion_type: String,
+    literal_spl: String,
+    literal_struct: LiteralStructJson,
+    positive: bool,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct TheoryStats {
+    rule_count: usize,
+    fact_count: usize,
+}
+
+pub(crate) fn run_reason(
+    file: Option<&PathBuf>,
+    scalable: bool,
+    positive_only: bool,
+    json: bool,
+    stdin: bool,
+    reference_time: Option<TimePoint>,
+) -> Result<CommandOutput, CliError> {
+    let source = resolve_theory_source(file, stdin)?;
+    let theory = load_theory_source(&source)?;
+
+    let opts = PrepareOptions {
+        reference_time,
+        ..Default::default()
+    };
+
+    let pipeline_result = prepare(&theory, opts).map_err(|e| {
+        CliError::execution(
+            "PREPARATION_ERROR",
+            format!("Error during preparation: {e}"),
+        )
+    })?;
+
+    let conclusions = if scalable {
+        let indexed = spindle_core::index::IndexedTheory::build(&pipeline_result.theory);
+        let result = spindle_core::scalable::reason_scalable(&indexed);
+        result.to_conclusions(&indexed)
+    } else {
+        spindle_core::reason::reason(&pipeline_result.theory).map_err(|e| {
+            CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
+        })?
+    };
+
+    if json {
+        let mut output_conclusions: Vec<ConclusionStruct> = conclusions
+            .into_iter()
+            .filter(|c| !positive_only || c.is_positive())
+            .map(|c| ConclusionStruct {
+                conclusion_type: c.conclusion_type.symbol().to_string(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStructJson::from(&c.literal),
+                positive: c.is_positive(),
+            })
+            .collect();
+
+        // Sort conclusions for deterministic output (per spec §7)
+        output_conclusions.sort_by(|a, b| match a.literal_spl.cmp(&b.literal_spl) {
+            std::cmp::Ordering::Equal => a.conclusion_type.cmp(&b.conclusion_type),
+            other => other,
+        });
+
+        let output = ReasonOutput {
+            schema_version: "spindle.reason.v1".to_string(),
+            evaluated_at: pipeline_result
+                .evaluated_at
+                .and_then(|t: TimePoint| t.to_rfc3339()),
+            grounding: GroundingStats {
+                performed: pipeline_result.grounding_report.performed,
+                had_variables: pipeline_result.grounding_report.had_variables,
+                instances: pipeline_result.grounding_report.instances,
+                limit_hit: pipeline_result.grounding_report.limit_hit,
+            },
+            conclusions: output_conclusions,
+            diagnostics: vec![],
+            stats: Some(TheoryStats {
+                rule_count: pipeline_result.theory.rule_count(),
+                fact_count: pipeline_result.theory.facts().count(),
+            }),
+        };
+
+        CommandOutput::json(output)
+    } else {
+        let mut text = String::new();
+        text.push_str("Conclusions:\n\n");
+
+        for c in conclusions {
+            if positive_only && !c.is_positive() {
+                continue;
+            }
+
+            let symbol = match c.conclusion_type {
+                ConclusionType::DefinitelyProvable => "+D",
+                ConclusionType::DefinitelyNotProvable => "-D",
+                ConclusionType::DefeasiblyProvable => "+d",
+                ConclusionType::DefeasiblyNotProvable => "-d",
+            };
+
+            text.push_str(&format!("  {} {}\n", symbol, c.literal));
+        }
+
+        Ok(CommandOutput::text(text))
+    }
+}
