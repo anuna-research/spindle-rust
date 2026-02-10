@@ -1,0 +1,75 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://spindle.local/specs/schemas/spindle.capabilities.v1.schema.json",
+	"title": "spindle.capabilities.v1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["schema_version", "commands", "features", "schemas"],
+	"properties": {
+		"schema_version": {
+			"const": "spindle.capabilities.v1"
+		},
+		"commands": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"enum": ["reason", "query", "requires", "explain", "why-not"]
+			},
+			"uniqueItems": true
+		},
+		"features": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [
+				"stdin",
+				"given_flags",
+				"trust_overlay_v1",
+				"trust_explain_v1",
+				"at",
+				"reason_json"
+			],
+			"properties": {
+				"stdin": {
+					"type": "boolean"
+				},
+				"given_flags": {
+					"type": "boolean"
+				},
+				"trust_overlay_v1": {
+					"type": "boolean"
+				},
+				"trust_explain_v1": {
+					"type": "boolean"
+				},
+				"at": {
+					"type": "boolean"
+				},
+				"reason_json": {
+					"type": "boolean"
+				}
+			}
+		},
+		"schemas": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["reason", "query", "requires", "explain", "why_not"],
+			"properties": {
+				"reason": {
+					"const": "spindle.reason.v1"
+				},
+				"query": {
+					"const": "spindle.query.v1"
+				},
+				"requires": {
+					"const": "spindle.requires.v1"
+				},
+				"explain": {
+					"const": "spindle.explain.v1"
+				},
+				"why_not": {
+					"const": "spindle.why_not.v1"
+				}
+			}
+		}
+	}
+}

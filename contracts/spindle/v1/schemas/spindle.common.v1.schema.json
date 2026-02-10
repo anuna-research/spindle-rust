@@ -1,0 +1,160 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://spindle.local/specs/schemas/spindle.common.v1.schema.json",
+	"title": "spindle.common.v1",
+	"type": "object",
+	"additionalProperties": false,
+	"$defs": {
+		"literalStruct": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["mode", "negated", "functor", "args", "temporal"],
+			"properties": {
+				"mode": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["name", "negation"],
+					"properties": {
+						"name": {
+							"oneOf": [
+								{
+									"type": "string",
+									"minLength": 1
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"negation": {
+							"type": "boolean"
+						}
+					}
+				},
+				"negated": {
+					"type": "boolean"
+				},
+				"functor": {
+					"type": "string",
+					"minLength": 1
+				},
+				"args": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"temporal": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["start", "end"],
+					"properties": {
+						"start": {
+							"oneOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"end": {
+							"oneOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						}
+					}
+				}
+			}
+		},
+		"trust": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["score", "contributors", "explain"],
+			"properties": {
+				"score": {
+					"oneOf": [
+						{
+							"type": "number",
+							"minimum": 0,
+							"maximum": 1
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"contributors": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/trustContributor"
+					}
+				},
+				"explain": {
+					"type": "string",
+					"minLength": 1
+				}
+			}
+		},
+		"trustContributor": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["source_id", "weight", "impact"],
+			"properties": {
+				"source_id": {
+					"type": "string",
+					"minLength": 1
+				},
+				"weight": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1
+				},
+				"impact": {
+					"type": "number",
+					"minimum": -1,
+					"maximum": 1
+				}
+			}
+		},
+		"diagnostic": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["severity", "code", "message"],
+			"properties": {
+				"severity": {
+					"type": "string",
+					"enum": ["error", "warning", "info"]
+				},
+				"code": {
+					"type": "string",
+					"minLength": 1
+				},
+				"message": {
+					"type": "string",
+					"minLength": 1
+				},
+				"details": {
+					"type": "object",
+					"additionalProperties": true
+				}
+			}
+		},
+		"truncated": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["solutions"],
+			"properties": {
+				"solutions": {
+					"type": "boolean"
+				}
+			}
+		}
+	}
+}

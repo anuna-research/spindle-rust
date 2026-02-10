@@ -125,7 +125,7 @@ No chain of rules (including defeasible) leads to this literal, OR the literal i
 ## Reading Spindle Output
 
 ```bash
-$ spindle penguin.dfl
+$ spindle reason penguin.dfl
 +D bird
 +D penguin
 +d bird
@@ -146,7 +146,7 @@ Interpretation:
 
 Show only positive conclusions:
 ```bash
-spindle --positive penguin.dfl
+spindle reason --positive penguin.dfl
 ```
 
 Output:

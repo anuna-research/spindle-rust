@@ -1,0 +1,71 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://spindle.local/specs/schemas/spindle.explain.v1.schema.json",
+	"title": "spindle.explain.v1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [
+		"schema_version",
+		"literal_spl",
+		"literal_struct",
+		"status",
+		"proof_tree",
+		"evaluated_at",
+		"trust",
+		"diagnostics"
+	],
+	"properties": {
+		"schema_version": {
+			"const": "spindle.explain.v1"
+		},
+		"literal_spl": {
+			"type": "string",
+			"minLength": 1
+		},
+		"literal_struct": {
+			"$ref": "spindle.common.v1.schema.json#/$defs/literalStruct"
+		},
+		"status": {
+			"type": "string",
+			"enum": ["provable", "refuted", "unknown"]
+		},
+		"proof_tree": {
+			"oneOf": [
+				{
+					"type": "object",
+					"additionalProperties": true
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"evaluated_at": {
+			"oneOf": [
+				{
+					"type": "string",
+					"format": "date-time"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"trust": {
+			"oneOf": [
+				{
+					"$ref": "spindle.common.v1.schema.json#/$defs/trust"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"diagnostics": {
+			"type": "array",
+			"items": {
+				"$ref": "spindle.common.v1.schema.json#/$defs/diagnostic"
+			}
+		}
+	}
+}

@@ -1,0 +1,137 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://spindle.local/specs/schemas/spindle.requires.v1.schema.json",
+	"title": "spindle.requires.v1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [
+		"schema_version",
+		"goal_spl",
+		"goal_struct",
+		"satisfied",
+		"solutions",
+		"trust",
+		"evaluated_at",
+		"diagnostics"
+	],
+	"properties": {
+		"schema_version": {
+			"const": "spindle.requires.v1"
+		},
+		"goal_spl": {
+			"type": "string",
+			"minLength": 1
+		},
+		"goal_struct": {
+			"$ref": "spindle.common.v1.schema.json#/$defs/literalStruct"
+		},
+		"satisfied": {
+			"type": "boolean"
+		},
+		"solutions": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/solution"
+			}
+		},
+		"trust": {
+			"oneOf": [
+				{
+					"$ref": "spindle.common.v1.schema.json#/$defs/trust"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"truncated": {
+			"$ref": "spindle.common.v1.schema.json#/$defs/truncated"
+		},
+		"evaluated_at": {
+			"oneOf": [
+				{
+					"type": "string",
+					"format": "date-time"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"diagnostics": {
+			"type": "array",
+			"items": {
+				"$ref": "spindle.common.v1.schema.json#/$defs/diagnostic"
+			}
+		}
+	},
+	"allOf": [
+		{
+			"if": {
+				"properties": {
+					"satisfied": {
+						"const": true
+					}
+				},
+				"required": ["satisfied"]
+			},
+			"then": {
+				"properties": {
+					"solutions": {
+						"maxItems": 0
+					}
+				}
+			}
+		},
+		{
+			"if": {
+				"properties": {
+					"satisfied": {
+						"const": false
+					}
+				},
+				"required": ["satisfied"]
+			},
+			"then": {
+				"properties": {
+					"solutions": {
+						"minItems": 1
+					}
+				}
+			}
+		}
+	],
+	"$defs": {
+		"solution": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["facts", "score"],
+			"properties": {
+				"facts": {
+					"oneOf": [
+						{
+							"type": "array",
+							"minItems": 1,
+							"items": {
+								"type": "string",
+								"minLength": 1
+							}
+						},
+						{
+							"type": "array",
+							"minItems": 1,
+							"items": {
+								"$ref": "spindle.common.v1.schema.json#/$defs/literalStruct"
+							}
+						}
+					]
+				},
+				"score": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1
+				}
+			}
+		}
+	}
+}
