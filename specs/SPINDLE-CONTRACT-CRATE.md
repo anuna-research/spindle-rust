@@ -6,11 +6,14 @@
 | Title | `spindle-contract` Shared Transport Types Crate |
 | Status | Draft |
 | Created | 2026-02-10 |
+| Implements | ADR-201, REQ-203, CON-202, CON-204 |
 | Parent | [IMPL-010](./IMPL-010-spindle-simplification-cleanup.md) |
 
 ## 1. Purpose
 
-The `spindle-contract` crate owns the shared transport-level data transfer objects (DTOs) used by both `spindle-cli` and `spindle-wasm` for structured output. This eliminates duplicate type definitions that currently drift independently across presentation crates.
+The `spindle-contract` crate owns the shared transport-level data transfer objects (DTOs) used by both `spindle-cli` and `spindle-wasm` for structured output. It eliminates duplicate type definitions that currently drift independently across presentation crates (OBS-202) and provides a single location for schema evolution.
+
+This crate contains **no reasoning logic**. It is purely a data definition crate.
 
 ## 2. Problem
 
@@ -40,14 +43,14 @@ spindle-contract  (transport DTOs: ReasonOutput, error envelope types)
 spindle-cli   spindle-wasm
 ```
 
-- `spindle-contract` depends on `spindle-core` for `Literal`, `Mode`, `Temporal`, `ConclusionType`.
+- `spindle-contract` depends on `spindle-core` for `Literal`, `LiteralStruct`, `Mode`, `Temporal`, `ConclusionType`.
 - `spindle-cli` and `spindle-wasm` depend on `spindle-contract` for shared DTOs.
 - `spindle-core` does NOT depend on `spindle-contract` (no cycles).
 - `spindle-parser` is unaffected.
 
 ## 4. Crate Contents
 
-### 4.1. Reason Output Types (Phase C, initial)
+### 4.1. Reason Output Types (Phase C)
 
 ```rust
 // crates/spindle-contract/src/reason.rs
@@ -134,18 +137,99 @@ pub struct DiagnosticEntry {
 }
 ```
 
-### 4.4. Error Envelope Types (Phase D, future)
+### 4.4. Error Envelope Types (Phase D)
 
 After the error module (SPEC-010) lands, the contract crate will also own:
 
-- `ProblemDetails` — RFC 9457 presentation error model.
-- `ProblemExtensions` — CLI exit code, location, hint, source context.
-- `ErrorReport` / `ErrorEnvelope` / `ErrorDetails` — contract-compliant JSON error wrapper.
-- `SourceContext` / `SourceLine` — source context window types.
+```rust
+// crates/spindle-contract/src/error.rs
+
+/// RFC 9457 Problem Details (without HTTP `status` field).
+#[derive(Debug, Clone, Serialize)]
+pub struct ProblemDetails {
+    #[serde(rename = "type")]
+    pub problem_type: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
+    #[serde(flatten)]
+    pub extensions: ProblemExtensions,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProblemExtensions {
+    pub exit_code: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_context: Option<SourceContext>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceContext {
+    pub lines: Vec<SourceLine>,
+    pub highlight_index: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceLine {
+    pub line_number: usize,
+    pub text: String,
+}
+
+/// Top-level error report for JSON output.
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorReport {
+    pub schema_version: &'static str,
+    pub diagnostics: Vec<Diagnostic>,
+    pub error: ErrorEnvelope,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorEnvelope {
+    pub code: String,
+    pub message: String,
+    pub details: ErrorDetails,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorDetails {
+    pub problem: ProblemDetails,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Diagnostic {
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+```
 
 These are deferred to Phase D to avoid coupling the contract crate to error types that don't exist yet.
 
-## 5. Cargo.toml
+## 5. Module Layout
+
+```
+crates/spindle-contract/
+├── Cargo.toml
+└── src/
+    ├── lib.rs          # Re-exports
+    ├── reason.rs       # ReasonOutput, GroundingStats, ConclusionEntry, TheoryStats
+    ├── literal.rs      # LiteralStructJson, ModeJson, TemporalJson
+    ├── diagnostic.rs   # DiagnosticEntry
+    └── error.rs        # ProblemDetails, ErrorReport, ErrorEnvelope, etc. (Phase D)
+```
+
+## 6. Cargo.toml
 
 ```toml
 [package]
@@ -174,24 +258,24 @@ members = [
 ]
 ```
 
-## 6. Migration Path
+## 7. Migration Path
 
-1. Create `crates/spindle-contract/` with the types above.
-2. In `spindle-cli`: replace `ReasonOutput`, `GroundingStats`, `ConclusionStruct`, `TheoryStats`, `LiteralStructJson`, `ModeJson`, `TemporalJson` with re-exports from `spindle-contract`.
-3. In `spindle-wasm`: replace `JsReasonOutput`, `JsGroundingStats`, `JsConclusionStruct`, `JsTheoryStats` with re-exports from `spindle-contract`.
+### Phase C (PR-3)
+
+1. Create `crates/spindle-contract/` with reason DTOs, literal transport types, and diagnostic entry.
+2. In `spindle-cli`: replace `ReasonOutput`, `GroundingStats`, `ConclusionStruct`, `TheoryStats`, `LiteralStructJson`, `ModeJson`, `TemporalJson` with imports from `spindle-contract`.
+3. In `spindle-wasm`: replace `JsReasonOutput`, `JsGroundingStats`, `JsConclusionStruct`, `JsTheoryStats` with imports from `spindle-contract`.
 4. Run `cargo test --workspace` to verify no regressions.
-5. Add parity tests in `spindle-contract` that serialize identical inputs through both paths.
+5. Add parity tests (TEST-203): serialize identical theory outcomes in both CLI and WASM and assert schema/value parity.
 
-## 7. What Stays Out
+### Phase D (PR-4a–4e)
 
-- **Core domain types** (`Literal`, `Theory`, `Rule`, `Conclusion`) stay in `spindle-core`. The contract crate only holds serialization-oriented transport types.
-- **CLI-specific output types** (`QueryOutput`, `ExplainOutput`, etc.) stay in `spindle-cli` until WASM gains matching endpoints.
-- **WASM-specific bindings** (`#[wasm_bindgen]` annotations, `JsValue` conversions) stay in `spindle-wasm`.
-- **Rendering logic** (`render_human()`, `emit_and_exit()`) stays in presentation crates.
+6. Add error envelope types (`ProblemDetails`, `ErrorReport`, etc.) to `spindle-contract`.
+7. CLI and WASM import these types for boundary error rendering.
 
 ## 8. Naming Convention
 
-The canonical names drop the `Js` prefix and the `Json` suffix used in the current crates:
+The canonical names drop the `Js` prefix used in WASM:
 
 | Current (CLI) | Current (WASM) | Contract Crate |
 |---|---|---|
@@ -204,3 +288,11 @@ The canonical names drop the `Js` prefix and the `Json` suffix used in the curre
 | `TemporalJson` | *(core `Temporal`)* | `TemporalJson` |
 
 `ConclusionStruct` is renamed to `ConclusionEntry` to avoid confusion with `spindle_core::conclusion::Conclusion`.
+
+## 9. What Stays Out
+
+- **Core domain types** (`Literal`, `Theory`, `Rule`, `Conclusion`) stay in `spindle-core`. The contract crate only holds serialization-oriented transport types.
+- **Domain error types** (`SpindleError`, `ParseError`) stay in `spindle-core` and `spindle-parser` (ADR-202).
+- **CLI-specific output types** (`QueryOutput`, `ExplainOutput`, etc.) stay in `spindle-cli` until WASM gains matching endpoints.
+- **WASM-specific bindings** (`#[wasm_bindgen]` annotations, `JsValue` conversions) stay in `spindle-wasm`.
+- **Rendering logic** (`render_human()`, `emit_and_exit()`) stays in presentation crates.
