@@ -94,9 +94,9 @@ fn parse_theory_content(
         let mut err = cli_err.with_source_name(&source_name);
         if let Some(line) = e.line() {
             err = err.with_location(line, None);
-            err = err.with_source_context(
-                spindle_contract::error::SourceContext::from_source(content, line, 1),
-            );
+            err = err.with_source_context(spindle_contract::error::SourceContext::from_source(
+                content, line, 1,
+            ));
         }
         err
     };

@@ -106,8 +106,7 @@ fn test_human_parse_error_shows_source_context() {
 #[test]
 fn test_json_parse_error_includes_location_fields() {
     let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
-    let (exit, stdout, _stderr) =
-        run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
+    let (exit, stdout, _stderr) = run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
     assert_eq!(exit, 2);
     let json: serde_json::Value =
         serde_json::from_str(&stdout).expect("Error output should be valid JSON");
@@ -125,8 +124,7 @@ fn test_json_parse_error_includes_location_fields() {
 #[test]
 fn test_json_parse_error_includes_source_context() {
     let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
-    let (exit, stdout, _stderr) =
-        run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
+    let (exit, stdout, _stderr) = run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
     assert_eq!(exit, 2);
     let json: serde_json::Value =
         serde_json::from_str(&stdout).expect("Error output should be valid JSON");
@@ -185,11 +183,37 @@ fn test_redaction_no_abs_paths_in_normal_mode() {
     let (exit, _stdout, stderr) =
         run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
     assert_eq!(exit, 2);
-    // In normal mode, render_human should show the error but we just check
-    // that the output is human-readable (starts with "Error:")
     assert!(
         stderr.starts_with("Error: "),
         "Should produce structured error"
+    );
+    // In normal mode, the absolute path directory should be stripped from source_name
+    assert!(
+        stderr.contains("nonexistent_spindle_test_file.dfl"),
+        "Should still mention the filename, got: {stderr}"
+    );
+    // Should NOT contain the /tmp/ directory prefix in the location line
+    assert!(
+        !stderr.contains("--> /tmp/"),
+        "Normal mode should redact absolute path prefix from location, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_redaction_debug_mode_shows_full_path() {
+    // With --debug-errors, the full absolute path should appear
+    let (exit, _stdout, stderr) = run_with_stdin(
+        &[
+            "reason",
+            "--debug-errors",
+            "/tmp/nonexistent_spindle_test_file.dfl",
+        ],
+        None,
+    );
+    assert_eq!(exit, 2);
+    assert!(
+        stderr.contains("/tmp/nonexistent_spindle_test_file.dfl"),
+        "Debug mode should show full absolute path, got: {stderr}"
     );
 }
 
@@ -212,6 +236,53 @@ fn test_redaction_debug_mode_shows_code() {
     assert!(
         stderr.contains("(exit 2)"),
         "Debug mode should show exit code"
+    );
+}
+
+#[test]
+fn test_redaction_normal_mode_hides_code() {
+    // Without --debug-errors, the error type URI and exit code should NOT appear
+    let (exit, _stdout, stderr) =
+        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
+    assert_eq!(exit, 2);
+    assert!(
+        !stderr.contains("tag:spindle.dev,2026:error:"),
+        "Normal mode should not show error type URI, got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("(exit 2)"),
+        "Normal mode should not show exit code, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_redaction_os_error_stripped_in_normal_mode() {
+    // File not found should trigger OS error string in the detail
+    let (exit, _stdout, stderr) =
+        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
+    assert_eq!(exit, 2);
+    // OS error codes like "(os error 2)" should be stripped in normal mode
+    assert!(
+        !stderr.contains("(os error"),
+        "Normal mode should strip OS error codes, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_redaction_os_error_shown_in_debug_mode() {
+    let (exit, _stdout, stderr) = run_with_stdin(
+        &[
+            "reason",
+            "--debug-errors",
+            "/tmp/nonexistent_spindle_test_file.dfl",
+        ],
+        None,
+    );
+    assert_eq!(exit, 2);
+    // Debug mode should show the OS error code
+    assert!(
+        stderr.contains("(os error"),
+        "Debug mode should show OS error codes, got: {stderr}"
     );
 }
 

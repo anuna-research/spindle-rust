@@ -84,10 +84,10 @@ impl CliError {
     /// Extracts `hint` from the details object and sets it on the ProblemDetails.
     /// Per contract §8.3.
     pub(crate) fn with_details(mut self, details: serde_json::Value) -> Self {
-        if let Some(obj) = details.as_object() {
-            if let Some(hint) = obj.get("hint").and_then(|v| v.as_str()) {
-                self.problem.extensions.hint = Some(hint.to_string());
-            }
+        if let Some(obj) = details.as_object()
+            && let Some(hint) = obj.get("hint").and_then(|v| v.as_str())
+        {
+            self.problem.extensions.hint = Some(hint.to_string());
         }
         self
     }
