@@ -749,3 +749,309 @@
   (target-file ".woodpecker/release.yaml")
   (verifies "TEST-207")
   (effort "1h"))
+
+(claims agent:system
+  :at "2026-02-10T12:17:49Z"
+  (given claim-v1-fix-woodpecker-flags)
+  (normally r-state-v1-fix-woodpecker-flags claim-v1-fix-woodpecker-flags state-claimed-v1-fix-woodpecker-flags)
+  (normally r-chain-v1-fix-woodpecker-flags state-claimed-v1-fix-woodpecker-flags claimed-fix-woodpecker-flags))
+
+(claims agent:claude
+  :at "2026-02-10T13:00:46Z"
+  (given completed-render-human))
+
+(claims agent:claude
+  :at "2026-02-10T13:00:46Z"
+  (given completed-render-json))
+
+(claims agent:claude
+  :at "2026-02-10T13:00:47Z"
+  (given completed-wasm-problem-details))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:48Z"
+  (given completed-fix-contract-refs))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:48Z"
+  (given completed-fix-woodpecker-flags))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:49Z"
+  (given completed-plan-contract-crate))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:52Z"
+  (given completed-cli-app-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:53Z"
+  (given completed-cli-input-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:53Z"
+  (given completed-cli-output-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:54Z"
+  (given completed-cli-error-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:54Z"
+  (given completed-cli-commands-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:55Z"
+  (given completed-fix-double-prepare))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:58Z"
+  (given completed-cli-main-rewire))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:58Z"
+  (given completed-cli-behavior-parity))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:01Z"
+  (given completed-create-contract-crate))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:02Z"
+  (given completed-migrate-cli-dtos))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:03Z"
+  (given completed-migrate-wasm-dtos))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:03Z"
+  (given completed-dto-parity-tests))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:06Z"
+  (given completed-error-category))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:07Z"
+  (given completed-core-code-category))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:08Z"
+  (given completed-parser-code-category))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:08Z"
+  (given completed-non-exhaustive))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:09Z"
+  (given completed-from-parse-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:10Z"
+  (given completed-send-sync-static))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:13Z"
+  (given completed-problem-details))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:13Z"
+  (given completed-source-context))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:14Z"
+  (given completed-diagnostic-type))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:15Z"
+  (given completed-error-report))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:15Z"
+  (given completed-from-spindle-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:16Z"
+  (given completed-from-parse-error-pd))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:52Z"
+  (given claim-v1-test-taxonomy)
+  (normally r-state-v1-test-taxonomy claim-v1-test-taxonomy state-claimed-v1-test-taxonomy)
+  (normally r-chain-v1-test-taxonomy state-claimed-v1-test-taxonomy claimed-test-taxonomy))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:52Z"
+  (given claim-v1-test-send-sync)
+  (normally r-state-v1-test-send-sync claim-v1-test-send-sync state-claimed-v1-test-send-sync)
+  (normally r-chain-v1-test-send-sync state-claimed-v1-test-send-sync claimed-test-send-sync))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:53Z"
+  (given claim-v1-test-non-exhaustive)
+  (normally r-state-v1-test-non-exhaustive claim-v1-test-non-exhaustive state-claimed-v1-test-non-exhaustive)
+  (normally r-chain-v1-test-non-exhaustive state-claimed-v1-test-non-exhaustive claimed-test-non-exhaustive))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:54Z"
+  (given claim-v1-test-source-chain)
+  (normally r-state-v1-test-source-chain claim-v1-test-source-chain state-claimed-v1-test-source-chain)
+  (normally r-chain-v1-test-source-chain state-claimed-v1-test-source-chain claimed-test-source-chain))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:54Z"
+  (given claim-v1-test-construction)
+  (normally r-state-v1-test-construction claim-v1-test-construction state-claimed-v1-test-construction)
+  (normally r-chain-v1-test-construction state-claimed-v1-test-construction claimed-test-construction))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:55Z"
+  (given claim-v1-test-source-context)
+  (normally r-state-v1-test-source-context claim-v1-test-source-context state-claimed-v1-test-source-context)
+  (normally r-chain-v1-test-source-context state-claimed-v1-test-source-context claimed-test-source-context))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:55Z"
+  (given claim-v1-test-hint-quality)
+  (normally r-state-v1-test-hint-quality claim-v1-test-hint-quality state-claimed-v1-test-hint-quality)
+  (normally r-chain-v1-test-hint-quality state-claimed-v1-test-hint-quality claimed-test-hint-quality))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:56Z"
+  (given claim-v1-test-tone)
+  (normally r-state-v1-test-tone claim-v1-test-tone state-claimed-v1-test-tone)
+  (normally r-chain-v1-test-tone state-claimed-v1-test-tone claimed-test-tone))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:56Z"
+  (given claim-v1-test-title-detail)
+  (normally r-state-v1-test-title-detail claim-v1-test-title-detail state-claimed-v1-test-title-detail)
+  (normally r-chain-v1-test-title-detail state-claimed-v1-test-title-detail claimed-test-title-detail))
+
+(claims agent:claude
+  :at "2026-02-10T13:03:01Z"
+  (given completed-test-taxonomy))
+
+(claims agent:claude
+  :at "2026-02-10T13:03:01Z"
+  (given completed-test-send-sync))
+
+(claims agent:claude
+  :at "2026-02-10T13:03:02Z"
+  (given completed-test-non-exhaustive))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:30Z"
+  (given completed-test-construction))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:30Z"
+  (given completed-test-source-context))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:31Z"
+  (given completed-test-source-chain))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:32Z"
+  (given completed-test-hint-quality))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:32Z"
+  (given completed-test-tone))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:33Z"
+  (given completed-test-title-detail))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:42Z"
+  (given claim-v1-replace-cli-error)
+  (normally r-state-v1-replace-cli-error claim-v1-replace-cli-error state-claimed-v1-replace-cli-error)
+  (normally r-chain-v1-replace-cli-error state-claimed-v1-replace-cli-error claimed-replace-cli-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:11:10Z"
+  (given completed-replace-cli-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:11:23Z"
+  (given claim-v1-debug-errors-flag)
+  (normally r-state-v1-debug-errors-flag claim-v1-debug-errors-flag state-claimed-v1-debug-errors-flag)
+  (normally r-chain-v1-debug-errors-flag state-claimed-v1-debug-errors-flag claimed-debug-errors-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:11:23Z"
+  (given claim-v1-explain-code-flag)
+  (normally r-state-v1-explain-code-flag claim-v1-explain-code-flag state-claimed-v1-explain-code-flag)
+  (normally r-chain-v1-explain-code-flag state-claimed-v1-explain-code-flag claimed-explain-code-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:13:52Z"
+  (given completed-debug-errors-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:13:53Z"
+  (given completed-explain-code-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:14:02Z"
+  (given claim-v1-test-uniform-format)
+  (normally r-state-v1-test-uniform-format claim-v1-test-uniform-format state-claimed-v1-test-uniform-format)
+  (normally r-chain-v1-test-uniform-format state-claimed-v1-test-uniform-format claimed-test-uniform-format))
+
+(claims agent:claude
+  :at "2026-02-10T13:14:03Z"
+  (given claim-v1-test-redaction)
+  (normally r-state-v1-test-redaction claim-v1-test-redaction state-claimed-v1-test-redaction)
+  (normally r-chain-v1-test-redaction state-claimed-v1-test-redaction claimed-test-redaction))
+
+(claims agent:claude
+  :at "2026-02-10T13:14:03Z"
+  (given claim-v1-test-json-envelope)
+  (normally r-state-v1-test-json-envelope claim-v1-test-json-envelope state-claimed-v1-test-json-envelope)
+  (normally r-chain-v1-test-json-envelope state-claimed-v1-test-json-envelope claimed-test-json-envelope))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:24Z"
+  (given completed-test-uniform-format))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:25Z"
+  (given completed-test-redaction))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:25Z"
+  (given completed-test-json-envelope))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:34Z"
+  (given claim-v1-ci-contract-gates)
+  (normally r-state-v1-ci-contract-gates claim-v1-ci-contract-gates state-claimed-v1-ci-contract-gates)
+  (normally r-chain-v1-ci-contract-gates state-claimed-v1-ci-contract-gates claimed-ci-contract-gates))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:34Z"
+  (given claim-v1-ci-doc-example-check)
+  (normally r-state-v1-ci-doc-example-check claim-v1-ci-doc-example-check state-claimed-v1-ci-doc-example-check)
+  (normally r-chain-v1-ci-doc-example-check state-claimed-v1-ci-doc-example-check claimed-ci-doc-example-check))
+
+(claims agent:claude
+  :at "2026-02-10T13:21:10Z"
+  (given completed-ci-contract-gates))
+
+(claims agent:claude
+  :at "2026-02-10T13:21:10Z"
+  (given completed-ci-doc-example-check))
+
+(claims agent:system
+  :at "2026-02-10T13:21:30Z"
+  (given claim-v1-ci-reduce-overlap)
+  (normally r-state-v1-ci-reduce-overlap claim-v1-ci-reduce-overlap state-claimed-v1-ci-reduce-overlap)
+  (normally r-chain-v1-ci-reduce-overlap state-claimed-v1-ci-reduce-overlap claimed-ci-reduce-overlap))
+
+(claims agent:claude
+  :at "2026-02-10T13:23:00Z"
+  (given completed-ci-reduce-overlap))
