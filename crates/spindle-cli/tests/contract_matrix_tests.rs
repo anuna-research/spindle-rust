@@ -281,7 +281,9 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             expected_output: ExpectedOutput::JsonSuccessNoSchema {
                 required_fields: &["stats", "diagnostics"],
                 custom_check: Some(|json| {
-                    let stats = json["stats"].as_object().expect("stats should be an object");
+                    let stats = json["stats"]
+                        .as_object()
+                        .expect("stats should be an object");
                     for key in [
                         "total_rules",
                         "facts",
@@ -357,7 +359,6 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             },
             setup: None,
         },
-
         // reason --json --stdin with invalid input (parse error, exit 2)
         // Schema commands should have schema_version even on errors
         MatrixCase {

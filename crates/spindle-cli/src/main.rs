@@ -732,7 +732,11 @@ struct ValidateOutput {
     diagnostics: Vec<Diagnostic>,
 }
 
-fn run_validate(file: Option<&PathBuf>, stdin: bool, json: bool) -> Result<CommandOutput, CliError> {
+fn run_validate(
+    file: Option<&PathBuf>,
+    stdin: bool,
+    json: bool,
+) -> Result<CommandOutput, CliError> {
     let source = resolve_theory_source(file, stdin)?;
     let _theory = load_theory_source(&source)?;
 
@@ -1301,33 +1305,31 @@ fn main() {
         .skip(1)
         .any(|arg| arg == std::ffi::OsStr::new("--json"));
 
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
-        Err(err) => match err.kind() {
-            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
-                // Keep help/version textual and user-friendly.
-                let _ = err.print();
-                std::process::exit(0);
-            }
-            kind => {
-                if json_requested_in_raw_args {
-                    emit_and_exit(
-                        Err(
-                            CliError::validation("CLI_PARSE_ERROR", err.to_string()).with_details(
-                                serde_json::json!({
-                                    "kind": format!("{kind:?}")
-                                }),
-                            ),
-                        ),
-                        None,
-                        true,
-                    );
-                } else {
-                    err.exit();
+    let cli =
+        match Cli::try_parse() {
+            Ok(cli) => cli,
+            Err(err) => match err.kind() {
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+                    // Keep help/version textual and user-friendly.
+                    let _ = err.print();
+                    std::process::exit(0);
                 }
-            }
-        },
-    };
+                kind => {
+                    if json_requested_in_raw_args {
+                        emit_and_exit(
+                            Err(CliError::validation("CLI_PARSE_ERROR", err.to_string())
+                                .with_details(serde_json::json!({
+                                    "kind": format!("{kind:?}")
+                                }))),
+                            None,
+                            true,
+                        );
+                    } else {
+                        err.exit();
+                    }
+                }
+            },
+        };
 
     // Determine schema version and json flag based on the command before we move out of cli.command
     let (schema_version, json_flag) = match &cli.command {

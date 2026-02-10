@@ -305,7 +305,10 @@ fn test_stats_json_success_from_stdin() {
     assert!(output.status.success(), "stats --json should succeed");
     let json: Value =
         serde_json::from_slice(&output.stdout).expect("stats --json should emit valid JSON");
-    assert!(json["stats"].is_object(), "stats --json should include stats object");
+    assert!(
+        json["stats"].is_object(),
+        "stats --json should include stats object"
+    );
     assert!(
         json["diagnostics"].is_array(),
         "stats --json should include diagnostics array"
@@ -653,7 +656,10 @@ fn test_json_flag_parse_error_emits_json_envelope() {
         .output()
         .expect("Failed to execute --json parse error case");
 
-    assert!(!output.status.success(), "--json with no subcommand should fail");
+    assert!(
+        !output.status.success(),
+        "--json with no subcommand should fail"
+    );
     let json: Value = serde_json::from_slice(&output.stdout)
         .expect("parse failure with --json should emit JSON envelope");
     assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
