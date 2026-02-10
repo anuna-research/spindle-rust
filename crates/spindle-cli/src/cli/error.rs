@@ -92,6 +92,28 @@ impl CliError {
         self
     }
 
+    /// Attach the source file name or "stdin" to the error.
+    pub(crate) fn with_source_name(mut self, name: impl Into<String>) -> Self {
+        self.problem.extensions.source_name = Some(name.into());
+        self
+    }
+
+    /// Attach source location (line, optional column) to the error.
+    pub(crate) fn with_location(mut self, line: usize, column: Option<usize>) -> Self {
+        self.problem.extensions.line = Some(line);
+        self.problem.extensions.column = column;
+        self
+    }
+
+    /// Attach source context lines around the error location.
+    pub(crate) fn with_source_context(
+        mut self,
+        ctx: spindle_contract::error::SourceContext,
+    ) -> Self {
+        self.problem.extensions.source_context = Some(ctx);
+        self
+    }
+
     /// Build an `ErrorReport` from this error for JSON output.
     pub(crate) fn to_error_report(&self, schema_version: Option<&'static str>) -> ErrorReport {
         let contract_diagnostics: Vec<spindle_contract::error::Diagnostic> = self

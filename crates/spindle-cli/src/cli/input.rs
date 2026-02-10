@@ -59,6 +59,7 @@ fn load_theory_from_file(file: &PathBuf) -> Result<spindle_core::Theory, CliErro
             "FILE_READ_ERROR",
             format!("Error reading file '{}': {}", file.display(), e),
         )
+        .with_source_name(file.display().to_string())
     })?;
     parse_theory_content(&content, Some(file))
 }
@@ -85,10 +86,25 @@ fn parse_theory_content(
         || content.trim().starts_with('(')
         || content.trim().starts_with(';');
 
+    let source_name = file
+        .map(|f| f.display().to_string())
+        .unwrap_or_else(|| "stdin".to_string());
+
+    let enrich = |e: &spindle_parser::ParseError, cli_err: CliError| -> CliError {
+        let mut err = cli_err.with_source_name(&source_name);
+        if let Some(line) = e.line() {
+            err = err.with_location(line, None);
+            err = err.with_source_context(
+                spindle_contract::error::SourceContext::from_source(content, line, 1),
+            );
+        }
+        err
+    };
+
     if is_spl {
-        parse_spl(content).map_err(|e| CliError::parse(e.code(), e.to_string()))
+        parse_spl(content).map_err(|e| enrich(&e, CliError::parse(e.code(), e.to_string())))
     } else {
-        parse_dfl(content).map_err(|e| CliError::parse(e.code(), e.to_string()))
+        parse_dfl(content).map_err(|e| enrich(&e, CliError::parse(e.code(), e.to_string())))
     }
 }
 
