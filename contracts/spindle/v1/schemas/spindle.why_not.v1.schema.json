@@ -1,0 +1,75 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://spindle.local/specs/schemas/spindle.why_not.v1.schema.json",
+	"title": "spindle.why_not.v1",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [
+		"schema_version",
+		"literal_spl",
+		"literal_struct",
+		"status",
+		"blocked_by",
+		"evaluated_at",
+		"trust",
+		"diagnostics"
+	],
+	"properties": {
+		"schema_version": {
+			"const": "spindle.why_not.v1"
+		},
+		"literal_spl": {
+			"type": "string",
+			"minLength": 1
+		},
+		"literal_struct": {
+			"$ref": "spindle.common.v1.schema.json#/$defs/literalStruct"
+		},
+		"status": {
+			"type": "string",
+			"enum": ["provable", "refuted", "unknown"]
+		},
+		"blocked_by": {
+			"type": "array",
+			"items": {
+				"oneOf": [
+					{
+						"type": "string",
+						"minLength": 1
+					},
+					{
+						"type": "object",
+						"additionalProperties": true
+					}
+				]
+			}
+		},
+		"evaluated_at": {
+			"oneOf": [
+				{
+					"type": "string",
+					"format": "date-time"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"trust": {
+			"oneOf": [
+				{
+					"$ref": "spindle.common.v1.schema.json#/$defs/trust"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"diagnostics": {
+			"type": "array",
+			"items": {
+				"$ref": "spindle.common.v1.schema.json#/$defs/diagnostic"
+			}
+		}
+	}
+}

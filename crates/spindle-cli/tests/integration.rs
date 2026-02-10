@@ -3,6 +3,7 @@
 use assert_cmd::Command;
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
+use serde_json::Value;
 use std::fs;
 use tempfile::TempDir;
 
@@ -27,9 +28,9 @@ fn spindle() -> Command {
 fn test_no_args_shows_usage() {
     spindle()
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Spindle"))
-        .stdout(predicate::str::contains("Usage:"));
+        .failure()
+        .stderr(predicate::str::contains("Usage:"))
+        .stderr(predicate::str::contains("spindle"));
 }
 
 #[test]
@@ -127,7 +128,7 @@ r1: bird => flies
 
 #[test]
 fn test_reason_direct_file_arg() {
-    // Test the direct file argument without subcommand
+    // Direct invocation without subcommand is rejected.
     let content = r#"
 f1: >> bird
 r1: bird => flies
@@ -137,8 +138,9 @@ r1: bird => flies
     spindle()
         .arg(&path)
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .failure()
+        .stderr(predicate::str::contains("Usage:"))
+        .stderr(predicate::str::contains("<COMMAND>"));
 }
 
 #[test]
@@ -237,6 +239,30 @@ fn test_validate_nonexistent_file() {
         .stderr(predicate::str::contains("Error reading file"));
 }
 
+#[test]
+fn test_validate_json_success_from_stdin() {
+    let output = spindle()
+        .arg("--json")
+        .arg("validate")
+        .arg("--stdin")
+        .write_stdin("(given a)\n")
+        .output()
+        .expect("Failed to execute validate --json --stdin");
+
+    assert!(output.status.success(), "validate --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("validate --json should emit valid JSON");
+    assert_eq!(json["valid"], true);
+    assert!(
+        json["diagnostics"].is_array(),
+        "validate --json should include diagnostics array"
+    );
+    assert!(
+        json.get("schema_version").is_none(),
+        "validate --json should not include schema_version"
+    );
+}
+
 // ============================================================================
 // Stats command
 // ============================================================================
@@ -266,6 +292,33 @@ r2 > r1
         .stdout(predicate::str::contains("Superiorities:"));
 }
 
+#[test]
+fn test_stats_json_success_from_stdin() {
+    let output = spindle()
+        .arg("--json")
+        .arg("stats")
+        .arg("--stdin")
+        .write_stdin("f1: >> bird\nr1: bird => flies\n")
+        .output()
+        .expect("Failed to execute stats --json --stdin");
+
+    assert!(output.status.success(), "stats --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("stats --json should emit valid JSON");
+    assert!(
+        json["stats"].is_object(),
+        "stats --json should include stats object"
+    );
+    assert!(
+        json["diagnostics"].is_array(),
+        "stats --json should include diagnostics array"
+    );
+    assert!(
+        json.get("schema_version").is_none(),
+        "stats --json should not include schema_version"
+    );
+}
+
 // ============================================================================
 // Query command
 // ============================================================================
@@ -280,8 +333,8 @@ r1: bird => flies
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("flies"));
@@ -297,8 +350,8 @@ r1: bird => flies
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("Unknown"));
@@ -312,15 +365,17 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
+    let output = spindle()
         .arg("query")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"literal\""))
-        .stdout(predicate::str::contains("\"status\""));
+        .output()
+        .expect("Failed to execute query --json");
+    assert!(output.status.success(), "query --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("query --json should emit valid JSON");
+    assert_eq!(json["status"], "provable");
 }
 
 #[test]
@@ -336,8 +391,8 @@ r2 > r1
 
     spindle()
         .arg("query")
-        .arg(&path)
         .arg("~flies")
+        .arg(&path)
         .assert()
         .success()
         .stdout(predicate::str::contains("~flies"));
@@ -357,8 +412,8 @@ r1: bird => flies
 
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .assert()
         .success();
 }
@@ -371,12 +426,13 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
+    // Per contract §8.2: explain with no proof tree returns exit code 0
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .assert()
-        .failure()
+        .success()
         .stdout(predicate::str::contains("not provable"));
 }
 
@@ -390,8 +446,8 @@ r1: bird => flies
 
     spindle()
         .arg("explain")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
         .assert()
         .success();
@@ -405,15 +461,19 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
+    // Per contract §8.2: explain with no proof tree returns exit code 0
+    let output = spindle()
         .arg("explain")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .arg("--json")
-        .assert()
-        .failure()
-        .stdout(predicate::str::contains("\"error\""))
-        .stdout(predicate::str::contains("not provable"));
+        .output()
+        .expect("Failed to execute explain --json");
+    assert!(output.status.success(), "explain --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("explain --json should emit valid JSON");
+    assert_eq!(json["status"], "unknown");
+    assert!(json["proof_tree"].is_null());
 }
 
 // ============================================================================
@@ -430,8 +490,8 @@ r1: bird => flies
 
     spindle()
         .arg("why-not")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .assert()
         .success();
 }
@@ -444,16 +504,18 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
+    let output = spindle()
         .arg("why-not")
-        .arg(&path)
         .arg("swims")
+        .arg(&path)
         .arg("--json")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"literal\""))
-        .stdout(predicate::str::contains("\"would_derive\""))
-        .stdout(predicate::str::contains("\"blocked_by\""));
+        .output()
+        .expect("Failed to execute why-not --json");
+    assert!(output.status.success(), "why-not --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("why-not --json should emit valid JSON");
+    assert_eq!(json["status"], "unknown");
+    assert!(json["blocked_by"].is_array());
 }
 
 // ============================================================================
@@ -469,8 +531,8 @@ r1: bird => flies
 
     spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .assert()
         .success();
 }
@@ -485,12 +547,32 @@ r2: plane => flies
 
     spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--max")
         .arg("5")
         .assert()
         .success();
+}
+
+#[test]
+fn test_requires_with_max_respected_in_text_output() {
+    let content = r#"
+r1: bird => flies
+r2: plane => flies
+"#;
+    let (_dir, path) = setup_theory_file(content, "dfl");
+
+    spindle()
+        .arg("requires")
+        .arg("flies")
+        .arg(&path)
+        .arg("--max")
+        .arg("1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("  1."))
+        .stdout(predicate::str::contains("\n  2.").not());
 }
 
 #[test]
@@ -500,15 +582,52 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
+    let output = spindle()
         .arg("requires")
-        .arg(&path)
         .arg("flies")
+        .arg(&path)
         .arg("--json")
+        .output()
+        .expect("Failed to execute requires --json");
+    assert!(output.status.success(), "requires --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("requires --json should emit valid JSON");
+    assert_eq!(json["satisfied"], false);
+    assert!(
+        json["solutions"].as_array().is_some_and(|s| !s.is_empty()),
+        "requires unsatisfied should produce solutions"
+    );
+}
+
+// ============================================================================
+// Capabilities command
+// ============================================================================
+
+#[test]
+fn test_capabilities_command() {
+    spindle()
+        .arg("capabilities")
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"goal\""))
-        .stdout(predicate::str::contains("\"solutions\""));
+        .stdout(predicate::str::contains("Spindle Capabilities:"))
+        .stdout(predicate::str::contains("Commands:"))
+        .stdout(predicate::str::contains("Features:"));
+}
+
+#[test]
+fn test_capabilities_json() {
+    let output = spindle()
+        .arg("capabilities")
+        .arg("--json")
+        .output()
+        .expect("Failed to execute capabilities --json");
+    assert!(
+        output.status.success(),
+        "capabilities --json should succeed"
+    );
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("capabilities --json should emit valid JSON");
+    assert_eq!(json["features"]["stdin"], true);
 }
 
 // ============================================================================
@@ -527,10 +646,24 @@ fn test_reason_missing_file_arg() {
 
 #[test]
 fn test_query_missing_literal_arg() {
-    let content = "f1: >> bird";
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    spindle().arg("query").assert().failure();
+}
 
-    spindle().arg("query").arg(&path).assert().failure();
+#[test]
+fn test_json_flag_parse_error_emits_json_envelope() {
+    let output = spindle()
+        .arg("--json")
+        .output()
+        .expect("Failed to execute --json parse error case");
+
+    assert!(
+        !output.status.success(),
+        "--json with no subcommand should fail"
+    );
+    let json: Value = serde_json::from_slice(&output.stdout)
+        .expect("parse failure with --json should emit JSON envelope");
+    assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
+    assert!(json["diagnostics"].is_array());
 }
 
 // ============================================================================
@@ -688,18 +821,21 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
+    let output = spindle()
         .arg("reason")
         .arg(&path)
         .arg("--json")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"schema_version\""))
-        .stdout(predicate::str::contains("\"grounding\""))
-        .stdout(predicate::str::contains("\"had_variables\""))
-        .stdout(predicate::str::contains("\"instances\""))
-        .stdout(predicate::str::contains("\"limit_hit\""))
-        .stdout(predicate::str::contains("\"evaluated_at\""));
+        .output()
+        .expect("Failed to execute reason --json");
+    assert!(output.status.success(), "reason --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("reason --json should emit valid JSON");
+    assert!(
+        json["conclusions"]
+            .as_array()
+            .is_some_and(|c| !c.is_empty()),
+        "reason --json should include at least one conclusion for this theory"
+    );
 }
 
 #[test]
@@ -710,10 +846,14 @@ r1: bird => flies
 "#;
     let (_dir, path) = setup_theory_file(content, "dfl");
 
-    spindle()
+    let output = spindle()
         .arg(&path)
         .arg("--json")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("\"schema_version\""));
+        .output()
+        .expect("Failed to execute direct --json");
+    assert!(!output.status.success(), "direct file --json should fail");
+    let json: Value = serde_json::from_slice(&output.stdout)
+        .expect("direct parse failure with --json should emit JSON envelope");
+    assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
+    assert!(json["diagnostics"].is_array());
 }

@@ -65,7 +65,7 @@ pub mod worklist;
 pub mod prelude {
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
-    pub use crate::error::{Result, SpindleError};
+    pub use crate::error::{ErrorCategory, Result, SpindleError};
     pub use crate::intern::{
         LiteralId, SymbolId, intern, intern_literal, resolve, resolve_literal,
     };

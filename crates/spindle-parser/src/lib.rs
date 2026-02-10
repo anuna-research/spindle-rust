@@ -37,7 +37,7 @@ pub mod error;
 pub mod spl;
 
 pub use dfl::parse_dfl;
-pub use error::ParseError;
+pub use error::{ParseError, ParserFormat};
 pub use spl::parse_spl;
 
 #[cfg(test)]

@@ -3,6 +3,21 @@ when:
     branch: main
 
 steps:
+  - name: validate-docs
+    image: rust:1.88-bookworm
+    commands:
+      - cargo build --release --package spindle-cli
+      - export SPINDLE=target/release/spindle
+      # Verify subcommands from release notes and README
+      - $SPINDLE --help
+      - $SPINDLE reason --help
+      - $SPINDLE --version
+      # Smoke-test documented usage patterns
+      - 'printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --stdin'
+      - 'printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --json --stdin'
+      # Verify explain-code subcommand
+      - $SPINDLE explain-code PARSE_ERROR
+
   - name: build-executables
     image: rust:1.88-bookworm
     commands:
@@ -195,7 +210,7 @@ steps:
         spindle reason theory.dfl
 
         # JSON output
-        spindle reason theory.dfl --format json
+        spindle reason theory.dfl --json
 
         # Show help
         spindle --help

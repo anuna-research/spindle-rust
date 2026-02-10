@@ -1,0 +1,1057 @@
+; ===========================================================================
+; Error Module Implementation Plan
+; Implements: specs/ERROR-MODULE-SPEC.md (SPEC-010 v0.6.0)
+;           + specs/IMPL-010-spindle-simplification-cleanup.md
+; Branch: feature/error-module
+; ===========================================================================
+
+; ===========================================================================
+; Phase A: Spec and Contract Hygiene (IMPL-010 Phase A / PR-1)
+; ===========================================================================
+
+(given task-fix-contract-refs)
+(given task-fix-woodpecker-flags)
+(given task-plan-contract-crate)
+
+(given no-deps-fix-contract-refs)
+(given no-deps-fix-woodpecker-flags)
+(given no-deps-plan-contract-crate)
+
+; All Phase A tasks are independent of each other
+(normally r-ready-fix-contract-refs
+  (and task-fix-contract-refs no-deps-fix-contract-refs)
+  ready-fix-contract-refs)
+
+(normally r-ready-fix-woodpecker-flags
+  (and task-fix-woodpecker-flags no-deps-fix-woodpecker-flags)
+  ready-fix-woodpecker-flags)
+
+(normally r-ready-plan-contract-crate
+  (and task-plan-contract-crate no-deps-plan-contract-crate)
+  ready-plan-contract-crate)
+
+(normally r-phase-a-done
+  (and completed-fix-contract-refs completed-fix-woodpecker-flags completed-plan-contract-crate)
+  phase-a-complete)
+
+; ===========================================================================
+; Phase B: CLI Boundary Decomposition (IMPL-010 Phase B / PR-2)
+; ===========================================================================
+
+(given task-cli-app-module)
+(given task-cli-input-module)
+(given task-cli-output-module)
+(given task-cli-error-module)
+(given task-cli-commands-module)
+(given task-cli-main-rewire)
+(given task-cli-behavior-parity)
+(given task-fix-double-prepare)
+
+; CLI modules can be extracted in parallel after phase A
+(normally r-dep-cli-app-on-phase-a
+  (and task-cli-app-module phase-a-complete)
+  ready-cli-app-module)
+
+(normally r-dep-cli-input-on-phase-a
+  (and task-cli-input-module phase-a-complete)
+  ready-cli-input-module)
+
+(normally r-dep-cli-output-on-phase-a
+  (and task-cli-output-module phase-a-complete)
+  ready-cli-output-module)
+
+(normally r-dep-cli-error-on-phase-a
+  (and task-cli-error-module phase-a-complete)
+  ready-cli-error-module)
+
+(normally r-dep-cli-commands-on-phase-a
+  (and task-cli-commands-module phase-a-complete)
+  ready-cli-commands-module)
+
+; Fix double prepare can happen in parallel with CLI decomposition
+(normally r-dep-fix-double-prepare-on-phase-a
+  (and task-fix-double-prepare phase-a-complete)
+  ready-fix-double-prepare)
+
+; Rewire main.rs to use the extracted modules
+(normally r-dep-cli-main-rewire
+  (and task-cli-main-rewire completed-cli-app-module completed-cli-input-module
+       completed-cli-output-module completed-cli-error-module completed-cli-commands-module
+       completed-fix-double-prepare)
+  ready-cli-main-rewire)
+
+; Behavior parity verification after full rewire
+(normally r-dep-cli-behavior-parity
+  (and task-cli-behavior-parity completed-cli-main-rewire)
+  ready-cli-behavior-parity)
+
+(normally r-phase-b-done
+  (and completed-cli-app-module completed-cli-input-module completed-cli-output-module
+       completed-cli-error-module completed-cli-commands-module completed-cli-main-rewire
+       completed-cli-behavior-parity completed-fix-double-prepare)
+  phase-b-complete)
+
+; ===========================================================================
+; Phase C: Shared Contract Extraction (IMPL-010 Phase C / PR-3)
+; ===========================================================================
+
+(given task-create-contract-crate)
+(given task-migrate-cli-dtos)
+(given task-migrate-wasm-dtos)
+(given task-dto-parity-tests)
+
+; Contract crate depends on Phase B (CLI is decomposed, easier to extract)
+(normally r-dep-create-contract-crate
+  (and task-create-contract-crate phase-b-complete)
+  ready-create-contract-crate)
+
+; CLI and WASM migration happen after the crate exists
+(normally r-dep-migrate-cli-dtos
+  (and task-migrate-cli-dtos completed-create-contract-crate)
+  ready-migrate-cli-dtos)
+
+(normally r-dep-migrate-wasm-dtos
+  (and task-migrate-wasm-dtos completed-create-contract-crate)
+  ready-migrate-wasm-dtos)
+
+; Parity tests after both migrations
+(normally r-dep-dto-parity-tests
+  (and task-dto-parity-tests completed-migrate-cli-dtos completed-migrate-wasm-dtos)
+  ready-dto-parity-tests)
+
+(normally r-phase-c-done
+  (and completed-create-contract-crate completed-migrate-cli-dtos
+       completed-migrate-wasm-dtos completed-dto-parity-tests)
+  phase-c-complete)
+
+; ===========================================================================
+; Phase D1: Extend core error types (SPEC-010 Phase 1 / PR-4a)
+; ===========================================================================
+
+(given task-error-category)
+(given task-core-code-category)
+(given task-parser-code-category)
+(given task-non-exhaustive)
+(given task-from-parse-error)
+(given task-send-sync-static)
+
+; ErrorCategory enum depends on Phase C (contract crate exists for shared types)
+(normally r-dep-error-category-on-phase-c
+  (and task-error-category phase-c-complete)
+  ready-error-category)
+
+; code()/category() on SpindleError depends on ErrorCategory
+(normally r-dep-core-code-on-category
+  (and task-core-code-category completed-error-category)
+  ready-core-code-category)
+
+; code()/category() on ParseError depends on ErrorCategory
+(normally r-dep-parser-code-on-category
+  (and task-parser-code-category completed-error-category)
+  ready-parser-code-category)
+
+; #[non_exhaustive] on both enums once code/category are done
+(normally r-dep-nonexhaustive-on-methods
+  (and task-non-exhaustive completed-core-code-category completed-parser-code-category)
+  ready-non-exhaustive)
+
+; From<ParseError> for SpindleError depends on both enums being stable
+(normally r-dep-from-parse-on-nonexhaustive
+  (and task-from-parse-error completed-non-exhaustive)
+  ready-from-parse-error)
+
+; Send + Sync + 'static compile-time assertions after all type changes
+(normally r-dep-send-sync-on-from
+  (and task-send-sync-static completed-from-parse-error)
+  ready-send-sync-static)
+
+(normally r-phase-d1-done
+  (and completed-error-category completed-core-code-category completed-parser-code-category
+       completed-non-exhaustive completed-from-parse-error completed-send-sync-static)
+  phase-d1-complete)
+
+; ===========================================================================
+; Phase D2: Add presentation types (SPEC-010 Phase 2 / PR-4b)
+; ===========================================================================
+
+(given task-problem-details)
+(given task-source-context)
+(given task-error-report)
+(given task-diagnostic-type)
+(given task-from-spindle-error)
+(given task-from-parse-error-pd)
+
+; ProblemDetails struct depends on D1 (needs error codes for type URI)
+(normally r-dep-problem-details-on-d1
+  (and task-problem-details phase-d1-complete)
+  ready-problem-details)
+
+; SourceContext/SourceLine alongside ProblemDetails
+(normally r-dep-source-context-on-d1
+  (and task-source-context phase-d1-complete)
+  ready-source-context)
+
+; Diagnostic type alongside ProblemDetails
+(normally r-dep-diagnostic-on-d1
+  (and task-diagnostic-type phase-d1-complete)
+  ready-diagnostic-type)
+
+; ErrorReport wraps ProblemDetails + SourceContext + Diagnostic
+(normally r-dep-error-report-on-pd
+  (and task-error-report completed-problem-details completed-source-context completed-diagnostic-type)
+  ready-error-report)
+
+; From<&SpindleError> for ProblemDetails
+(normally r-dep-from-spindle-pd
+  (and task-from-spindle-error completed-problem-details completed-source-context)
+  ready-from-spindle-error)
+
+; From<&ParseError> for ProblemDetails
+(normally r-dep-from-parse-pd
+  (and task-from-parse-error-pd completed-problem-details completed-source-context)
+  ready-from-parse-error-pd)
+
+(normally r-phase-d2-done
+  (and completed-problem-details completed-source-context completed-error-report
+       completed-diagnostic-type completed-from-spindle-error completed-from-parse-error-pd)
+  phase-d2-complete)
+
+; ===========================================================================
+; Phase D3: Wire CLI rendering (SPEC-010 Phase 3 / PR-4c)
+; ===========================================================================
+
+(given task-render-human)
+(given task-render-json)
+(given task-replace-cli-error)
+(given task-debug-errors-flag)
+(given task-explain-code-flag)
+
+; Renderers depend on D2 (presentation types exist)
+(normally r-dep-render-human-on-d2
+  (and task-render-human phase-d2-complete)
+  ready-render-human)
+
+(normally r-dep-render-json-on-d2
+  (and task-render-json phase-d2-complete)
+  ready-render-json)
+
+; Replace CliError after renderers are ready
+(normally r-dep-replace-cli-on-renderers
+  (and task-replace-cli-error completed-render-human completed-render-json)
+  ready-replace-cli-error)
+
+; Flags depend on CliError replacement
+(normally r-dep-debug-flag-on-replace
+  (and task-debug-errors-flag completed-replace-cli-error)
+  ready-debug-errors-flag)
+
+(normally r-dep-explain-flag-on-replace
+  (and task-explain-code-flag completed-replace-cli-error)
+  ready-explain-code-flag)
+
+(normally r-phase-d3-done
+  (and completed-render-human completed-render-json completed-replace-cli-error
+       completed-debug-errors-flag completed-explain-code-flag)
+  phase-d3-complete)
+
+; ===========================================================================
+; Phase D4: Wire WASM rendering (SPEC-010 Phase 4 / PR-4d)
+; ===========================================================================
+
+(given task-wasm-problem-details)
+
+(normally r-dep-wasm-on-d2
+  (and task-wasm-problem-details phase-d2-complete)
+  ready-wasm-problem-details)
+
+(normally r-phase-d4-done
+  completed-wasm-problem-details
+  phase-d4-complete)
+
+; ===========================================================================
+; Phase D5: Error module testing (SPEC-010 Phase 5 / PR-4e)
+; ===========================================================================
+
+(given task-test-construction)
+(given task-test-json-envelope)
+(given task-test-redaction)
+(given task-test-taxonomy)
+(given task-test-source-chain)
+(given task-test-non-exhaustive)
+(given task-test-send-sync)
+(given task-test-source-context)
+(given task-test-uniform-format)
+(given task-test-hint-quality)
+(given task-test-tone)
+(given task-test-title-detail)
+
+(normally r-dep-test-construction-on-d2
+  (and task-test-construction phase-d2-complete)
+  ready-test-construction)
+
+(normally r-dep-test-json-on-d3
+  (and task-test-json-envelope phase-d3-complete)
+  ready-test-json-envelope)
+
+(normally r-dep-test-redaction-on-d3
+  (and task-test-redaction phase-d3-complete)
+  ready-test-redaction)
+
+(normally r-dep-test-taxonomy-on-d1
+  (and task-test-taxonomy phase-d1-complete)
+  ready-test-taxonomy)
+
+(normally r-dep-test-chain-on-d1
+  (and task-test-source-chain phase-d1-complete)
+  ready-test-source-chain)
+
+(normally r-dep-test-nonexhaustive-on-d1
+  (and task-test-non-exhaustive completed-non-exhaustive)
+  ready-test-non-exhaustive)
+
+(normally r-dep-test-sendsync-on-d1
+  (and task-test-send-sync completed-send-sync-static)
+  ready-test-send-sync)
+
+(normally r-dep-test-srcctx-on-d2
+  (and task-test-source-context phase-d2-complete)
+  ready-test-source-context)
+
+(normally r-dep-test-uniform-on-d3
+  (and task-test-uniform-format phase-d3-complete)
+  ready-test-uniform-format)
+
+(normally r-dep-test-hint-on-d2
+  (and task-test-hint-quality phase-d2-complete)
+  ready-test-hint-quality)
+
+(normally r-dep-test-tone-on-d2
+  (and task-test-tone phase-d2-complete)
+  ready-test-tone)
+
+(normally r-dep-test-titledetail-on-d2
+  (and task-test-title-detail phase-d2-complete)
+  ready-test-title-detail)
+
+(normally r-phase-d5-done
+  (and completed-test-construction completed-test-json-envelope completed-test-redaction
+       completed-test-taxonomy completed-test-source-chain completed-test-non-exhaustive
+       completed-test-send-sync completed-test-source-context completed-test-uniform-format
+       completed-test-hint-quality completed-test-tone completed-test-title-detail)
+  phase-d5-complete)
+
+; Phase D aggregate gate
+(normally r-phase-d-done
+  (and phase-d1-complete phase-d2-complete phase-d3-complete phase-d4-complete phase-d5-complete)
+  phase-d-complete)
+
+; ===========================================================================
+; Phase E: CI and Test Suite Simplification (IMPL-010 Phase E / PR-5)
+; ===========================================================================
+
+(given task-ci-contract-gates)
+(given task-ci-reduce-overlap)
+(given task-ci-doc-example-check)
+
+; CI work depends on Phase D (error module tests exist to gate)
+(normally r-dep-ci-contract-gates-on-d
+  (and task-ci-contract-gates phase-d-complete)
+  ready-ci-contract-gates)
+
+(normally r-dep-ci-reduce-overlap-on-gates
+  (and task-ci-reduce-overlap completed-ci-contract-gates)
+  ready-ci-reduce-overlap)
+
+(normally r-dep-ci-doc-check-on-d
+  (and task-ci-doc-example-check phase-d-complete)
+  ready-ci-doc-example-check)
+
+(normally r-phase-e-done
+  (and completed-ci-contract-gates completed-ci-reduce-overlap completed-ci-doc-example-check)
+  phase-e-complete)
+
+; ===========================================================================
+; Project completion
+; ===========================================================================
+
+(normally r-project-done
+  (and phase-a-complete phase-b-complete phase-c-complete phase-d-complete phase-e-complete)
+  project-complete)
+
+; ===========================================================================
+; Metadata: Phase A - Spec and Contract Hygiene
+; ===========================================================================
+
+(meta task-fix-contract-refs
+  (description "Reconcile SPINDLE-CONTRACT.md references in specs. Verify specs/SPINDLE-CONTRACT.md exists and all cross-references in ERROR-MODULE-SPEC.md and SPINDLE-RUST-IMPLEMENTATION.md resolve correctly. Fix broken anchors like §8-error-and-exit-behavior-normative. Per OBS-206/ADR-205.")
+  (phase "a-spec-hygiene")
+  (target-file "specs/ERROR-MODULE-SPEC.md specs/SPINDLE-RUST-IMPLEMENTATION.md")
+  (implements "REQ-201 REQ-207")
+  (effort "1h"))
+
+(meta task-fix-woodpecker-flags
+  (description "Fix stale CI pipeline examples. .woodpecker/release.yaml line 198 uses '--format json' but CLI uses '--json'. Update to match actual CLI flags. Per OBS-206.")
+  (phase "a-spec-hygiene")
+  (target-file ".woodpecker/release.yaml")
+  (implements "REQ-207")
+  (effort "30m"))
+
+(meta task-plan-contract-crate
+  (description "Document the spindle-contract crate design: what shared transport types it will own (ReasonOutput, GroundingStats, ConclusionStruct, TheoryStats, error envelope types), its Cargo.toml shape, and dependency direction (CLI and WASM depend on it, it depends on spindle-core for Literal/Mode/Temporal types). Per ADR-201.")
+  (phase "a-spec-hygiene")
+  (target-file "specs/SPINDLE-CONTRACT-CRATE.md")
+  (implements "REQ-203")
+  (effort "2h"))
+
+; ===========================================================================
+; Metadata: Phase B - CLI Boundary Decomposition
+; ===========================================================================
+
+(meta task-cli-app-module
+  (description "Extract CLI application scaffolding from main.rs into src/cli/app.rs: the Cli struct, Commands enum, and clap derive macros. Keep same flags and subcommands. No behavior change. Per REQ-202/OBS-203.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/cli/app.rs")
+  (implements "REQ-202")
+  (effort "2h"))
+
+(meta task-cli-input-module
+  (description "Extract theory source resolution and loading from main.rs into src/cli/input.rs: TheorySource enum, resolve_theory_source(), load_theory_source(), load_theory_from_file(), load_theory_from_stdin(), parse_theory_content(), parse_literal_arg(). No behavior change. Per REQ-202.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/cli/input.rs")
+  (implements "REQ-202")
+  (effort "2h"))
+
+(meta task-cli-output-module
+  (description "Extract output rendering from main.rs into src/cli/output.rs: CommandOutput enum, emit_and_exit() function, JSON serialization helpers, print_json_error_envelope(), print_non_json_error(). No behavior change. Per REQ-202.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/cli/output.rs")
+  (implements "REQ-202")
+  (effort "2h"))
+
+(meta task-cli-error-module
+  (description "Extract error types from main.rs into src/cli/error.rs: CliError struct and its constructors (validation, parse, execution, resource, with_details), Diagnostic struct and constructors (warning, error, info). No behavior change. Per REQ-202.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/cli/error.rs")
+  (implements "REQ-202")
+  (effort "1h"))
+
+(meta task-cli-commands-module
+  (description "Extract command implementations from main.rs into src/cli/commands/{reason,validate,stats,query,explain,why_not,requires,capabilities}.rs. Each command gets its own file with its output structs and run_* function. No behavior change. Per REQ-202/OBS-203.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/cli/commands/")
+  (implements "REQ-202")
+  (effort "4h"))
+
+(meta task-fix-double-prepare
+  (description "Fix OBS-204: CLI run_reason calls prepare() then passes result.theory to reason() which calls prepare() again internally. Add reason_prepared() or equivalent that accepts a pre-prepared theory, or refactor reason() to skip prepare when theory is already ground. Per REQ-204/ADR-203/CON-203.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-core/src/reason.rs crates/spindle-cli/src/main.rs")
+  (implements "REQ-204")
+  (effort "3h"))
+
+(meta task-cli-main-rewire
+  (description "Rewire main.rs to import from extracted cli/ modules. main() stays thin: parse args, dispatch to command, emit output. Remove all moved code from main.rs. Verify cargo build succeeds. Per REQ-202.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/main.rs")
+  (implements "REQ-202")
+  (effort "2h"))
+
+(meta task-cli-behavior-parity
+  (description "TEST-202: Run all existing CLI tests after module split. Add smoke tests for no-arg, --help, --version, and each subcommand. Assert identical stdout/stderr/exit-code behavior vs pre-split baseline. Per NFR-201.")
+  (phase "b-cli-decomposition")
+  (target-file "crates/spindle-cli/src/tests.rs")
+  (verifies "TEST-202")
+  (effort "2h"))
+
+; ===========================================================================
+; Metadata: Phase C - Shared Contract Extraction
+; ===========================================================================
+
+(meta task-create-contract-crate
+  (description "Create crates/spindle-contract with Cargo.toml (deps: serde, serde_json, spindle-core). Define shared transport types: ReasonOutput, GroundingStats, ConclusionStruct, TheoryStats, LiteralStructJson, ModeJson, TemporalJson and their From impls. Add to workspace Cargo.toml. Per ADR-201/REQ-203/CON-202.")
+  (phase "c-contract-extraction")
+  (target-file "crates/spindle-contract/src/lib.rs crates/spindle-contract/Cargo.toml Cargo.toml")
+  (implements "REQ-203")
+  (effort "4h"))
+
+(meta task-migrate-cli-dtos
+  (description "Replace duplicate DTO structs in spindle-cli with re-exports from spindle-contract. Remove ReasonOutput, GroundingStats, ConclusionStruct, TheoryStats, LiteralStructJson, ModeJson, TemporalJson from CLI code. Update imports in command modules. Per OBS-202/REQ-203.")
+  (phase "c-contract-extraction")
+  (target-file "crates/spindle-cli/Cargo.toml crates/spindle-cli/src/")
+  (implements "REQ-203")
+  (effort "2h"))
+
+(meta task-migrate-wasm-dtos
+  (description "Replace duplicate DTO structs in spindle-wasm with re-exports from spindle-contract. Remove JsReasonOutput, JsGroundingStats, JsConclusionStruct, JsTheoryStats and their From impls. Update imports. Per OBS-202/REQ-203.")
+  (phase "c-contract-extraction")
+  (target-file "crates/spindle-wasm/Cargo.toml crates/spindle-wasm/src/lib.rs")
+  (implements "REQ-203")
+  (effort "2h"))
+
+(meta task-dto-parity-tests
+  (description "TEST-203: Serialize identical theory outcomes through CLI and WASM paths, assert schema and value parity. Verify deterministic ordering preserved. Per NFR-202/CON-202.")
+  (phase "c-contract-extraction")
+  (target-file "crates/spindle-contract/tests/parity_tests.rs")
+  (verifies "TEST-203")
+  (effort "2h"))
+
+; ===========================================================================
+; Metadata: Phase D1 - Extend core error types
+; ===========================================================================
+
+(meta task-error-category
+  (description "Define ErrorCategory enum in spindle-core/src/error.rs with variants: ParseError, ValidationError, ExecutionError, ResourceLimit, InternalError. Add default_title(), exit_code(), and default_hint() methods. Maps to SPEC-010 Section 10.1 taxonomy.")
+  (phase "d1-core-types")
+  (target-file "crates/spindle-core/src/error.rs")
+  (implements "REQ-104 REQ-105 REQ-206")
+  (effort "2h"))
+
+(meta task-core-code-category
+  (description "Add code() -> &'static str and category() -> ErrorCategory methods to SpindleError. Map each variant per SPEC-010 Section 10.2: RuleNotFound->RULE_NOT_FOUND/ExecutionError, InvalidLiteral->INVALID_LITERAL/ValidationError, TheoryError->THEORY_ERROR/ValidationError, ReasoningError->REASONING_ERROR/ExecutionError, Validation->VALIDATION_ERROR/ValidationError, Parse->delegates to inner ParseError.")
+  (phase "d1-core-types")
+  (target-file "crates/spindle-core/src/error.rs")
+  (implements "REQ-105 REQ-109 REQ-206")
+  (effort "2h"))
+
+(meta task-parser-code-category
+  (description "Add code() -> &'static str and category() -> ErrorCategory methods to ParseError. Map: LexerError->DFL_LEXER_ERROR/ParseError, ParserError->DFL_PARSE_ERROR/ParseError, UnexpectedToken->UNEXPECTED_TOKEN/ParseError, IoError->IO_ERROR/InternalError. Import ErrorCategory from spindle-core.")
+  (phase "d1-core-types")
+  (target-file "crates/spindle-parser/src/error.rs")
+  (implements "REQ-105 REQ-109 REQ-206")
+  (effort "2h"))
+
+(meta task-non-exhaustive
+  (description "Add #[non_exhaustive] attribute to both SpindleError and ParseError enums. Update any internal match arms to include wildcard _ where needed. Per SPEC-010 REQ-111/ADR-106.")
+  (phase "d1-core-types")
+  (target-file "crates/spindle-core/src/error.rs crates/spindle-parser/src/error.rs")
+  (implements "REQ-111")
+  (effort "1h"))
+
+(meta task-from-parse-error
+  (description "Add Parse(#[from] spindle_parser::ParseError) variant to SpindleError with #[error(transparent)] for Display/source() delegation. Per SPEC-010 ADR-107 composition pattern. Add spindle-parser as dependency of spindle-core if not already.")
+  (phase "d1-core-types")
+  (target-file "crates/spindle-core/src/error.rs crates/spindle-core/Cargo.toml")
+  (implements "REQ-109 REQ-110")
+  (effort "2h"))
+
+(meta task-send-sync-static
+  (description "Add compile-time assertion tests: fn assert_send_sync<T: Send + Sync + 'static>() {} called with SpindleError and ParseError. Verify all fields are owned (String, not &str). Per SPEC-010 REQ-112.")
+  (phase "d1-core-types")
+  (target-file "crates/spindle-core/src/error.rs")
+  (implements "REQ-112")
+  (effort "30m"))
+
+; ===========================================================================
+; Metadata: Phase D2 - Add presentation types
+; ===========================================================================
+
+(meta task-problem-details
+  (description "Create error_report module with ProblemDetails struct: problem_type (serde rename 'type'), title, detail (Option), instance (Option), extensions (ProblemExtensions flattened). ProblemExtensions: exit_code, line, column, hint, source_name, source_context. All with skip_serializing_if for Options. Per SPEC-010 Section 8.3 and CON-102. Place in spindle-contract or spindle-cli depending on Phase C outcome.")
+  (phase "d2-presentation")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-101 REQ-106 REQ-205")
+  (effort "3h"))
+
+(meta task-source-context
+  (description "Define SourceContext struct with lines: Vec<SourceLine> and highlight_index: usize. SourceLine has line_number: usize and text: String. Both derive Serialize, Debug, Clone. Per SPEC-010 REQ-116.")
+  (phase "d2-presentation")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-116")
+  (effort "1h"))
+
+(meta task-diagnostic-type
+  (description "Define new Diagnostic struct in error_report: code (String), message (String), detail (Option<String>). Replaces the ad-hoc Diagnostic in main.rs. Per SPEC-010 Section 8.3 and REQ-108.")
+  (phase "d2-presentation")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-108")
+  (effort "1h"))
+
+(meta task-error-report
+  (description "Define ErrorReport (schema_version, diagnostics, error: ErrorEnvelope), ErrorEnvelope (code, message, details: ErrorDetails), ErrorDetails (problem: ProblemDetails). Wraps ProblemDetails into existing contract JSON envelope shape. Per SPEC-010 CON-103/REQ-205.")
+  (phase "d2-presentation")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-103 REQ-205")
+  (effort "2h"))
+
+(meta task-from-spindle-error
+  (description "Implement From<&SpindleError> for ProblemDetails. Use err.code() for type URI tag:spindle.dev,2026:error:{CODE}, err.category().default_title() for title, err.to_string() for detail, category.exit_code() for exit_code extension. Extract line/column from ParseError variants when available. Per SPEC-010 Section 8.4.")
+  (phase "d2-presentation")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-101 REQ-110")
+  (effort "2h"))
+
+(meta task-from-parse-error-pd
+  (description "Implement From<&ParseError> for ProblemDetails. Extracts position/line/column directly from ParseError variants. Generates source_context when source text is available.")
+  (phase "d2-presentation")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-101 REQ-110")
+  (effort "2h"))
+
+; ===========================================================================
+; Metadata: Phase D3 - Wire CLI rendering
+; ===========================================================================
+
+(meta task-render-human
+  (description "Implement render_human() on ProblemDetails. Format: 'Error: {title}' line, then '--> {source_name}:{line}:{column}' if available, then source context window with line numbers and caret marker, then 'Hint: {hint}' if present. Redact absolute paths unless debug mode. Per SPEC-010 Section 11.2 and REQ-106/REQ-107/REQ-116/REQ-117.")
+  (phase "d3-cli-wiring")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-106 REQ-107 REQ-116 REQ-117 REQ-205")
+  (effort "4h"))
+
+(meta task-render-json
+  (description "Implement render_json() on ErrorReport. Produces the contract-compliant JSON envelope with embedded ProblemDetails at error.details.problem. Ensures schema_version, diagnostics array, and error object are all present. Per SPEC-010 CON-103/REQ-205.")
+  (phase "d3-cli-wiring")
+  (target-file "crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-103 REQ-205")
+  (effort "2h"))
+
+(meta task-replace-cli-error
+  (description "Replace ad-hoc CliError struct with ProblemDetails-based error flow. Update emit_and_exit to use ErrorReport for JSON and render_human for stderr. Convert all CliError::validation/parse/execution calls to construct ProblemDetails. Keep existing exit code semantics. Largest task - touches all error paths in CLI. Per SPEC-010 REQ-102/REQ-103/REQ-104/REQ-205.")
+  (phase "d3-cli-wiring")
+  (target-file "crates/spindle-cli/src/cli/error.rs crates/spindle-cli/src/cli/output.rs")
+  (implements "REQ-102 REQ-103 REQ-104 REQ-205")
+  (effort "6h"))
+
+(meta task-debug-errors-flag
+  (description "Add --debug-errors global CLI flag. When enabled, render_human includes full source() error chain and unredacted paths. Per SPEC-010 REQ-107 and Section 11.2.")
+  (phase "d3-cli-wiring")
+  (target-file "crates/spindle-cli/src/cli/app.rs")
+  (implements "REQ-107")
+  (effort "2h"))
+
+(meta task-explain-code-flag
+  (description "Add --explain CODE subcommand or flag. Prints expanded explanation for a stable error code: meaning, common causes, correct usage example, doc reference. Per SPEC-010 REQ-124 and Section 11.1 principle 13.")
+  (phase "d3-cli-wiring")
+  (target-file "crates/spindle-cli/src/cli/app.rs crates/spindle-cli/src/error_report.rs")
+  (implements "REQ-124")
+  (effort "4h"))
+
+; ===========================================================================
+; Metadata: Phase D4 - Wire WASM rendering
+; ===========================================================================
+
+(meta task-wasm-problem-details
+  (description "Update spindle-wasm/src/lib.rs to convert errors via ProblemDetails. Replace JsError::new(&e.to_string()) with ProblemDetails JSON serialization. Per SPEC-010 Section 8.5/REQ-102.")
+  (phase "d4-wasm")
+  (target-file "crates/spindle-wasm/src/lib.rs")
+  (implements "REQ-102")
+  (effort "2h"))
+
+; ===========================================================================
+; Metadata: Phase D5 - Error module testing
+; ===========================================================================
+
+(meta task-test-construction
+  (description "TEST-101/107: ProblemDetails construction from each SpindleError and ParseError variant preserves required fields, extension data, stable codes, and RFC 9457-compatible output.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-101 TEST-107 TEST-205")
+  (effort "3h"))
+
+(meta task-test-json-envelope
+  (description "TEST-102: CLI JSON error output contains contract envelope plus embedded ProblemDetails with correct field names at error.details.problem.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-102 TEST-205")
+  (effort "2h"))
+
+(meta task-test-redaction
+  (description "TEST-103: Error rendering redacts sensitive data (absolute paths, OS error strings) unless --debug-errors is enabled.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-103")
+  (effort "2h"))
+
+(meta task-test-taxonomy
+  (description "TEST-104/206: Error taxonomy maps to exit codes and stable codes exactly as specified in SPEC-010 Section 10.2.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-core/tests/error_tests.rs")
+  (verifies "TEST-104 TEST-206")
+  (effort "1h"))
+
+(meta task-test-source-chain
+  (description "TEST-106: source() chain is preserved through From conversions. ParseError -> SpindleError::Parse -> ProblemDetails all maintain the error chain.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-core/tests/error_tests.rs")
+  (verifies "TEST-106")
+  (effort "1h"))
+
+(meta task-test-non-exhaustive
+  (description "TEST-109: SpindleError and ParseError are #[non_exhaustive]. A match without wildcard arm fails to compile (compile-fail test or doc comment).")
+  (phase "d5-testing")
+  (target-file "crates/spindle-core/tests/error_tests.rs")
+  (verifies "TEST-109")
+  (effort "1h"))
+
+(meta task-test-send-sync
+  (description "TEST-110: All error types satisfy Send + Sync + 'static bounds. Compile-time assertion via fn assert_bounds<T: Send + Sync + 'static>() {}.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-core/tests/error_tests.rs")
+  (verifies "TEST-110")
+  (effort "30m"))
+
+(meta task-test-source-context
+  (description "TEST-111: When source text is available, ProblemDetails includes source_context with correct lines, highlight_index, and surrounding context.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-111")
+  (effort "2h"))
+
+(meta task-test-uniform-format
+  (description "TEST-112: Human-readable rendering uses the same template format for all error categories (parse, validation, execution, internal).")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-112")
+  (effort "2h"))
+
+(meta task-test-hint-quality
+  (description "TEST-113: hint values contain actionable corrective suggestions, not restatements of the error title or detail.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-113")
+  (effort "1h"))
+
+(meta task-test-tone
+  (description "TEST-116: User-facing title, detail, and hint text does not contain blame language or anthropomorphism. No 'you failed', 'illegal', 'I expected'.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-116")
+  (effort "1h"))
+
+(meta task-test-title-detail
+  (description "TEST-117: For each error variant, title and detail do not repeat the same text. Detail provides occurrence-specific information beyond the stable title.")
+  (phase "d5-testing")
+  (target-file "crates/spindle-cli/tests/error_report_tests.rs")
+  (verifies "TEST-117")
+  (effort "1h"))
+
+; ===========================================================================
+; Metadata: Phase E - CI and Test Suite Simplification
+; ===========================================================================
+
+(meta task-ci-contract-gates
+  (description "TEST-208: Add explicit CI contract gate jobs/steps that run error envelope contract tests, reason JSON contract tests, and WASM contract tests as named gates. CI must clearly signal contract failures vs general unit failures. Per REQ-208/OBS-208.")
+  (phase "e-ci-simplification")
+  (target-file ".woodpecker/ci.yaml")
+  (implements "REQ-208")
+  (effort "2h"))
+
+(meta task-ci-reduce-overlap
+  (description "Reduce redundant test overlap where behavior is already covered at lower levels. Keep integration-first bias for end-user behavior. Remove tests that only duplicate lower-level coverage without adding boundary value. Per IMPL-010 Phase E.")
+  (phase "e-ci-simplification")
+  (target-file "crates/spindle-cli/src/tests.rs crates/spindle-core/tests/")
+  (implements "REQ-208")
+  (effort "2h"))
+
+(meta task-ci-doc-example-check
+  (description "TEST-207: Validate examples in docs and release pipeline commands against current CLI flags. Ensure --json not --format json, correct subcommand names, etc. Per REQ-207/OBS-206.")
+  (phase "e-ci-simplification")
+  (target-file ".woodpecker/release.yaml")
+  (verifies "TEST-207")
+  (effort "1h"))
+
+(claims agent:system
+  :at "2026-02-10T12:17:49Z"
+  (given claim-v1-fix-woodpecker-flags)
+  (normally r-state-v1-fix-woodpecker-flags claim-v1-fix-woodpecker-flags state-claimed-v1-fix-woodpecker-flags)
+  (normally r-chain-v1-fix-woodpecker-flags state-claimed-v1-fix-woodpecker-flags claimed-fix-woodpecker-flags))
+
+(claims agent:claude
+  :at "2026-02-10T13:00:46Z"
+  (given completed-render-human))
+
+(claims agent:claude
+  :at "2026-02-10T13:00:46Z"
+  (given completed-render-json))
+
+(claims agent:claude
+  :at "2026-02-10T13:00:47Z"
+  (given completed-wasm-problem-details))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:48Z"
+  (given completed-fix-contract-refs))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:48Z"
+  (given completed-fix-woodpecker-flags))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:49Z"
+  (given completed-plan-contract-crate))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:52Z"
+  (given completed-cli-app-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:53Z"
+  (given completed-cli-input-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:53Z"
+  (given completed-cli-output-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:54Z"
+  (given completed-cli-error-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:54Z"
+  (given completed-cli-commands-module))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:55Z"
+  (given completed-fix-double-prepare))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:58Z"
+  (given completed-cli-main-rewire))
+
+(claims agent:claude
+  :at "2026-02-10T13:01:58Z"
+  (given completed-cli-behavior-parity))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:01Z"
+  (given completed-create-contract-crate))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:02Z"
+  (given completed-migrate-cli-dtos))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:03Z"
+  (given completed-migrate-wasm-dtos))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:03Z"
+  (given completed-dto-parity-tests))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:06Z"
+  (given completed-error-category))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:07Z"
+  (given completed-core-code-category))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:08Z"
+  (given completed-parser-code-category))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:08Z"
+  (given completed-non-exhaustive))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:09Z"
+  (given completed-from-parse-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:10Z"
+  (given completed-send-sync-static))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:13Z"
+  (given completed-problem-details))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:13Z"
+  (given completed-source-context))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:14Z"
+  (given completed-diagnostic-type))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:15Z"
+  (given completed-error-report))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:15Z"
+  (given completed-from-spindle-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:16Z"
+  (given completed-from-parse-error-pd))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:52Z"
+  (given claim-v1-test-taxonomy)
+  (normally r-state-v1-test-taxonomy claim-v1-test-taxonomy state-claimed-v1-test-taxonomy)
+  (normally r-chain-v1-test-taxonomy state-claimed-v1-test-taxonomy claimed-test-taxonomy))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:52Z"
+  (given claim-v1-test-send-sync)
+  (normally r-state-v1-test-send-sync claim-v1-test-send-sync state-claimed-v1-test-send-sync)
+  (normally r-chain-v1-test-send-sync state-claimed-v1-test-send-sync claimed-test-send-sync))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:53Z"
+  (given claim-v1-test-non-exhaustive)
+  (normally r-state-v1-test-non-exhaustive claim-v1-test-non-exhaustive state-claimed-v1-test-non-exhaustive)
+  (normally r-chain-v1-test-non-exhaustive state-claimed-v1-test-non-exhaustive claimed-test-non-exhaustive))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:54Z"
+  (given claim-v1-test-source-chain)
+  (normally r-state-v1-test-source-chain claim-v1-test-source-chain state-claimed-v1-test-source-chain)
+  (normally r-chain-v1-test-source-chain state-claimed-v1-test-source-chain claimed-test-source-chain))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:54Z"
+  (given claim-v1-test-construction)
+  (normally r-state-v1-test-construction claim-v1-test-construction state-claimed-v1-test-construction)
+  (normally r-chain-v1-test-construction state-claimed-v1-test-construction claimed-test-construction))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:55Z"
+  (given claim-v1-test-source-context)
+  (normally r-state-v1-test-source-context claim-v1-test-source-context state-claimed-v1-test-source-context)
+  (normally r-chain-v1-test-source-context state-claimed-v1-test-source-context claimed-test-source-context))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:55Z"
+  (given claim-v1-test-hint-quality)
+  (normally r-state-v1-test-hint-quality claim-v1-test-hint-quality state-claimed-v1-test-hint-quality)
+  (normally r-chain-v1-test-hint-quality state-claimed-v1-test-hint-quality claimed-test-hint-quality))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:56Z"
+  (given claim-v1-test-tone)
+  (normally r-state-v1-test-tone claim-v1-test-tone state-claimed-v1-test-tone)
+  (normally r-chain-v1-test-tone state-claimed-v1-test-tone claimed-test-tone))
+
+(claims agent:claude
+  :at "2026-02-10T13:02:56Z"
+  (given claim-v1-test-title-detail)
+  (normally r-state-v1-test-title-detail claim-v1-test-title-detail state-claimed-v1-test-title-detail)
+  (normally r-chain-v1-test-title-detail state-claimed-v1-test-title-detail claimed-test-title-detail))
+
+(claims agent:claude
+  :at "2026-02-10T13:03:01Z"
+  (given completed-test-taxonomy))
+
+(claims agent:claude
+  :at "2026-02-10T13:03:01Z"
+  (given completed-test-send-sync))
+
+(claims agent:claude
+  :at "2026-02-10T13:03:02Z"
+  (given completed-test-non-exhaustive))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:30Z"
+  (given completed-test-construction))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:30Z"
+  (given completed-test-source-context))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:31Z"
+  (given completed-test-source-chain))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:32Z"
+  (given completed-test-hint-quality))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:32Z"
+  (given completed-test-tone))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:33Z"
+  (given completed-test-title-detail))
+
+(claims agent:claude
+  :at "2026-02-10T13:04:42Z"
+  (given claim-v1-replace-cli-error)
+  (normally r-state-v1-replace-cli-error claim-v1-replace-cli-error state-claimed-v1-replace-cli-error)
+  (normally r-chain-v1-replace-cli-error state-claimed-v1-replace-cli-error claimed-replace-cli-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:11:10Z"
+  (given completed-replace-cli-error))
+
+(claims agent:claude
+  :at "2026-02-10T13:11:23Z"
+  (given claim-v1-debug-errors-flag)
+  (normally r-state-v1-debug-errors-flag claim-v1-debug-errors-flag state-claimed-v1-debug-errors-flag)
+  (normally r-chain-v1-debug-errors-flag state-claimed-v1-debug-errors-flag claimed-debug-errors-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:11:23Z"
+  (given claim-v1-explain-code-flag)
+  (normally r-state-v1-explain-code-flag claim-v1-explain-code-flag state-claimed-v1-explain-code-flag)
+  (normally r-chain-v1-explain-code-flag state-claimed-v1-explain-code-flag claimed-explain-code-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:13:52Z"
+  (given completed-debug-errors-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:13:53Z"
+  (given completed-explain-code-flag))
+
+(claims agent:claude
+  :at "2026-02-10T13:14:02Z"
+  (given claim-v1-test-uniform-format)
+  (normally r-state-v1-test-uniform-format claim-v1-test-uniform-format state-claimed-v1-test-uniform-format)
+  (normally r-chain-v1-test-uniform-format state-claimed-v1-test-uniform-format claimed-test-uniform-format))
+
+(claims agent:claude
+  :at "2026-02-10T13:14:03Z"
+  (given claim-v1-test-redaction)
+  (normally r-state-v1-test-redaction claim-v1-test-redaction state-claimed-v1-test-redaction)
+  (normally r-chain-v1-test-redaction state-claimed-v1-test-redaction claimed-test-redaction))
+
+(claims agent:claude
+  :at "2026-02-10T13:14:03Z"
+  (given claim-v1-test-json-envelope)
+  (normally r-state-v1-test-json-envelope claim-v1-test-json-envelope state-claimed-v1-test-json-envelope)
+  (normally r-chain-v1-test-json-envelope state-claimed-v1-test-json-envelope claimed-test-json-envelope))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:24Z"
+  (given completed-test-uniform-format))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:25Z"
+  (given completed-test-redaction))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:25Z"
+  (given completed-test-json-envelope))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:34Z"
+  (given claim-v1-ci-contract-gates)
+  (normally r-state-v1-ci-contract-gates claim-v1-ci-contract-gates state-claimed-v1-ci-contract-gates)
+  (normally r-chain-v1-ci-contract-gates state-claimed-v1-ci-contract-gates claimed-ci-contract-gates))
+
+(claims agent:claude
+  :at "2026-02-10T13:15:34Z"
+  (given claim-v1-ci-doc-example-check)
+  (normally r-state-v1-ci-doc-example-check claim-v1-ci-doc-example-check state-claimed-v1-ci-doc-example-check)
+  (normally r-chain-v1-ci-doc-example-check state-claimed-v1-ci-doc-example-check claimed-ci-doc-example-check))
+
+(claims agent:claude
+  :at "2026-02-10T13:21:10Z"
+  (given completed-ci-contract-gates))
+
+(claims agent:claude
+  :at "2026-02-10T13:21:10Z"
+  (given completed-ci-doc-example-check))
+
+(claims agent:system
+  :at "2026-02-10T13:21:30Z"
+  (given claim-v1-ci-reduce-overlap)
+  (normally r-state-v1-ci-reduce-overlap claim-v1-ci-reduce-overlap state-claimed-v1-ci-reduce-overlap)
+  (normally r-chain-v1-ci-reduce-overlap state-claimed-v1-ci-reduce-overlap claimed-ci-reduce-overlap))
+
+(claims agent:claude
+  :at "2026-02-10T13:23:00Z"
+  (given completed-ci-reduce-overlap))

@@ -11,18 +11,21 @@ cargo install --path crates/spindle-cli
 ## Synopsis
 
 ```bash
-spindle [OPTIONS] <FILE>
-spindle <COMMAND> [OPTIONS] <FILE> [LITERAL]
+spindle <COMMAND> [OPTIONS]
+spindle reason [OPTIONS] [FILE]
+spindle query <LITERAL> [FILE] [OPTIONS]
+spindle explain <LITERAL> [FILE] [OPTIONS]
+spindle why-not <LITERAL> [FILE] [OPTIONS]
+spindle requires <LITERAL> [FILE] [OPTIONS]
 ```
 
 ## Commands
 
-### reason (default)
+### reason
 
 Perform defeasible reasoning on a theory.
 
 ```bash
-spindle examples/penguin.dfl
 spindle reason examples/penguin.dfl
 ```
 
@@ -32,11 +35,20 @@ Check syntax without reasoning.
 
 ```bash
 spindle validate examples/penguin.dfl
+spindle --json validate --stdin < examples/penguin.dfl
 ```
 
 Output on success:
 ```
-Valid DFL theory.
+Valid theory file
+```
+
+With `--json` success output:
+```json
+{
+  "valid": true,
+  "diagnostics": []
+}
 ```
 
 Output on error:
@@ -50,6 +62,7 @@ Show theory statistics.
 
 ```bash
 spindle stats examples/penguin.dfl
+spindle --json stats --stdin < examples/penguin.dfl
 ```
 
 Output:
@@ -63,15 +76,30 @@ Theory Statistics:
   Total rules: 8
 ```
 
+With `--json` success output:
+```json
+{
+  "stats": {
+    "total_rules": 8,
+    "facts": 2,
+    "strict": 1,
+    "defeasible": 4,
+    "defeaters": 1,
+    "superiorities": 1
+  },
+  "diagnostics": []
+}
+```
+
 ### query
 
 Query if a literal holds in the theory.
 
 ```bash
-spindle query examples/penguin.dfl flies
-spindle query examples/penguin.dfl "~flies"
-spindle query examples/penguin.dfl "(not flies)"
-spindle query examples/penguin.dfl --json flies
+spindle query flies examples/penguin.dfl
+spindle query "~flies" examples/penguin.dfl
+spindle query "(not flies)" examples/penguin.dfl
+spindle query flies examples/penguin.dfl --json
 ```
 
 The literal argument supports multiple formats: `p`, `~p`, `(not p)`, or complex SPL expressions.
@@ -99,8 +127,8 @@ With `--json`:
 Show the derivation proof tree for why a literal holds.
 
 ```bash
-spindle explain examples/penguin.dfl "-flies"
-spindle explain examples/penguin.dfl --json "-flies"
+spindle explain "-flies" examples/penguin.dfl
+spindle explain "-flies" examples/penguin.dfl --json
 ```
 
 Shows the proof tree detailing how the reasoning engine derived the conclusion.
@@ -123,8 +151,8 @@ With `--json`, the output is a JSON or JSON-LD structure containing an `Explanat
 Explain why a literal is NOT provable.
 
 ```bash
-spindle why-not examples/penguin.dfl flies
-spindle why-not examples/penguin.dfl --json flies
+spindle why-not flies examples/penguin.dfl
+spindle why-not flies examples/penguin.dfl --json
 ```
 
 Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes `is_provable: true` and `blocked_by` will be empty.
@@ -150,9 +178,9 @@ Possible blocking reasons:
 Abduction: find the minimal sets of facts needed to derive a literal.
 
 ```bash
-spindle requires examples/penguin.dfl flies
-spindle requires examples/penguin.dfl --max 5 flies
-spindle requires examples/penguin.dfl --json flies
+spindle requires flies examples/penguin.dfl
+spindle requires flies examples/penguin.dfl --max 5
+spindle requires flies examples/penguin.dfl --json
 ```
 
 The `--max` option limits the number of solutions returned (defaults to 10).
@@ -170,12 +198,20 @@ Each result is a minimal set of assumptions that, if added to the theory, would 
 
 ### `--json`
 
-Output results in JSON format. Available for `reason`, `query`, `explain`, `why-not`, and `requires` commands.
+Output results in JSON format. Available for all commands, including `validate` and `stats`.
+When `--json` is present, success and failure paths are machine-readable JSON.
 
 ```bash
 spindle reason examples/penguin.dfl --json
-spindle query examples/penguin.dfl --json flies
-spindle explain examples/penguin.dfl --json "-flies"
+spindle query flies examples/penguin.dfl --json
+spindle explain "-flies" examples/penguin.dfl --json
+spindle --json validate --stdin < examples/penguin.dfl
+```
+
+Parse/usage failures also emit JSON envelopes when `--json` is present:
+
+```bash
+spindle --json
 ```
 
 ### `--scalable`
@@ -183,7 +219,7 @@ spindle explain examples/penguin.dfl --json "-flies"
 Use the scalable DL(d||) algorithm instead of standard DL(d).
 
 ```bash
-spindle --scalable large-theory.dfl
+spindle reason --scalable large-theory.dfl
 ```
 
 Recommended for theories with:
@@ -196,7 +232,7 @@ Recommended for theories with:
 Show only positive conclusions (+D, +d).
 
 ```bash
-spindle --positive examples/penguin.dfl
+spindle reason --positive examples/penguin.dfl
 ```
 
 Output:
@@ -222,7 +258,9 @@ The CLI auto-detects format by extension:
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Error (parse error, file not found, etc.) |
+| 2 | User input / parse / validation error |
+| 3 | Execution/internal reasoning error |
+| 4 | Resource/limit/timeout hit |
 
 ## Examples
 
@@ -230,9 +268,6 @@ The CLI auto-detects format by extension:
 
 ```bash
 # Reason about a theory
-spindle penguin.dfl
-
-# Same with explicit command
 spindle reason penguin.dfl
 ```
 
@@ -240,35 +275,35 @@ spindle reason penguin.dfl
 
 ```bash
 # Check if a literal holds
-spindle query penguin.dfl flies
+spindle query flies penguin.dfl
 
 # Get a proof tree for a derived conclusion
-spindle explain penguin.dfl "-flies"
+spindle explain "-flies" penguin.dfl
 
 # Debug why something is not provable
-spindle why-not penguin.dfl flies
+spindle why-not flies penguin.dfl
 
 # Find what facts would make a literal provable
-spindle requires penguin.dfl flies --max 5
+spindle requires flies penguin.dfl --max 5
 
 # Get JSON output for scripting
-spindle query penguin.dfl --json flies
+spindle query flies penguin.dfl --json
 ```
 
 ### Validate Before Reasoning
 
 ```bash
-spindle validate theory.dfl && spindle theory.dfl
+spindle validate theory.dfl && spindle reason theory.dfl
 ```
 
 ### Compare Algorithms
 
 ```bash
 # Standard algorithm
-spindle theory.dfl > standard.txt
+spindle reason theory.dfl > standard.txt
 
 # Scalable algorithm
-spindle --scalable theory.dfl > scalable.txt
+spindle reason --scalable theory.dfl > scalable.txt
 
 # Compare (should be identical for correct theories)
 diff standard.txt scalable.txt
@@ -281,7 +316,7 @@ diff standard.txt scalable.txt
 for file in theories/*.dfl; do
     echo "Processing $file..."
     if spindle validate "$file"; then
-        spindle --positive "$file"
+        spindle reason --positive "$file"
     else
         echo "Invalid: $file"
     fi
@@ -295,5 +330,5 @@ done
 | `SPINDLE_LOG` | Set log level (error, warn, info, debug, trace) |
 
 ```bash
-SPINDLE_LOG=debug spindle theory.dfl
+SPINDLE_LOG=debug spindle reason theory.dfl
 ```

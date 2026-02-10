@@ -9,10 +9,31 @@ steps:
       - cargo fmt --all -- --check
       - cargo clippy --all -- -D warnings
 
+  - name: contract-error-envelope
+    image: rust:1.88-bookworm
+    commands:
+      - cargo test --package spindle-contract --test error_quality_tests
+      - cargo test --package spindle-cli --test contract_matrix_tests
+      - cargo test --package spindle-cli --test error_rendering_tests
+      - cargo test --package spindle-cli --test contract_guard_tests
+
+  - name: contract-reason-json
+    image: rust:1.88-bookworm
+    commands:
+      - cargo test --package spindle-cli --test reason_json_contract_tests
+
+  - name: contract-wasm
+    image: rust:1.88-bookworm
+    commands:
+      - cargo test --package spindle-wasm --test wasm_contract
+      - cargo test --package spindle-contract --test parity
+
   - name: test
     image: rust:1.88-bookworm
     commands:
-      - cargo test --all
+      # Contract tests already run in dedicated gate steps above;
+      # exclude fully-covered crates to reduce redundant work.
+      - cargo test --workspace --exclude spindle-contract --exclude spindle-wasm
 
   - name: wasm
     image: rust:1.88-bookworm
