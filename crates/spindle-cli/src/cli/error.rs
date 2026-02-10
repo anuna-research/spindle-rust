@@ -201,16 +201,14 @@ pub(crate) fn render_human(pd: &ProblemDetails, debug: bool) -> String {
         out.push_str(&format!("  {detail}\n"));
     }
 
-    // Show source location if available
-    if debug {
-        if let Some(name) = &pd.extensions.source_name {
-            let loc = match (pd.extensions.line, pd.extensions.column) {
-                (Some(l), Some(c)) => format!("  --> {name}:{l}:{c}\n"),
-                (Some(l), None) => format!("  --> {name}:{l}\n"),
-                _ => format!("  --> {name}\n"),
-            };
-            out.push_str(&loc);
-        }
+    // Show source location if available (always, not just in debug mode)
+    if let Some(name) = &pd.extensions.source_name {
+        let loc = match (pd.extensions.line, pd.extensions.column) {
+            (Some(l), Some(c)) => format!("  --> {name}:{l}:{c}\n"),
+            (Some(l), None) => format!("  --> {name}:{l}\n"),
+            _ => format!("  --> {name}\n"),
+        };
+        out.push_str(&loc);
     }
 
     // Show source context if available
