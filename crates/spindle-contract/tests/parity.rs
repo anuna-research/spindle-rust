@@ -231,8 +231,8 @@ fn test_error_report_diagnostics_include_severity_and_details() {
         details: Some(json!({"note": "extra"})),
     }];
 
-    let report = ErrorReport::new(None, "TEST_ERROR", "Test error", problem)
-        .with_diagnostics(diagnostics);
+    let report =
+        ErrorReport::new(None, "TEST_ERROR", "Test error", problem).with_diagnostics(diagnostics);
 
     let value: Value = serde_json::to_value(&report).unwrap();
     let diag = &value["diagnostics"][0];
