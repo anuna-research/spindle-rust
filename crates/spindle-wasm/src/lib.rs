@@ -25,7 +25,9 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use spindle_core::literal::{Literal, LiteralStruct};
+use spindle_contract::literal::LiteralStructJson;
+use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
+use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
@@ -48,37 +50,11 @@ pub fn init() {
     set_panic_hook();
 }
 
-/// Result of reasoning
-#[derive(Serialize, Deserialize)]
-pub struct JsReasonOutput {
-    pub schema_version: String,
-    pub evaluated_at: Option<String>,
-    pub grounding: JsGroundingStats,
-    pub conclusions: Vec<JsConclusionStruct>,
-    pub stats: JsTheoryStats,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct JsGroundingStats {
-    pub performed: bool,
-    pub had_variables: bool,
-    pub instances: usize,
-    pub limit_hit: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct JsTheoryStats {
-    pub rule_count: usize,
-    pub fact_count: usize,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct JsConclusionStruct {
-    pub conclusion_type: String,
-    pub literal_spl: String,
-    pub literal_struct: LiteralStruct,
-    pub positive: bool,
-}
+// Re-export contract types with Js-prefixed aliases for backward compatibility
+pub type JsReasonOutput = ReasonOutput;
+pub type JsGroundingStats = GroundingStats;
+pub type JsTheoryStats = TheoryStats;
+pub type JsConclusionStruct = ConclusionEntry;
 
 /// A conclusion from reasoning (legacy simple format)
 #[derive(Serialize, Deserialize)]
@@ -228,12 +204,12 @@ impl Spindle {
 
         let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
 
-        let mut output_conclusions: Vec<JsConclusionStruct> = conclusions
+        let mut output_conclusions: Vec<ConclusionEntry> = conclusions
             .iter()
-            .map(|c| JsConclusionStruct {
+            .map(|c| ConclusionEntry {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
                 literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStruct::from(&c.literal),
+                literal_struct: LiteralStructJson::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
@@ -244,20 +220,21 @@ impl Spindle {
                 .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
         });
 
-        let output = JsReasonOutput {
+        let output = ReasonOutput {
             schema_version: "spindle.reason.v1".to_string(),
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            grounding: JsGroundingStats {
+            grounding: GroundingStats {
                 performed: prepared.grounding_report.performed,
                 had_variables: prepared.grounding_report.had_variables,
                 instances: prepared.grounding_report.instances,
                 limit_hit: prepared.grounding_report.limit_hit,
             },
             conclusions: output_conclusions,
-            stats: JsTheoryStats {
+            diagnostics: vec![],
+            stats: Some(TheoryStats {
                 rule_count: prepared.theory.rule_count(),
                 fact_count: prepared.theory.facts().count(),
-            },
+            }),
         };
 
         Ok(serde_wasm_bindgen::to_value(&output)?)
@@ -272,12 +249,12 @@ impl Spindle {
         let result = reason_scalable(&indexed);
         let conclusions = result.to_conclusions(&indexed);
 
-        let mut output_conclusions: Vec<JsConclusionStruct> = conclusions
+        let mut output_conclusions: Vec<ConclusionEntry> = conclusions
             .iter()
-            .map(|c| JsConclusionStruct {
+            .map(|c| ConclusionEntry {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
                 literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStruct::from(&c.literal),
+                literal_struct: LiteralStructJson::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
             })
             .collect();
@@ -287,20 +264,21 @@ impl Spindle {
                 .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
         });
 
-        let output = JsReasonOutput {
+        let output = ReasonOutput {
             schema_version: "spindle.reason.v1".to_string(),
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            grounding: JsGroundingStats {
+            grounding: GroundingStats {
                 performed: prepared.grounding_report.performed,
                 had_variables: prepared.grounding_report.had_variables,
                 instances: prepared.grounding_report.instances,
                 limit_hit: prepared.grounding_report.limit_hit,
             },
             conclusions: output_conclusions,
-            stats: JsTheoryStats {
+            diagnostics: vec![],
+            stats: Some(TheoryStats {
                 rule_count: prepared.theory.rule_count(),
                 fact_count: prepared.theory.facts().count(),
-            },
+            }),
         };
 
         Ok(serde_wasm_bindgen::to_value(&output)?)
