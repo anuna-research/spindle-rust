@@ -7,21 +7,48 @@
 //!
 //! When `--debug-errors` IS set, messages pass through unmodified.
 
-use std::path::Path;
+/// Check whether a string starts with an absolute path prefix.
+///
+/// Recognises Unix (`/`), UNC (`\\server`), and Windows drive-letter
+/// (`C:\`, `C:/`) prefixes.
+fn is_absolute_path_prefix(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.is_empty() {
+        return false;
+    }
+    // Unix: /...
+    if b[0] == b'/' {
+        return true;
+    }
+    // UNC: \\server\share\...
+    if b.len() >= 2 && b[0] == b'\\' && b[1] == b'\\' {
+        return true;
+    }
+    // Windows drive-letter: C:\... or C:/...
+    if b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/')
+    {
+        return true;
+    }
+    false
+}
 
 /// Redact an absolute path to just its filename component.
 ///
 /// "/Users/alice/theories/my_theory.dfl" -> "my_theory.dfl"
-/// "stdin" -> "stdin" (unchanged)
+/// "C:\\Users\\alice\\theory.dfl"        -> "theory.dfl"
+/// "\\\\server\\share\\file.dfl"         -> "file.dfl"
+/// "stdin"                               -> "stdin" (unchanged)
 /// Relative paths are left unchanged.
 pub(crate) fn redact_path(path: &str) -> String {
-    if path.starts_with('/') || path.starts_with('\\') {
-        Path::new(path)
-            .file_name()
-            .map(|f| f.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string())
-    } else {
-        path.to_string()
+    if !is_absolute_path_prefix(path) {
+        return path.to_string();
+    }
+    // Find the last separator (either `/` or `\`) so Windows paths
+    // are handled correctly regardless of the host OS.
+    let last_sep = path.rfind('/').into_iter().chain(path.rfind('\\')).max();
+    match last_sep {
+        Some(pos) if pos + 1 < path.len() => path[pos + 1..].to_string(),
+        _ => path.to_string(),
     }
 }
 
@@ -45,27 +72,59 @@ pub(crate) fn redact_os_errors(message: &str) -> String {
 
 /// Redact absolute paths embedded in a message string.
 ///
-/// Replaces quoted absolute paths like `'/Users/alice/theory.dfl'` or
-/// `"/Users/alice/theory.dfl"` with just the filename component.
+/// Handles:
+/// - Quoted paths (single/double): `'/Users/alice/f.dfl'`, `"C:\Users\f.dfl"`
+/// - Unquoted paths at word boundaries: `Error reading /tmp/f.dfl: ...`
 pub(crate) fn redact_paths_in_text(message: &str) -> String {
-    let mut result = message.to_string();
-    // Redact single-quoted absolute paths: '/abs/path/file' -> 'file'
-    for quote in ['\'', '"'] {
-        let pattern = format!("{quote}/");
-        while let Some(start) = result.find(&pattern) {
-            if let Some(end) = result[start + 1..].find(quote) {
-                let path = &result[start + 1..start + 1 + end];
+    let mut result = String::with_capacity(message.len());
+    let bytes = message.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // --- quoted absolute path ---
+        if (bytes[i] == b'\'' || bytes[i] == b'"')
+            && i + 1 < bytes.len()
+            && is_absolute_path_prefix(&message[i + 1..])
+        {
+            let quote = bytes[i] as char;
+            if let Some(end) = message[i + 1..].find(quote) {
+                let path = &message[i + 1..i + 1 + end];
                 let redacted = redact_path(path);
-                result = format!(
-                    "{}{quote}{redacted}{quote}{}",
-                    &result[..start],
-                    &result[start + 1 + end + 1..]
-                );
-            } else {
-                break;
+                result.push(quote);
+                result.push_str(&redacted);
+                result.push(quote);
+                i = i + 1 + end + 1;
+                continue;
             }
         }
+
+        // --- unquoted absolute path at a word boundary ---
+        if is_absolute_path_prefix(&message[i..])
+            && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric())
+        {
+            let start = i;
+            let mut end = i;
+            while end < bytes.len() && !bytes[end].is_ascii_whitespace() {
+                end += 1;
+            }
+            // Trim trailing punctuation that is not part of the path
+            while end > start && matches!(bytes[end - 1], b':' | b',' | b';' | b')' | b']') {
+                end -= 1;
+            }
+            if end > start {
+                let redacted = redact_path(&message[start..end]);
+                result.push_str(&redacted);
+                i = end;
+                continue;
+            }
+        }
+
+        // Regular character (handles multi-byte UTF-8)
+        let c = message[i..].chars().next().unwrap();
+        result.push(c);
+        i += c.len_utf8();
     }
+
     result
 }
 
@@ -94,9 +153,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_redact_absolute_path() {
+    fn test_redact_absolute_path_unix() {
         assert_eq!(redact_path("/Users/alice/theory.dfl"), "theory.dfl");
         assert_eq!(redact_path("/tmp/test.spl"), "test.spl");
+    }
+
+    #[test]
+    fn test_redact_absolute_path_windows_drive() {
+        assert_eq!(redact_path("C:\\Users\\alice\\theory.dfl"), "theory.dfl");
+        assert_eq!(redact_path("D:/data/test.spl"), "test.spl");
+    }
+
+    #[test]
+    fn test_redact_absolute_path_unc() {
+        assert_eq!(redact_path("\\\\server\\share\\theory.dfl"), "theory.dfl");
     }
 
     #[test]
@@ -158,6 +228,47 @@ mod tests {
     }
 
     #[test]
+    fn test_redact_paths_in_text_quoted_windows_drive() {
+        assert_eq!(
+            redact_paths_in_text("Error reading 'C:\\Users\\alice\\theory.dfl': denied"),
+            "Error reading 'theory.dfl': denied"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_quoted_unc() {
+        assert_eq!(
+            redact_paths_in_text("Error reading '\\\\server\\share\\file.dfl': denied"),
+            "Error reading 'file.dfl': denied"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_unquoted_unix() {
+        assert_eq!(
+            redact_paths_in_text("Error reading /tmp/foo.dfl: No such file"),
+            "Error reading foo.dfl: No such file"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_unquoted_windows() {
+        assert_eq!(
+            redact_paths_in_text("Error reading C:\\Users\\alice\\file.dfl: denied"),
+            "Error reading file.dfl: denied"
+        );
+    }
+
+    #[test]
+    fn test_redact_paths_in_text_unquoted_preserves_nonpath() {
+        // "and/or" should not be treated as a path
+        assert_eq!(
+            redact_paths_in_text("use stdin and/or a file"),
+            "use stdin and/or a file"
+        );
+    }
+
+    #[test]
     fn test_redact_detail_debug_passthrough() {
         let msg = "Error reading '/tmp/foo.dfl': No such file (os error 2)";
         assert_eq!(redact_detail(msg, true), msg);
@@ -197,5 +308,13 @@ mod tests {
             "theory.dfl"
         );
         assert_eq!(redact_source_name("stdin", false), "stdin");
+    }
+
+    #[test]
+    fn test_redact_source_name_windows() {
+        assert_eq!(
+            redact_source_name("C:\\Users\\alice\\theory.dfl", false),
+            "theory.dfl"
+        );
     }
 }
