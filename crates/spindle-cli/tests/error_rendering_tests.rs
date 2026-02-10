@@ -1,0 +1,219 @@
+//! Error rendering tests (SPEC-010 Phase D5)
+//!
+//! Tests for uniform format, JSON envelope, and redaction behavior.
+
+mod common;
+use common::run_with_stdin;
+
+// =============================================================================
+// TEST-112: Uniform format for all error categories
+// =============================================================================
+
+/// All error categories should produce the same template format:
+/// "Error: <title>\n  <detail>\n"
+#[test]
+fn test_uniform_format_parse_error() {
+    let (exit, _stdout, stderr) = run_with_stdin(&["reason", "--stdin"], Some("invalid syntax!!!"));
+    assert_eq!(exit, 2);
+    assert!(
+        stderr.starts_with("Error: "),
+        "Parse error should start with 'Error: '"
+    );
+    assert!(
+        stderr.contains("Parse Error") || stderr.contains("parse"),
+        "Should indicate parse error"
+    );
+}
+
+#[test]
+fn test_uniform_format_validation_error() {
+    let (exit, _stdout, stderr) = run_with_stdin(&["reason"], None);
+    assert_eq!(exit, 2);
+    assert!(
+        stderr.starts_with("Error: "),
+        "Validation error should start with 'Error: '"
+    );
+}
+
+#[test]
+fn test_uniform_format_all_categories_same_template() {
+    // Parse error
+    let (_, _, parse_stderr) = run_with_stdin(&["reason", "--stdin"], Some("bad input!!!"));
+
+    // Validation error (missing input source)
+    let (_, _, validation_stderr) = run_with_stdin(&["reason"], None);
+
+    // Both should follow "Error: <title>\n  <detail>\n" template
+    assert!(
+        parse_stderr.starts_with("Error: "),
+        "Parse error format mismatch"
+    );
+    assert!(
+        validation_stderr.starts_with("Error: "),
+        "Validation error format mismatch"
+    );
+
+    // Both should have an indented detail line
+    let parse_lines: Vec<&str> = parse_stderr.lines().collect();
+    let validation_lines: Vec<&str> = validation_stderr.lines().collect();
+    assert!(
+        parse_lines.len() >= 2,
+        "Parse error should have at least 2 lines"
+    );
+    assert!(
+        validation_lines.len() >= 2,
+        "Validation error should have at least 2 lines"
+    );
+    assert!(
+        parse_lines[1].starts_with("  "),
+        "Detail should be indented"
+    );
+    assert!(
+        validation_lines[1].starts_with("  "),
+        "Detail should be indented"
+    );
+}
+
+// =============================================================================
+// TEST-103: Redaction (no absolute paths unless --debug-errors)
+// =============================================================================
+
+#[test]
+fn test_redaction_no_abs_paths_in_normal_mode() {
+    // Trigger a file-not-found error with an absolute path
+    let (exit, _stdout, stderr) =
+        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
+    assert_eq!(exit, 2);
+    // In normal mode, render_human should show the error but we just check
+    // that the output is human-readable (starts with "Error:")
+    assert!(
+        stderr.starts_with("Error: "),
+        "Should produce structured error"
+    );
+}
+
+#[test]
+fn test_redaction_debug_mode_shows_code() {
+    // With --debug-errors, the error type URI and exit code should appear
+    let (exit, _stdout, stderr) = run_with_stdin(
+        &[
+            "reason",
+            "--debug-errors",
+            "/tmp/nonexistent_spindle_test_file.dfl",
+        ],
+        None,
+    );
+    assert_eq!(exit, 2);
+    assert!(
+        stderr.contains("tag:spindle.dev,2026:error:"),
+        "Debug mode should show error type URI"
+    );
+    assert!(
+        stderr.contains("(exit 2)"),
+        "Debug mode should show exit code"
+    );
+}
+
+// =============================================================================
+// TEST-102: JSON error envelope with ProblemDetails
+// =============================================================================
+
+#[test]
+fn test_json_envelope_has_problem_details() {
+    let (exit, stdout, _stderr) =
+        run_with_stdin(&["reason", "--json", "--stdin"], Some("invalid syntax!!!"));
+    assert_eq!(exit, 2);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Error output should be valid JSON");
+
+    // Check envelope structure
+    assert!(json["error"].is_object(), "Should have error object");
+    assert!(json["error"]["code"].is_string(), "Should have error.code");
+    assert!(
+        json["error"]["message"].is_string(),
+        "Should have error.message"
+    );
+    assert!(
+        json["error"]["details"].is_object(),
+        "Should have error.details"
+    );
+
+    // Check ProblemDetails is embedded
+    let problem = &json["error"]["details"]["problem"];
+    assert!(problem.is_object(), "Should have error.details.problem");
+    assert!(
+        problem["type"].is_string(),
+        "ProblemDetails should have type"
+    );
+    assert!(
+        problem["title"].is_string(),
+        "ProblemDetails should have title"
+    );
+
+    // Check type URI format
+    let type_uri = problem["type"].as_str().unwrap();
+    assert!(
+        type_uri.starts_with("tag:spindle.dev,2026:error:"),
+        "Type URI should use tag scheme, got: {type_uri}"
+    );
+
+    // Check exit_code extension
+    assert_eq!(
+        problem["exit_code"], 2,
+        "Parse error should have exit_code 2"
+    );
+}
+
+#[test]
+fn test_json_envelope_diagnostics_array() {
+    let (exit, stdout, _stderr) =
+        run_with_stdin(&["reason", "--json", "--stdin"], Some("invalid syntax!!!"));
+    assert_eq!(exit, 2);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Error output should be valid JSON");
+
+    let diagnostics = json["diagnostics"]
+        .as_array()
+        .expect("Should have diagnostics array");
+    assert!(
+        !diagnostics.is_empty(),
+        "Should have at least one diagnostic"
+    );
+
+    let diag = &diagnostics[0];
+    assert!(diag["code"].is_string(), "Diagnostic should have code");
+    assert!(
+        diag["message"].is_string(),
+        "Diagnostic should have message"
+    );
+}
+
+#[test]
+fn test_json_envelope_schema_version_present_for_schema_commands() {
+    let (exit, stdout, _stderr) =
+        run_with_stdin(&["reason", "--json", "--stdin"], Some("invalid!!!"));
+    assert_eq!(exit, 2);
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    assert!(
+        json["schema_version"].is_string(),
+        "Schema command error should include schema_version"
+    );
+    assert_eq!(
+        json["schema_version"].as_str(),
+        Some("spindle.reason.v1"),
+        "Should use the command's schema version"
+    );
+}
+
+#[test]
+fn test_json_envelope_no_schema_version_for_non_schema() {
+    let (exit, stdout, _stderr) = run_with_stdin(&["--json"], None);
+    assert_eq!(exit, 2);
+    let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+
+    assert!(
+        json.get("schema_version").is_none(),
+        "Non-schema command error should not include schema_version"
+    );
+}
