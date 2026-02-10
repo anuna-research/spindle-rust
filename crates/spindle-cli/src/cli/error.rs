@@ -120,9 +120,10 @@ impl CliError {
             .diagnostics
             .iter()
             .map(|d| spindle_contract::error::Diagnostic {
+                severity: d.severity.clone(),
                 code: d.code.clone(),
                 message: d.message.clone(),
-                detail: None,
+                details: d.details.clone(),
             })
             .collect();
 

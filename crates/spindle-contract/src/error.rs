@@ -100,13 +100,15 @@ pub struct ErrorDetails {
 /// A diagnostic message for error reports.
 #[derive(Debug, Clone, Serialize)]
 pub struct Diagnostic {
+    /// Severity level
+    pub severity: String,
     /// Diagnostic code
     pub code: String,
     /// Human-readable message
     pub message: String,
     /// Additional detail
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
+    pub details: Option<serde_json::Value>,
 }
 
 impl ProblemDetails {

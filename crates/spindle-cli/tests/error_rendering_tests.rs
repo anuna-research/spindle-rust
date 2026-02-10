@@ -353,11 +353,21 @@ fn test_json_envelope_diagnostics_array() {
     );
 
     let diag = &diagnostics[0];
+    assert!(
+        diag["severity"].is_string(),
+        "Diagnostic should have severity"
+    );
     assert!(diag["code"].is_string(), "Diagnostic should have code");
     assert!(
         diag["message"].is_string(),
         "Diagnostic should have message"
     );
+    if diag.get("details").is_some() {
+        assert!(
+            diag["details"].is_object(),
+            "Diagnostic details must be an object when present"
+        );
+    }
 }
 
 #[test]

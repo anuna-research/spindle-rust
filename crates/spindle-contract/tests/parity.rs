@@ -4,9 +4,10 @@
 //! through the shared contract types. Since both CLI and WASM now use the same
 //! contract types, this validates the shared serialization path.
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use spindle_contract::diagnostic::DiagnosticEntry;
+use spindle_contract::error::{Diagnostic as ErrorDiagnostic, ErrorReport, ProblemDetails};
 use spindle_contract::literal::{LiteralStructJson, ModeJson, TemporalJson};
 use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
 use spindle_core::literal::Literal;
@@ -218,6 +219,28 @@ fn test_diagnostic_entry_detail_null_omitted() {
     let value: Value = serde_json::to_value(&diag).unwrap();
     // detail should be omitted (skip_serializing_if = "Option::is_none")
     assert!(!value.as_object().unwrap().contains_key("detail"));
+}
+
+#[test]
+fn test_error_report_diagnostics_include_severity_and_details() {
+    let problem = ProblemDetails::new("TEST_ERROR", "Test error", 3);
+    let diagnostics = vec![ErrorDiagnostic {
+        severity: "warning".to_string(),
+        code: "TEST_DIAG".to_string(),
+        message: "Diagnostic message".to_string(),
+        details: Some(json!({"note": "extra"})),
+    }];
+
+    let report = ErrorReport::new(None, "TEST_ERROR", "Test error", problem)
+        .with_diagnostics(diagnostics);
+
+    let value: Value = serde_json::to_value(&report).unwrap();
+    let diag = &value["diagnostics"][0];
+
+    assert_eq!(diag["severity"], "warning");
+    assert_eq!(diag["code"], "TEST_DIAG");
+    assert_eq!(diag["message"], "Diagnostic message");
+    assert_eq!(diag["details"]["note"], "extra");
 }
 
 #[test]
