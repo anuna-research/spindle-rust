@@ -7,6 +7,7 @@ use thiserror::Error;
 /// Maps error variants to exit codes and default titles. Used by
 /// presentation crates to convert library errors into `ProblemDetails`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ErrorCategory {
     /// Input parsing failures (DFL/SPL lexer or parser errors). Exit code 2.
     ParseError,
@@ -50,6 +51,7 @@ impl std::fmt::Display for ErrorCategory {
 
 /// Spindle error type
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum SpindleError {
     /// Rule not found in theory
     #[error("rule not found: {0}")]

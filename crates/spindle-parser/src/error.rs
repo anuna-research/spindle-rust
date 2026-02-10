@@ -5,6 +5,7 @@ use thiserror::Error;
 
 /// Parse error type
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum ParseError {
     /// Lexer error at a specific position
     #[error("lexer error at position {position}: {message}")]
