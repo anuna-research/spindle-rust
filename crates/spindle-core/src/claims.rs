@@ -26,6 +26,33 @@ pub enum ClaimsStatement {
 }
 
 /// Builder for `(claims ...)` SPL blocks.
+///
+/// ```
+/// use spindle_core::claims::ClaimsBlock;
+/// use spindle_core::literal::Literal;
+/// use spindle_core::rule::Rule;
+///
+/// let mut block = ClaimsBlock::new("agent:alice")
+///     .with_timestamp("2026-01-20T09:00:00Z")
+///     .with_id("block-1");
+///
+/// block.add_fact(Literal::simple("bird"));
+/// block.add_rule(Rule::defeasible(
+///     "r1",
+///     vec![Literal::simple("bird")],
+///     Literal::simple("flies"),
+/// ));
+/// block.add_superiority("r1", "r2");
+///
+/// // Canonical form for signing (deterministic, excludes :sig)
+/// let canonical = block.to_canonical_spl();
+/// assert!(!canonical.contains(":sig"));
+///
+/// // Attach signature and render final SPL
+/// let signed = block.with_signature("ed25519:abc123");
+/// let spl = signed.to_spl();
+/// assert!(spl.contains(":sig \"ed25519:abc123\""));
+/// ```
 #[derive(Debug, Clone)]
 pub struct ClaimsBlock {
     source: String,
@@ -56,21 +83,36 @@ impl ClaimsBlock {
     /// Pulls all rules and superiorities into the block.
     /// Use this to canonicalize existing SPL for signing:
     ///
-    /// ```ignore
-    /// let theory = parse_spl(spl_text)?;
+    /// ```
+    /// use spindle_core::claims::ClaimsBlock;
+    /// use spindle_core::theory::Theory;
+    /// use spindle_core::literal::Literal;
+    /// use spindle_core::rule::Rule;
+    ///
+    /// let mut theory = Theory::new();
+    /// theory.add_fact("bird");
+    /// theory.add_rule(Rule::defeasible(
+    ///     "r1",
+    ///     vec![Literal::simple("bird")],
+    ///     Literal::simple("flies"),
+    /// ));
+    ///
     /// let block = ClaimsBlock::from_theory("agent:alice", &theory);
     /// let canonical = block.to_canonical_spl();
+    /// assert!(canonical.contains("(given (bird))"));
     /// ```
     pub fn from_theory(source: impl Into<String>, theory: &Theory) -> Self {
         let mut block = Self::new(source);
 
         for rule in theory.rules() {
-            block.statements
+            block
+                .statements
                 .push(ClaimsStatement::Rule(Box::new(rule.clone())));
         }
 
         for sup in theory.superiorities() {
-            block.statements
+            block
+                .statements
                 .push(ClaimsStatement::Superiority(sup.clone()));
         }
 
@@ -119,8 +161,7 @@ impl ClaimsBlock {
 
     /// Add a pre-built rule (strict, defeasible, or defeater).
     pub fn add_rule(&mut self, rule: Rule) -> &mut Self {
-        self.statements
-            .push(ClaimsStatement::Rule(Box::new(rule)));
+        self.statements.push(ClaimsStatement::Rule(Box::new(rule)));
         self
     }
 
@@ -182,6 +223,19 @@ impl ClaimsBlock {
     /// - Metadata order: alphabetical (`:at`, `:id`, `:note`; never `:sig`)
     /// - Statement order: facts by head, rules by label, superiorities by `(superior, inferior)`
     /// - No indentation, one statement per line, single spaces
+    ///
+    /// ```
+    /// use spindle_core::claims::ClaimsBlock;
+    /// use spindle_core::literal::Literal;
+    ///
+    /// let mut block = ClaimsBlock::new("agent:test");
+    /// block.add_fact(Literal::simple("z_fact"));
+    /// block.add_fact(Literal::simple("a_fact"));
+    ///
+    /// let canonical = block.to_canonical_spl();
+    /// // Facts are sorted alphabetically by head
+    /// assert!(canonical.find("a_fact").unwrap() < canonical.find("z_fact").unwrap());
+    /// ```
     pub fn to_canonical_spl(&self) -> String {
         let mut out = format!("(claims {}", render_spl_atom(&self.source));
 
@@ -270,8 +324,7 @@ mod tests {
 
     #[test]
     fn test_to_spl_basic() {
-        let mut block = ClaimsBlock::new("agent:security")
-            .with_timestamp("2026-01-20T09:00:00Z");
+        let mut block = ClaimsBlock::new("agent:security").with_timestamp("2026-01-20T09:00:00Z");
 
         block.add_fact(Literal::simple("vulnerability_detected"));
         block.add_rule(Rule::defeasible(
@@ -300,8 +353,7 @@ mod tests {
     #[test]
     fn test_canonical_determinism() {
         // Build two blocks with same content in different insertion order
-        let mut block1 = ClaimsBlock::new("agent:test")
-            .with_timestamp("2026-01-01T00:00:00Z");
+        let mut block1 = ClaimsBlock::new("agent:test").with_timestamp("2026-01-01T00:00:00Z");
         block1.add_fact(Literal::simple("b_fact"));
         block1.add_fact(Literal::simple("a_fact"));
         block1.add_rule(Rule::defeasible(
@@ -317,8 +369,7 @@ mod tests {
         block1.add_superiority("r2", "r1");
         block1.add_superiority("r1", "r3");
 
-        let mut block2 = ClaimsBlock::new("agent:test")
-            .with_timestamp("2026-01-01T00:00:00Z");
+        let mut block2 = ClaimsBlock::new("agent:test").with_timestamp("2026-01-01T00:00:00Z");
         // Reversed insertion order
         block2.add_superiority("r1", "r3");
         block2.add_superiority("r2", "r1");
@@ -342,7 +393,10 @@ mod tests {
     fn test_canonical_excludes_sig() {
         let block = ClaimsBlock::new("agent:a").with_signature("should_not_appear");
         let canonical = block.to_canonical_spl();
-        assert!(!canonical.contains(":sig"), "canonical form must exclude :sig");
+        assert!(
+            !canonical.contains(":sig"),
+            "canonical form must exclude :sig"
+        );
         assert!(!canonical.contains("should_not_appear"));
     }
 
@@ -417,8 +471,8 @@ mod tests {
         ));
         theory.add_superiority("r1", "r2");
 
-        let block = ClaimsBlock::from_theory("agent:alice", &theory)
-            .with_timestamp("2026-01-01T00:00:00Z");
+        let block =
+            ClaimsBlock::from_theory("agent:alice", &theory).with_timestamp("2026-01-01T00:00:00Z");
 
         // Should have 2 rules + 1 superiority
         assert_eq!(block.statements().len(), 3);
@@ -429,8 +483,8 @@ mod tests {
         assert!(canonical.contains("(prefer r1 r2)"));
 
         // Canonical should be deterministic on repeated calls
-        let block2 = ClaimsBlock::from_theory("agent:alice", &theory)
-            .with_timestamp("2026-01-01T00:00:00Z");
+        let block2 =
+            ClaimsBlock::from_theory("agent:alice", &theory).with_timestamp("2026-01-01T00:00:00Z");
         assert_eq!(canonical, block2.to_canonical_spl());
     }
 
@@ -456,8 +510,7 @@ mod tests {
         assert!(final_spl.contains(":sig \"externally-computed-sig\""));
 
         // Final SPL should parse back cleanly
-        let reparsed =
-            spindle_parser::spl::parse_spl(&final_spl).expect("signed SPL should parse");
+        let reparsed = spindle_parser::spl::parse_spl(&final_spl).expect("signed SPL should parse");
         assert_eq!(reparsed.rule_count(), 2);
     }
 
