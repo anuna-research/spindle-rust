@@ -5,5 +5,6 @@
 //! It contains no reasoning logic.
 
 pub mod diagnostic;
+pub mod error;
 pub mod literal;
 pub mod reason;
