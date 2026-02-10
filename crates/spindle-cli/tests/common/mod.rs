@@ -96,7 +96,7 @@ fn load_inlined_schema(schema_name: &str) -> Value {
     let mut all_defs = serde_json::Map::new();
 
     // Collect $defs from all schemas
-    for (_, schema) in &registry {
+    for schema in registry.values() {
         if let Some(defs) = schema.get("$defs").and_then(|d| d.as_object()) {
             for (key, value) in defs {
                 all_defs.insert(key.clone(), value.clone());
@@ -137,8 +137,8 @@ fn replace_remote_refs(mut schema: Value) -> Value {
             }
         }
         Value::Array(arr) => {
-            for i in 0..arr.len() {
-                arr[i] = replace_remote_refs(arr[i].clone());
+            for item in arr.iter_mut() {
+                *item = replace_remote_refs(item.clone());
             }
         }
         _ => {}
@@ -310,7 +310,7 @@ pub fn run_matrix_case(case: &MatrixCase) {
             custom_check,
         } => {
             let json: Value = serde_json::from_str(&stdout)
-                .expect(&format!("{}: Output should be valid JSON", case.name));
+                .unwrap_or_else(|_| panic!("{}: Output should be valid JSON", case.name));
 
             // Success response should not contain error object
             assert!(
@@ -332,7 +332,7 @@ pub fn run_matrix_case(case: &MatrixCase) {
             custom_check,
         } => {
             let json: Value = serde_json::from_str(&stdout)
-                .expect(&format!("{}: Output should be valid JSON", case.name));
+                .unwrap_or_else(|_| panic!("{}: Output should be valid JSON", case.name));
 
             assert!(
                 json.get("error").is_none(),
@@ -368,10 +368,9 @@ pub fn run_matrix_case(case: &MatrixCase) {
             expected_error_code,
             custom_check,
         } => {
-            let json: Value = serde_json::from_str(&stdout).expect(&format!(
-                "{}: Output should be valid JSON even on error",
-                case.name
-            ));
+            let json: Value = serde_json::from_str(&stdout).unwrap_or_else(|_| {
+                panic!("{}: Output should be valid JSON even on error", case.name)
+            });
 
             // Validate error envelope invariants
             validate_error_envelope(&json, case.name);
