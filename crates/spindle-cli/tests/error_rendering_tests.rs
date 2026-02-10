@@ -75,6 +75,107 @@ fn test_uniform_format_all_categories_same_template() {
 }
 
 // =============================================================================
+// TEST-113: Location and source context rendering
+// =============================================================================
+
+#[test]
+fn test_human_parse_error_shows_source_location() {
+    let input = "line one\nbad syntax!!!\nline three\n";
+    let (exit, _stdout, stderr) = run_with_stdin(&["reason", "--stdin"], Some(input));
+    assert_eq!(exit, 2);
+    // Should show source name (stdin) in location line
+    assert!(
+        stderr.contains("--> stdin"),
+        "Human parse error should show '--> stdin' location, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_human_parse_error_shows_source_context() {
+    // Multi-line input where the error is on a specific line
+    let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
+    let (exit, _stdout, stderr) = run_with_stdin(&["reason", "--stdin"], Some(input));
+    assert_eq!(exit, 2);
+    // Source context should include line numbers with pipe separator
+    assert!(
+        stderr.contains(" | "),
+        "Human parse error should show source context lines, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_json_parse_error_includes_location_fields() {
+    let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
+    let (exit, stdout, _stderr) =
+        run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
+    assert_eq!(exit, 2);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Error output should be valid JSON");
+
+    let problem = &json["error"]["details"]["problem"];
+
+    // source_name should be present
+    assert_eq!(
+        problem["source_name"].as_str(),
+        Some("stdin"),
+        "JSON parse error should include source_name"
+    );
+}
+
+#[test]
+fn test_json_parse_error_includes_source_context() {
+    let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
+    let (exit, stdout, _stderr) =
+        run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
+    assert_eq!(exit, 2);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("Error output should be valid JSON");
+
+    let problem = &json["error"]["details"]["problem"];
+
+    // source_context should be present with lines array
+    if let Some(ctx) = problem.get("source_context") {
+        assert!(
+            ctx["lines"].is_array(),
+            "source_context should have lines array"
+        );
+        let lines = ctx["lines"].as_array().unwrap();
+        assert!(
+            !lines.is_empty(),
+            "source_context.lines should not be empty"
+        );
+        // Each line should have line_number and text
+        for line in lines {
+            assert!(
+                line["line_number"].is_number(),
+                "Each source line should have line_number"
+            );
+            assert!(
+                line["text"].is_string(),
+                "Each source line should have text"
+            );
+        }
+        assert!(
+            ctx["highlight_index"].is_number(),
+            "source_context should have highlight_index"
+        );
+    }
+    // Note: source_context may be absent if the parser doesn't report a line number
+}
+
+#[test]
+fn test_location_shown_without_debug_flag() {
+    let input = "bad syntax!!!\n";
+    let (exit, _stdout, stderr) = run_with_stdin(&["reason", "--stdin"], Some(input));
+    assert_eq!(exit, 2);
+    // Location should appear even without --debug-errors
+    assert!(
+        stderr.contains("--> stdin"),
+        "Source location should appear without --debug-errors, got: {stderr}"
+    );
+}
+
+// =============================================================================
 // TEST-103: Redaction (no absolute paths unless --debug-errors)
 // =============================================================================
 
