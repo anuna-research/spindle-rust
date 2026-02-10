@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | SPEC-010 |
 | Title | Dedicated Error Module for Consistent, Best-Practice Error Messages |
-| Version | 0.3.0 |
+| Version | 0.3.1 |
 | Status | Draft |
 | Created | 2026-02-09 |
 | Last Updated | 2026-02-10 |
@@ -512,11 +512,11 @@ The Error module defines a stable taxonomy with explicit exit code mappings:
 | `VALIDATION_ERROR` | 2 | Structural or semantic validation failures in the pipeline. |
 | `EXECUTION_ERROR` | 3 | Reasoning or query execution failures. |
 | `RESOURCE_LIMIT` | 4 | Timeouts, size limits, or truncation errors. |
-| `INTERNAL_ERROR` | 4 | Unexpected failures with no safe recovery path. |
+| `INTERNAL_ERROR` | 3 | Unexpected failures with no safe recovery path. |
 
 Each taxonomy entry maps to:
 
-- A stable `exit_code` extension value (2, 3, or 4).
+- A stable `exit_code` extension value per the contract: `2` (input/parse/validation), `3` (execution/internal), or `4` (resource/limit).
 - A stable `code` for the error envelope (e.g., `DFL_PARSE_ERROR`).
 - A `type` URI (e.g., `tag:spindle.dev,2026:error:DFL_PARSE_ERROR`).
 - Default `title` and `detail` templates.
@@ -528,7 +528,7 @@ Each taxonomy entry maps to:
 | `ParseError::LexerError` | `PARSE_ERROR` | `DFL_LEXER_ERROR` / `SPL_LEXER_ERROR` | 2 |
 | `ParseError::ParserError` | `PARSE_ERROR` | `DFL_PARSE_ERROR` / `SPL_PARSE_ERROR` | 2 |
 | `ParseError::UnexpectedToken` | `PARSE_ERROR` | `UNEXPECTED_TOKEN` | 2 |
-| `ParseError::IoError` | `INTERNAL_ERROR` | `IO_ERROR` | 4 |
+| `ParseError::IoError` | `INTERNAL_ERROR` | `IO_ERROR` | 3 |
 | `SpindleError::RuleNotFound` | `EXECUTION_ERROR` | `RULE_NOT_FOUND` | 3 |
 | `SpindleError::InvalidLiteral` | `VALIDATION_ERROR` | `INVALID_LITERAL` | 2 |
 | `SpindleError::TheoryError` | `VALIDATION_ERROR` | `THEORY_ERROR` | 2 |
@@ -614,6 +614,7 @@ Trace links:
 | 0.1.0 | 2026-02-09 | Codex (AI agent) | Initial draft |
 | 0.2.0 | 2026-02-10 | Claude (AI agent) | RFC 9457 alignment, Rust error handling architecture, migration strategy, taxonomy mapping |
 | 0.3.0 | 2026-02-10 | Claude (AI agent) | Add #[non_exhaustive], Display stability disclaimer, composition principle, 'static constraint |
+| 0.3.1 | 2026-02-10 | Claude (AI agent) | Fix INTERNAL_ERROR exit code: 4 → 3 per contract Section 8.1 |
 
 ---
 
