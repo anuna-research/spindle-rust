@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | SPEC-010 |
 | Title | Dedicated Error Module for Consistent, Best-Practice Error Messages |
-| Version | 0.4.0 |
+| Version | 0.5.0 |
 | Status | Draft |
 | Created | 2026-02-09 |
 | Last Updated | 2026-02-10 |
@@ -74,7 +74,7 @@ This specification uses RFC 9457 as the structural model for rendered output whi
 
 ### Message Quality Principles
 
-Research on error message quality — notably Brown's study of compiler diagnostics [Brown 1983] and Horning's principles for compiler-user communication [Horning 1974] — identifies recurring failure modes that this specification aims to prevent:
+Research on error message quality — notably Brown's study of compiler diagnostics [Brown 1983], Horning's principles for compiler-user communication [Horning 1974], and Wrenn & Krishnamurthi's classifier model for error report evaluation [Wrenn 2017] — identifies recurring failure modes and evaluation criteria that this specification aims to address:
 
 1. **Diagnostic uncertainty.** The system detects inconsistency but does not know the user's intent. As Horning observes: "Two (or more) pieces of information have been found to be inconsistent, but it cannot be said with certainty where the error lies." Messages SHOULD express this uncertainty rather than making definitive but potentially wrong claims (e.g., "expected `)` after argument list" is preferable to "missing semicolon" when the real error is a missing parenthesis).
 
@@ -88,11 +88,18 @@ Research on error message quality — notably Brown's study of compiler diagnost
 
 6. **Uniform presentation.** Users should not see radically different message formats for different error categories. Lexical, syntactic, semantic, and runtime errors SHOULD all follow the same rendering template.
 
+7. **Error reports as classifiers.** An error report implicitly classifies program fragments as "look here to fix the error" versus "not relevant." Wrenn & Krishnamurthi [2017] formalize this with precision (fraction of presented information that is actually relevant) and recall (fraction of relevant information that is actually presented). Error report design should aim for high precision (avoid showing irrelevant fragments that waste the user's attention) and high recall (include all information the user needs to understand and repair the error). When a tradeoff is necessary, Spindle prefers precision — showing less but correct information — since users exhibit an "edit here" mentality and will modify whatever code the error points to, even if the message text suggests otherwise.
+
+8. **Three information sources.** An error arises from the interaction of three information sources: program *terms* (the input fragments), computed *values* (inferred states, derivation results), and violated *constraints* (the semantic rules that make the combination invalid). Error reports that omit the constraint — the *why* — leave the user guessing. The `detail` text SHOULD state which rule or expectation was violated, not just where or what.
+
+9. **Highlight for repair, not detection.** Source location data (`line`, `column`, `source_context`) SHOULD identify the program fragment most relevant to *repairing* the error, not merely the point where the system first detected the inconsistency. Users treat highlighted code as an edit target. Pointing at irrelevant or immutable code actively harms the user's ability to fix the problem.
+
 These principles inform the requirements (Section 5), rendering rules (Section 11), and hint-quality guidelines throughout this specification.
 
 **References:**
 - Brown, P.J. "Error Messages: The Neglected Area of the Man/Machine Interface?" *Communications of the ACM*, 26(4), April 1983, pp. 246-249.
 - Horning, J.J. "What the Compiler Should Tell the User." In Bauer and Eickel (eds.), *Compiler Construction*, Springer-Verlag, 1974, pp. 525-548.
+- Wrenn, J. and Krishnamurthi, S. "Error Messages Are Classifiers: A Process to Design and Evaluate Error Messages." In *Proceedings of the 2017 ACM SIGPLAN International Symposium on New Ideas, New Paradigms, and Reflections on Programming and Software (Onward! '17)*, 2017, pp. 134-147.
 
 ## 5. Requirements
 
@@ -116,6 +123,8 @@ Functional Requirements:
 - REQ-116: When source text and location data are available, human-readable rendering SHOULD include a context window showing surrounding source lines with the error position visually indicated, rather than reporting only a bare line number.
 - REQ-117: All error categories (lexical, syntactic, semantic, execution) SHALL use the same rendering template for human-readable output. The user-facing format MUST NOT vary based on which internal subsystem detected the error.
 - REQ-118: The `hint` extension member, when present, SHALL suggest a specific corrective action rather than restating the error. Hints SHOULD be omitted when no actionable suggestion can be made with reasonable confidence.
+- REQ-119: The `detail` text SHOULD communicate the violated constraint — the semantic rule or expectation that makes the input invalid — not just the location or symptom. For DFL/SPL errors, this means stating what the grammar or logic requires (e.g., "a strict rule requires exactly one head literal") rather than only what was found.
+- REQ-120: Source location data (`line`, `column`, `source_context`) SHALL identify the program fragment most relevant to *repairing* the error, not merely the point where the system first detected the inconsistency. When the detection point differs from the likely repair site, the location SHOULD favor the repair site.
 
 Non-Functional Requirements:
 
@@ -483,6 +492,8 @@ Implements:
 - REQ-116
 - REQ-117
 - REQ-118
+- REQ-119
+- REQ-120
 
 Verified by:
 
@@ -491,6 +502,8 @@ Verified by:
 - TEST-111
 - TEST-112
 - TEST-113
+- TEST-114
+- TEST-115
 
 CON-103: CLI JSON Error Envelope (Compatibility Contract)
 
@@ -610,7 +623,7 @@ Error codes are `SCREAMING_SNAKE_CASE` strings. They MUST NOT change across patc
 
 ### 11.1. Message Quality Principles
 
-These principles (derived from Brown 1983 and Horning 1974, see Section 4) govern all rendered error output:
+These principles (derived from Brown 1983, Horning 1974, and Wrenn & Krishnamurthi 2017; see Section 4) govern all rendered error output:
 
 1. **User-centric language (REQ-114).** Messages describe the problem in terms of the user's input, never in terms of parser states, internal data structures, or algorithm internals. Bad: "unexpected token in state 47". Good: "expected `)` after argument list".
 
@@ -635,6 +648,12 @@ These principles (derived from Brown 1983 and Horning 1974, see Section 4) gover
 5. **Actionable hints (REQ-118).** A hint that restates the error adds nothing. If a hint is present, it suggests a concrete corrective action. If no actionable suggestion can be made with reasonable confidence, the hint is omitted rather than filled with a vague platitude.
 
 6. **Balanced specificity.** Messages occupy the middle ground between vacuous ("illegal symbol") and over-specific-but-wrong ("missing semicolon"). When a specific diagnosis is available with high confidence, state it. When confidence is low, describe what was expected and where.
+
+7. **Precision over recall (REQ-120).** When a tradeoff is unavoidable, prefer showing less information that is correct (high precision) over showing all information including irrelevant fragments (high recall). Users exhibit an "edit here" mentality: they will modify whatever code the error highlights, even if the prose says otherwise. Highlighting irrelevant code actively misdirects repair efforts.
+
+8. **State the violated constraint (REQ-119).** An error report that shows only location and symptom leaves the user guessing *why* the input is wrong. The `detail` text should state the semantic rule or grammar constraint that was violated. Example — Bad: "unexpected token `=>`". Good: "unexpected token `=>` — a strict rule body requires at least one literal before the arrow."
+
+9. **Repair-relevant location.** The `line`/`column` pointer and `source_context` highlight SHALL target the fragment the user needs to edit, not the token where the parser happened to detect the inconsistency. When these differ (e.g., a missing token is detected at the *next* token), the location should favor the repair site.
 
 ### 11.2. Human-Readable CLI Errors
 
@@ -686,6 +705,8 @@ TEST-110: All error types satisfy `Send + Sync + 'static` bounds (compile-time a
 TEST-111: When source text is available, `ProblemDetails` includes a `source_context` with correct `lines`, `highlight_index`, and surrounding context.
 TEST-112: Human-readable rendering uses the same template format for all error categories (parse, validation, execution, internal).
 TEST-113: `hint` values, when present, contain actionable corrective suggestions — not restatements of the error `title` or `detail`.
+TEST-114: For each error variant, the `detail` text communicates the violated constraint (the semantic rule or grammar expectation that was not satisfied), not just the symptom or location.
+TEST-115: Source location (`line`, `column`, `source_context`) points to the program fragment most relevant to repairing the error. When the detection point differs from the repair site, location favors the repair site.
 
 ## 14. Traceability
 
@@ -709,6 +730,8 @@ Trace links:
 - REQ-116 → CON-102 → TEST-111
 - REQ-117 → CON-102 → TEST-112
 - REQ-118 → CON-102 → TEST-113
+- REQ-119 → CON-102 → TEST-114
+- REQ-120 → CON-102 → TEST-115
 
 ---
 
@@ -721,6 +744,7 @@ Trace links:
 | 0.3.0 | 2026-02-10 | Claude (AI agent) | Add #[non_exhaustive], Display stability disclaimer, composition principle, 'static constraint |
 | 0.3.1 | 2026-02-10 | Claude (AI agent) | Fix INTERNAL_ERROR exit code: 4 → 3 per contract Section 8.1 |
 | 0.4.0 | 2026-02-10 | Claude (AI agent) | Message quality principles from Brown 1983 / Horning 1974: diagnostic uncertainty, source context window, hint quality, uniform rendering, no-internal-jargon (REQ-114 through REQ-118, TEST-111 through TEST-113, SourceContext type) |
+| 0.5.0 | 2026-02-10 | Claude (AI agent) | Classifier model from Wrenn & Krishnamurthi 2017: precision/recall evaluation, three-source information model (terms/values/constraints), repair-relevant highlighting, "edit here" mentality (REQ-119, REQ-120, TEST-114, TEST-115) |
 
 ---
 
