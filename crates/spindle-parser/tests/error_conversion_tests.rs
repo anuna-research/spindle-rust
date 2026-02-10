@@ -84,3 +84,11 @@ fn test_from_parse_error_via_question_mark() {
     assert_eq!(err.code(), "UNEXPECTED_TOKEN");
     assert_eq!(err.category(), ErrorCategory::ParseError);
 }
+
+// Compile-time assertion: ParseError must be Send + Sync + 'static (REQ-112)
+const _: () = {
+    fn assert_send_sync_static<T: Send + Sync + 'static>() {}
+    fn assertions() {
+        assert_send_sync_static::<ParseError>();
+    }
+};

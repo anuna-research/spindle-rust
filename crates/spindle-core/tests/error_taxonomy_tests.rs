@@ -134,3 +134,12 @@ fn test_error_category_clone_copy_eq() {
     let cat3 = cat.clone();
     assert_eq!(cat, cat3);
 }
+
+// Compile-time assertions: error types must be Send + Sync + 'static (REQ-112)
+const _: () = {
+    fn assert_send_sync_static<T: Send + Sync + 'static>() {}
+    fn assertions() {
+        assert_send_sync_static::<SpindleError>();
+        assert_send_sync_static::<ErrorCategory>();
+    }
+};
