@@ -2,10 +2,10 @@
 //!
 //! Centralized output boundary — the ONLY place that calls `std::process::exit`.
 
-use spindle_core::literal::Literal;
-use spindle_core::temporal::Temporal;
-
 use super::error::CliError;
+
+// Re-export literal transport types from the contract crate
+pub(crate) use spindle_contract::literal::LiteralStructJson;
 
 /// Command output variants - either JSON-serializable or text
 #[derive(Debug)]
@@ -173,66 +173,4 @@ pub(crate) struct TrustContributor {
     pub(crate) source_id: String,
     pub(crate) weight: f64,
     pub(crate) impact: f64,
-}
-
-/// JSON-serializable literal structure (contract-compliant)
-#[derive(serde::Serialize)]
-pub(crate) struct LiteralStructJson {
-    pub(crate) mode: ModeJson,
-    pub(crate) negated: bool,
-    pub(crate) functor: String,
-    pub(crate) args: Vec<String>,
-    pub(crate) temporal: TemporalJson,
-}
-
-impl From<&Literal> for LiteralStructJson {
-    fn from(literal: &Literal) -> Self {
-        Self {
-            mode: ModeJson::from(&literal.mode),
-            negated: literal.negation,
-            functor: literal.name().to_string(),
-            args: literal.predicates().iter().map(|s| s.to_string()).collect(),
-            temporal: TemporalJson::from(&literal.temporal),
-        }
-    }
-}
-
-/// JSON-serializable mode structure
-#[derive(serde::Serialize)]
-pub(crate) struct ModeJson {
-    pub(crate) name: Option<String>,
-    pub(crate) negation: bool,
-}
-
-impl From<&spindle_core::mode::Mode> for ModeJson {
-    fn from(mode: &spindle_core::mode::Mode) -> Self {
-        Self {
-            name: mode.name.clone(),
-            negation: mode.negation,
-        }
-    }
-}
-
-/// JSON-serializable temporal structure
-/// Maps NegInf/PosInf to null per contract schema
-#[derive(serde::Serialize)]
-pub(crate) struct TemporalJson {
-    pub(crate) start: Option<i64>,
-    pub(crate) end: Option<i64>,
-}
-
-impl From<&Temporal> for TemporalJson {
-    fn from(temporal: &Temporal) -> Self {
-        use spindle_core::temporal::TimePoint;
-        Self {
-            start: match temporal.start {
-                TimePoint::Moment(v) => Some(v),
-                TimePoint::NegInf | TimePoint::PosInf => None,
-            },
-            end: match temporal.end {
-                TimePoint::Moment(v) => Some(v),
-                TimePoint::NegInf | TimePoint::PosInf => None,
-            },
-        }
-    }
 }

@@ -2,46 +2,15 @@
 
 use std::path::PathBuf;
 
+use spindle_contract::literal::LiteralStructJson;
+use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::temporal::TimePoint;
 
-use crate::cli::error::{CliError, Diagnostic};
+use crate::cli::error::CliError;
 use crate::cli::input::{load_theory_source, resolve_theory_source};
-use crate::cli::output::{CommandOutput, LiteralStructJson};
-
-#[derive(serde::Serialize)]
-pub(crate) struct ReasonOutput {
-    schema_version: String,
-    evaluated_at: Option<String>,
-    grounding: GroundingStats,
-    conclusions: Vec<ConclusionStruct>,
-    diagnostics: Vec<Diagnostic>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stats: Option<TheoryStats>,
-}
-
-#[derive(serde::Serialize)]
-pub(crate) struct GroundingStats {
-    performed: bool,
-    had_variables: bool,
-    instances: usize,
-    limit_hit: bool,
-}
-
-#[derive(serde::Serialize)]
-pub(crate) struct ConclusionStruct {
-    conclusion_type: String,
-    literal_spl: String,
-    literal_struct: LiteralStructJson,
-    positive: bool,
-}
-
-#[derive(serde::Serialize)]
-pub(crate) struct TheoryStats {
-    rule_count: usize,
-    fact_count: usize,
-}
+use crate::cli::output::CommandOutput;
 
 pub(crate) fn run_reason(
     file: Option<&PathBuf>,
@@ -77,10 +46,10 @@ pub(crate) fn run_reason(
     };
 
     if json {
-        let mut output_conclusions: Vec<ConclusionStruct> = conclusions
+        let mut output_conclusions: Vec<ConclusionEntry> = conclusions
             .into_iter()
             .filter(|c| !positive_only || c.is_positive())
-            .map(|c| ConclusionStruct {
+            .map(|c| ConclusionEntry {
                 conclusion_type: c.conclusion_type.symbol().to_string(),
                 literal_spl: c.literal.to_spl(),
                 literal_struct: LiteralStructJson::from(&c.literal),
