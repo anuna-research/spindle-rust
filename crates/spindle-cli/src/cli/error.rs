@@ -193,16 +193,20 @@ impl Diagnostic {
 /// Hint: <hint>
 /// ```
 pub(crate) fn render_human(pd: &ProblemDetails, debug: bool) -> String {
+    use super::redact::{redact_detail, redact_source_name};
+
     let mut out = String::new();
 
     out.push_str(&format!("Error: {}\n", pd.title));
 
     if let Some(detail) = &pd.detail {
+        let detail = redact_detail(detail, debug);
         out.push_str(&format!("  {detail}\n"));
     }
 
     // Show source location if available (always, not just in debug mode)
     if let Some(name) = &pd.extensions.source_name {
+        let name = redact_source_name(name, debug);
         let loc = match (pd.extensions.line, pd.extensions.column) {
             (Some(l), Some(c)) => format!("  --> {name}:{l}:{c}\n"),
             (Some(l), None) => format!("  --> {name}:{l}\n"),
