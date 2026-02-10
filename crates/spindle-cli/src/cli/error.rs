@@ -1,6 +1,8 @@
-//! CLI error types
+//! CLI error types and rendering
 //!
 //! Structured error and diagnostic types for contract-compliant output.
+//! Includes `render_human()` and `render_json()` for converting
+//! `ProblemDetails` into CLI output.
 
 /// Structured CLI error with contract-compliant exit codes
 /// Per contract §8.1: 2=user, 3=execution, 4=resource
@@ -117,4 +119,65 @@ impl Diagnostic {
             details: None,
         }
     }
+}
+
+// =============================================================================
+// Error rendering (SPEC-010 §8.3)
+// =============================================================================
+
+use spindle_contract::error::{ErrorReport, ProblemDetails};
+
+/// Render a ProblemDetails as human-readable stderr output.
+///
+/// Used by `replace-cli-error` task to wire ProblemDetails into the CLI output boundary.
+///
+/// Format:
+/// ```text
+/// Error: <title>
+///   <detail>
+///
+///   3 | bad line here
+///       ^^^^^^^^^^^^^
+///
+/// Hint: <hint>
+/// ```
+#[allow(dead_code)]
+pub(crate) fn render_human(pd: &ProblemDetails) -> String {
+    let mut out = String::new();
+
+    out.push_str(&format!("Error: {}\n", pd.title));
+
+    if let Some(detail) = &pd.detail {
+        out.push_str(&format!("  {detail}\n"));
+    }
+
+    // Show source context if available
+    if let Some(ctx) = &pd.extensions.source_context {
+        out.push('\n');
+        for (i, line) in ctx.lines.iter().enumerate() {
+            let marker = if i == ctx.highlight_index { ">" } else { " " };
+            out.push_str(&format!(
+                "{marker} {:>4} | {}\n",
+                line.line_number, line.text
+            ));
+        }
+        out.push('\n');
+    }
+
+    if let Some(hint) = &pd.extensions.hint {
+        out.push_str(&format!("Hint: {hint}\n"));
+    }
+
+    out
+}
+
+/// Render an ErrorReport as pretty-printed JSON for stdout.
+#[allow(dead_code)]
+pub(crate) fn render_json(report: &ErrorReport) -> Result<String, CliError> {
+    serde_json::to_string_pretty(report).map_err(|e| {
+        CliError::execution(
+            "JSON_SERIALIZATION_ERROR",
+            format!("Failed to serialize error report: {e}"),
+        )
+    })
 }

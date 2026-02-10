@@ -25,8 +25,10 @@
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
+use spindle_contract::error::ProblemDetails;
 use spindle_contract::literal::LiteralStructJson;
 use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
+use spindle_core::error::SpindleError;
 use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
 use spindle_core::pipeline::{PrepareOptions, prepare};
@@ -549,6 +551,20 @@ fn parse_literal_inner(s: &str, negated: bool) -> Literal {
     } else {
         Literal::simple(s)
     }
+}
+
+/// Convert a SpindleError to a ProblemDetails JsValue for structured WASM error output.
+///
+/// Returns a JsValue containing the RFC 9457 Problem Details object.
+pub fn error_to_problem_details(err: &SpindleError) -> JsValue {
+    let pd = ProblemDetails::from(err);
+    serde_wasm_bindgen::to_value(&pd).unwrap_or_else(|_| {
+        JsValue::from_str(&format!(
+            "{{\"type\":\"tag:spindle.dev,2026:error:{}\",\"title\":\"{}\"}}",
+            err.code(),
+            err.category().default_title()
+        ))
+    })
 }
 
 #[cfg(test)]
