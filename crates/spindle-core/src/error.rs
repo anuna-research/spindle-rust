@@ -86,6 +86,8 @@ pub enum SpindleError {
         code: &'static str,
         /// Human-readable error message
         message: String,
+        /// Source line number where the parse error occurred
+        line: Option<usize>,
     },
 }
 
@@ -99,6 +101,14 @@ impl SpindleError {
             Self::ReasoningError(_) => "REASONING_ERROR",
             Self::Validation { .. } => "VALIDATION_ERROR",
             Self::Parse { code, .. } => code,
+        }
+    }
+
+    /// Returns the source line number, if available.
+    pub fn line(&self) -> Option<usize> {
+        match self {
+            Self::Parse { line, .. } => *line,
+            _ => None,
         }
     }
 

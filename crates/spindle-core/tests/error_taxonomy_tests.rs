@@ -65,7 +65,8 @@ fn test_spindle_error_codes() {
     assert_eq!(
         SpindleError::Parse {
             code: "LEXER_ERROR",
-            message: "bad token".into()
+            message: "bad token".into(),
+            line: None,
         }
         .code(),
         "LEXER_ERROR"
@@ -100,7 +101,8 @@ fn test_spindle_error_categories() {
     assert_eq!(
         SpindleError::Parse {
             code: "PARSE_ERROR",
-            message: "bad input".into()
+            message: "bad input".into(),
+            line: None,
         }
         .category(),
         ErrorCategory::ParseError
@@ -115,6 +117,7 @@ fn test_spindle_error_display() {
     let err = SpindleError::Parse {
         code: "LEXER_ERROR",
         message: "unexpected character".into(),
+        line: None,
     };
     assert_eq!(format!("{err}"), "unexpected character");
 }

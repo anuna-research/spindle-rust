@@ -82,6 +82,7 @@ fn test_construction_parse_error() {
     let err = SpindleError::Parse {
         code: "LEXER_ERROR",
         message: "unexpected character '@'".into(),
+        line: None,
     };
     let pd = ProblemDetails::from(&err);
 
@@ -105,6 +106,7 @@ fn test_construction_type_uri_format() {
         SpindleError::Parse {
             code: "PARSE_ERROR",
             message: "p".into(),
+            line: None,
         },
     ];
 
@@ -217,6 +219,7 @@ fn test_source_chain_parse_variant_preserves_code() {
     let err = SpindleError::Parse {
         code: "UNEXPECTED_TOKEN",
         message: "expected '=>' but found '->'".into(),
+        line: None,
     };
     let pd = ProblemDetails::from(&err);
 
@@ -266,6 +269,7 @@ fn test_hint_parse_error_is_actionable() {
     let err = SpindleError::Parse {
         code: "PARSE_ERROR",
         message: "unexpected token".into(),
+        line: None,
     };
     let pd = ProblemDetails::from(&err);
 
@@ -317,6 +321,7 @@ fn test_tone_no_blame_in_titles() {
         SpindleError::Parse {
             code: "PARSE_ERROR",
             message: "p".into(),
+            line: None,
         },
     ];
 
@@ -334,6 +339,7 @@ fn test_tone_no_blame_in_hints() {
         SpindleError::Parse {
             code: "PARSE_ERROR",
             message: "p".into(),
+            line: None,
         },
     ];
 
@@ -378,6 +384,7 @@ fn test_title_detail_not_identical() {
         SpindleError::Parse {
             code: "LEXER_ERROR",
             message: "unexpected char".into(),
+            line: None,
         },
     ];
 

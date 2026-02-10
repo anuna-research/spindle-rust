@@ -128,9 +128,11 @@ impl ParseError {
 
 impl From<ParseError> for SpindleError {
     fn from(e: ParseError) -> Self {
+        let line = e.line();
         SpindleError::Parse {
             code: e.code(),
             message: e.to_string(),
+            line,
         }
     }
 }

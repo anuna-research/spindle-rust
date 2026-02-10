@@ -200,9 +200,8 @@ impl From<&spindle_core::error::SpindleError> for ProblemDetails {
             .with_detail(err.to_string());
 
         // Extract location info from Parse variant
-        if let SpindleError::Parse { .. } = err {
-            // Parse errors carry message but not structured location info;
-            // location is added by the presentation layer with source context.
+        if let Some(line) = err.line() {
+            pd = pd.with_location(line, None);
         }
 
         // Add category-specific hints
