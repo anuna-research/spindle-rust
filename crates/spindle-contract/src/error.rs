@@ -183,3 +183,113 @@ impl SourceContext {
         }
     }
 }
+
+// =============================================================================
+// From conversions: library errors → ProblemDetails (ADR-104)
+// =============================================================================
+
+impl From<&spindle_core::error::SpindleError> for ProblemDetails {
+    fn from(err: &spindle_core::error::SpindleError) -> Self {
+        use spindle_core::error::SpindleError;
+
+        let code = err.code();
+        let category = err.category();
+
+        let mut pd = ProblemDetails::new(code, category.default_title(), category.exit_code())
+            .with_detail(err.to_string());
+
+        // Extract location info from Parse variant
+        if let SpindleError::Parse { .. } = err {
+            // Parse errors carry message but not structured location info;
+            // location is added by the presentation layer with source context.
+        }
+
+        // Add category-specific hints
+        match err {
+            SpindleError::RuleNotFound(label) => {
+                pd = pd.with_hint(format!(
+                    "Check that rule '{label}' is defined in the theory."
+                ));
+            }
+            SpindleError::InvalidLiteral(lit) => {
+                pd = pd.with_hint(format!(
+                    "Check the syntax of literal '{lit}'. Literals must be alphanumeric identifiers."
+                ));
+            }
+            SpindleError::Parse { .. } => {
+                pd = pd.with_hint(
+                    "Check the input syntax. Use --stdin with DFL or SPL format.".to_string(),
+                );
+            }
+            _ => {}
+        }
+
+        pd
+    }
+}
+
+impl ErrorReport {
+    /// Build an error report from a SpindleError.
+    pub fn from_spindle_error(
+        err: &spindle_core::error::SpindleError,
+        schema_version: &'static str,
+    ) -> Self {
+        let problem = ProblemDetails::from(err);
+        Self {
+            schema_version,
+            diagnostics: vec![],
+            error: ErrorEnvelope {
+                code: err.code().to_string(),
+                message: err.to_string(),
+                details: ErrorDetails { problem },
+            },
+        }
+    }
+
+    /// Build an error report from an error code, message, and ProblemDetails.
+    pub fn new(
+        schema_version: &'static str,
+        code: impl Into<String>,
+        message: impl Into<String>,
+        problem: ProblemDetails,
+    ) -> Self {
+        Self {
+            schema_version,
+            diagnostics: vec![],
+            error: ErrorEnvelope {
+                code: code.into(),
+                message: message.into(),
+                details: ErrorDetails { problem },
+            },
+        }
+    }
+
+    /// Add diagnostics to the report.
+    pub fn with_diagnostics(mut self, diagnostics: Vec<Diagnostic>) -> Self {
+        self.diagnostics = diagnostics;
+        self
+    }
+}
+
+/// Convert a `ParseError` to `ProblemDetails` via its code/category methods.
+///
+/// This function is provided for presentation crates that have access to
+/// `ParseError` directly (spindle-parser is not a dependency of this crate).
+/// For indirect conversions, use `SpindleError::Parse` → `ProblemDetails`.
+pub fn parse_error_to_problem_details(
+    code: &str,
+    message: &str,
+    category: spindle_core::error::ErrorCategory,
+    line: Option<usize>,
+    hint: Option<String>,
+) -> ProblemDetails {
+    let mut pd = ProblemDetails::new(code, category.default_title(), category.exit_code())
+        .with_detail(message.to_string());
+    if let Some(l) = line {
+        pd = pd.with_location(l, None);
+    }
+    if let Some(h) = hint {
+        pd = pd.with_hint(h);
+    }
+    pd
+}
