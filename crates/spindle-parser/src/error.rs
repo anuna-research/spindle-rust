@@ -1,5 +1,6 @@
 //! Parser error types
 
+use spindle_core::error::ErrorCategory;
 use thiserror::Error;
 
 /// Parse error type
@@ -35,4 +36,26 @@ pub enum ParseError {
     /// IO error
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+}
+
+impl ParseError {
+    /// Returns the stable error code for this variant (SPEC-010 §10.2).
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::LexerError { .. } => "LEXER_ERROR",
+            Self::ParserError { .. } => "PARSE_ERROR",
+            Self::UnexpectedToken { .. } => "UNEXPECTED_TOKEN",
+            Self::IoError(_) => "IO_ERROR",
+        }
+    }
+
+    /// Returns the error category for this variant (SPEC-010 §10.2).
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            Self::LexerError { .. } | Self::ParserError { .. } | Self::UnexpectedToken { .. } => {
+                ErrorCategory::ParseError
+            }
+            Self::IoError(_) => ErrorCategory::InternalError,
+        }
+    }
 }

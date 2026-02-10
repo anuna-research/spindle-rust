@@ -75,5 +75,29 @@ pub enum SpindleError {
     },
 }
 
+impl SpindleError {
+    /// Returns the stable error code for this variant (SPEC-010 §10.2).
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::RuleNotFound(_) => "RULE_NOT_FOUND",
+            Self::InvalidLiteral(_) => "INVALID_LITERAL",
+            Self::TheoryError(_) => "THEORY_ERROR",
+            Self::ReasoningError(_) => "REASONING_ERROR",
+            Self::Validation { .. } => "VALIDATION_ERROR",
+        }
+    }
+
+    /// Returns the error category for this variant (SPEC-010 §10.2).
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            Self::RuleNotFound(_) => ErrorCategory::ExecutionError,
+            Self::InvalidLiteral(_) => ErrorCategory::ValidationError,
+            Self::TheoryError(_) => ErrorCategory::ValidationError,
+            Self::ReasoningError(_) => ErrorCategory::ExecutionError,
+            Self::Validation { .. } => ErrorCategory::ValidationError,
+        }
+    }
+}
+
 /// Result type alias for Spindle operations
 pub type Result<T> = std::result::Result<T, SpindleError>;
