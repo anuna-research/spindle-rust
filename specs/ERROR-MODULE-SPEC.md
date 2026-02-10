@@ -4,7 +4,7 @@
 |---|---|
 | Document ID | SPEC-010 |
 | Title | Dedicated Error Module for Consistent, Best-Practice Error Messages |
-| Version | 0.3.1 |
+| Version | 0.4.0 |
 | Status | Draft |
 | Created | 2026-02-09 |
 | Last Updated | 2026-02-10 |
@@ -72,6 +72,28 @@ Adopting RFC 9457's Problem Details pattern provides a well-known structure that
 
 This specification uses RFC 9457 as the structural model for rendered output while keeping the existing Rust error enums as the internal representation.
 
+### Message Quality Principles
+
+Research on error message quality — notably Brown's study of compiler diagnostics [Brown 1983] and Horning's principles for compiler-user communication [Horning 1974] — identifies recurring failure modes that this specification aims to prevent:
+
+1. **Diagnostic uncertainty.** The system detects inconsistency but does not know the user's intent. As Horning observes: "Two (or more) pieces of information have been found to be inconsistent, but it cannot be said with certainty where the error lies." Messages SHOULD express this uncertainty rather than making definitive but potentially wrong claims (e.g., "expected `)` after argument list" is preferable to "missing semicolon" when the real error is a missing parenthesis).
+
+2. **No internal jargon.** Messages that expose parser states or internal algorithm details (e.g., "UNEXPECTED SYMBOL", "error in type of standard procedure parameter") are meaningless to users. All user-facing text MUST describe the problem in terms of the user's input, not the system's internals.
+
+3. **Source context.** Showing only a line number forces the user to cross-reference separately. When source text is available, rendering SHOULD include a context window of surrounding lines with the error location visually marked.
+
+4. **Corrective hints.** A hint that restates the error adds nothing. Hints SHOULD suggest a specific corrective action (e.g., "wrap the argument in parentheses: `read(mychar)`") when the system has sufficient confidence.
+
+5. **Balanced specificity.** Over-specific messages risk being wrong; vacuous messages (e.g., "illegal symbol") provide no guidance. Messages SHOULD be specific enough to be actionable but qualified when the diagnosis is uncertain.
+
+6. **Uniform presentation.** Users should not see radically different message formats for different error categories. Lexical, syntactic, semantic, and runtime errors SHOULD all follow the same rendering template.
+
+These principles inform the requirements (Section 5), rendering rules (Section 11), and hint-quality guidelines throughout this specification.
+
+**References:**
+- Brown, P.J. "Error Messages: The Neglected Area of the Man/Machine Interface?" *Communications of the ACM*, 26(4), April 1983, pp. 246-249.
+- Horning, J.J. "What the Compiler Should Tell the User." In Bauer and Eickel (eds.), *Compiler Construction*, Springer-Verlag, 1974, pp. 525-548.
+
 ## 5. Requirements
 
 Functional Requirements:
@@ -89,6 +111,11 @@ Functional Requirements:
 - REQ-111: Public error enums SHALL be marked `#[non_exhaustive]` so that new variants can be added in minor releases without a semver-breaking change.
 - REQ-112: Error types SHALL use only owned or `'static` fields (e.g., `String`, not `&'a str`) to satisfy the `'static` bound required by `std::error::Error`, downcasting, and `Send + Sync` thread safety.
 - REQ-113: The `Display` output of library error types is NOT a stable API. Consumers MUST use `code()`, `category()`, or `ProblemDetails` fields for programmatic decisions, never `.to_string()` text.
+- REQ-114: User-facing error messages SHALL NOT expose internal implementation details such as parser states, algorithm names, or internal data-structure terminology. Messages MUST describe the problem in terms of the user's input.
+- REQ-115: When the root cause of an error is ambiguous, the `detail` text SHOULD express diagnostic uncertainty (e.g., "expected `(` before argument" rather than "missing semicolon") and SHOULD NOT make definitive claims that may be wrong. Over-specific wrong guesses are worse than honest qualified descriptions.
+- REQ-116: When source text and location data are available, human-readable rendering SHOULD include a context window showing surrounding source lines with the error position visually indicated, rather than reporting only a bare line number.
+- REQ-117: All error categories (lexical, syntactic, semantic, execution) SHALL use the same rendering template for human-readable output. The user-facing format MUST NOT vary based on which internal subsystem detected the error.
+- REQ-118: The `hint` extension member, when present, SHALL suggest a specific corrective action rather than restating the error. Hints SHOULD be omitted when no actionable suggestion can be made with reasonable confidence.
 
 Non-Functional Requirements:
 
@@ -291,6 +318,28 @@ pub struct ProblemExtensions {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_name: Option<String>,
+
+    /// Surrounding source lines for contextual display (REQ-116).
+    /// Contains the source lines around the error location, with the
+    /// offending line indicated. Omitted when source text is unavailable
+    /// (e.g., stdin without buffering, WASM without source access).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_context: Option<SourceContext>,
+}
+
+/// A window of source lines surrounding an error location.
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceContext {
+    /// The source lines to display, each with its line number.
+    pub lines: Vec<SourceLine>,
+    /// Index into `lines` identifying the offending line (0-based).
+    pub highlight_index: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceLine {
+    pub line_number: usize,
+    pub text: String,
 }
 
 /// Wraps ProblemDetails with diagnostics for the full JSON envelope.
@@ -418,6 +467,7 @@ Error model:
     - `column` (integer, optional): source column number.
     - `hint` (string, optional): actionable suggestion for the user.
     - `source_name` (string, optional): input source identifier (e.g., filename, `"stdin"`).
+    - `source_context` (object, optional): surrounding source lines for contextual error display. Contains `lines` (array of `{line_number, text}` objects) and `highlight_index` (0-based index of the offending line within `lines`). Omitted when source text is unavailable.
 
 Note: The RFC 9457 `status` field is intentionally omitted. It is defined as an HTTP status code and does not apply to CLI tooling. CLI exit codes are carried in the `exit_code` extension member (see ADR-105).
 
@@ -428,11 +478,19 @@ Implements:
 - REQ-106
 - REQ-107
 - REQ-110
+- REQ-114
+- REQ-115
+- REQ-116
+- REQ-117
+- REQ-118
 
 Verified by:
 
 - TEST-101
 - TEST-103
+- TEST-111
+- TEST-112
+- TEST-113
 
 CON-103: CLI JSON Error Envelope (Compatibility Contract)
 
@@ -464,8 +522,16 @@ Error model:
         "exit_code": 2,
         "line": 5,
         "column": 13,
-        "hint": "Check the rule syntax near the arrow.",
-        "source_name": "stdin"
+        "hint": "Wrap the argument list in parentheses, e.g.: `a => b`.",
+        "source_name": "stdin",
+        "source_context": {
+          "lines": [
+            {"line_number": 4, "text": "  r1: a, b => c"},
+            {"line_number": 5, "text": "  r2: d =>"},
+            {"line_number": 6, "text": "  r3: e, f => g"}
+          ],
+          "highlight_index": 1
+        }
       }
     }
   }
@@ -542,21 +608,52 @@ Error codes are `SCREAMING_SNAKE_CASE` strings. They MUST NOT change across patc
 
 ## 11. Rendering Rules
 
-Human-readable CLI errors:
+### 11.1. Message Quality Principles
 
-- Format: `Error: {title}` followed by optional `at line {line}, column {column}` and a `Hint: {hint}` line.
-- `detail` is shown only when it provides actionable guidance.
-- Sensitive details are redacted unless `--debug-errors` is enabled.
-- When `--debug-errors` is enabled, the full `source()` error chain is printed.
+These principles (derived from Brown 1983 and Horning 1974, see Section 4) govern all rendered error output:
 
-JSON errors:
+1. **User-centric language (REQ-114).** Messages describe the problem in terms of the user's input, never in terms of parser states, internal data structures, or algorithm internals. Bad: "unexpected token in state 47". Good: "expected `)` after argument list".
+
+2. **Honest uncertainty (REQ-115).** When the detected inconsistency has multiple possible causes, the message qualifies the diagnosis. Bad: "missing semicolon" (when the actual error is a missing parenthesis). Good: "expected `(` before argument — check the syntax near `read`". A wrong but confident message is more harmful than a qualified one.
+
+3. **Source context window (REQ-116).** When source text is available, display 1-3 lines before and after the error line, with the offending line visually marked (e.g., a `>` prefix or underline caret). This lets the user locate the error without cross-referencing a separate file. Example:
+
+   ```
+   Error: DFL parse error
+     --> stdin:5:13
+     |
+   4 |   r1: a, b => c
+   5 |   r2: d =>
+     |             ^ unexpected end of rule
+   6 |   r3: e, f => g
+     |
+   Hint: The right-hand side of a rule requires at least one literal.
+   ```
+
+4. **Uniform format (REQ-117).** All error categories — lexical, syntactic, semantic, execution — use the same rendering template. The user should not see a radically different format depending on which internal subsystem detected the error.
+
+5. **Actionable hints (REQ-118).** A hint that restates the error adds nothing. If a hint is present, it suggests a concrete corrective action. If no actionable suggestion can be made with reasonable confidence, the hint is omitted rather than filled with a vague platitude.
+
+6. **Balanced specificity.** Messages occupy the middle ground between vacuous ("illegal symbol") and over-specific-but-wrong ("missing semicolon"). When a specific diagnosis is available with high confidence, state it. When confidence is low, describe what was expected and where.
+
+### 11.2. Human-Readable CLI Errors
+
+- Format: `Error: {title}` followed by a location block and optional `Hint:` line.
+- When `source_context` is available, render the context window with line numbers, a gutter, and a caret or marker on the offending column (see example above).
+- When `source_context` is unavailable, fall back to `at line {line}, column {column}`.
+- `detail` is shown only when it provides information beyond the `title`.
+- Sensitive details (absolute paths, OS error strings) are redacted unless `--debug-errors` is enabled.
+- When `--debug-errors` is enabled, the full `source()` error chain is printed after the primary message.
+
+### 11.3. JSON Errors
 
 - Always include `diagnostics` (may be empty array).
 - `error.details.problem` is required when `error` is present.
 - `exit_code` extension reflects the CLI exit code.
+- `source_context` is included when source text is available; omitted otherwise.
 - The RFC 9457 `status` field is not emitted (see ADR-105).
 
-Diagnostics:
+### 11.4. Diagnostics
 
 - Remain non-fatal; do not populate `error` when exit code is `0`.
 - Must use stable diagnostic codes from the contract.
@@ -586,6 +683,9 @@ TEST-107: `From<&SpindleError> for ProblemDetails` and `From<&ParseError> for Pr
 TEST-108: Extension member names conform to RFC 9457 naming rules (ALPHA start, ALPHA/DIGIT/underscore body).
 TEST-109: `SpindleError` and `ParseError` are `#[non_exhaustive]` — a `match` without a wildcard arm fails to compile.
 TEST-110: All error types satisfy `Send + Sync + 'static` bounds (compile-time assertion via `fn assert_bounds<T: Send + Sync + 'static>() {}`).
+TEST-111: When source text is available, `ProblemDetails` includes a `source_context` with correct `lines`, `highlight_index`, and surrounding context.
+TEST-112: Human-readable rendering uses the same template format for all error categories (parse, validation, execution, internal).
+TEST-113: `hint` values, when present, contain actionable corrective suggestions — not restatements of the error `title` or `detail`.
 
 ## 14. Traceability
 
@@ -604,6 +704,11 @@ Trace links:
 - REQ-111 → CON-101 → TEST-109
 - REQ-112 → CON-101 → TEST-110
 - REQ-113 → CON-101, CON-102 → (documented constraint, no test)
+- REQ-114 → CON-102 → (rendering guideline, verified by review)
+- REQ-115 → CON-102 → (rendering guideline, verified by review)
+- REQ-116 → CON-102 → TEST-111
+- REQ-117 → CON-102 → TEST-112
+- REQ-118 → CON-102 → TEST-113
 
 ---
 
@@ -615,6 +720,7 @@ Trace links:
 | 0.2.0 | 2026-02-10 | Claude (AI agent) | RFC 9457 alignment, Rust error handling architecture, migration strategy, taxonomy mapping |
 | 0.3.0 | 2026-02-10 | Claude (AI agent) | Add #[non_exhaustive], Display stability disclaimer, composition principle, 'static constraint |
 | 0.3.1 | 2026-02-10 | Claude (AI agent) | Fix INTERNAL_ERROR exit code: 4 → 3 per contract Section 8.1 |
+| 0.4.0 | 2026-02-10 | Claude (AI agent) | Message quality principles from Brown 1983 / Horning 1974: diagnostic uncertainty, source context window, hint quality, uniform rendering, no-internal-jargon (REQ-114 through REQ-118, TEST-111 through TEST-113, SourceContext type) |
 
 ---
 
