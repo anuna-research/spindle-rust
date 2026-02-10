@@ -13,8 +13,8 @@ steps:
       - $SPINDLE reason --help
       - $SPINDLE --version
       # Smoke-test documented usage patterns
-      - printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --stdin
-      - printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --json --stdin
+      - 'printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --stdin'
+      - 'printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --json --stdin'
       # Verify explain-code subcommand
       - $SPINDLE explain-code PARSE_ERROR
 

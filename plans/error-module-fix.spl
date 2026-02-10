@@ -1,0 +1,145 @@
+; ===========================================================================
+; Error Module Fix Plan (post-review)
+; Targets: specs/ERROR-MODULE-SPEC.md (SPEC-010 v0.6.0)
+; Focus: parse location/context, redaction, stable parse codes
+; ===========================================================================
+
+; ==========================================================================
+; Phase F1: Parse Error Code Alignment
+; ==========================================================================
+
+(given task-parse-code-mapping)
+(meta task-parse-code-mapping
+  (description "Align ParseError codes with SPEC-010 mapping (DFL/SPL prefixes)")
+  (phase "f1-parse-codes")
+  (priority "high")
+  (file "crates/spindle-parser/src/error.rs"))
+(given task-parse-code-tests)
+(meta task-parse-code-tests
+  (description "Add/adjust tests for stable parse error codes")
+  (phase "f1-parse-codes")
+  (priority "high")
+  (file "crates/spindle-core/tests/error_taxonomy_tests.rs"))
+
+(given no-deps-parse-code-mapping)
+
+(normally r-ready-parse-code-mapping
+  (and task-parse-code-mapping no-deps-parse-code-mapping)
+  ready-parse-code-mapping)
+
+(normally r-ready-parse-code-tests
+  (and task-parse-code-tests completed-parse-code-mapping)
+  ready-parse-code-tests)
+
+(normally r-phase-f1-done
+  (and completed-parse-code-mapping completed-parse-code-tests)
+  phase-f1-complete)
+
+; ==========================================================================
+; Phase F2: Location + Source Context Wiring
+; ==========================================================================
+
+(given task-parse-location-propagation)
+(meta task-parse-location-propagation
+  (description "Preserve parse location data through ParseError -> SpindleError -> ProblemDetails")
+  (phase "f2-location-context")
+  (priority "high")
+  (file "crates/spindle-parser/src/error.rs"))
+(given task-source-context-builder)
+(meta task-source-context-builder
+  (description "Build SourceContext from source text and error location")
+  (phase "f2-location-context")
+  (priority "high")
+  (file "crates/spindle-contract/src/error.rs"))
+(given task-cli-attach-context)
+(meta task-cli-attach-context
+  (description "Attach source_name + source_context in CLI parse error handling")
+  (phase "f2-location-context")
+  (priority "high")
+  (file "crates/spindle-cli/src/cli/input.rs")
+  (notes "Confirmed: CLI should attach source_name and source_context now (not a later phase)."))
+(given task-location-rendering)
+(meta task-location-rendering
+  (description "Render location/context in human output even without debug")
+  (phase "f2-location-context")
+  (priority "high")
+  (file "crates/spindle-cli/src/cli/error.rs"))
+(given task-location-tests)
+(meta task-location-tests
+  (description "Add tests for location/context rendering")
+  (phase "f2-location-context")
+  (priority "medium")
+  (file "crates/spindle-cli/tests/error_rendering_tests.rs"))
+
+(normally r-dep-parse-location-on-f1
+  (and task-parse-location-propagation phase-f1-complete)
+  ready-parse-location-propagation)
+
+(normally r-dep-source-context-on-location
+  (and task-source-context-builder completed-parse-location-propagation)
+  ready-source-context-builder)
+
+(normally r-dep-cli-attach-context
+  (and task-cli-attach-context completed-source-context-builder)
+  ready-cli-attach-context)
+
+(normally r-dep-location-rendering
+  (and task-location-rendering completed-cli-attach-context)
+  ready-location-rendering)
+
+(normally r-dep-location-tests
+  (and task-location-tests completed-location-rendering)
+  ready-location-tests)
+
+(normally r-phase-f2-done
+  (and completed-parse-location-propagation completed-source-context-builder
+       completed-cli-attach-context completed-location-rendering
+       completed-location-tests)
+  phase-f2-complete)
+
+; ==========================================================================
+; Phase F3: Redaction + Debug Behavior
+; ==========================================================================
+
+(given task-redaction-rules)
+(meta task-redaction-rules
+  (description "Define redaction policy for paths and OS error strings")
+  (phase "f3-redaction")
+  (priority "high"))
+(given task-redaction-implementation)
+(meta task-redaction-implementation
+  (description "Implement redaction in CLI error rendering when debug is off")
+  (phase "f3-redaction")
+  (priority "high")
+  (file "crates/spindle-cli/src/cli/error.rs"))
+(given task-redaction-tests)
+(meta task-redaction-tests
+  (description "Add tests ensuring redaction behavior with/without --debug-errors")
+  (phase "f3-redaction")
+  (priority "medium")
+  (file "crates/spindle-cli/tests/error_rendering_tests.rs"))
+
+(normally r-dep-redaction-rules-on-f2
+  (and task-redaction-rules phase-f2-complete)
+  ready-redaction-rules)
+
+(normally r-dep-redaction-implementation
+  (and task-redaction-implementation completed-redaction-rules)
+  ready-redaction-implementation)
+
+(normally r-dep-redaction-tests
+  (and task-redaction-tests completed-redaction-implementation)
+  ready-redaction-tests)
+
+(normally r-phase-f3-done
+  (and completed-redaction-rules completed-redaction-implementation
+       completed-redaction-tests)
+  phase-f3-complete)
+
+; ==========================================================================
+; Completion
+; ==========================================================================
+
+(normally r-plan-complete
+  (and phase-f1-complete phase-f2-complete phase-f3-complete)
+  error-module-fix-complete)
