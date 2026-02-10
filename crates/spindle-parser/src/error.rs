@@ -1,6 +1,6 @@
 //! Parser error types
 
-use spindle_core::error::ErrorCategory;
+use spindle_core::error::{ErrorCategory, SpindleError};
 use thiserror::Error;
 
 /// Parse error type
@@ -57,6 +57,15 @@ impl ParseError {
                 ErrorCategory::ParseError
             }
             Self::IoError(_) => ErrorCategory::InternalError,
+        }
+    }
+}
+
+impl From<ParseError> for SpindleError {
+    fn from(e: ParseError) -> Self {
+        SpindleError::Parse {
+            code: e.code(),
+            message: e.to_string(),
         }
     }
 }

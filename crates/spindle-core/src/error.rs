@@ -75,6 +75,18 @@ pub enum SpindleError {
         /// Human-readable validation error message
         message: String,
     },
+
+    /// Wraps a parser error via composition (ADR-107).
+    ///
+    /// The `code` field preserves the parser error's stable code.
+    /// Constructed via `From<ParseError>` in `spindle-parser`.
+    #[error("{message}")]
+    Parse {
+        /// Stable error code from the original `ParseError`
+        code: &'static str,
+        /// Human-readable error message
+        message: String,
+    },
 }
 
 impl SpindleError {
@@ -86,6 +98,7 @@ impl SpindleError {
             Self::TheoryError(_) => "THEORY_ERROR",
             Self::ReasoningError(_) => "REASONING_ERROR",
             Self::Validation { .. } => "VALIDATION_ERROR",
+            Self::Parse { code, .. } => code,
         }
     }
 
@@ -97,6 +110,7 @@ impl SpindleError {
             Self::TheoryError(_) => ErrorCategory::ValidationError,
             Self::ReasoningError(_) => ErrorCategory::ExecutionError,
             Self::Validation { .. } => ErrorCategory::ValidationError,
+            Self::Parse { .. } => ErrorCategory::ParseError,
         }
     }
 }
