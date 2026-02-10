@@ -71,7 +71,8 @@ pub struct SourceLine {
 #[derive(Debug, Clone, Serialize)]
 pub struct ErrorReport {
     /// Schema version for the error report
-    pub schema_version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_version: Option<&'static str>,
     /// Diagnostic messages
     pub diagnostics: Vec<Diagnostic>,
     /// The error envelope
@@ -236,7 +237,7 @@ impl ErrorReport {
     ) -> Self {
         let problem = ProblemDetails::from(err);
         Self {
-            schema_version,
+            schema_version: Some(schema_version),
             diagnostics: vec![],
             error: ErrorEnvelope {
                 code: err.code().to_string(),
@@ -248,7 +249,7 @@ impl ErrorReport {
 
     /// Build an error report from an error code, message, and ProblemDetails.
     pub fn new(
-        schema_version: &'static str,
+        schema_version: Option<&'static str>,
         code: impl Into<String>,
         message: impl Into<String>,
         problem: ProblemDetails,

@@ -317,10 +317,16 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expect_schema_version: false,
                 expected_error_code: Some("CLI_PARSE_ERROR"),
                 custom_check: Some(|json| {
-                    let kind = json["error"]["details"]["kind"]
-                        .as_str()
-                        .expect("error.details.kind should be present");
-                    assert!(!kind.is_empty(), "error.details.kind should be non-empty");
+                    // ProblemDetails should be present in the error envelope
+                    let problem = &json["error"]["details"]["problem"];
+                    assert!(
+                        problem["type"].is_string(),
+                        "error.details.problem.type should be present"
+                    );
+                    assert!(
+                        problem["title"].is_string(),
+                        "error.details.problem.title should be present"
+                    );
                 }),
             },
             setup: None,
@@ -334,10 +340,11 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expect_schema_version: false,
                 expected_error_code: Some("CLI_PARSE_ERROR"),
                 custom_check: Some(|json| {
-                    let kind = json["error"]["details"]["kind"]
-                        .as_str()
-                        .expect("error.details.kind should be present");
-                    assert!(!kind.is_empty(), "error.details.kind should be non-empty");
+                    let problem = &json["error"]["details"]["problem"];
+                    assert!(
+                        problem["type"].is_string(),
+                        "error.details.problem.type should be present"
+                    );
                 }),
             },
             setup: None,
@@ -351,10 +358,11 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expect_schema_version: false,
                 expected_error_code: Some("CLI_PARSE_ERROR"),
                 custom_check: Some(|json| {
-                    let kind = json["error"]["details"]["kind"]
-                        .as_str()
-                        .expect("error.details.kind should be present");
-                    assert!(!kind.is_empty(), "error.details.kind should be non-empty");
+                    let problem = &json["error"]["details"]["problem"];
+                    assert!(
+                        problem["type"].is_string(),
+                        "error.details.problem.type should be present"
+                    );
                 }),
             },
             setup: None,
@@ -414,10 +422,20 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expect_schema_version: true, // Schema command
                 expected_error_code: Some("INVALID_ARGUMENT"),
                 custom_check: Some(|json| {
-                    let details = &json["error"]["details"];
-                    assert_eq!(details["argument"], "--max");
-                    assert_eq!(details["provided"], 0);
-                    assert_eq!(details["minimum"], 1);
+                    // ProblemDetails should contain the error details
+                    let problem = &json["error"]["details"]["problem"];
+                    assert_eq!(
+                        problem["title"].as_str(),
+                        Some("Validation Error"),
+                        "Should be a validation error"
+                    );
+                    let detail = problem["detail"]
+                        .as_str()
+                        .expect("problem.detail should be present");
+                    assert!(
+                        detail.contains("--max"),
+                        "Detail should mention --max argument"
+                    );
                 }),
             },
             setup: None,

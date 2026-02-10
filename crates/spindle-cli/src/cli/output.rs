@@ -2,7 +2,7 @@
 //!
 //! Centralized output boundary — the ONLY place that calls `std::process::exit`.
 
-use super::error::CliError;
+use super::error::{CliError, render_human, render_json};
 
 // Re-export literal transport types from the contract crate
 pub(crate) use spindle_contract::literal::LiteralStructJson;
@@ -33,80 +33,33 @@ impl CommandOutput {
 /// Per contract §6.1 and §8.3
 pub(crate) fn emit_and_exit(
     result: Result<CommandOutput, CliError>,
-    schema_version: Option<&str>,
+    schema_version: Option<&'static str>,
     json: bool,
 ) -> ! {
-    fn print_json_error_envelope(err: &CliError, schema_version: Option<&str>) {
-        let mut envelope = serde_json::Map::new();
-
-        if let Some(sv) = schema_version {
-            envelope.insert(
-                "schema_version".to_string(),
-                serde_json::Value::String(sv.to_string()),
-            );
-        }
-
-        let mut error_obj = serde_json::Map::new();
-        error_obj.insert(
-            "code".to_string(),
-            serde_json::Value::String(err.code.clone()),
-        );
-        error_obj.insert(
-            "message".to_string(),
-            serde_json::Value::String(err.message.clone()),
-        );
-        error_obj.insert("details".to_string(), err.details.clone());
-        envelope.insert("error".to_string(), serde_json::Value::Object(error_obj));
-
-        let diagnostics: Vec<serde_json::Value> = err
-            .diagnostics
-            .iter()
-            .map(|d| {
-                serde_json::to_value(d).unwrap_or_else(|_| {
-                    serde_json::json!({
-                        "severity": "error",
-                        "code": "DIAGNOSTIC_SERIALIZATION_ERROR",
-                        "message": "Failed to serialize diagnostic"
-                    })
-                })
-            })
-            .collect();
-        envelope.insert(
-            "diagnostics".to_string(),
-            serde_json::Value::Array(diagnostics),
-        );
-
-        match serde_json::to_string_pretty(&envelope) {
+    /// Print a ProblemDetails-based JSON error envelope via ErrorReport.
+    fn print_json_error(err: &CliError, schema_version: Option<&'static str>) {
+        let report = err.to_error_report(schema_version);
+        match render_json(&report) {
             Ok(serialized) => println!("{serialized}"),
             Err(_) => {
-                let mut fallback = serde_json::json!({
-                    "error": {
-                        "code": "JSON_SERIALIZATION_ERROR",
-                        "message": "Failed to serialize JSON error envelope",
-                        "details": {}
-                    },
-                    "diagnostics": [{
-                        "severity": "error",
-                        "code": "JSON_SERIALIZATION_ERROR",
-                        "message": "Failed to serialize JSON error envelope"
-                    }]
-                });
-                if let Some(sv) = schema_version {
-                    fallback["schema_version"] = serde_json::Value::String(sv.to_string());
-                }
-                let fallback_str = serde_json::to_string(&fallback).unwrap_or_else(|_| {
-                    "{\"error\":{\"code\":\"JSON_SERIALIZATION_ERROR\",\"message\":\"Failed to serialize JSON error envelope\",\"details\":{}},\"diagnostics\":[]}".to_string()
-                });
-                println!("{fallback_str}");
+                // Last-resort fallback if ErrorReport serialization itself fails
+                let sv_part = match schema_version {
+                    Some(sv) => format!("\"schema_version\":\"{sv}\","),
+                    None => String::new(),
+                };
+                let fallback = format!(
+                    "{{{sv_part}\"diagnostics\":[],\"error\":{{\"code\":\"{}\",\"message\":\"{}\"}}}}",
+                    err.code.replace('"', "\\\""),
+                    err.message.replace('"', "\\\""),
+                );
+                println!("{fallback}");
             }
         }
     }
 
-    fn print_non_json_error(err: &CliError) {
-        eprintln!("Error: {}", err.message);
-        if let Some(hint) = err.details.get("hint").and_then(|v| v.as_str()) {
-            eprintln!("Hint: {hint}");
-        }
+    /// Print a ProblemDetails-based human-readable error to stderr.
+    fn print_human_error(err: &CliError) {
+        eprint!("{}", render_human(&err.problem));
     }
 
     match result {
@@ -122,9 +75,9 @@ pub(crate) fn emit_and_exit(
                         format!("Failed to serialize successful JSON response: {e}"),
                     );
                     if json {
-                        print_json_error_envelope(&err, schema_version);
+                        print_json_error(&err, schema_version);
                     } else {
-                        print_non_json_error(&err);
+                        print_human_error(&err);
                     }
                     std::process::exit(err.exit_code);
                 }
@@ -134,11 +87,8 @@ pub(crate) fn emit_and_exit(
                     let err = CliError::execution(
                         "JSON_OUTPUT_EXPECTED",
                         "Expected JSON output but command returned text",
-                    )
-                    .with_details(serde_json::json!({
-                        "hint": "This is an internal CLI bug. Please report it."
-                    }));
-                    print_json_error_envelope(&err, schema_version);
+                    );
+                    print_json_error(&err, schema_version);
                     std::process::exit(err.exit_code);
                 }
                 println!("{text}");
@@ -147,9 +97,9 @@ pub(crate) fn emit_and_exit(
         },
         Err(err) => {
             if json {
-                print_json_error_envelope(&err, schema_version);
+                print_json_error(&err, schema_version);
             } else {
-                print_non_json_error(&err);
+                print_human_error(&err);
             }
             std::process::exit(err.exit_code);
         }

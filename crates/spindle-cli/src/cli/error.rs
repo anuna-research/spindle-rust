@@ -1,17 +1,22 @@
 //! CLI error types and rendering
 //!
 //! Structured error and diagnostic types for contract-compliant output.
-//! Includes `render_human()` and `render_json()` for converting
-//! `ProblemDetails` into CLI output.
+//! `CliError` carries a `ProblemDetails` for RFC 9457 error rendering.
+//! `render_human()` and `render_json()` convert `ProblemDetails` into
+//! CLI output for stderr and stdout respectively.
 
-/// Structured CLI error with contract-compliant exit codes
-/// Per contract §8.1: 2=user, 3=execution, 4=resource
+use spindle_contract::error::{ErrorReport, ProblemDetails};
+
+/// Structured CLI error with contract-compliant exit codes.
+///
+/// Each error carries a `ProblemDetails` for RFC 9457-compliant output.
+/// Per contract §8.1: exit code 2=user, 3=execution, 4=resource.
 #[derive(Debug)]
 pub(crate) struct CliError {
     pub(crate) exit_code: i32,
     pub(crate) code: String,
     pub(crate) message: String,
-    pub(crate) details: serde_json::Value,
+    pub(crate) problem: Box<ProblemDetails>,
     pub(crate) diagnostics: Vec<Diagnostic>,
 }
 
@@ -20,11 +25,12 @@ impl CliError {
     pub(crate) fn validation(code: impl Into<String>, message: impl Into<String>) -> Self {
         let code = code.into();
         let message = message.into();
+        let problem = ProblemDetails::new(&code, "Validation Error", 2).with_detail(&message);
         Self {
             exit_code: 2,
             code: code.clone(),
             message: message.clone(),
-            details: serde_json::json!({}),
+            problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
         }
     }
@@ -33,11 +39,12 @@ impl CliError {
     pub(crate) fn parse(code: impl Into<String>, message: impl Into<String>) -> Self {
         let code = code.into();
         let message = message.into();
+        let problem = ProblemDetails::new(&code, "Parse Error", 2).with_detail(&message);
         Self {
             exit_code: 2,
             code: code.clone(),
             message: message.clone(),
-            details: serde_json::json!({}),
+            problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
         }
     }
@@ -46,11 +53,12 @@ impl CliError {
     pub(crate) fn execution(code: impl Into<String>, message: impl Into<String>) -> Self {
         let code = code.into();
         let message = message.into();
+        let problem = ProblemDetails::new(&code, "Execution Error", 3).with_detail(&message);
         Self {
             exit_code: 3,
             code: code.clone(),
             message: message.clone(),
-            details: serde_json::json!({}),
+            problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
         }
     }
@@ -60,24 +68,49 @@ impl CliError {
     pub(crate) fn resource(code: impl Into<String>, message: impl Into<String>) -> Self {
         let code = code.into();
         let message = message.into();
+        let problem =
+            ProblemDetails::new(&code, "Resource Limit Exceeded", 4).with_detail(&message);
         Self {
             exit_code: 4,
             code: code.clone(),
             message: message.clone(),
-            details: serde_json::json!({}),
+            problem: Box::new(problem),
             diagnostics: vec![Diagnostic::error(&code, &message)],
         }
     }
 
-    /// Add details to the error (must be an object per contract §8.3)
+    /// Add details to the error.
+    ///
+    /// Extracts `hint` from the details object and sets it on the ProblemDetails.
+    /// Per contract §8.3.
     pub(crate) fn with_details(mut self, details: serde_json::Value) -> Self {
-        // Ensure details is an object
-        if !details.is_object() {
-            self.details = serde_json::json!({});
-        } else {
-            self.details = details;
+        if let Some(obj) = details.as_object() {
+            if let Some(hint) = obj.get("hint").and_then(|v| v.as_str()) {
+                self.problem.extensions.hint = Some(hint.to_string());
+            }
         }
         self
+    }
+
+    /// Build an `ErrorReport` from this error for JSON output.
+    pub(crate) fn to_error_report(&self, schema_version: Option<&'static str>) -> ErrorReport {
+        let contract_diagnostics: Vec<spindle_contract::error::Diagnostic> = self
+            .diagnostics
+            .iter()
+            .map(|d| spindle_contract::error::Diagnostic {
+                code: d.code.clone(),
+                message: d.message.clone(),
+                detail: None,
+            })
+            .collect();
+
+        ErrorReport::new(
+            schema_version,
+            &self.code,
+            &self.message,
+            (*self.problem).clone(),
+        )
+        .with_diagnostics(contract_diagnostics)
     }
 }
 
@@ -125,11 +158,7 @@ impl Diagnostic {
 // Error rendering (SPEC-010 §8.3)
 // =============================================================================
 
-use spindle_contract::error::{ErrorReport, ProblemDetails};
-
 /// Render a ProblemDetails as human-readable stderr output.
-///
-/// Used by `replace-cli-error` task to wire ProblemDetails into the CLI output boundary.
 ///
 /// Format:
 /// ```text
@@ -141,7 +170,6 @@ use spindle_contract::error::{ErrorReport, ProblemDetails};
 ///
 /// Hint: <hint>
 /// ```
-#[allow(dead_code)]
 pub(crate) fn render_human(pd: &ProblemDetails) -> String {
     let mut out = String::new();
 
@@ -172,7 +200,6 @@ pub(crate) fn render_human(pd: &ProblemDetails) -> String {
 }
 
 /// Render an ErrorReport as pretty-printed JSON for stdout.
-#[allow(dead_code)]
 pub(crate) fn render_json(report: &ErrorReport) -> Result<String, CliError> {
     serde_json::to_string_pretty(report).map_err(|e| {
         CliError::execution(

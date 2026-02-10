@@ -15,10 +15,7 @@ fn test_construction_rule_not_found() {
     let err = SpindleError::RuleNotFound("missing_rule".into());
     let pd = ProblemDetails::from(&err);
 
-    assert_eq!(
-        pd.problem_type,
-        "tag:spindle.dev,2026:error:RULE_NOT_FOUND"
-    );
+    assert_eq!(pd.problem_type, "tag:spindle.dev,2026:error:RULE_NOT_FOUND");
     assert_eq!(pd.title, "Execution Error");
     assert!(pd.detail.is_some());
     assert!(pd.detail.as_ref().unwrap().contains("missing_rule"));
@@ -44,10 +41,7 @@ fn test_construction_theory_error() {
     let err = SpindleError::TheoryError("circular dependency".into());
     let pd = ProblemDetails::from(&err);
 
-    assert_eq!(
-        pd.problem_type,
-        "tag:spindle.dev,2026:error:THEORY_ERROR"
-    );
+    assert_eq!(pd.problem_type, "tag:spindle.dev,2026:error:THEORY_ERROR");
     assert_eq!(pd.title, "Validation Error");
     assert!(pd.detail.as_ref().unwrap().contains("circular dependency"));
     assert_eq!(pd.extensions.exit_code, 2);
@@ -91,10 +85,7 @@ fn test_construction_parse_error() {
     };
     let pd = ProblemDetails::from(&err);
 
-    assert_eq!(
-        pd.problem_type,
-        "tag:spindle.dev,2026:error:LEXER_ERROR"
-    );
+    assert_eq!(pd.problem_type, "tag:spindle.dev,2026:error:LEXER_ERROR");
     assert_eq!(pd.title, "Parse Error");
     assert!(pd.detail.as_ref().unwrap().contains("unexpected character"));
     assert_eq!(pd.extensions.exit_code, 2);
@@ -120,8 +111,7 @@ fn test_construction_type_uri_format() {
     for err in &variants {
         let pd = ProblemDetails::from(err);
         assert!(
-            pd.problem_type
-                .starts_with("tag:spindle.dev,2026:error:"),
+            pd.problem_type.starts_with("tag:spindle.dev,2026:error:"),
             "Type URI must use tag scheme, got: {}",
             pd.problem_type
         );
@@ -395,7 +385,8 @@ fn test_title_detail_not_identical() {
         let pd = ProblemDetails::from(err);
         if let Some(detail) = &pd.detail {
             assert_ne!(
-                pd.title, *detail,
+                pd.title,
+                *detail,
                 "Title and detail should differ for {}",
                 err.code()
             );
