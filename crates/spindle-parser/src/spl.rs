@@ -43,6 +43,7 @@ use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 
 use crate::ParseError;
+use crate::error::ParserFormat;
 
 /// Parse an SPL string into a Theory
 pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
@@ -57,6 +58,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
         ParseError::ParserError {
             line,
             message: format!("SPL parse error: {e:?}"),
+            format: ParserFormat::Spl,
         }
     })?;
 
@@ -65,6 +67,7 @@ pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
         return Err(ParseError::ParserError {
             line,
             message: format!("Unparsed input remaining: {}", remaining.trim()),
+            format: ParserFormat::Spl,
         });
     }
 
@@ -306,6 +309,7 @@ fn process_expr_with_line(
     let list = expr.as_list().ok_or_else(|| ParseError::ParserError {
         line,
         message: "Expected list expression".to_string(),
+        format: ParserFormat::Spl,
     })?;
 
     if list.is_empty() {
@@ -315,6 +319,7 @@ fn process_expr_with_line(
     let keyword = list[0].as_atom().ok_or_else(|| ParseError::ParserError {
         line,
         message: "Expected keyword".to_string(),
+        format: ParserFormat::Spl,
     })?;
 
     match keyword {
@@ -329,6 +334,7 @@ fn process_expr_with_line(
         _ => Err(ParseError::ParserError {
             line,
             message: format!("Unknown keyword: {keyword}"),
+            format: ParserFormat::Spl,
         }),
     }
 }
@@ -344,12 +350,14 @@ fn process_claims(
         return Err(ParseError::ParserError {
             line,
             message: "claims requires a source".to_string(),
+            format: ParserFormat::Spl,
         });
     }
 
     let source = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
         line,
         message: "claims source must be an atom".to_string(),
+        format: ParserFormat::Spl,
     })?;
 
     let mut timestamp: Option<String> = None;
@@ -372,6 +380,7 @@ fn process_claims(
                 return Err(ParseError::ParserError {
                     line,
                     message: format!("claims {kw} requires a {field_name} atom"),
+                    format: ParserFormat::Spl,
                 });
             }
             let val = args[body_start + 1]
@@ -379,6 +388,7 @@ fn process_claims(
                 .ok_or_else(|| ParseError::ParserError {
                     line,
                     message: format!("claims {kw} requires a {field_name} atom"),
+                    format: ParserFormat::Spl,
                 })?;
             *target = Some(val.to_string());
             body_start += 2;
@@ -433,6 +443,7 @@ fn process_fact_with_line(
         return Err(ParseError::ParserError {
             line,
             message: "fact requires at least one argument".to_string(),
+            format: ParserFormat::Spl,
         });
     }
 
@@ -454,6 +465,7 @@ fn process_fact_with_line(
                             .ok_or_else(|| ParseError::ParserError {
                                 line,
                                 message: "Expected atom argument".to_string(),
+                                format: ParserFormat::Spl,
                             })
                     })
                     .collect();
@@ -487,6 +499,7 @@ fn process_rule_with_line(
         return Err(ParseError::ParserError {
             line,
             message: "rule requires at least body and head".to_string(),
+            format: ParserFormat::Spl,
         });
     }
 
@@ -523,6 +536,7 @@ fn process_rule_with_line(
         return Err(ParseError::ParserError {
             line,
             message: format!("Duplicate rule label: {final_label}"),
+            format: ParserFormat::Spl,
         });
     }
 
@@ -564,6 +578,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                     return Err(ParseError::ParserError {
                         line,
                         message: "Double negation with empty name".to_string(),
+                        format: ParserFormat::Spl,
                     });
                 }
                 // ~~name = not(not(name)) = name (positive)
@@ -580,12 +595,14 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                 return Err(ParseError::ParserError {
                     line,
                     message: "Empty list is not a valid literal".to_string(),
+                    format: ParserFormat::Spl,
                 });
             }
 
             let first = items[0].as_atom().ok_or_else(|| ParseError::ParserError {
                 line,
                 message: "Expected atom in literal".to_string(),
+                format: ParserFormat::Spl,
             })?;
 
             match first {
@@ -595,6 +612,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                         return Err(ParseError::ParserError {
                             line,
                             message: "not takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
                         });
                     }
                     let inner = parse_literal_with_line(&items[1], line)?;
@@ -606,6 +624,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                         return Err(ParseError::ParserError {
                             line,
                             message: "must takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
@@ -618,6 +637,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                         return Err(ParseError::ParserError {
                             line,
                             message: "may takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
@@ -630,6 +650,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                         return Err(ParseError::ParserError {
                             line,
                             message: "forbidden takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
@@ -643,6 +664,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                             line,
                             message: "during takes exactly three arguments: literal, start, end"
                                 .to_string(),
+                            format: ParserFormat::Spl,
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
@@ -660,6 +682,7 @@ fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseEr
                                 ParseError::ParserError {
                                     line,
                                     message: "Expected atom argument".to_string(),
+                                    format: ParserFormat::Spl,
                                 }
                             })
                         })
@@ -690,6 +713,7 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
                 Err(ParseError::ParserError {
                     line,
                     message: format!("Invalid timepoint: {s}"),
+                    format: ParserFormat::Spl,
                 })
             }
         }
@@ -705,22 +729,26 @@ fn parse_timepoint_with_line(expr: &SExpr, line: usize) -> Result<TimePoint, Par
                     Err(ParseError::ParserError {
                         line,
                         message: format!("Invalid RFC3339 timepoint for moment: {s}"),
+                        format: ParserFormat::Spl,
                     })
                 } else {
                     Err(ParseError::ParserError {
                         line,
                         message: "moment argument must be atom".to_string(),
+                        format: ParserFormat::Spl,
                     })
                 }
             } else if items.len() >= 4 && items[0].as_atom() == Some("moment") {
                 Err(ParseError::ParserError {
                     line,
                     message: "Multi-arity moment (YYYY MM DD ...) not yet supported".to_string(),
+                    format: ParserFormat::Spl,
                 })
             } else {
                 Err(ParseError::ParserError {
                     line,
                     message: "Invalid timepoint expression".to_string(),
+                    format: ParserFormat::Spl,
                 })
             }
         }
@@ -737,12 +765,14 @@ fn process_meta_with_line(
         return Err(ParseError::ParserError {
             line,
             message: "meta requires a label".to_string(),
+            format: ParserFormat::Spl,
         });
     }
 
     let label = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
         line,
         message: "meta label must be an atom".to_string(),
+        format: ParserFormat::Spl,
     })?;
 
     // Process each property: (key "value") or (key ("v1" "v2"))
@@ -755,6 +785,7 @@ fn process_meta_with_line(
                 .ok_or_else(|| ParseError::ParserError {
                     line,
                     message: "meta property key must be an atom".to_string(),
+                    format: ParserFormat::Spl,
                 })?;
 
             // Check if value is a list or single value
@@ -769,6 +800,7 @@ fn process_meta_with_line(
                                 ParseError::ParserError {
                                     line,
                                     message: "meta list values must be atoms".to_string(),
+                                    format: ParserFormat::Spl,
                                 }
                             })
                         })
@@ -794,6 +826,7 @@ fn process_prefer_with_line(
         return Err(ParseError::ParserError {
             line,
             message: "prefer requires at least two labels".to_string(),
+            format: ParserFormat::Spl,
         });
     }
 
@@ -803,6 +836,7 @@ fn process_prefer_with_line(
             a.as_atom().ok_or_else(|| ParseError::ParserError {
                 line,
                 message: "prefer arguments must be atoms".to_string(),
+                format: ParserFormat::Spl,
             })
         })
         .collect();

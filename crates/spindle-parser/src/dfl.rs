@@ -67,6 +67,7 @@ pub fn parse_dfl(input: &str) -> Result<Theory, ParseError> {
         return Err(ParseError::ParserError {
             line: line_num + 1,
             message: format!("could not parse: {line}"),
+            format: crate::error::ParserFormat::Dfl,
         });
     }
 
