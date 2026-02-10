@@ -71,7 +71,7 @@ pub(crate) fn run_reason(
         let result = spindle_core::scalable::reason_scalable(&indexed);
         result.to_conclusions(&indexed)
     } else {
-        spindle_core::reason::reason(&pipeline_result.theory).map_err(|e| {
+        spindle_core::reason::reason_prepared(&pipeline_result.theory).map_err(|e| {
             CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
         })?
     };

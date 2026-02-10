@@ -97,13 +97,22 @@ pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
 pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<Conclusion>> {
     // Phase 0: Pipeline (Filtering + Validation + Grounding)
     let prepared = prepare(theory, opts)?;
-    let grounded_theory = prepared.theory;
 
-    // Use the grounded theory for indexing and reasoning
-    let mut indexed = IndexedTheory::build(&grounded_theory);
+    reason_prepared(&prepared.theory)
+}
+
+/// Perform defeasible reasoning on an already-prepared theory.
+///
+/// Use this when you have already called [`prepare()`] and want to avoid
+/// redundant pipeline work. The theory must have been prepared with the
+/// desired options (grounding, temporal filtering, etc.) before calling
+/// this function.
+pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
+    // Use the theory directly for indexing and reasoning
+    let mut indexed = IndexedTheory::build(theory);
 
     // Pre-allocate conclusions vector
-    let estimated_size = grounded_theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
+    let estimated_size = theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
     let mut conclusions = Vec::with_capacity(estimated_size);
 
     // Track what we've proven using LiteralBitSet for O(1) operations
@@ -112,10 +121,10 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
     let mut defeasible_proven = LiteralBitSet::new(atom_count);
 
     // Track rule body satisfaction - pre-allocate for all rules
-    let rule_count = grounded_theory.rule_count();
+    let rule_count = theory.rule_count();
     let mut body_remaining: FxHashMap<&str, usize> =
         FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
-    for rule in grounded_theory.rules() {
+    for rule in theory.rules() {
         body_remaining.insert(&rule.label, rule.body.len());
     }
 
@@ -125,7 +134,7 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
     let mut enqueued = LiteralBitSet::new(atom_count);
 
     // Phase 1: Initialize with facts (deduplicated)
-    for fact in grounded_theory.facts() {
+    for fact in theory.facts() {
         let lit = fact.head_literal().clone();
         // Interning here is safe as facts are already in the theory
         let lit_id = indexed.intern_literal(&lit);
@@ -148,7 +157,7 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
     // Phase 1b: Initialize empty-body non-fact rules
     // These rules have no body literals so forward chaining never triggers them.
     // We must seed their heads into the worklist explicitly.
-    for rule in grounded_theory.rules() {
+    for rule in theory.rules() {
         if rule.body.is_empty() && rule.rule_type != RuleType::Fact {
             let head_lit = rule.head_literal().clone();
             let head_id = indexed.intern_literal(&head_lit);
@@ -179,7 +188,7 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
                     if !defeasible_proven.contains(head_id) {
                         let blocked = is_blocked_by_superior(
                             &indexed,
-                            &grounded_theory,
+                            theory,
                             rule,
                             &defeasible_proven,
                         );
@@ -253,7 +262,7 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
                                 // Check if we're blocked by superior rules
                                 let blocked = is_blocked_by_superior(
                                     &indexed,
-                                    &grounded_theory,
+                                    theory,
                                     rule,
                                     &defeasible_proven,
                                 );
