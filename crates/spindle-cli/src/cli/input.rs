@@ -46,9 +46,7 @@ pub(crate) fn resolve_theory_source(
 }
 
 /// Load theory from resolved source
-pub(crate) fn load_theory_source(
-    source: &TheorySource,
-) -> Result<spindle_core::Theory, CliError> {
+pub(crate) fn load_theory_source(source: &TheorySource) -> Result<spindle_core::Theory, CliError> {
     match source {
         TheorySource::File(path) => load_theory_from_file(path),
         TheorySource::Stdin => load_theory_from_stdin(),

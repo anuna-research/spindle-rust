@@ -186,12 +186,8 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
                 RuleType::Defeasible => {
                     // Empty-body defeasible rules fire immediately but can still be blocked
                     if !defeasible_proven.contains(head_id) {
-                        let blocked = is_blocked_by_superior(
-                            &indexed,
-                            theory,
-                            rule,
-                            &defeasible_proven,
-                        );
+                        let blocked =
+                            is_blocked_by_superior(&indexed, theory, rule, &defeasible_proven);
                         if !blocked {
                             defeasible_proven.insert(head_id);
                             conclusions.push(
