@@ -146,6 +146,7 @@ This is the anti-whackamole baseline. Contract changes are not complete until al
    - File: `crates/spindle-cli/tests/contract_matrix_tests.rs`
    - Model every command/edge case as `MatrixCase` entries.
    - Every `JsonSuccess` case must validate against the corresponding JSON schema, not ad-hoc required-field checks.
+   - Non-schema utility success (`validate`, `stats`) must be covered by explicit JSON success assertions that enforce no `schema_version`, required top-level keys, and typed values.
    - Success invariants must be schema-aware per command (for example, capabilities has a different shape than query/reason outputs).
    - Include paired cases for order-independent invocations (for example, top-level vs subcommand `--stdin`) and assert identical behavior.
 2. Shared schema + runner helpers:
@@ -153,7 +154,7 @@ This is the anti-whackamole baseline. Contract changes are not complete until al
    - Centralize binary invocation (`cargo_bin_cmd!`), schema loading, and strict JSON Schema validation.
    - Missing/unreadable schema files must fail fast (panic), never warn-and-skip.
    - JSON error envelope assertions (`diagnostics` + `error.code/message/details`) are centralized here.
-   - Ensure `--json` parse/load/validation failures are validated through the same envelope assertions.
+   - Ensure `--json` clap parse failures and parse/load/validation failures are validated through the same envelope assertions.
 3. Structural guard tests:
    - File: `crates/spindle-cli/tests/contract_guard_tests.rs`
    - Enforce boundary rules (no direct `std::process::exit` outside boundary emitter, no `eprintln!` in handlers, no deprecated `Command::cargo_bin` usage).

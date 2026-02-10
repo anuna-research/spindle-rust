@@ -59,7 +59,8 @@ Non-schema utility commands may exist (currently `validate` and `stats`).
 They are not schema-bearing v1 responses, but they must still follow:
 
 1. theory source resolution rules in Section 5.1.
-2. JSON error envelope rules in Section 8.3 when `--json` is requested.
+2. non-schema utility success shape rules in Section 6.4 when `--json` is requested.
+3. JSON error envelope rules in Section 8.3 when `--json` is requested.
 
 Global/command flags required for integration:
 
@@ -126,7 +127,7 @@ With `--json`, all command responses include:
 1. `schema_version` is required for schema-bearing responses (Section 6.3).
 2. `diagnostics` is required for schema-bearing responses that define it in their schema.
 3. `diagnostics` is always required in JSON error envelopes (Section 8.3), including non-schema commands.
-4. Non-schema utility commands (`validate`, `stats`) must not emit an empty/placeholder `schema_version`.
+4. Non-schema utility commands (`validate`, `stats`) must not emit `schema_version`.
 
 Diagnostic shape:
 
@@ -211,6 +212,35 @@ Required command-level semantics:
 5. `why-not` required fields:
    - `schema_version`, `literal_spl`, `literal_struct`, `status`, `blocked_by`, `evaluated_at` (nullable), `trust` (nullable), `diagnostics`
 
+### 6.4 Non-Schema Utility Success Shapes
+
+When `--json` is requested, non-schema utility commands return structured JSON success payloads with `diagnostics`, and no `schema_version`.
+
+1. `validate` success:
+
+```json
+{
+  "valid": true,
+  "diagnostics": []
+}
+```
+
+2. `stats` success:
+
+```json
+{
+  "stats": {
+    "total_rules": 0,
+    "facts": 0,
+    "strict": 0,
+    "defeasible": 0,
+    "defeaters": 0,
+    "superiorities": 0
+  },
+  "diagnostics": []
+}
+```
+
 `requires` rules:
 
 1. If `satisfied=true`, then `solutions=[]`.
@@ -270,7 +300,7 @@ Logical outcomes are not process failures:
 
 On failures with `--json`:
 
-1. A JSON object is emitted to stdout, including parse/load/validation failures (no plain-text-only error path).
+1. A JSON object is emitted to stdout, including clap parse/usage failures and parse/load/validation failures (no plain-text-only error path).
 2. `diagnostics` is always present.
 3. Top-level `error` is present only when exit code is non-zero.
 4. `error.details` is required and must be an object (may be empty).

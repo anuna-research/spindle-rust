@@ -246,6 +246,11 @@ pub enum ExpectedOutput {
         schema: &'static str,
         custom_check: Option<fn(&Value)>,
     },
+    /// JSON success response for non-schema utility commands
+    JsonSuccessNoSchema {
+        required_fields: &'static [&'static str],
+        custom_check: Option<fn(&Value)>,
+    },
     /// JSON error response with envelope validation
     JsonError {
         /// Whether schema_version should be present in error envelope
@@ -316,6 +321,42 @@ pub fn run_matrix_case(case: &MatrixCase) {
             validate_against_schema(&json, schema, case.name);
 
             // Run custom check if provided
+            if let Some(check) = custom_check {
+                check(&json);
+            }
+        }
+        ExpectedOutput::JsonSuccessNoSchema {
+            required_fields,
+            custom_check,
+        } => {
+            let json: Value = serde_json::from_str(&stdout)
+                .expect(&format!("{}: Output should be valid JSON", case.name));
+
+            assert!(
+                json.get("error").is_none(),
+                "{}: Success response should not contain error object",
+                case.name
+            );
+            assert!(
+                json.get("schema_version").is_none(),
+                "{}: Non-schema success response should not include schema_version",
+                case.name
+            );
+            assert!(
+                json.get("diagnostics").is_some() && json["diagnostics"].is_array(),
+                "{}: Non-schema success response should include diagnostics array",
+                case.name
+            );
+
+            for field in *required_fields {
+                assert!(
+                    json.get(field).is_some(),
+                    "{}: Non-schema success response missing required field '{}'",
+                    case.name,
+                    field
+                );
+            }
+
             if let Some(check) = custom_check {
                 check(&json);
             }

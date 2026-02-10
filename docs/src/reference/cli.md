@@ -35,11 +35,20 @@ Check syntax without reasoning.
 
 ```bash
 spindle validate examples/penguin.dfl
+spindle --json validate --stdin < examples/penguin.dfl
 ```
 
 Output on success:
 ```
-Valid DFL theory.
+Valid theory file
+```
+
+With `--json` success output:
+```json
+{
+  "valid": true,
+  "diagnostics": []
+}
 ```
 
 Output on error:
@@ -53,6 +62,7 @@ Show theory statistics.
 
 ```bash
 spindle stats examples/penguin.dfl
+spindle --json stats --stdin < examples/penguin.dfl
 ```
 
 Output:
@@ -64,6 +74,21 @@ Theory Statistics:
   Defeaters:   1
   Superiority: 1
   Total rules: 8
+```
+
+With `--json` success output:
+```json
+{
+  "stats": {
+    "total_rules": 8,
+    "facts": 2,
+    "strict": 1,
+    "defeasible": 4,
+    "defeaters": 1,
+    "superiorities": 1
+  },
+  "diagnostics": []
+}
 ```
 
 ### query
@@ -173,13 +198,20 @@ Each result is a minimal set of assumptions that, if added to the theory, would 
 
 ### `--json`
 
-Output results in JSON format. Available for `reason`, `query`, `explain`, `why-not`, `requires`, and `capabilities`.
-For `validate` and `stats`, `--json` enables JSON error envelopes when a command fails.
+Output results in JSON format. Available for all commands, including `validate` and `stats`.
+When `--json` is present, success and failure paths are machine-readable JSON.
 
 ```bash
 spindle reason examples/penguin.dfl --json
 spindle query flies examples/penguin.dfl --json
 spindle explain "-flies" examples/penguin.dfl --json
+spindle --json validate --stdin < examples/penguin.dfl
+```
+
+Parse/usage failures also emit JSON envelopes when `--json` is present:
+
+```bash
+spindle --json
 ```
 
 ### `--scalable`

@@ -4,6 +4,8 @@
 //! enforcement belongs in the matrix/schema tests; this file only keeps a
 //! high-value structural guard that is hard to regress accidentally.
 
+use assert_cmd::cargo::cargo_bin_cmd;
+use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 
@@ -70,4 +72,28 @@ fn test_no_deprecated_cargo_bin_in_tests() {
         }
         panic!("{msg}");
     }
+}
+
+/// Guard: `--json` parse/usage failures must emit a JSON error envelope.
+#[test]
+fn test_json_parse_failure_uses_error_envelope() {
+    let output = cargo_bin_cmd!("spindle")
+        .arg("--json")
+        .output()
+        .expect("failed to run spindle --json");
+
+    assert!(
+        !output.status.success(),
+        "spindle --json with no subcommand should fail"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: Value =
+        serde_json::from_str(&stdout).expect("parse failure stdout should be valid JSON");
+
+    assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
+    assert!(
+        json["diagnostics"].is_array(),
+        "error envelope should include diagnostics array"
+    );
 }

@@ -239,6 +239,30 @@ fn test_validate_nonexistent_file() {
         .stderr(predicate::str::contains("Error reading file"));
 }
 
+#[test]
+fn test_validate_json_success_from_stdin() {
+    let output = spindle()
+        .arg("--json")
+        .arg("validate")
+        .arg("--stdin")
+        .write_stdin("(given a)\n")
+        .output()
+        .expect("Failed to execute validate --json --stdin");
+
+    assert!(output.status.success(), "validate --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("validate --json should emit valid JSON");
+    assert_eq!(json["valid"], true);
+    assert!(
+        json["diagnostics"].is_array(),
+        "validate --json should include diagnostics array"
+    );
+    assert!(
+        json.get("schema_version").is_none(),
+        "validate --json should not include schema_version"
+    );
+}
+
 // ============================================================================
 // Stats command
 // ============================================================================
@@ -266,6 +290,30 @@ r2 > r1
         .stdout(predicate::str::contains("Strict:"))
         .stdout(predicate::str::contains("Defeasible:"))
         .stdout(predicate::str::contains("Superiorities:"));
+}
+
+#[test]
+fn test_stats_json_success_from_stdin() {
+    let output = spindle()
+        .arg("--json")
+        .arg("stats")
+        .arg("--stdin")
+        .write_stdin("f1: >> bird\nr1: bird => flies\n")
+        .output()
+        .expect("Failed to execute stats --json --stdin");
+
+    assert!(output.status.success(), "stats --json should succeed");
+    let json: Value =
+        serde_json::from_slice(&output.stdout).expect("stats --json should emit valid JSON");
+    assert!(json["stats"].is_object(), "stats --json should include stats object");
+    assert!(
+        json["diagnostics"].is_array(),
+        "stats --json should include diagnostics array"
+    );
+    assert!(
+        json.get("schema_version").is_none(),
+        "stats --json should not include schema_version"
+    );
 }
 
 // ============================================================================
@@ -598,6 +646,20 @@ fn test_query_missing_literal_arg() {
     spindle().arg("query").assert().failure();
 }
 
+#[test]
+fn test_json_flag_parse_error_emits_json_envelope() {
+    let output = spindle()
+        .arg("--json")
+        .output()
+        .expect("Failed to execute --json parse error case");
+
+    assert!(!output.status.success(), "--json with no subcommand should fail");
+    let json: Value = serde_json::from_slice(&output.stdout)
+        .expect("parse failure with --json should emit JSON envelope");
+    assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
+    assert!(json["diagnostics"].is_array());
+}
+
 // ============================================================================
 // SPL format detection
 // ============================================================================
@@ -784,6 +846,8 @@ r1: bird => flies
         .output()
         .expect("Failed to execute direct --json");
     assert!(!output.status.success(), "direct file --json should fail");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Usage:"), "expected usage in stderr");
+    let json: Value = serde_json::from_slice(&output.stdout)
+        .expect("direct parse failure with --json should emit JSON envelope");
+    assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
+    assert!(json["diagnostics"].is_array());
 }

@@ -258,9 +258,105 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             },
             setup: None,
         },
+        // validate --json success (non-schema utility command)
+        MatrixCase {
+            name: "validate --json success",
+            args: &["--json", "validate", "--stdin"],
+            stdin: Some("(given a)"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::JsonSuccessNoSchema {
+                required_fields: &["valid", "diagnostics"],
+                custom_check: Some(|json| {
+                    assert_eq!(json["valid"], true);
+                }),
+            },
+            setup: None,
+        },
+        // stats --json success (non-schema utility command)
+        MatrixCase {
+            name: "stats --json success",
+            args: &["--json", "stats", "--stdin"],
+            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            expected_exit: 0,
+            expected_output: ExpectedOutput::JsonSuccessNoSchema {
+                required_fields: &["stats", "diagnostics"],
+                custom_check: Some(|json| {
+                    let stats = json["stats"].as_object().expect("stats should be an object");
+                    for key in [
+                        "total_rules",
+                        "facts",
+                        "strict",
+                        "defeasible",
+                        "defeaters",
+                        "superiorities",
+                    ] {
+                        assert!(stats.contains_key(key), "stats missing key '{}'", key);
+                        assert!(
+                            stats[key].is_number(),
+                            "stats key '{}' should have numeric value",
+                            key
+                        );
+                    }
+                }),
+            },
+            setup: None,
+        },
         // ============================================================================
         // Error cases (non-zero, JSON envelope invariants)
         // ============================================================================
+
+        // clap parse errors with --json should still produce JSON envelopes
+        MatrixCase {
+            name: "--json missing subcommand parse error",
+            args: &["--json"],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::JsonError {
+                expect_schema_version: false,
+                expected_error_code: Some("CLI_PARSE_ERROR"),
+                custom_check: Some(|json| {
+                    let kind = json["error"]["details"]["kind"]
+                        .as_str()
+                        .expect("error.details.kind should be present");
+                    assert!(!kind.is_empty(), "error.details.kind should be non-empty");
+                }),
+            },
+            setup: None,
+        },
+        MatrixCase {
+            name: "--json query missing literal parse error",
+            args: &["--json", "query"],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::JsonError {
+                expect_schema_version: false,
+                expected_error_code: Some("CLI_PARSE_ERROR"),
+                custom_check: Some(|json| {
+                    let kind = json["error"]["details"]["kind"]
+                        .as_str()
+                        .expect("error.details.kind should be present");
+                    assert!(!kind.is_empty(), "error.details.kind should be non-empty");
+                }),
+            },
+            setup: None,
+        },
+        MatrixCase {
+            name: "--json unknown subcommand parse error",
+            args: &["--json", "frobnicate"],
+            stdin: None,
+            expected_exit: 2,
+            expected_output: ExpectedOutput::JsonError {
+                expect_schema_version: false,
+                expected_error_code: Some("CLI_PARSE_ERROR"),
+                custom_check: Some(|json| {
+                    let kind = json["error"]["details"]["kind"]
+                        .as_str()
+                        .expect("error.details.kind should be present");
+                    assert!(!kind.is_empty(), "error.details.kind should be non-empty");
+                }),
+            },
+            setup: None,
+        },
 
         // reason --json --stdin with invalid input (parse error, exit 2)
         // Schema commands should have schema_version even on errors

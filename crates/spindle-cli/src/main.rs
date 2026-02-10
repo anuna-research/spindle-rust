@@ -7,6 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use chrono::DateTime;
+use clap::error::ErrorKind;
 use clap::{Parser, Subcommand};
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
@@ -725,17 +726,47 @@ fn run_reason(
 // VALIDATE COMMAND
 // =============================================================================
 
-fn run_validate(file: Option<&PathBuf>, stdin: bool) -> Result<CommandOutput, CliError> {
+#[derive(serde::Serialize)]
+struct ValidateOutput {
+    valid: bool,
+    diagnostics: Vec<Diagnostic>,
+}
+
+fn run_validate(file: Option<&PathBuf>, stdin: bool, json: bool) -> Result<CommandOutput, CliError> {
     let source = resolve_theory_source(file, stdin)?;
     let _theory = load_theory_source(&source)?;
-    Ok(CommandOutput::text("Valid theory file"))
+
+    if json {
+        CommandOutput::json(ValidateOutput {
+            valid: true,
+            diagnostics: vec![],
+        })
+    } else {
+        Ok(CommandOutput::text("Valid theory file"))
+    }
 }
 
 // =============================================================================
 // STATS COMMAND
 // =============================================================================
 
-fn run_stats(file: Option<&PathBuf>, stdin: bool) -> Result<CommandOutput, CliError> {
+#[derive(serde::Serialize)]
+struct StatsOutput {
+    stats: StatsPayload,
+    diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(serde::Serialize)]
+struct StatsPayload {
+    total_rules: usize,
+    facts: usize,
+    strict: usize,
+    defeasible: usize,
+    defeaters: usize,
+    superiorities: usize,
+}
+
+fn run_stats(file: Option<&PathBuf>, stdin: bool, json: bool) -> Result<CommandOutput, CliError> {
     let source = resolve_theory_source(file, stdin)?;
     let theory = load_theory_source(&source)?;
 
@@ -750,19 +781,33 @@ fn run_stats(file: Option<&PathBuf>, stdin: bool) -> Result<CommandOutput, CliEr
         .rules_by_type(spindle_core::rule::RuleType::Defeater)
         .count();
 
-    let mut text = String::new();
-    text.push_str("Theory Statistics:\n");
-    text.push_str(&format!("  Total rules: {}\n", theory.rule_count()));
-    text.push_str(&format!("    Facts:      {facts}\n"));
-    text.push_str(&format!("    Strict:     {strict}\n"));
-    text.push_str(&format!("    Defeasible: {defeasible}\n"));
-    text.push_str(&format!("    Defeaters:  {defeaters}\n"));
-    text.push_str(&format!(
-        "  Superiorities: {}",
-        theory.superiorities().len()
-    ));
+    let total_rules = theory.rule_count();
+    let superiorities = theory.superiorities().len();
 
-    Ok(CommandOutput::text(text))
+    if json {
+        CommandOutput::json(StatsOutput {
+            stats: StatsPayload {
+                total_rules,
+                facts,
+                strict,
+                defeasible,
+                defeaters,
+                superiorities,
+            },
+            diagnostics: vec![],
+        })
+    } else {
+        let mut text = String::new();
+        text.push_str("Theory Statistics:\n");
+        text.push_str(&format!("  Total rules: {total_rules}\n"));
+        text.push_str(&format!("    Facts:      {facts}\n"));
+        text.push_str(&format!("    Strict:     {strict}\n"));
+        text.push_str(&format!("    Defeasible: {defeasible}\n"));
+        text.push_str(&format!("    Defeaters:  {defeaters}\n"));
+        text.push_str(&format!("  Superiorities: {superiorities}"));
+
+        Ok(CommandOutput::text(text))
+    }
 }
 
 // =============================================================================
@@ -1252,7 +1297,37 @@ fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
 // =============================================================================
 
 fn main() {
-    let cli = Cli::parse();
+    let json_requested_in_raw_args = std::env::args_os()
+        .skip(1)
+        .any(|arg| arg == std::ffi::OsStr::new("--json"));
+
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => match err.kind() {
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+                // Keep help/version textual and user-friendly.
+                let _ = err.print();
+                std::process::exit(0);
+            }
+            kind => {
+                if json_requested_in_raw_args {
+                    emit_and_exit(
+                        Err(
+                            CliError::validation("CLI_PARSE_ERROR", err.to_string()).with_details(
+                                serde_json::json!({
+                                    "kind": format!("{kind:?}")
+                                }),
+                            ),
+                        ),
+                        None,
+                        true,
+                    );
+                } else {
+                    err.exit();
+                }
+            }
+        },
+    };
 
     // Determine schema version and json flag based on the command before we move out of cli.command
     let (schema_version, json_flag) = match &cli.command {
@@ -1298,8 +1373,10 @@ fn main() {
             cli.stdin,
             reference_time,
         ),
-        Commands::Validate { file, stdin } => run_validate(file.as_ref(), stdin || cli.stdin),
-        Commands::Stats { file, stdin } => run_stats(file.as_ref(), stdin || cli.stdin),
+        Commands::Validate { file, stdin } => {
+            run_validate(file.as_ref(), stdin || cli.stdin, json_flag)
+        }
+        Commands::Stats { file, stdin } => run_stats(file.as_ref(), stdin || cli.stdin, json_flag),
         Commands::Query {
             literal,
             file,
