@@ -86,11 +86,9 @@ fn parse_theory_content(
         || content.trim().starts_with(';');
 
     if is_spl {
-        parse_spl(content)
-            .map_err(|e| CliError::parse("SPL_PARSE_ERROR", format!("SPL parse error: {e}")))
+        parse_spl(content).map_err(|e| CliError::parse(e.code(), e.to_string()))
     } else {
-        parse_dfl(content)
-            .map_err(|e| CliError::parse("DFL_PARSE_ERROR", format!("DFL parse error: {e}")))
+        parse_dfl(content).map_err(|e| CliError::parse(e.code(), e.to_string()))
     }
 }
 
