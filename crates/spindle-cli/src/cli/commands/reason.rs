@@ -14,7 +14,6 @@ use crate::cli::output::CommandOutput;
 
 pub(crate) fn run_reason(
     file: Option<&PathBuf>,
-    scalable: bool,
     positive_only: bool,
     json: bool,
     stdin: bool,
@@ -35,15 +34,10 @@ pub(crate) fn run_reason(
         )
     })?;
 
-    let conclusions = if scalable {
-        let indexed = spindle_core::index::IndexedTheory::build(&pipeline_result.theory);
-        let result = spindle_core::scalable::reason_scalable(&indexed);
-        result.to_conclusions(&indexed)
-    } else {
+    let conclusions =
         spindle_core::reason::reason_prepared(&pipeline_result.theory).map_err(|e| {
             CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
-        })?
-    };
+        })?;
 
     if json {
         let mut output_conclusions: Vec<ConclusionEntry> = conclusions

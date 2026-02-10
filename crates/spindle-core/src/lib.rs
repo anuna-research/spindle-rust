@@ -12,7 +12,7 @@
 //! - Four rule types: facts, strict rules, defeasible rules, and defeaters
 //! - Two provability levels: definite (+D/-D) and defeasible (+d/-d)
 //! - Superiority relations for conflict resolution
-//! - Standard DL(d) and scalable DL(d||) reasoning modes
+//! - Standard DL(d) reasoning mode
 //!
 //! # Example
 //!
@@ -54,7 +54,6 @@ pub mod pipeline;
 pub mod query;
 pub mod reason;
 pub mod rule;
-pub mod scalable;
 pub mod superiority;
 pub mod temporal;
 pub mod theory;

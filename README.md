@@ -18,9 +18,8 @@ This project is part of the SPINdle family:
   - Defeasible rules (`=>`) - Normally hold unless defeated
   - Defeaters (`~>`) - Block conclusions without proving anything
 
-- **Two Reasoning Modes**:
+- **Reasoning Mode**:
   - Standard DL(d) - Traditional forward chaining
-  - Scalable DL(d||) - Three-phase closure algorithm for large theories
 
 - **Temporal Reasoning**: Allen interval algebra with 13 temporal relations
 
@@ -57,9 +56,6 @@ spindle examples/penguin.dfl
 
 # Reason about a theory (SPL format)
 spindle examples/penguin.spl
-
-# Use scalable mode
-spindle --scalable examples/penguin.dfl
 
 # Show only positive conclusions
 spindle --positive examples/penguin.dfl
@@ -186,7 +182,6 @@ const abduce = spindle.abduce("flies", 3);
 
 - `spindle-core` - Core reasoning engine
   - `reason` - Standard DL(d) forward chaining
-  - `scalable` - Scalable DL(d||) three-phase algorithm
   - `temporal` - Allen interval algebra
   - `grounding` - Datalog-style variable grounding
   - `explanation` - Proof trees and explanations
@@ -200,7 +195,6 @@ const abduce = spindle.abduce("flies", 3);
 
 830 tests covering:
 - Core reasoning (facts, rules, conflicts, superiority)
-- Semantic equivalence (standard vs scalable modes)
 - Edge cases (cycles, empty theories, defeaters)
 - Stress tests (long chains, wide theories)
 - Query operators (what-if, why-not, abduction)

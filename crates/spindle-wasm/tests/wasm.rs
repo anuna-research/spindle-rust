@@ -174,17 +174,6 @@ fn test_reason() {
 }
 
 #[wasm_bindgen_test]
-fn test_reason_scalable() {
-    let mut spindle = Spindle::new();
-    spindle.add_fact("bird");
-    spindle.add_defeasible_rule(vec!["bird".to_string()], "flies");
-
-    let result = spindle.reason_scalable();
-    assert!(!result.is_null());
-    assert!(!result.is_undefined());
-}
-
-#[wasm_bindgen_test]
 fn test_get_positive_conclusions() {
     let mut spindle = Spindle::new();
     spindle.add_fact("bird");
@@ -496,21 +485,6 @@ fn test_defeater_blocks() {
     // flies should NOT be derived (blocked by defeater)
     // Note: defeaters block but don't prove the opposite
     assert!(!conclusions.iter().any(|c| c.contains("+d flies")));
-}
-
-#[wasm_bindgen_test]
-fn test_scalable_vs_standard() {
-    let mut spindle = Spindle::new();
-
-    spindle.add_fact("a");
-    spindle.add_defeasible_rule(vec!["a".to_string()], "b");
-
-    let standard = spindle.reason();
-    let scalable = spindle.reason_scalable();
-
-    // Both should return valid results
-    assert!(!standard.is_null());
-    assert!(!scalable.is_null());
 }
 
 #[wasm_bindgen_test]

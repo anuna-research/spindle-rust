@@ -34,7 +34,6 @@ use spindle_core::mode::Mode;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
-use spindle_core::scalable::reason_scalable;
 use spindle_core::temporal::Temporal;
 use spindle_core::theory::{MetaValue, Theory};
 use spindle_parser::{parse_dfl, parse_spl};
@@ -216,50 +215,6 @@ impl Spindle {
             })
             .collect();
         // Sort for deterministic output matching CLI behavior
-        output_conclusions.sort_by(|a, b| {
-            a.literal_spl
-                .cmp(&b.literal_spl)
-                .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
-        });
-
-        let output = ReasonOutput {
-            schema_version: "spindle.reason.v1".to_string(),
-            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            grounding: GroundingStats {
-                performed: prepared.grounding_report.performed,
-                had_variables: prepared.grounding_report.had_variables,
-                instances: prepared.grounding_report.instances,
-                limit_hit: prepared.grounding_report.limit_hit,
-            },
-            conclusions: output_conclusions,
-            diagnostics: vec![],
-            stats: Some(TheoryStats {
-                rule_count: prepared.theory.rule_count(),
-                fact_count: prepared.theory.facts().count(),
-            }),
-        };
-
-        Ok(serde_wasm_bindgen::to_value(&output)?)
-    }
-
-    /// Perform scalable reasoning and return structured JSON output
-    #[wasm_bindgen(js_name = reasonScalable)]
-    pub fn reason_scalable(&self) -> Result<JsValue, JsError> {
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
-        let indexed = spindle_core::index::IndexedTheory::build(&prepared.theory);
-        let result = reason_scalable(&indexed);
-        let conclusions = result.to_conclusions(&indexed);
-
-        let mut output_conclusions: Vec<ConclusionEntry> = conclusions
-            .iter()
-            .map(|c| ConclusionEntry {
-                conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStructJson::from(&c.literal),
-                positive: c.conclusion_type.is_positive(),
-            })
-            .collect();
         output_conclusions.sort_by(|a, b| {
             a.literal_spl
                 .cmp(&b.literal_spl)
@@ -883,7 +838,7 @@ mod tests {
         assert_eq!(lit.name(), "bird");
     }
 
-    // Note: Tests that call reason(), reason_scalable(), query(), what_if(),
+    // Note: Tests that call reason(), query(), what_if(),
     // why_not(), abduce(), or get_rules() require WASM target because they
     // return JsValue. Run these with: wasm-pack test --node
 }

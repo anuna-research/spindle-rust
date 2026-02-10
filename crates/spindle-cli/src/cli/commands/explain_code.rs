@@ -46,7 +46,7 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
             "Internal reasoning engine failure",
             "Unsupported theory configuration",
         ],
-        example: "Try simplifying the theory or using --scalable mode.",
+        example: "Try simplifying the theory and rerunning reasoning.",
     },
     ErrorCodeInfo {
         code: "VALIDATION_ERROR",

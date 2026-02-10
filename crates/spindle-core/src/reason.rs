@@ -362,7 +362,7 @@ fn is_blocked_by_superior(
 
         // Ambiguity blocking (skeptical semantics): if neither rule is superior
         // over the other and both have satisfied bodies, block the conclusion.
-        // This matches scalable.rs behavior and standard DL(d) semantics.
+        // This matches standard DL(d) ambiguity-blocking semantics.
         if !attacker_superior && !rule_superior {
             return true;
         }
@@ -1257,39 +1257,6 @@ mod tests {
         assert!(
             has_q,
             "q should be provable when attacker body is unsatisfied"
-        );
-    }
-
-    #[test]
-    fn test_standard_scalable_parity_ambiguity() {
-        // Standard and scalable algorithms should agree on ambiguity blocking
-        use crate::index::IndexedTheory;
-        use crate::scalable::reason_scalable;
-
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-        theory.add_defeasible_rule(&["p"], "q");
-        theory.add_defeasible_rule(&["p"], "~q");
-
-        let standard = reason(&theory).unwrap();
-        let indexed = IndexedTheory::build(&theory);
-        let scalable = reason_scalable(&indexed);
-        let scalable_conclusions = scalable.to_conclusions(&indexed);
-
-        let std_has_q = standard.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "q"
-                && !c.literal.negation
-        });
-        let scl_has_q = scalable_conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "q"
-                && !c.literal.negation
-        });
-
-        assert_eq!(
-            std_has_q, scl_has_q,
-            "Standard and scalable should agree on ambiguity blocking for q"
         );
     }
 
