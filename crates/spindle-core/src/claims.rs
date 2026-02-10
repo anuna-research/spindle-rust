@@ -587,8 +587,7 @@ mod tests {
 
     #[test]
     fn test_metadata_escapes_mixed() {
-        let block = ClaimsBlock::new("agent:a")
-            .with_note(r#"a "b\" c"#);
+        let block = ClaimsBlock::new("agent:a").with_note(r#"a "b\" c"#);
 
         let spl = block.to_spl();
         assert!(
