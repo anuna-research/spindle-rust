@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/spindle-core",
     "crates/spindle-parser",
+    "crates/spindle-contract",
     "crates/spindle-cli",
     "crates/spindle-wasm",
 ]
