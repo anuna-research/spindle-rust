@@ -58,6 +58,15 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
         example: "spindle validate --stdin < theory.dfl",
     },
     ErrorCodeInfo {
+        code: "PARSE_ERROR",
+        meaning: "The input could not be parsed (generic parse failure).",
+        causes: &[
+            "Syntax error in the input file",
+            "Unrecognized format or malformed structure",
+        ],
+        example: "Check the input syntax. Use spindle explain-code DFL_PARSE_ERROR or SPL_PARSE_ERROR for format-specific guidance.",
+    },
+    ErrorCodeInfo {
         code: "DFL_LEXER_ERROR",
         meaning: "The DFL lexer encountered an unexpected character.",
         causes: &[

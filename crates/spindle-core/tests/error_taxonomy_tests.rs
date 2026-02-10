@@ -134,6 +134,7 @@ fn test_error_category_clone_copy_eq() {
     let cat2 = cat;
     assert_eq!(cat, cat2);
 
+    #[allow(clippy::clone_on_copy)]
     let cat3 = cat.clone();
     assert_eq!(cat, cat3);
 }

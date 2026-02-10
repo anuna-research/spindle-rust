@@ -192,11 +192,16 @@ fn test_temporal_json_with_moments() {
 
 #[test]
 fn test_diagnostic_entry_round_trip() {
+    let mut details = serde_json::Map::new();
+    details.insert(
+        "limit".to_string(),
+        serde_json::Value::String("Max 1000 instances".to_string()),
+    );
     let diag = DiagnosticEntry {
         severity: "warning".to_string(),
         code: "GROUNDING_LIMIT".to_string(),
         message: "Grounding limit reached".to_string(),
-        detail: Some("Max 1000 instances".to_string()),
+        details: Some(details.clone()),
     };
 
     let json = serde_json::to_string(&diag).unwrap();
@@ -204,21 +209,21 @@ fn test_diagnostic_entry_round_trip() {
 
     assert_eq!(deserialized.severity, "warning");
     assert_eq!(deserialized.code, "GROUNDING_LIMIT");
-    assert_eq!(deserialized.detail, Some("Max 1000 instances".to_string()));
+    assert_eq!(deserialized.details, Some(details));
 }
 
 #[test]
-fn test_diagnostic_entry_detail_null_omitted() {
+fn test_diagnostic_entry_details_null_omitted() {
     let diag = DiagnosticEntry {
         severity: "info".to_string(),
         code: "INFO_CODE".to_string(),
         message: "Info message".to_string(),
-        detail: None,
+        details: None,
     };
 
     let value: Value = serde_json::to_value(&diag).unwrap();
-    // detail should be omitted (skip_serializing_if = "Option::is_none")
-    assert!(!value.as_object().unwrap().contains_key("detail"));
+    // details should be omitted (skip_serializing_if = "Option::is_none")
+    assert!(!value.as_object().unwrap().contains_key("details"));
 }
 
 #[test]

@@ -9,5 +9,5 @@ pub struct DiagnosticEntry {
     pub code: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
+    pub details: Option<serde_json::Map<String, serde_json::Value>>,
 }
