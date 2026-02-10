@@ -11,7 +11,9 @@ use clap::error::ErrorKind;
 use spindle_core::temporal::TimePoint;
 
 use cli::app::{Cli, Commands};
-use cli::commands::{capabilities, explain, query, reason, requires, stats, validate, why_not};
+use cli::commands::{
+    capabilities, explain, explain_code, query, reason, requires, stats, validate, why_not,
+};
 use cli::error::CliError;
 use cli::output::emit_and_exit;
 
@@ -38,6 +40,7 @@ fn main() {
                                 }))),
                             None,
                             true,
+                            false,
                         );
                     } else {
                         err.exit();
@@ -45,6 +48,8 @@ fn main() {
                 }
             },
         };
+
+    let debug_errors = cli.debug_errors;
 
     // Determine schema version and json flag based on the command before we move out of cli.command
     let (schema_version, json_flag) = match &cli.command {
@@ -54,6 +59,7 @@ fn main() {
         Commands::WhyNot { json, .. } => (Some("spindle.why_not.v1"), *json || cli.json),
         Commands::Requires { json, .. } => (Some("spindle.requires.v1"), *json || cli.json),
         Commands::Capabilities { json, .. } => (Some("spindle.capabilities.v1"), *json || cli.json),
+        Commands::ExplainCode { .. } => (None, false),
         Commands::Validate { .. } | Commands::Stats { .. } => (None, cli.json),
     };
 
@@ -69,6 +75,7 @@ fn main() {
                     )),
                     schema_version,
                     json_flag,
+                    debug_errors,
                 );
             }
         }
@@ -143,7 +150,8 @@ fn main() {
             reference_time,
         ),
         Commands::Capabilities { json: _ } => capabilities::run_capabilities(json_flag),
+        Commands::ExplainCode { code } => explain_code::run_explain_code(&code),
     };
 
-    emit_and_exit(result, schema_version, json_flag);
+    emit_and_exit(result, schema_version, json_flag, debug_errors);
 }

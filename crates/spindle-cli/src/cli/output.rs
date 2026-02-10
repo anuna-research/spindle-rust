@@ -35,6 +35,7 @@ pub(crate) fn emit_and_exit(
     result: Result<CommandOutput, CliError>,
     schema_version: Option<&'static str>,
     json: bool,
+    debug_errors: bool,
 ) -> ! {
     /// Print a ProblemDetails-based JSON error envelope via ErrorReport.
     fn print_json_error(err: &CliError, schema_version: Option<&'static str>) {
@@ -58,8 +59,8 @@ pub(crate) fn emit_and_exit(
     }
 
     /// Print a ProblemDetails-based human-readable error to stderr.
-    fn print_human_error(err: &CliError) {
-        eprint!("{}", render_human(&err.problem));
+    fn print_human_error(err: &CliError, debug: bool) {
+        eprint!("{}", render_human(&err.problem, debug));
     }
 
     match result {
@@ -77,7 +78,7 @@ pub(crate) fn emit_and_exit(
                     if json {
                         print_json_error(&err, schema_version);
                     } else {
-                        print_human_error(&err);
+                        print_human_error(&err, debug_errors);
                     }
                     std::process::exit(err.exit_code);
                 }
@@ -99,7 +100,7 @@ pub(crate) fn emit_and_exit(
             if json {
                 print_json_error(&err, schema_version);
             } else {
-                print_human_error(&err);
+                print_human_error(&err, debug_errors);
             }
             std::process::exit(err.exit_code);
         }

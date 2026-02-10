@@ -25,10 +25,19 @@ pub(crate) struct Cli {
     /// Read theory from stdin
     #[arg(long, global = true)]
     pub(crate) stdin: bool,
+
+    /// Show full error details (source chain, unredacted paths)
+    #[arg(long, global = true)]
+    pub(crate) debug_errors: bool,
 }
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
+    /// Explain a stable error code
+    ExplainCode {
+        /// The error code to explain (e.g. RULE_NOT_FOUND)
+        code: String,
+    },
     /// Show reasoning conclusions from a theory file
     Reason {
         /// Input file (mutually exclusive with --stdin)
