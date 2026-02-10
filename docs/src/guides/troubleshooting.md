@@ -127,7 +127,7 @@ r1 > r2    # or r2 > r1
 3. Both rules actually fire:
    ```bash
    # Both bodies must be satisfied
-   spindle --positive theory.dfl | grep "bird\|penguin"
+   spindle reason --positive theory.dfl | grep "bird\|penguin"
    ```
 
 ### Circular Superiority
@@ -209,8 +209,8 @@ r2 > r1
 
 **Debug**:
 ```bash
-spindle theory.dfl > standard.txt
-spindle --scalable theory.dfl > scalable.txt
+spindle reason theory.dfl > standard.txt
+spindle reason --scalable theory.dfl > scalable.txt
 diff standard.txt scalable.txt
 ```
 
@@ -244,7 +244,7 @@ If different, please report a bug.
 
 Always validate before reasoning:
 ```bash
-spindle validate theory.dfl && spindle theory.dfl
+spindle validate theory.dfl && spindle reason theory.dfl
 ```
 
 ### Minimal Reproduction
@@ -261,7 +261,7 @@ r1: bird => flies
 
 Focus on what IS proven:
 ```bash
-spindle --positive theory.dfl
+spindle reason --positive theory.dfl
 ```
 
 ### Check Statistics
@@ -275,7 +275,7 @@ Look for unexpected counts.
 ### Enable Logging
 
 ```bash
-SPINDLE_LOG=debug spindle theory.dfl 2>&1 | less
+SPINDLE_LOG=debug spindle reason theory.dfl 2>&1 | less
 ```
 
 ## Getting Help

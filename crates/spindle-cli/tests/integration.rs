@@ -28,9 +28,9 @@ fn spindle() -> Command {
 fn test_no_args_shows_usage() {
     spindle()
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Spindle"))
-        .stdout(predicate::str::contains("Usage:"));
+        .failure()
+        .stderr(predicate::str::contains("Usage:"))
+        .stderr(predicate::str::contains("spindle"));
 }
 
 #[test]
@@ -128,7 +128,7 @@ r1: bird => flies
 
 #[test]
 fn test_reason_direct_file_arg() {
-    // Test the direct file argument without subcommand
+    // Direct invocation without subcommand is rejected.
     let content = r#"
 f1: >> bird
 r1: bird => flies
@@ -138,8 +138,9 @@ r1: bird => flies
     spindle()
         .arg(&path)
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .failure()
+        .stderr(predicate::str::contains("Usage:"))
+        .stderr(predicate::str::contains("<COMMAND>"));
 }
 
 #[test]
@@ -782,7 +783,7 @@ r1: bird => flies
         .arg("--json")
         .output()
         .expect("Failed to execute direct --json");
-    assert!(output.status.success(), "direct file --json should succeed");
-    let _json: Value =
-        serde_json::from_slice(&output.stdout).expect("direct --json should emit valid JSON");
+    assert!(!output.status.success(), "direct file --json should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Usage:"), "expected usage in stderr");
 }

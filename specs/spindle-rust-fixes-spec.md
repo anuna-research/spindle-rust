@@ -67,7 +67,7 @@ Contributing implementation details:
 Docs explicitly state “superiority applies to the rule template, affecting all ground instances”, but current behavior cannot achieve that once grounding is wired.
 
 ### 1.4 CLI JSON contract drift
-- CLI has a global `--json` flag (`Cli.json`), docs say `spindle --json penguin.dfl` outputs JSON, but `run_reason()` ignores json and always prints text.  
+- CLI has a `--json` flag, docs claim `spindle reason --json penguin.dfl` outputs JSON, but `run_reason()` ignores json and always prints text.  
   - Flag: `crates/spindle-cli/src/main.rs:39`  
   - Reason path: `crates/spindle-cli/src/main.rs:156` and `crates/spindle-cli/src/main.rs:240`  
   - Docs claim JSON: `docs/src/getting-started.md:137`
@@ -250,7 +250,7 @@ Supported time expressions (v1):
 
 **CLI**
 - Implement JSON output for `reason`:
-  - `spindle reason <file> --json` and `spindle --json <file>`
+  - `spindle reason <file> --json` and `spindle --json reason <file>`
   - schema aligned with WASM and query outputs
 
 **Recommended JSON schema (v1)**
@@ -355,7 +355,7 @@ Add failing tests demonstrating:
 3) **Grounding + superiority**
    - `prefer r2 r1` applies to grounded instances
 4) **CLI `--json` for reason**
-   - `spindle --json file.dfl` outputs JSON parseable
+   - `spindle --json reason file.dfl` outputs JSON parseable
    - `spindle reason file.dfl --json` outputs JSON parseable
 5) **Timepoint (“as-of”) temporal filtering (when implemented)**
    - facts/rules outside `reference_time` are ignored
@@ -410,7 +410,7 @@ Add failing tests demonstrating:
 - Align wasm output schema
 
 **Acceptance criteria**
-- `spindle --json <file>` and `spindle reason <file> --json` emit valid JSON with `schema_version: "spindle.reason.v1"`.
+- `spindle --json reason <file>` and `spindle reason <file> --json` emit valid JSON with `schema_version: "spindle.reason.v1"`.
 - JSON includes `grounding` and per-conclusion `literal_struct` + `literal_spl` for every conclusion.
 - CLI docs match behavior (no “`--json` works” claims that are untrue).
 - WASM output schema matches CLI (field names and meanings).
@@ -462,7 +462,7 @@ Add focused tests in `crates/spindle-core/src/reason.rs` (or a new `reason_tests
 
 ### 5.3 CLI integration tests (spindle-cli)
 - Add tests for:
-  - `spindle --json file.dfl` is valid JSON and contains expected keys
+  - `spindle --json reason file.dfl` is valid JSON and contains expected keys
   - `spindle reason file.spl --json` same
   - `--positive` behavior consistent in JSON and text modes
 

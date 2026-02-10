@@ -12,7 +12,7 @@ Best for:
 - Low memory environments
 
 ```bash
-spindle theory.dfl
+spindle reason theory.dfl
 ```
 
 ### Scalable DL(d||)
@@ -23,15 +23,15 @@ Best for:
 - Long inference chains
 
 ```bash
-spindle --scalable theory.dfl
+spindle reason --scalable theory.dfl
 ```
 
 ### Benchmark Your Theory
 
 ```bash
 # Time both algorithms
-time spindle theory.dfl > /dev/null
-time spindle --scalable theory.dfl > /dev/null
+time spindle reason theory.dfl > /dev/null
+time spindle reason --scalable theory.dfl > /dev/null
 ```
 
 ## Theory Design
@@ -193,14 +193,14 @@ Look for:
 cargo build --release
 
 # Profile with flamegraph
-cargo flamegraph -- spindle theory.dfl
+cargo flamegraph -- spindle reason theory.dfl
 ```
 
 ### Memory Profiling
 
 ```bash
 # Use heaptrack
-heaptrack spindle large-theory.dfl
+heaptrack spindle reason large-theory.dfl
 heaptrack_print heaptrack.spindle.*.gz
 ```
 

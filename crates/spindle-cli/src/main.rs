@@ -388,22 +388,10 @@ fn parse_theory_content(
 #[command(version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
-
-    /// Input file (DFL format)
-    #[arg(value_name = "FILE")]
-    input: Option<PathBuf>,
-
-    /// Use scalable reasoning mode (DL(d||))
-    #[arg(long)]
-    scalable: bool,
-
-    /// Output only positive conclusions
-    #[arg(long)]
-    positive: bool,
+    command: Commands,
 
     /// Output in JSON format
-    #[arg(long)]
+    #[arg(long, global = true)]
     json: bool,
 
     /// Reference time for "as-of" reasoning (ISO 8601)
@@ -1267,33 +1255,15 @@ fn main() {
     let cli = Cli::parse();
 
     // Determine schema version and json flag based on the command before we move out of cli.command
-    let (schema_version, json_flag) = cli
-        .command
-        .as_ref()
-        .map(|cmd| {
-            let sv = match cmd {
-                Commands::Reason { .. } => Some("spindle.reason.v1"),
-                Commands::Query { .. } => Some("spindle.query.v1"),
-                Commands::Explain { .. } => Some("spindle.explain.v1"),
-                Commands::WhyNot { .. } => Some("spindle.why_not.v1"),
-                Commands::Requires { .. } => Some("spindle.requires.v1"),
-                Commands::Validate { .. } | Commands::Stats { .. } => None, // Non-schema commands
-                Commands::Capabilities { .. } => Some("spindle.capabilities.v1"),
-            };
-
-            let jf = match cmd {
-                Commands::Reason { json, .. } => *json,
-                Commands::Query { json, .. } => *json,
-                Commands::Explain { json, .. } => *json,
-                Commands::WhyNot { json, .. } => *json,
-                Commands::Requires { json, .. } => *json,
-                Commands::Capabilities { json, .. } => *json,
-                _ => cli.json,
-            };
-
-            (sv, jf)
-        })
-        .unwrap_or((None, cli.json));
+    let (schema_version, json_flag) = match &cli.command {
+        Commands::Reason { json, .. } => (Some("spindle.reason.v1"), *json || cli.json),
+        Commands::Query { json, .. } => (Some("spindle.query.v1"), *json || cli.json),
+        Commands::Explain { json, .. } => (Some("spindle.explain.v1"), *json || cli.json),
+        Commands::WhyNot { json, .. } => (Some("spindle.why_not.v1"), *json || cli.json),
+        Commands::Requires { json, .. } => (Some("spindle.requires.v1"), *json || cli.json),
+        Commands::Capabilities { json, .. } => (Some("spindle.capabilities.v1"), *json || cli.json),
+        Commands::Validate { .. } | Commands::Stats { .. } => (None, cli.json), // Non-schema commands
+    };
 
     // Parse reference time if provided (after determining json_flag so errors use correct format)
     let reference_time = if let Some(ref s) = cli.at {
@@ -1315,12 +1285,12 @@ fn main() {
     };
 
     let result: Result<CommandOutput, CliError> = match cli.command {
-        Some(Commands::Reason {
+        Commands::Reason {
             file,
             scalable,
             positive,
             json: _,
-        }) => run_reason(
+        } => run_reason(
             file.as_ref(),
             scalable,
             positive,
@@ -1328,47 +1298,47 @@ fn main() {
             cli.stdin,
             reference_time,
         ),
-        Some(Commands::Validate { file, stdin }) => run_validate(file.as_ref(), stdin || cli.stdin),
-        Some(Commands::Stats { file, stdin }) => run_stats(file.as_ref(), stdin || cli.stdin),
-        Some(Commands::Query {
+        Commands::Validate { file, stdin } => run_validate(file.as_ref(), stdin || cli.stdin),
+        Commands::Stats { file, stdin } => run_stats(file.as_ref(), stdin || cli.stdin),
+        Commands::Query {
             literal,
             file,
             json: _,
-        }) => run_query(
+        } => run_query(
             file.as_ref(),
             &literal,
             json_flag,
             cli.stdin,
             reference_time,
         ),
-        Some(Commands::Explain {
+        Commands::Explain {
             literal,
             file,
             json: _,
-        }) => run_explain(
+        } => run_explain(
             file.as_ref(),
             &literal,
             json_flag,
             cli.stdin,
             reference_time,
         ),
-        Some(Commands::WhyNot {
+        Commands::WhyNot {
             literal,
             file,
             json: _,
-        }) => run_why_not(
+        } => run_why_not(
             file.as_ref(),
             &literal,
             json_flag,
             cli.stdin,
             reference_time,
         ),
-        Some(Commands::Requires {
+        Commands::Requires {
             literal,
             file,
             max,
             json: _,
-        }) => run_requires(
+        } => run_requires(
             file.as_ref(),
             &literal,
             max,
@@ -1376,50 +1346,7 @@ fn main() {
             cli.stdin,
             reference_time,
         ),
-        Some(Commands::Capabilities { json: _ }) => run_capabilities(json_flag),
-        None => {
-            // Handle legacy positional form
-            if cli.stdin && cli.input.is_some() {
-                Err(CliError::validation(
-                    "CONFLICTING_INPUT_SOURCES",
-                    "Cannot specify both a file and --stdin",
-                ))
-            } else if cli.stdin {
-                run_reason(
-                    None,
-                    cli.scalable,
-                    cli.positive,
-                    json_flag,
-                    true,
-                    reference_time,
-                )
-            } else if let Some(ref file) = cli.input {
-                run_reason(
-                    Some(file),
-                    cli.scalable,
-                    cli.positive,
-                    json_flag,
-                    false,
-                    reference_time,
-                )
-            } else {
-                let help_text = r#"Spindle v0.1.0 - Defeasible Logic Reasoning Engine
-Ported from SPINdle-Racket v1.7.0
-
-Usage: spindle [OPTIONS] [FILE]
-       spindle reason [FILE]
-       spindle validate <FILE>
-       spindle stats <FILE>
-       spindle query <LITERAL> [FILE]
-       spindle explain <LITERAL> [FILE]
-       spindle why-not <LITERAL> [FILE]
-       spindle requires <LITERAL> [FILE]
-       spindle capabilities
-
-Use --help for more information"#;
-                Ok(CommandOutput::text(help_text))
-            }
-        }
+        Commands::Capabilities { json: _ } => run_capabilities(json_flag),
     };
 
     emit_and_exit(result, schema_version, json_flag);

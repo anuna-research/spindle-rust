@@ -38,7 +38,7 @@ r2: bird => has_feathers
 Run it:
 
 ```bash
-spindle hello.dfl
+spindle reason hello.dfl
 ```
 
 Output:
@@ -83,7 +83,7 @@ r2 > r1
 Run it:
 
 ```bash
-spindle penguin.dfl
+spindle reason penguin.dfl
 ```
 
 Output:
@@ -121,20 +121,20 @@ The same theory in SPL (Spindle Lisp) format, `penguin.spl`:
 Run it:
 
 ```bash
-spindle penguin.spl
+spindle reason penguin.spl
 ```
 
 ## CLI Options
 
 ```bash
 # Show only positive conclusions
-spindle --positive penguin.dfl
+spindle reason --positive penguin.dfl
 
 # Use scalable algorithm (for large theories)
-spindle --scalable penguin.dfl
+spindle reason --scalable penguin.dfl
 
 # Output as JSON
-spindle --json penguin.dfl
+spindle reason --json penguin.dfl
 
 # Validate syntax without reasoning
 spindle validate penguin.dfl
