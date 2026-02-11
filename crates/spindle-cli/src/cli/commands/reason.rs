@@ -47,6 +47,7 @@ pub(crate) fn run_reason(
             &conclusions,
             &pipeline_result.theory,
             policy,
+            pipeline_result.evaluated_at,
         ))
     } else {
         None

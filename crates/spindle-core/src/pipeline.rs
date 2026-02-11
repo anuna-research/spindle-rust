@@ -349,10 +349,12 @@ fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
 /// Resolve a rule label to its trust value and optional source.
 ///
 /// Handles grounded instances by falling back to the template label for metadata lookup.
+/// When `reference_time` is provided, applies decay based on the claim's `:at` timestamp.
 fn resolve_rule_trust(
     rule_label: &str,
     theory: &Theory,
     policy: &TrustPolicy,
+    reference_time: Option<TimePoint>,
 ) -> (TrustValue, Option<Source>) {
     // Try the rule label directly, then fall back to template label
     let labels_to_try = if let Some(rule) = theory.get_rule(rule_label) {
@@ -370,11 +372,36 @@ fn resolve_rule_trust(
         if let Some(meta) = theory.get_meta(label)
             && let Some(MetaValue::String(source_id)) = meta.properties.get("source")
         {
-            let trust = policy.get_trust(source_id);
+            let trust = compute_source_trust(source_id, meta, policy, reference_time);
             return (trust, Some(Source::new(source_id.clone())));
         }
     }
     (policy.default_trust, None)
+}
+
+/// Compute trust for a source, applying decay if a timestamp and reference time are available.
+fn compute_source_trust(
+    source_id: &str,
+    meta: &crate::theory::Meta,
+    policy: &TrustPolicy,
+    reference_time: Option<TimePoint>,
+) -> TrustValue {
+    if let Some(TimePoint::Moment(ref_millis)) = reference_time
+        && let Some(MetaValue::String(ts)) = meta.properties.get("timestamp")
+        && let Some(claim_millis) = parse_iso8601_millis(ts.as_str())
+    {
+        let age_secs = (ref_millis - claim_millis) as f64 / 1000.0;
+        return policy.get_effective_trust(source_id, age_secs);
+    }
+    policy.get_trust(source_id)
+}
+
+/// Parse an ISO-8601 timestamp string to milliseconds since epoch.
+fn parse_iso8601_millis(ts: &str) -> Option<i64> {
+    use chrono::DateTime;
+    DateTime::parse_from_rfc3339(ts)
+        .ok()
+        .map(|dt| dt.timestamp_millis())
 }
 
 /// Build a trust derivation tree for a literal by tracing back through deriving rules.
@@ -384,6 +411,7 @@ fn build_trust_tree(
     positive_conclusions: &HashMap<String, &Conclusion>,
     theory: &Theory,
     policy: &TrustPolicy,
+    reference_time: Option<TimePoint>,
     visited: &mut HashSet<String>,
 ) -> TrustDerivationNode {
     let lit_key = literal.to_spl();
@@ -395,7 +423,7 @@ fn build_trust_tree(
     visited.insert(lit_key.clone());
 
     let (trust, source) = if let Some(label) = rule_label {
-        resolve_rule_trust(label, theory, policy)
+        resolve_rule_trust(label, theory, policy, reference_time)
     } else {
         (policy.default_trust, None)
     };
@@ -419,6 +447,7 @@ fn build_trust_tree(
                     positive_conclusions,
                     theory,
                     policy,
+                    reference_time,
                     visited,
                 );
                 children.push(child);
@@ -457,6 +486,7 @@ pub fn compute_weighted_conclusions(
     conclusions: &[Conclusion],
     theory: &Theory,
     policy: &TrustPolicy,
+    reference_time: Option<TimePoint>,
 ) -> Vec<WeightedConclusion> {
     // Build index of positive conclusions for fast body-literal lookup.
     // Key by to_spl() so that literals with different arguments (e.g. p(a) vs p(b))
@@ -477,6 +507,7 @@ pub fn compute_weighted_conclusions(
                     &positive_conclusions,
                     theory,
                     policy,
+                    reference_time,
                     &mut HashSet::new(),
                 );
                 let degree = tree.weakest_link_trust();
@@ -515,7 +546,7 @@ mod tests {
         ctype: ConclusionType,
     ) -> Option<WeightedConclusion> {
         let conclusions = reason_prepared(theory).unwrap();
-        let weighted = compute_weighted_conclusions(&conclusions, theory, policy);
+        let weighted = compute_weighted_conclusions(&conclusions, theory, policy, None);
         weighted
             .into_iter()
             .find(|wc| wc.literal.canonical_name() == literal_name && wc.conclusion_type == ctype)
@@ -639,7 +670,7 @@ mod tests {
         let policy = TrustPolicy::new(0.3).with_trust("alice", 0.9);
 
         let conclusions = reason_prepared(&theory).unwrap();
-        let weighted = compute_weighted_conclusions(&conclusions, &theory, &policy);
+        let weighted = compute_weighted_conclusions(&conclusions, &theory, &policy, None);
 
         // "b" is not provable, so -D b and -d b should exist
         let neg = weighted
