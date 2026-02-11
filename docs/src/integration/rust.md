@@ -75,11 +75,11 @@ theory.add_superiority(&r2, &r1);
 use spindle_parser::parse_spl;
 
 let spl = r#"
-    f1: >> bird
-    f2: >> penguin
-    r1: bird => flies
-    r2: penguin => ~flies
-    r2 > r1
+    (given bird)
+    (given penguin)
+    (normally r1 bird flies)
+    (normally r2 penguin (not flies))
+    (prefer r2 r1)
 "#;
 
 let theory = parse_spl(spl)?;

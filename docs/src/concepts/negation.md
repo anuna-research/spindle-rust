@@ -11,21 +11,12 @@ Used in Prolog and many logic programming systems:
 
 ### Strong Negation
 Used in Spindle:
-- `-P` (or `~P`) is a separate proposition
+- `(not P)` is a separate proposition
 - Must be explicitly proven
-- Absence of `P` does not imply `-P`
+- Absence of `P` does not imply `(not P)`
 
 ## Syntax
 
-Both `-` and `~` denote negation:
-
-**SPL:**
-```lisp
-f1: >> -guilty       # Explicitly not guilty
-r1: penguin => ~flies
-```
-
-**SPL:**
 ```lisp
 (given (not guilty))
 (normally r1 penguin (not flies))
@@ -38,15 +29,15 @@ For any literal `P`, the outcome can be:
 | State | Meaning | Conclusions |
 |-------|---------|-------------|
 | True | P is provable | `+d P` |
-| False | -P is provable | `+d -P` |
+| False | (not P) is provable | `+d -P` |
 | Unknown | Neither provable | `-d P` and `-d -P` |
 
 ## Example: Unknown State
 
 ```lisp
-f1: >> bird
-r1: bird => flies
-# No information about grounded
+(given bird)
+(normally r1 bird flies)
+; No information about grounded
 ```
 
 Conclusions:
@@ -58,22 +49,22 @@ The `grounded` literal is in an **unknown** state.
 
 ## Complementary Literals
 
-`P` and `-P` are **complements**. They interact in specific ways:
+`P` and `(not P)` are **complements**. They interact in specific ways:
 
 ### Conflict
-If rules prove both `P` and `-P`:
+If rules prove both `P` and `(not P)`:
 ```lisp
-f1: >> a
-r1: a => p
-r2: a => -p
+(given a)
+(normally r1 a p)
+(normally r2 a (not p))
 ```
 Without superiority, neither is provable (ambiguity).
 
 ### Definite Blocking
-If `-P` is **definitely** provable, `P` cannot be defeasibly provable:
+If `(not P)` is **definitely** provable, `P` cannot be defeasibly provable:
 ```lisp
-f1: >> -p        # Definite fact: -p
-r1: a => p       # Tries to prove p
+(given (not p))              ; Definite fact: (not p)
+(normally r1 a p)            ; Tries to prove p
 ```
 Even if r1's body is satisfied, `+d p` is blocked because `+D -p`.
 
@@ -82,30 +73,17 @@ Even if r1's body is satisfied, `+d p` is blocked because `+D -p`.
 Negated literals can appear in rule bodies:
 
 ```lisp
-r1: bird, -penguin => flies    # Non-penguin birds fly
-r2: student, -employed => needs_loan
-```
-
-**SPL:**
-```lisp
-(normally r1 (and bird (not penguin)) flies)
-```
-
-## Double Negation
-
-`--P` is equivalent to `P`:
-
-```lisp
-r1: a => --flies    # Same as: a => flies
+(normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
+(normally r2 (and student (not employed)) needs-loan)
 ```
 
 ## Consistency
 
-Spindle does not enforce consistency. A theory can prove both `P` and `-P`:
+Spindle does not enforce consistency. A theory can prove both `P` and `(not P)`:
 
 ```lisp
-f1: >> p
-f2: >> -p
+(given p)
+(given (not p))
 ```
 
 Result:
@@ -123,10 +101,10 @@ To detect inconsistency, check for literals where both `+D P` and `+D -P` (or `+
 Spindle does **not** use the Closed World Assumption by default. If you need it, add explicit rules:
 
 ```lisp
-# CWA for 'guilty': if not proven guilty, then not guilty
-d1: >> -guilty           # Default: not guilty
-r1: evidence => guilty   # Can be overridden by evidence
-r1 > d1
+; CWA for 'guilty': if not proven guilty, then not guilty
+(given (not guilty))                    ; Default: not guilty
+(normally r1 evidence guilty)           ; Can be overridden by evidence
+(prefer r1 f1)
 ```
 
 This pattern uses a defeatable default.

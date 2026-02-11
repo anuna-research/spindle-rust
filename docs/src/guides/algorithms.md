@@ -34,7 +34,7 @@ Defeasible rules add `+d` only if not blocked.
 
 ## Conflict Handling
 
-For a defeasible rule `r: body => q`, attackers are rules for `~q`.
+For a defeasible rule `(normally r body q)`, attackers are rules for `(not q)`.
 
 `r` is blocked when:
 

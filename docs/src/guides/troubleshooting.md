@@ -4,20 +4,7 @@ Common issues and how to resolve them.
 
 ## Parse Errors
 
-### "Could not parse" Error
-
-```
-Error at line 5: could not parse: bird flies
-```
-
-**Cause**: Missing arrow operator.
-
-**Fix**: Add the correct arrow:
-```lisp
-r1: bird => flies
-```
-
-### "Unknown keyword" Error (SPL)
+### "Unknown keyword" Error
 
 ```
 SPL parse error: Unknown keyword: defeasible
@@ -30,19 +17,6 @@ SPL parse error: Unknown keyword: defeasible
 - `normally` (not `defeasible`)
 - `always` (not `strict`)
 - `except` (not `defeater`)
-
-### Missing Label (SPL)
-
-```
-Error at line 3: could not parse: >> bird
-```
-
-**Cause**: SPL rules require labels.
-
-**Fix**: Add a label:
-```lisp
-f1: >> bird
-```
 
 ## Unexpected Conclusions
 
@@ -59,20 +33,20 @@ f1: >> bird
 
 2. Check if the body is satisfied:
    ```lisp
-   # Is 'bird' actually proven?
-   r1: bird => flies
+   ; Is 'bird' actually proven?
+   (normally r1 bird flies)
    ```
 
 3. Check for conflicts:
    ```bash
    # Look for rules proving the complement
-   grep "~flies\|-flies" theory.spl
+   grep "(not flies)" theory.spl
    ```
 
 4. Check superiority:
    ```bash
    # Is there a superior rule blocking?
-   grep ">" theory.spl
+   grep "prefer" theory.spl
    ```
 
 ### Unexpected Conclusion Present
@@ -83,41 +57,41 @@ f1: >> bird
 
 1. Find which rule proves it:
    ```bash
-   grep "=> literal\|-> literal" theory.spl
+   grep "literal" theory.spl
    ```
 
 2. Check if a defeater is missing:
    ```lisp
-   # Add a defeater to block
-   d1: exception ~> unexpected_literal
+   ; Add a defeater to block
+   (except d1 exception unexpected-literal)
    ```
 
 ### Both Literals Unprovable (Ambiguity)
 
-**Symptom**: Neither `q` nor `~q` is `+d`.
+**Symptom**: Neither `q` nor `(not q)` is `+d`.
 
 **Cause**: Conflicting rules without superiority.
 
 **Fix**: Add superiority:
 ```lisp
-r1: a => q
-r2: b => ~q
-r1 > r2    # or r2 > r1
+(normally r1 a q)
+(normally r2 b (not q))
+(prefer r1 r2)    ; or (prefer r2 r1)
 ```
 
 ## Superiority Issues
 
 ### Superiority Not Working
 
-**Symptom**: Declared `r1 > r2` but r2 still wins.
+**Symptom**: Declared `(prefer r1 r2)` but r2 still wins.
 
 **Check**:
 
 1. Rule labels match exactly:
    ```lisp
-   r1: bird => flies      # Label is "r1"
-   r2: penguin => ~flies  # Label is "r2"
-   r1 > r2                # Must match exactly
+   (normally r1 bird flies)
+   (normally r2 penguin (not flies))
+   (prefer r1 r2)                      ; Must match labels exactly
    ```
 
 2. Rule type compatibility:
@@ -133,9 +107,9 @@ r1 > r2    # or r2 > r1
 ### Circular Superiority
 
 ```lisp
-# BAD: creates undefined behavior
-r1 > r2
-r2 > r1
+; BAD: creates undefined behavior
+(prefer r1 r2)
+(prefer r2 r1)
 ```
 
 **Fix**: Remove one declaration or restructure rules.
@@ -189,15 +163,13 @@ r2 > r1
 
 **Symptom**: File parses incorrectly.
 
-**Fix**: Use correct extension:
-- `.spl` for SPL format
-- `.spl` for SPL format
+**Fix**: Use `.spl` extension for SPL format.
 
 ### Encoding Issues
 
 **Symptom**: Special characters cause errors.
 
-**Fix**: Use UTF-8 encoding. The negation symbol `¬` is supported.
+**Fix**: Use UTF-8 encoding.
 
 ## Conflict Expectations
 
@@ -245,10 +217,10 @@ spindle validate theory.spl && spindle reason theory.spl
 
 Create a minimal theory that reproduces the issue:
 ```lisp
-# Start with just the failing rules
-f1: >> bird
-r1: bird => flies
-# Add rules until issue appears
+; Start with just the failing rules
+(given bird)
+(normally r1 bird flies)
+; Add rules until issue appears
 ```
 
 ### Use Positive Output

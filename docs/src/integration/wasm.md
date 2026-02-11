@@ -93,11 +93,11 @@ const { Spindle } = require('spindle-wasm');
 const spindle = new Spindle();
 
 spindle.parseSpl(`
-    f1: >> bird
-    f2: >> penguin
-    r1: bird => flies
-    r2: penguin => ~flies
-    r2 > r1
+    (given bird)
+    (given penguin)
+    (normally r1 bird flies)
+    (normally r2 penguin (not flies))
+    (prefer r2 r1)
 `);
 
 const conclusions = spindle.reason();
@@ -144,12 +144,6 @@ spindle.addSuperiority("r2", "r1");  // r2 > r1
 ### Parsing
 
 ```typescript
-// Parse SPL
-spindle.parseSpl(`
-    f1: >> bird
-    r1: bird => flies
-`);
-
 // Parse SPL
 spindle.parseSpl(`
     (given bird)
@@ -271,15 +265,15 @@ async function reasonAboutPenguins() {
 
     // Build theory
     spindle.parseSpl(`
-        f1: >> bird
-        f2: >> penguin
+        (given bird)
+        (given penguin)
 
-        r1: bird => flies
-        r2: bird => has_feathers
-        r3: penguin => ~flies
-        r4: penguin => swims
+        (normally r1 bird flies)
+        (normally r2 bird has-feathers)
+        (normally r3 penguin (not flies))
+        (normally r4 penguin swims)
 
-        r3 > r1
+        (prefer r3 r1)
     `);
 
     // Reason
