@@ -6,8 +6,6 @@ use thiserror::Error;
 /// The input format that produced a parse error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ParserFormat {
-    /// Defeasible Logic Format
-    Dfl,
     /// Spindle Lisp format
     Spl,
 }
@@ -15,7 +13,6 @@ pub enum ParserFormat {
 impl std::fmt::Display for ParserFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Dfl => write!(f, "DFL"),
             Self::Spl => write!(f, "SPL"),
         }
     }
@@ -66,29 +63,17 @@ pub enum ParseError {
 impl ParseError {
     /// Returns the stable error code for this variant (SPEC-010 §10.2).
     ///
-    /// Codes are prefixed with the parser format (DFL_ or SPL_).
+    /// Codes are prefixed with the parser format.
     pub fn code(&self) -> &'static str {
         match self {
-            Self::LexerError {
-                format: ParserFormat::Dfl,
-                ..
-            } => "DFL_LEXER_ERROR",
             Self::LexerError {
                 format: ParserFormat::Spl,
                 ..
             } => "SPL_LEXER_ERROR",
             Self::ParserError {
-                format: ParserFormat::Dfl,
-                ..
-            } => "DFL_PARSE_ERROR",
-            Self::ParserError {
                 format: ParserFormat::Spl,
                 ..
             } => "SPL_PARSE_ERROR",
-            Self::UnexpectedToken {
-                format: ParserFormat::Dfl,
-                ..
-            } => "DFL_UNEXPECTED_TOKEN",
             Self::UnexpectedToken {
                 format: ParserFormat::Spl,
                 ..

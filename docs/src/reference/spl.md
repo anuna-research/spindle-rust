@@ -262,9 +262,9 @@ inf                              ; Positive infinity
 (meta r3 (description "Penguins are an exception"))
 ```
 
-## DFL vs SPL Comparison
+## SPL Comparison
 
-| Concept | DFL | SPL |
+| Concept | SPL | SPL |
 |---------|-----|-----|
 | Fact | `f1: >> bird` | `(given bird)` |
 | Strict | `r1: a -> b` | `(always r1 a b)` |

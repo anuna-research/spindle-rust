@@ -10,7 +10,7 @@ Cargo workspace with five crates under `crates/`:
 | Crate | Purpose |
 |---|---|
 | `spindle-core` | Core reasoning engine, theory types, algorithms |
-| `spindle-parser` | Lexer/parser for `.dfl` / `.spl` theory files |
+| `spindle-parser` | Lexer/parser for `.spl` theory files |
 | `spindle-cli` | Command-line interface (`spindle` binary) |
 | `spindle-contract` | JSON contract schemas for CLI I/O |
 | `spindle-wasm` | WebAssembly bindings via `wasm-pack` |
@@ -72,7 +72,7 @@ make bench-scaling  # large-scale benchmarks (algorithm crossover points)
 
 ## Development tips
 
-- The `examples/` directory contains sample `.dfl` theory files useful for
+- The `examples/` directory contains sample `.spl` theory files useful for
   manual testing.
 - Benchmarks use Criterion; results go to `target/criterion/`. Use
   `make bench-compare` to diff between commits.

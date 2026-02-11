@@ -52,7 +52,7 @@ OBS-205: Error model centralization has not started yet.
 
 OBS-206: Contract and docs references are partially stale.
 - Evidence: `specs/ERROR-MODULE-SPEC.md` references `./SPINDLE-CONTRACT.md`, which is missing in repo.
-- Evidence: `.woodpecker/release.yaml` uses `spindle reason theory.dfl --format json`, but CLI uses `--json`.
+- Evidence: `.woodpecker/release.yaml` uses `spindle reason theory.spl --format json`, but CLI uses `--json`.
 - Impact: planned work needs spec/doc hygiene before implementation waves.
 
 OBS-207: Baseline test health is strong and should be preserved.

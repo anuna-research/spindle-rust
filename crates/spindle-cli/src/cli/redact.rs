@@ -34,9 +34,9 @@ fn is_absolute_path_prefix(s: &str) -> bool {
 
 /// Redact an absolute path to just its filename component.
 ///
-/// "/Users/alice/theories/my_theory.dfl" -> "my_theory.dfl"
-/// "C:\\Users\\alice\\theory.dfl"        -> "theory.dfl"
-/// "\\\\server\\share\\file.dfl"         -> "file.dfl"
+/// "/Users/alice/theories/my_theory.spl" -> "my_theory.spl"
+/// "C:\\Users\\alice\\theory.spl"        -> "theory.spl"
+/// "\\\\server\\share\\file.spl"         -> "file.spl"
 /// "stdin"                               -> "stdin" (unchanged)
 /// Relative paths are left unchanged.
 pub(crate) fn redact_path(path: &str) -> String {
@@ -73,8 +73,8 @@ pub(crate) fn redact_os_errors(message: &str) -> String {
 /// Redact absolute paths embedded in a message string.
 ///
 /// Handles:
-/// - Quoted paths (single/double): `'/Users/alice/f.dfl'`, `"C:\Users\f.dfl"`
-/// - Unquoted paths at word boundaries: `Error reading /tmp/f.dfl: ...`
+/// - Quoted paths (single/double): `'/Users/alice/f.spl'`, `"C:\Users\f.spl"`
+/// - Unquoted paths at word boundaries: `Error reading /tmp/f.spl: ...`
 pub(crate) fn redact_paths_in_text(message: &str) -> String {
     let mut result = String::with_capacity(message.len());
     let bytes = message.as_bytes();
@@ -154,24 +154,24 @@ mod tests {
 
     #[test]
     fn test_redact_absolute_path_unix() {
-        assert_eq!(redact_path("/Users/alice/theory.dfl"), "theory.dfl");
+        assert_eq!(redact_path("/Users/alice/theory.spl"), "theory.spl");
         assert_eq!(redact_path("/tmp/test.spl"), "test.spl");
     }
 
     #[test]
     fn test_redact_absolute_path_windows_drive() {
-        assert_eq!(redact_path("C:\\Users\\alice\\theory.dfl"), "theory.dfl");
+        assert_eq!(redact_path("C:\\Users\\alice\\theory.spl"), "theory.spl");
         assert_eq!(redact_path("D:/data/test.spl"), "test.spl");
     }
 
     #[test]
     fn test_redact_absolute_path_unc() {
-        assert_eq!(redact_path("\\\\server\\share\\theory.dfl"), "theory.dfl");
+        assert_eq!(redact_path("\\\\server\\share\\theory.spl"), "theory.spl");
     }
 
     #[test]
     fn test_redact_relative_path_unchanged() {
-        assert_eq!(redact_path("theory.dfl"), "theory.dfl");
+        assert_eq!(redact_path("theory.spl"), "theory.spl");
         assert_eq!(redact_path("stdin"), "stdin");
     }
 
@@ -198,8 +198,8 @@ mod tests {
     #[test]
     fn test_redact_paths_in_text_single_quoted() {
         assert_eq!(
-            redact_paths_in_text("Error reading file '/Users/alice/theory.dfl': something"),
-            "Error reading file 'theory.dfl': something"
+            redact_paths_in_text("Error reading file '/Users/alice/theory.spl': something"),
+            "Error reading file 'theory.spl': something"
         );
     }
 
@@ -222,40 +222,40 @@ mod tests {
     #[test]
     fn test_redact_paths_in_text_relative_path_unchanged() {
         assert_eq!(
-            redact_paths_in_text("Error reading file 'theory.dfl': something"),
-            "Error reading file 'theory.dfl': something"
+            redact_paths_in_text("Error reading file 'theory.spl': something"),
+            "Error reading file 'theory.spl': something"
         );
     }
 
     #[test]
     fn test_redact_paths_in_text_quoted_windows_drive() {
         assert_eq!(
-            redact_paths_in_text("Error reading 'C:\\Users\\alice\\theory.dfl': denied"),
-            "Error reading 'theory.dfl': denied"
+            redact_paths_in_text("Error reading 'C:\\Users\\alice\\theory.spl': denied"),
+            "Error reading 'theory.spl': denied"
         );
     }
 
     #[test]
     fn test_redact_paths_in_text_quoted_unc() {
         assert_eq!(
-            redact_paths_in_text("Error reading '\\\\server\\share\\file.dfl': denied"),
-            "Error reading 'file.dfl': denied"
+            redact_paths_in_text("Error reading '\\\\server\\share\\file.spl': denied"),
+            "Error reading 'file.spl': denied"
         );
     }
 
     #[test]
     fn test_redact_paths_in_text_unquoted_unix() {
         assert_eq!(
-            redact_paths_in_text("Error reading /tmp/foo.dfl: No such file"),
-            "Error reading foo.dfl: No such file"
+            redact_paths_in_text("Error reading /tmp/foo.spl: No such file"),
+            "Error reading foo.spl: No such file"
         );
     }
 
     #[test]
     fn test_redact_paths_in_text_unquoted_windows() {
         assert_eq!(
-            redact_paths_in_text("Error reading C:\\Users\\alice\\file.dfl: denied"),
-            "Error reading file.dfl: denied"
+            redact_paths_in_text("Error reading C:\\Users\\alice\\file.spl: denied"),
+            "Error reading file.spl: denied"
         );
     }
 
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_redact_detail_debug_passthrough() {
-        let msg = "Error reading '/tmp/foo.dfl': No such file (os error 2)";
+        let msg = "Error reading '/tmp/foo.spl': No such file (os error 2)";
         assert_eq!(redact_detail(msg, true), msg);
     }
 
@@ -286,26 +286,26 @@ mod tests {
     fn test_redact_detail_strips_paths_and_os_errors() {
         assert_eq!(
             redact_detail(
-                "Error reading file '/Users/alice/theory.dfl': No such file or directory (os error 2)",
+                "Error reading file '/Users/alice/theory.spl': No such file or directory (os error 2)",
                 false
             ),
-            "Error reading file 'theory.dfl': No such file or directory"
+            "Error reading file 'theory.spl': No such file or directory"
         );
     }
 
     #[test]
     fn test_redact_source_name_debug() {
         assert_eq!(
-            redact_source_name("/Users/alice/theory.dfl", true),
-            "/Users/alice/theory.dfl"
+            redact_source_name("/Users/alice/theory.spl", true),
+            "/Users/alice/theory.spl"
         );
     }
 
     #[test]
     fn test_redact_source_name_normal() {
         assert_eq!(
-            redact_source_name("/Users/alice/theory.dfl", false),
-            "theory.dfl"
+            redact_source_name("/Users/alice/theory.spl", false),
+            "theory.spl"
         );
         assert_eq!(redact_source_name("stdin", false), "stdin");
     }
@@ -313,8 +313,8 @@ mod tests {
     #[test]
     fn test_redact_source_name_windows() {
         assert_eq!(
-            redact_source_name("C:\\Users\\alice\\theory.dfl", false),
-            "theory.dfl"
+            redact_source_name("C:\\Users\\alice\\theory.spl", false),
+            "theory.spl"
         );
     }
 }

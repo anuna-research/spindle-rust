@@ -6,7 +6,7 @@ Superiority relations resolve conflicts between competing rules.
 
 When two rules conclude opposite things, we have a conflict:
 
-```dfl
+```lisp
 f1: >> bird
 f2: >> penguin
 r1: bird => flies
@@ -19,7 +19,7 @@ Both r1 and r2 fire. Without superiority, we get **ambiguity** - neither `flies`
 
 The `>` operator declares that one rule is superior to another:
 
-```dfl
+```lisp
 r2 > r1    # r2 beats r1
 ```
 
@@ -34,8 +34,8 @@ Now when both rules fire, r2 wins and `-flies` is provable.
 
 You can declare chains of superiority:
 
-**DFL:**
-```dfl
+**SPL:**
+```lisp
 r3 > r2
 r2 > r1
 ```
@@ -49,7 +49,7 @@ r2 > r1
 
 Superiority is **not automatically transitive**. If you need `r3 > r1`, declare it explicitly:
 
-```dfl
+```lisp
 r3 > r2
 r2 > r1
 r3 > r1    # Must be explicit
@@ -68,7 +68,7 @@ When evaluating a defeasible conclusion:
 
 ## Example: Three-Way Conflict
 
-```dfl
+```lisp
 f1: >> a
 f2: >> b
 f3: >> c
@@ -91,7 +91,7 @@ Analysis:
 
 If two rules are equally superior over each other (or neither is superior), ambiguity results:
 
-```dfl
+```lisp
 f1: >> trigger
 r1: trigger => a
 r2: trigger => -a
@@ -104,7 +104,7 @@ Result: Neither `a` nor `-a` is provable.
 
 Defeaters can be overridden by superiority:
 
-```dfl
+```lisp
 f1: >> bird
 f2: >> healthy
 
@@ -121,7 +121,7 @@ If both `bird` and `healthy` are true, r2 beats d1 and `flies` is provable.
 
 Strict rules **always win** over defeasible rules, regardless of superiority:
 
-```dfl
+```lisp
 f1: >> p
 r1: p -> q           # Strict
 r2: p => -q          # Defeasible
@@ -139,7 +139,7 @@ Superiority only affects conflicts between:
 
 ### Use Specificity
 More specific rules should be superior:
-```dfl
+```lisp
 r2: penguin => -flies
 r1: bird => flies
 r2 > r1    # Penguin is more specific than bird
@@ -147,14 +147,14 @@ r2 > r1    # Penguin is more specific than bird
 
 ### Document Reasoning
 Use comments to explain why one rule beats another:
-```dfl
+```lisp
 # Medical override: confirmed diagnosis beats symptoms
 r_diagnosis > r_symptoms
 ```
 
 ### Avoid Cycles
 Don't create circular superiority:
-```dfl
+```lisp
 # BAD - creates a cycle
 r1 > r2
 r2 > r1

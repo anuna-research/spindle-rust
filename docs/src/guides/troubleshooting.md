@@ -13,7 +13,7 @@ Error at line 5: could not parse: bird flies
 **Cause**: Missing arrow operator.
 
 **Fix**: Add the correct arrow:
-```dfl
+```lisp
 r1: bird => flies
 ```
 
@@ -31,16 +31,16 @@ SPL parse error: Unknown keyword: defeasible
 - `always` (not `strict`)
 - `except` (not `defeater`)
 
-### Missing Label (DFL)
+### Missing Label (SPL)
 
 ```
 Error at line 3: could not parse: >> bird
 ```
 
-**Cause**: DFL rules require labels.
+**Cause**: SPL rules require labels.
 
 **Fix**: Add a label:
-```dfl
+```lisp
 f1: >> bird
 ```
 
@@ -54,11 +54,11 @@ f1: >> bird
 
 1. Check if the rule exists:
    ```bash
-   spindle stats theory.dfl
+   spindle stats theory.spl
    ```
 
 2. Check if the body is satisfied:
-   ```dfl
+   ```lisp
    # Is 'bird' actually proven?
    r1: bird => flies
    ```
@@ -66,13 +66,13 @@ f1: >> bird
 3. Check for conflicts:
    ```bash
    # Look for rules proving the complement
-   grep "~flies\|-flies" theory.dfl
+   grep "~flies\|-flies" theory.spl
    ```
 
 4. Check superiority:
    ```bash
    # Is there a superior rule blocking?
-   grep ">" theory.dfl
+   grep ">" theory.spl
    ```
 
 ### Unexpected Conclusion Present
@@ -83,11 +83,11 @@ f1: >> bird
 
 1. Find which rule proves it:
    ```bash
-   grep "=> literal\|-> literal" theory.dfl
+   grep "=> literal\|-> literal" theory.spl
    ```
 
 2. Check if a defeater is missing:
-   ```dfl
+   ```lisp
    # Add a defeater to block
    d1: exception ~> unexpected_literal
    ```
@@ -99,7 +99,7 @@ f1: >> bird
 **Cause**: Conflicting rules without superiority.
 
 **Fix**: Add superiority:
-```dfl
+```lisp
 r1: a => q
 r2: b => ~q
 r1 > r2    # or r2 > r1
@@ -114,7 +114,7 @@ r1 > r2    # or r2 > r1
 **Check**:
 
 1. Rule labels match exactly:
-   ```dfl
+   ```lisp
    r1: bird => flies      # Label is "r1"
    r2: penguin => ~flies  # Label is "r2"
    r1 > r2                # Must match exactly
@@ -127,12 +127,12 @@ r1 > r2    # or r2 > r1
 3. Both rules actually fire:
    ```bash
    # Both bodies must be satisfied
-   spindle reason --positive theory.dfl | grep "bird\|penguin"
+   spindle reason --positive theory.spl | grep "bird\|penguin"
    ```
 
 ### Circular Superiority
 
-```dfl
+```lisp
 # BAD: creates undefined behavior
 r1 > r2
 r2 > r1
@@ -190,7 +190,7 @@ r2 > r1
 **Symptom**: File parses incorrectly.
 
 **Fix**: Use correct extension:
-- `.dfl` for DFL format
+- `.spl` for SPL format
 - `.spl` for SPL format
 
 ### Encoding Issues
@@ -216,7 +216,7 @@ r2 > r1
 ### Slow Reasoning
 
 **Check**:
-1. Theory size: `spindle stats theory.dfl`
+1. Theory size: `spindle stats theory.spl`
 2. Conflict graph: add superiority to resolve high-conflict hotspots
 3. Grounding: check for variable explosion
 4. Conflicts: add superiority to reduce ambiguity
@@ -238,13 +238,13 @@ r2 > r1
 
 Always validate before reasoning:
 ```bash
-spindle validate theory.dfl && spindle reason theory.dfl
+spindle validate theory.spl && spindle reason theory.spl
 ```
 
 ### Minimal Reproduction
 
 Create a minimal theory that reproduces the issue:
-```dfl
+```lisp
 # Start with just the failing rules
 f1: >> bird
 r1: bird => flies
@@ -255,13 +255,13 @@ r1: bird => flies
 
 Focus on what IS proven:
 ```bash
-spindle reason --positive theory.dfl
+spindle reason --positive theory.spl
 ```
 
 ### Check Statistics
 
 ```bash
-spindle stats theory.dfl
+spindle stats theory.spl
 ```
 
 Look for unexpected counts.
@@ -269,7 +269,7 @@ Look for unexpected counts.
 ### Enable Logging
 
 ```bash
-SPINDLE_LOG=debug spindle reason theory.dfl 2>&1 | less
+SPINDLE_LOG=debug spindle reason theory.spl 2>&1 | less
 ```
 
 ## Getting Help

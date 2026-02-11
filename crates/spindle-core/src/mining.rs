@@ -7,7 +7,7 @@
 //! - Footprint matrix construction for activity relationships
 //! - Alpha algorithm for Petri net discovery
 //! - Conflict detection for mutually exclusive activities
-//! - DFL rule conversion from mined process models
+//! - Rule conversion from mined process models
 //!
 //! Ported from SPINdle-Racket process mining module.
 
@@ -709,7 +709,7 @@ pub fn detect_conflicts(log: &EventLog, net: &PetriNet) -> Vec<Conflict> {
 }
 
 // =============================================================================
-// DFL CONVERSION
+// RULE CONVERSION
 // =============================================================================
 
 /// A rule learned from process mining with support and confidence metrics
@@ -771,8 +771,8 @@ fn calculate_confidence(log: &EventLog, a: &str, b: &str) -> f64 {
     }
 }
 
-/// Convert a Petri net to DFL rules with support and confidence
-pub fn petri_net_to_dfl(
+/// Convert a Petri net to learned rules with support and confidence
+pub fn petri_net_to_rules(
     log: &EventLog,
     min_support: usize,
     min_confidence: f64,
@@ -810,7 +810,7 @@ pub fn petri_net_to_dfl(
 /// Complete result of the process mining pipeline
 #[derive(Debug, Clone)]
 pub struct MiningResult {
-    /// Learned DFL rules
+    /// Learned rules
     pub rules: Vec<LearnedRule>,
     /// Detected conflicts
     pub conflicts: Vec<Conflict>,
@@ -840,7 +840,7 @@ impl MiningResult {
     }
 }
 
-/// Mine DFL rules from an event log
+/// Mine rules from an event log
 ///
 /// This is the main entry point for process mining.
 pub fn mine_rules(log: &EventLog, min_support: usize, min_confidence: f64) -> MiningResult {
@@ -848,7 +848,7 @@ pub fn mine_rules(log: &EventLog, min_support: usize, min_confidence: f64) -> Mi
     let mut miner = AlphaMiner::new();
     let petri_net = miner.mine(log);
     let conflicts = detect_conflicts(log, &petri_net);
-    let rules = petri_net_to_dfl(log, min_support, min_confidence);
+    let rules = petri_net_to_rules(log, min_support, min_confidence);
 
     let mut metadata = HashMap::new();
     metadata.insert("trace_count".to_string(), log.cases.len().to_string());
@@ -1175,16 +1175,16 @@ mod tests {
     }
 
     // =========================================================================
-    // TEST-007: DFL Conversion
+    // TEST-007: Rule Conversion
     // =========================================================================
 
     #[test]
-    fn test_convert_petri_net_to_dfl_rules() {
+    fn test_convert_petri_net_to_rules() {
         // Given: Petri net with a -> b sequence
         let log = make_repeated_log(5, &["a", "b"]);
 
-        // When: Convert to DFL
-        let rules = petri_net_to_dfl(&log, 2, 0.5);
+        // When: Convert to rules
+        let rules = petri_net_to_rules(&log, 2, 0.5);
 
         // Then: Verify rules
         assert!(!rules.is_empty(), "Should have at least one rule");
@@ -1193,7 +1193,7 @@ mod tests {
     #[test]
     fn test_rule_body_head_relationship() {
         let log = make_repeated_log(5, &["a", "b"]);
-        let rules = petri_net_to_dfl(&log, 2, 0.5);
+        let rules = petri_net_to_rules(&log, 2, 0.5);
 
         // Find a rule where the causal relationship a->b is captured
         let matching_rule = rules.iter().find(|lr| {
@@ -1211,7 +1211,7 @@ mod tests {
     #[test]
     fn test_learned_rule_has_support_and_confidence() {
         let log = make_repeated_log(5, &["a", "b"]);
-        let rules = petri_net_to_dfl(&log, 1, 0.0);
+        let rules = petri_net_to_rules(&log, 1, 0.0);
 
         if !rules.is_empty() {
             let lr = &rules[0];
@@ -1543,7 +1543,7 @@ mod tests {
     }
 
     #[test]
-    fn test_petri_net_to_dfl_filtering() {
+    fn test_petri_net_to_rules_filtering() {
         // Create log with low support relationship
         let log = EventLog::new(vec![Case::new(
             "c1",
@@ -1554,11 +1554,11 @@ mod tests {
         )]);
 
         // With high min_support, no rules should pass
-        let rules = petri_net_to_dfl(&log, 100, 0.0);
+        let rules = petri_net_to_rules(&log, 100, 0.0);
         assert!(rules.is_empty());
 
         // With high min_confidence, rules might be filtered
-        let rules2 = petri_net_to_dfl(&log, 1, 0.99);
+        let rules2 = petri_net_to_rules(&log, 1, 0.99);
         // a->b has 100% confidence, so it should pass
         assert!(!rules2.is_empty());
     }

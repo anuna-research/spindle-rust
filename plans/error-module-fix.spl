@@ -10,7 +10,7 @@
 
 (given task-parse-code-mapping)
 (meta task-parse-code-mapping
-  (description "Align ParseError codes with SPEC-010 mapping (DFL/SPL prefixes)")
+  (description "Align ParseError codes with SPEC-010 mapping (SPL prefixes)")
   (phase "f1-parse-codes")
   (priority "high")
   (file "crates/spindle-parser/src/error.rs"))

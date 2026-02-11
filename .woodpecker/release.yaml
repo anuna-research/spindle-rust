@@ -13,8 +13,8 @@ steps:
       - $SPINDLE reason --help
       - $SPINDLE --version
       # Smoke-test documented usage patterns
-      - 'printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --stdin'
-      - 'printf "f1: >> bird\nr1: bird => flies" | $SPINDLE reason --json --stdin'
+      - 'printf "(given bird)\n(normally r1 bird flies)" | $SPINDLE reason --stdin'
+      - 'printf "(given bird)\n(normally r1 bird flies)" | $SPINDLE reason --json --stdin'
       # Verify explain-code subcommand
       - $SPINDLE explain-code PARSE_ERROR
 
@@ -161,7 +161,7 @@ steps:
           echo ""
           echo "Quick start:"
           echo "  spindle --help"
-          echo "  spindle reason examples/penguin.dfl"
+          echo "  spindle reason examples/penguin.spl"
           echo ""
           echo "Documentation: https://codeberg.org/anuna/spindle-rust"
         }
@@ -207,10 +207,10 @@ steps:
 
         \`\`\`bash
         # Reason over a theory
-        spindle reason theory.dfl
+        spindle reason theory.spl
 
         # JSON output
-        spindle reason theory.dfl --json
+        spindle reason theory.spl --json
 
         # Show help
         spindle --help

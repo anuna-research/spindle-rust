@@ -67,7 +67,7 @@ Contributing implementation details:
 Docs explicitly state “superiority applies to the rule template, affecting all ground instances”, but current behavior cannot achieve that once grounding is wired.
 
 ### 1.4 CLI JSON contract drift
-- CLI has a `--json` flag, docs claim `spindle reason --json penguin.dfl` outputs JSON, but `run_reason()` ignores json and always prints text.  
+- CLI has a `--json` flag, docs claim `spindle reason --json penguin.spl` outputs JSON, but `run_reason()` ignores json and always prints text.  
   - Flag: `crates/spindle-cli/src/main.rs:39`  
   - Reason path: `crates/spindle-cli/src/main.rs:156` and `crates/spindle-cli/src/main.rs:240`  
   - Docs claim JSON: `docs/src/getting-started.md:137`
@@ -355,8 +355,8 @@ Add failing tests demonstrating:
 3) **Grounding + superiority**
    - `prefer r2 r1` applies to grounded instances
 4) **CLI `--json` for reason**
-   - `spindle --json reason file.dfl` outputs JSON parseable
-   - `spindle reason file.dfl --json` outputs JSON parseable
+   - `spindle --json reason file.spl` outputs JSON parseable
+   - `spindle reason file.spl --json` outputs JSON parseable
 5) **Timepoint (“as-of”) temporal filtering (when implemented)**
    - facts/rules outside `reference_time` are ignored
    - complements only conflict when both are active at `reference_time`
@@ -462,7 +462,7 @@ Add focused tests in `crates/spindle-core/src/reason.rs` (or a new `reason_tests
 
 ### 5.3 CLI integration tests (spindle-cli)
 - Add tests for:
-  - `spindle --json reason file.dfl` is valid JSON and contains expected keys
+  - `spindle --json reason file.spl` is valid JSON and contains expected keys
   - `spindle reason file.spl --json` same
   - `--positive` behavior consistent in JSON and text modes
 

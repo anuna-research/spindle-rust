@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -239,12 +239,12 @@ theory.add_defeater(&amp;["broken_wing"], "flies");
 // Superiority
 theory.add_superiority(&amp;r2, &amp;r1);
 <span class="boring">}</span></code></pre>
-<h3 id="parsing-dfl"><a class="header" href="#parsing-dfl">Parsing DFL</a></h3>
+<h3 id="parsing-spl"><a class="header" href="#parsing-spl">Parsing SPL</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use spindle_parser::parse_dfl;
+</span>use spindle_parser::parse_spl;
 
-let dfl = r#"
+let spl = r#"
     f1: &gt;&gt; bird
     f2: &gt;&gt; penguin
     r1: bird =&gt; flies
@@ -252,9 +252,9 @@ let dfl = r#"
     r2 &gt; r1
 "#;
 
-let theory = parse_dfl(dfl)?;
+let theory = parse_spl(spl)?;
 <span class="boring">}</span></code></pre>
-<h3 id="parsing-spl"><a class="header" href="#parsing-spl">Parsing SPL</a></h3>
+<h3 id="parsing-spl-1"><a class="header" href="#parsing-spl-1">Parsing SPL</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_parser::parse_spl;
@@ -438,8 +438,8 @@ use spindle_parser::ParseError;
 fn load_theory(path: &amp;str) -&gt; Result&lt;Theory&gt; {
     let content = std::fs::read_to_string(path)?;
 
-    if path.ends_with(".dfl") {
-        parse_dfl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
+    if path.ends_with(".spl") {
+        parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
     } else if path.ends_with(".spl") {
         parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
     } else {
@@ -483,13 +483,13 @@ let results: Vec&lt;_&gt; = queries
 <span class="boring">}</span></code></pre>
 <h2 id="example-complete-application"><a class="header" href="#example-complete-application">Example: Complete Application</a></h2>
 <pre class="playground"><code class="language-rust">use spindle_core::prelude::*;
-use spindle_parser::parse_dfl;
+use spindle_parser::parse_spl;
 use std::fs;
 
 fn main() -&gt; Result&lt;()&gt; {
     // Load theory
-    let content = fs::read_to_string("rules.dfl")?;
-    let mut theory = parse_dfl(&amp;content)?;
+    let content = fs::read_to_string("rules.spl")?;
+    let mut theory = parse_spl(&amp;content)?;
 
     // Add runtime facts
     theory.add_fact("current_user_admin");

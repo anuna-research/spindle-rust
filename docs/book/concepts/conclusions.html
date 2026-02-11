@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,7 +198,7 @@
 </div>
 <h2 id="definite-conclusions-d---d"><a class="header" href="#definite-conclusions-d---d">Definite Conclusions (+D / -D)</a></h2>
 <p><strong>Definite provability</strong> uses only facts and strict rules. No defeasible reasoning is involved.</p>
-<pre><code class="language-dfl">f1: &gt;&gt; bird
+<pre><code class="language-lisp">f1: &gt;&gt; bird
 r1: bird -&gt; animal    # Strict rule
 r2: bird =&gt; flies     # Defeasible rule
 </code></pre>
@@ -217,7 +217,7 @@ r2: bird =&gt; flies     # Defeasible rule
 </ul>
 <h2 id="defeasible-conclusions-d---d"><a class="header" href="#defeasible-conclusions-d---d">Defeasible Conclusions (+d / -d)</a></h2>
 <p><strong>Defeasible provability</strong> extends definite provability with defeasible rules.</p>
-<pre><code class="language-dfl">f1: &gt;&gt; bird
+<pre><code class="language-lisp">f1: &gt;&gt; bird
 r1: bird =&gt; flies
 </code></pre>
 <p>Conclusions:</p>
@@ -234,7 +234,7 @@ r1: bird =&gt; flies
 </code></pre>
 <h2 id="conflict-and-ambiguity"><a class="header" href="#conflict-and-ambiguity">Conflict and Ambiguity</a></h2>
 <p>When rules conflict without a superiority relation, neither conclusion is provable:</p>
-<pre><code class="language-dfl">f1: &gt;&gt; trigger
+<pre><code class="language-lisp">f1: &gt;&gt; trigger
 r1: trigger =&gt; outcome
 r2: trigger =&gt; -outcome
 # No superiority declared
@@ -248,7 +248,7 @@ r2: trigger =&gt; -outcome
 <p>Both outcomes are <strong>ambiguous</strong> - neither can be proven.</p>
 <h2 id="resolved-conflict"><a class="header" href="#resolved-conflict">Resolved Conflict</a></h2>
 <p>With superiority, the conflict is resolved:</p>
-<pre><code class="language-dfl">f1: &gt;&gt; trigger
+<pre><code class="language-lisp">f1: &gt;&gt; trigger
 r1: trigger =&gt; outcome
 r2: trigger =&gt; -outcome
 r1 &gt; r2
@@ -259,7 +259,7 @@ r1 &gt; r2
 <li><code>-d -outcome</code> - r2 is defeated</li>
 </ul>
 <h2 id="example-multi-level"><a class="header" href="#example-multi-level">Example: Multi-Level</a></h2>
-<pre><code class="language-dfl">f1: &gt;&gt; a
+<pre><code class="language-lisp">f1: &gt;&gt; a
 r1: a -&gt; b           # Strict: a implies b
 r2: b =&gt; c           # Defeasible: b typically implies c
 r3: b =&gt; -c          # Defeasible: b typically implies -c
@@ -288,7 +288,7 @@ r2 &gt; r3              # r2 wins
 <li>A defeater</li>
 </ul>
 <h2 id="reading-spindle-output"><a class="header" href="#reading-spindle-output">Reading Spindle Output</a></h2>
-<pre><code class="language-bash">$ spindle reason penguin.dfl
+<pre><code class="language-bash">$ spindle reason penguin.spl
 +D bird
 +D penguin
 +d bird
@@ -307,7 +307,7 @@ r2 &gt; r3              # r2 wins
 </ul>
 <h2 id="filtering-output"><a class="header" href="#filtering-output">Filtering Output</a></h2>
 <p>Show only positive conclusions:</p>
-<pre><code class="language-bash">spindle reason --positive penguin.dfl
+<pre><code class="language-bash">spindle reason --positive penguin.spl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird

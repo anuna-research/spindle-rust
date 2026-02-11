@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,7 +188,7 @@
 </code></pre>
 <p><strong>Cause</strong>: Missing arrow operator.</p>
 <p><strong>Fix</strong>: Add the correct arrow:</p>
-<pre><code class="language-dfl">r1: bird =&gt; flies
+<pre><code class="language-lisp">r1: bird =&gt; flies
 </code></pre>
 <h3 id="unknown-keyword-error-spl"><a class="header" href="#unknown-keyword-error-spl">“Unknown keyword” Error (SPL)</a></h3>
 <pre><code>SPL parse error: Unknown keyword: defeasible
@@ -201,12 +201,12 @@
 <li><code>always</code> (not <code>strict</code>)</li>
 <li><code>except</code> (not <code>defeater</code>)</li>
 </ul>
-<h3 id="missing-label-dfl"><a class="header" href="#missing-label-dfl">Missing Label (DFL)</a></h3>
+<h3 id="missing-label-spl"><a class="header" href="#missing-label-spl">Missing Label (SPL)</a></h3>
 <pre><code>Error at line 3: could not parse: &gt;&gt; bird
 </code></pre>
-<p><strong>Cause</strong>: DFL rules require labels.</p>
+<p><strong>Cause</strong>: SPL rules require labels.</p>
 <p><strong>Fix</strong>: Add a label:</p>
-<pre><code class="language-dfl">f1: &gt;&gt; bird
+<pre><code class="language-lisp">f1: &gt;&gt; bird
 </code></pre>
 <h2 id="unexpected-conclusions"><a class="header" href="#unexpected-conclusions">Unexpected Conclusions</a></h2>
 <h3 id="expected-conclusion-missing"><a class="header" href="#expected-conclusion-missing">Expected Conclusion Missing</a></h3>
@@ -215,25 +215,25 @@
 <ol>
 <li>
 <p>Check if the rule exists:</p>
-<pre><code class="language-bash">spindle stats theory.dfl
+<pre><code class="language-bash">spindle stats theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check if the body is satisfied:</p>
-<pre><code class="language-dfl"># Is 'bird' actually proven?
+<pre><code class="language-lisp"># Is 'bird' actually proven?
 r1: bird =&gt; flies
 </code></pre>
 </li>
 <li>
 <p>Check for conflicts:</p>
 <pre><code class="language-bash"># Look for rules proving the complement
-grep "~flies\|-flies" theory.dfl
+grep "~flies\|-flies" theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check superiority:</p>
 <pre><code class="language-bash"># Is there a superior rule blocking?
-grep "&gt;" theory.dfl
+grep "&gt;" theory.spl
 </code></pre>
 </li>
 </ol>
@@ -243,12 +243,12 @@ grep "&gt;" theory.dfl
 <ol>
 <li>
 <p>Find which rule proves it:</p>
-<pre><code class="language-bash">grep "=&gt; literal\|-&gt; literal" theory.dfl
+<pre><code class="language-bash">grep "=&gt; literal\|-&gt; literal" theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check if a defeater is missing:</p>
-<pre><code class="language-dfl"># Add a defeater to block
+<pre><code class="language-lisp"># Add a defeater to block
 d1: exception ~&gt; unexpected_literal
 </code></pre>
 </li>
@@ -257,7 +257,7 @@ d1: exception ~&gt; unexpected_literal
 <p><strong>Symptom</strong>: Neither <code>q</code> nor <code>~q</code> is <code>+d</code>.</p>
 <p><strong>Cause</strong>: Conflicting rules without superiority.</p>
 <p><strong>Fix</strong>: Add superiority:</p>
-<pre><code class="language-dfl">r1: a =&gt; q
+<pre><code class="language-lisp">r1: a =&gt; q
 r2: b =&gt; ~q
 r1 &gt; r2    # or r2 &gt; r1
 </code></pre>
@@ -268,7 +268,7 @@ r1 &gt; r2    # or r2 &gt; r1
 <ol>
 <li>
 <p>Rule labels match exactly:</p>
-<pre><code class="language-dfl">r1: bird =&gt; flies      # Label is "r1"
+<pre><code class="language-lisp">r1: bird =&gt; flies      # Label is "r1"
 r2: penguin =&gt; ~flies  # Label is "r2"
 r1 &gt; r2                # Must match exactly
 </code></pre>
@@ -283,12 +283,12 @@ r1 &gt; r2                # Must match exactly
 <li>
 <p>Both rules actually fire:</p>
 <pre><code class="language-bash"># Both bodies must be satisfied
-spindle reason --positive theory.dfl | grep "bird\|penguin"
+spindle reason --positive theory.spl | grep "bird\|penguin"
 </code></pre>
 </li>
 </ol>
 <h3 id="circular-superiority"><a class="header" href="#circular-superiority">Circular Superiority</a></h3>
-<pre><code class="language-dfl"># BAD: creates undefined behavior
+<pre><code class="language-lisp"># BAD: creates undefined behavior
 r1 &gt; r2
 r2 &gt; r1
 </code></pre>
@@ -337,7 +337,7 @@ r2 &gt; r1
 <p><strong>Symptom</strong>: File parses incorrectly.</p>
 <p><strong>Fix</strong>: Use correct extension:</p>
 <ul>
-<li><code>.dfl</code> for DFL format</li>
+<li><code>.spl</code> for SPL format</li>
 <li><code>.spl</code> for SPL format</li>
 </ul>
 <h3 id="encoding-issues"><a class="header" href="#encoding-issues">Encoding Issues</a></h3>
@@ -356,7 +356,7 @@ r2 &gt; r1
 <h3 id="slow-reasoning"><a class="header" href="#slow-reasoning">Slow Reasoning</a></h3>
 <p><strong>Check</strong>:</p>
 <ol>
-<li>Theory size: <code>spindle stats theory.dfl</code></li>
+<li>Theory size: <code>spindle stats theory.spl</code></li>
 <li>Conflict graph: add superiority to resolve high-conflict hotspots</li>
 <li>Grounding: check for variable explosion</li>
 <li>Conflicts: add superiority to reduce ambiguity</li>
@@ -376,25 +376,25 @@ r2 &gt; r1
 <h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h2>
 <h3 id="validate-first"><a class="header" href="#validate-first">Validate First</a></h3>
 <p>Always validate before reasoning:</p>
-<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle reason theory.dfl
+<pre><code class="language-bash">spindle validate theory.spl &amp;&amp; spindle reason theory.spl
 </code></pre>
 <h3 id="minimal-reproduction"><a class="header" href="#minimal-reproduction">Minimal Reproduction</a></h3>
 <p>Create a minimal theory that reproduces the issue:</p>
-<pre><code class="language-dfl"># Start with just the failing rules
+<pre><code class="language-lisp"># Start with just the failing rules
 f1: &gt;&gt; bird
 r1: bird =&gt; flies
 # Add rules until issue appears
 </code></pre>
 <h3 id="use-positive-output"><a class="header" href="#use-positive-output">Use Positive Output</a></h3>
 <p>Focus on what IS proven:</p>
-<pre><code class="language-bash">spindle reason --positive theory.dfl
+<pre><code class="language-bash">spindle reason --positive theory.spl
 </code></pre>
 <h3 id="check-statistics"><a class="header" href="#check-statistics">Check Statistics</a></h3>
-<pre><code class="language-bash">spindle stats theory.dfl
+<pre><code class="language-bash">spindle stats theory.spl
 </code></pre>
 <p>Look for unexpected counts.</p>
 <h3 id="enable-logging"><a class="header" href="#enable-logging">Enable Logging</a></h3>
-<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.dfl 2&gt;&amp;1 | less
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.spl 2&gt;&amp;1 | less
 </code></pre>
 <h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
 <p>If you can’t resolve an issue:</p>

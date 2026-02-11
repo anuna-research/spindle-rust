@@ -1,6 +1,6 @@
 # Process Mining
 
-Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and DFL rule extraction with support/confidence metrics.
+Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and SPL rule extraction with support/confidence metrics.
 
 > **Note**: Process mining is currently available through the Rust API only. It is not exposed via the CLI or the WebAssembly bindings.
 
@@ -12,7 +12,7 @@ Process mining bridges the gap between observed behavior (event logs) and formal
 EventLog -> Footprint -> PetriNet -> LearnedRules
                |                         |
                v                         v
-         Relation analysis       DFL rules with
+         Relation analysis       SPL rules with
          (causal, parallel,      support/confidence
           unrelated)             metrics
 ```
@@ -311,12 +311,12 @@ For example, if `a` appears 10 times as a non-final activity and `a -> b` occurs
 ### Extracting Rules
 
 ```rust
-use spindle_core::mining::{petri_net_to_dfl, make_repeated_log};
+use spindle_core::mining::{petri_net_to_rules, make_repeated_log};
 
 let log = make_repeated_log(10, &["submit", "review", "approve"]);
 
 // Extract rules with minimum support of 5 and confidence of 0.7
-let rules = petri_net_to_dfl(&log, 5, 0.7);
+let rules = petri_net_to_rules(&log, 5, 0.7);
 
 for lr in &rules {
     println!("Rule: {}", lr.rule.label);
@@ -341,10 +341,10 @@ Rules below the minimum support or confidence thresholds are excluded:
 
 ```rust
 // Strict thresholds: only high-confidence rules
-let strict_rules = petri_net_to_dfl(&log, 10, 0.9);
+let strict_rules = petri_net_to_rules(&log, 10, 0.9);
 
 // Relaxed thresholds: discover more patterns
-let relaxed_rules = petri_net_to_dfl(&log, 1, 0.0);
+let relaxed_rules = petri_net_to_rules(&log, 1, 0.0);
 ```
 
 ## Complete Mining Pipeline
@@ -371,7 +371,7 @@ let result = mine_rules(&log, 2, 0.5);
 The result bundles all outputs from the pipeline:
 
 ```rust
-// Learned DFL rules
+// Learned SPL rules
 for lr in &result.rules {
     println!("{}: support={}, confidence={:.2}", lr.rule.label, lr.support, lr.confidence);
 }
@@ -407,7 +407,7 @@ println!("Min confidence: {}", result.metadata.get("min_confidence").unwrap());
 1. Build the footprint matrix from the event log
 2. Run the Alpha miner to discover the Petri net
 3. Detect conflicts from the net structure and trace analysis
-4. Extract DFL rules from causal pairs, filtered by support and confidence
+4. Extract SPL rules from causal pairs, filtered by support and confidence
 5. Package everything into a `MiningResult` with metadata
 
 ## Use Cases

@@ -52,9 +52,9 @@ TIERS = {
 }
 
 
-def generate_theory_dfl(num_facts: int, num_rules: int, seed: int = 42) -> str:
+def generate_theory_spl(num_facts: int, num_rules: int, seed: int = 42) -> str:
     """
-    Generate a DFL theory string with specified number of facts and rules.
+    Generate an SPL theory string with specified number of facts and rules.
 
     Creates:
     - Ground facts
@@ -63,11 +63,11 @@ def generate_theory_dfl(num_facts: int, num_rules: int, seed: int = 42) -> str:
     - Some superiority relations
     """
     random.seed(seed)
-    lines = ["# Generated benchmark theory", ""]
+    lines = ["; Generated benchmark theory", ""]
 
     # Add facts
     for i in range(num_facts):
-        lines.append(f"f{i}: >> fact{i}")
+        lines.append(f"(given fact{i})")
 
     lines.append("")
 
@@ -77,11 +77,11 @@ def generate_theory_dfl(num_facts: int, num_rules: int, seed: int = 42) -> str:
         premise = f"fact{premise_idx}"
         conclusion = f"conclusion{i}"
 
-        # Alternate between strict (->) and defeasible (=>)
+        # Alternate between strict (always) and defeasible (normally)
         if i % 2 == 0:
-            lines.append(f"r{i}: {premise} -> {conclusion}")
+            lines.append(f"(always r{i} {premise} {conclusion})")
         else:
-            lines.append(f"r{i}: {premise} => {conclusion}")
+            lines.append(f"(normally r{i} {premise} {conclusion})")
 
     lines.append("")
 
@@ -91,66 +91,66 @@ def generate_theory_dfl(num_facts: int, num_rules: int, seed: int = 42) -> str:
         premise_idx = i % max(1, num_facts)
         premise = f"fact{premise_idx}"
         target = f"conclusion{i * 2}"
-        lines.append(f"conflict{i}: {premise} => ¬{target}")
+        lines.append(f"(normally conflict{i} {premise} (not {target}))")
 
     lines.append("")
 
     # Add superiority relations
     for i in range(min(num_conflicts, 5)):
-        lines.append(f"r{i * 2} > conflict{i}")
+        lines.append(f"(prefer r{i * 2} conflict{i})")
 
     return "\n".join(lines)
 
 
-def generate_chain_theory_dfl(chain_length: int) -> str:
+def generate_chain_theory_spl(chain_length: int) -> str:
     """
     Generate a chain theory where each rule depends on the previous conclusion.
     Tests deep reasoning chains.
     """
-    lines = ["# Chain theory", ""]
+    lines = ["; Chain theory", ""]
 
     # Initial fact
-    lines.append("f0: >> p0")
+    lines.append("(given p0)")
     lines.append("")
 
     # Chain of defeasible rules
     for i in range(chain_length):
-        lines.append(f"r{i}: p{i} => p{i + 1}")
+        lines.append(f"(normally r{i} p{i} p{i + 1})")
 
     return "\n".join(lines)
 
 
-def generate_conflict_heavy_theory_dfl(num_chains: int, chain_depth: int) -> str:
+def generate_conflict_heavy_theory_spl(num_chains: int, chain_depth: int) -> str:
     """
     Generate a theory with multiple parallel chains and conflicts at each level.
     Designed to stress-test conflict resolution.
     """
-    lines = ["# Conflict-heavy theory", ""]
+    lines = ["; Conflict-heavy theory", ""]
 
     for chain_id in range(num_chains):
         # Initial fact
-        lines.append(f"f{chain_id}: >> start{chain_id}")
+        lines.append(f"(given start{chain_id})")
 
         for level in range(chain_depth):
             prev_lit = f"start{chain_id}" if level == 0 else f"c{chain_id}_l{level - 1}"
             curr_lit = f"c{chain_id}_l{level}"
 
             # Main rule
-            lines.append(f"r{chain_id}_l{level}: {prev_lit} => {curr_lit}")
+            lines.append(f"(normally r{chain_id}_l{level} {prev_lit} {curr_lit})")
 
             # Conflicting rule
-            lines.append(f"x{chain_id}_l{level}: {prev_lit} => ¬{curr_lit}")
+            lines.append(f"(normally x{chain_id}_l{level} {prev_lit} (not {curr_lit}))")
 
             # Superiority
-            lines.append(f"r{chain_id}_l{level} > x{chain_id}_l{level}")
+            lines.append(f"(prefer r{chain_id}_l{level} x{chain_id}_l{level})")
 
         lines.append("")
 
     return "\n".join(lines)
 
 
-def run_rust_benchmark(dfl_file: Path) -> BenchmarkResult:
-    """Run spindle-rust on a DFL file and measure time."""
+def run_rust_benchmark(spl_file: Path) -> BenchmarkResult:
+    """Run spindle-rust on an SPL file and measure time."""
     script_dir = Path(__file__).parent
     rust_binary = script_dir.parent / "target" / "release" / "spindle"
 
@@ -164,7 +164,7 @@ def run_rust_benchmark(dfl_file: Path) -> BenchmarkResult:
             success=False, error="spindle binary not found. Run: cargo build --release"
         )
 
-    cmd = [str(rust_binary), str(dfl_file)]
+    cmd = [str(rust_binary), "reason", str(spl_file)]
 
     try:
         start = time.perf_counter()
@@ -204,8 +204,8 @@ def run_rust_benchmark(dfl_file: Path) -> BenchmarkResult:
         )
 
 
-def run_racket_benchmark(dfl_file: Path) -> BenchmarkResult:
-    """Run spindle-racket on a DFL file and measure time."""
+def run_racket_benchmark(spl_file: Path) -> BenchmarkResult:
+    """Run spindle-racket on an SPL file and measure time."""
     script_dir = Path(__file__).parent
     racket_runner = script_dir / "racket-runner.rkt"
 
@@ -222,7 +222,7 @@ def run_racket_benchmark(dfl_file: Path) -> BenchmarkResult:
             success=False, error="racket not found in PATH"
         )
 
-    cmd = ["racket", str(racket_runner), str(dfl_file)]
+    cmd = ["racket", str(racket_runner), str(spl_file)]
 
     try:
         start = time.perf_counter()
@@ -290,19 +290,19 @@ def run_tier_benchmark(
 
     # Generate theory based on tier type
     if tier.name == "Chain":
-        theory_dfl = generate_chain_theory_dfl(tier.rules)
+        theory_spl = generate_chain_theory_spl(tier.rules)
     elif tier.name == "Conflict":
-        theory_dfl = generate_conflict_heavy_theory_dfl(
+        theory_spl = generate_conflict_heavy_theory_spl(
             num_chains=tier.facts,
             chain_depth=tier.rules // tier.facts
         )
     else:
-        theory_dfl = generate_theory_dfl(tier.facts, tier.rules)
+        theory_spl = generate_theory_spl(tier.facts, tier.rules)
 
     # Write to temp file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.dfl', delete=False) as f:
-        f.write(theory_dfl)
-        dfl_file = Path(f.name)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.spl', delete=False) as f:
+        f.write(theory_spl)
+        spl_file = Path(f.name)
 
     try:
         rust_times = []
@@ -319,7 +319,7 @@ def run_tier_benchmark(
                 print(f"  Iteration {i + 1}/{iterations}...", end="", flush=True)
 
             # Run Rust
-            rust_result = run_rust_benchmark(dfl_file)
+            rust_result = run_rust_benchmark(spl_file)
             if rust_result.success:
                 rust_times.append(rust_result.time_ms)
                 rust_conclusions = rust_result.conclusions
@@ -327,7 +327,7 @@ def run_tier_benchmark(
                 rust_error = rust_result.error
 
             # Run Racket
-            racket_result = run_racket_benchmark(dfl_file)
+            racket_result = run_racket_benchmark(spl_file)
             if racket_result.success:
                 racket_times.append(racket_result.time_ms)
                 racket_conclusions = racket_result.conclusions
@@ -366,7 +366,7 @@ def run_tier_benchmark(
             "target_ms": tier.target_ms,
         }
     finally:
-        dfl_file.unlink(missing_ok=True)
+        spl_file.unlink(missing_ok=True)
 
 
 def print_results(results: list[dict]):

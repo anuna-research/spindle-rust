@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,8 +184,8 @@
 <p>Spindle supports four types of rules, each with different semantics for how conclusions are drawn.</p>
 <h2 id="facts-"><a class="header" href="#facts-">Facts (<code>&gt;&gt;</code>)</a></h2>
 <p>Facts are unconditional truths. They have no body (antecedent) and are always true.</p>
-<p><strong>DFL:</strong></p>
-<pre><code class="language-dfl">f1: &gt;&gt; bird
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">f1: &gt;&gt; bird
 f2: &gt;&gt; penguin
 f3: &gt;&gt; -guilty    # Negated fact
 </code></pre>
@@ -197,8 +197,8 @@ f3: &gt;&gt; -guilty    # Negated fact
 <p>Facts produce <strong>definite conclusions</strong> (<code>+D</code>) that cannot be defeated.</p>
 <h2 id="strict-rules--"><a class="header" href="#strict-rules--">Strict Rules (<code>-&gt;</code>)</a></h2>
 <p>Strict rules express necessary implications. If the body is true, the head <strong>must</strong> be true.</p>
-<p><strong>DFL:</strong></p>
-<pre><code class="language-dfl">r1: penguin -&gt; bird        # All penguins are birds
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">r1: penguin -&gt; bird        # All penguins are birds
 r2: human, mortal -&gt; dies  # All mortal humans die
 </code></pre>
 <p><strong>SPL:</strong></p>
@@ -215,8 +215,8 @@ r2: human, mortal -&gt; dies  # All mortal humans die
 </ul>
 <h2 id="defeasible-rules-"><a class="header" href="#defeasible-rules-">Defeasible Rules (<code>=&gt;</code>)</a></h2>
 <p>Defeasible rules express typical or default behavior that may have exceptions.</p>
-<p><strong>DFL:</strong></p>
-<pre><code class="language-dfl">r1: bird =&gt; flies           # Birds typically fly
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">r1: bird =&gt; flies           # Birds typically fly
 r2: student =&gt; has_loans    # Students typically have loans
 </code></pre>
 <p><strong>SPL:</strong></p>
@@ -238,14 +238,14 @@ r2: student =&gt; has_loans    # Students typically have loans
 </ul>
 <h2 id="defeaters-"><a class="header" href="#defeaters-">Defeaters (<code>~&gt;</code>)</a></h2>
 <p>Defeaters are special rules that <strong>block</strong> conclusions without proving anything themselves.</p>
-<p><strong>DFL:</strong></p>
-<pre><code class="language-dfl">d1: broken_wing ~&gt; flies    # A broken wing blocks "flies"
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">d1: broken_wing ~&gt; flies    # A broken wing blocks "flies"
 </code></pre>
 <p><strong>SPL:</strong></p>
 <pre><code class="language-lisp">(except d1 broken_wing flies)
 </code></pre>
 <h3 id="defeater-vs-defeasible-rule"><a class="header" href="#defeater-vs-defeasible-rule">Defeater vs. Defeasible Rule</a></h3>
-<pre><code class="language-dfl"># Defeasible rule: proves -flies
+<pre><code class="language-lisp"># Defeasible rule: proves -flies
 r1: penguin =&gt; -flies
 
 # Defeater: only blocks flies, doesn't prove -flies
@@ -266,25 +266,25 @@ d1: sick ~&gt; flies
 <h2 id="rule-bodies-antecedents"><a class="header" href="#rule-bodies-antecedents">Rule Bodies (Antecedents)</a></h2>
 <p>Rule bodies can contain:</p>
 <h3 id="single-literal"><a class="header" href="#single-literal">Single Literal</a></h3>
-<pre><code class="language-dfl">r1: bird =&gt; flies
+<pre><code class="language-lisp">r1: bird =&gt; flies
 </code></pre>
 <h3 id="multiple-literals-conjunction"><a class="header" href="#multiple-literals-conjunction">Multiple Literals (Conjunction)</a></h3>
-<pre><code class="language-dfl">r1: bird, healthy =&gt; flies
+<pre><code class="language-lisp">r1: bird, healthy =&gt; flies
 r2: student, employed =&gt; busy
 </code></pre>
 <p><strong>SPL:</strong></p>
 <pre><code class="language-lisp">(normally r1 (and bird healthy) flies)
 </code></pre>
 <h3 id="negated-literals"><a class="header" href="#negated-literals">Negated Literals</a></h3>
-<pre><code class="language-dfl">r1: bird, -penguin =&gt; flies   # Non-penguin birds fly
+<pre><code class="language-lisp">r1: bird, -penguin =&gt; flies   # Non-penguin birds fly
 </code></pre>
 <h2 id="rule-heads-consequents"><a class="header" href="#rule-heads-consequents">Rule Heads (Consequents)</a></h2>
 <p>Rule heads are single literals that can be:</p>
 <h3 id="positive"><a class="header" href="#positive">Positive</a></h3>
-<pre><code class="language-dfl">r1: bird =&gt; flies
+<pre><code class="language-lisp">r1: bird =&gt; flies
 </code></pre>
 <h3 id="negated"><a class="header" href="#negated">Negated</a></h3>
-<pre><code class="language-dfl">r1: penguin =&gt; -flies
+<pre><code class="language-lisp">r1: penguin =&gt; -flies
 </code></pre>
 <h2 id="rule-labels"><a class="header" href="#rule-labels">Rule Labels</a></h2>
 <p>Every rule has a label (identifier) used for:</p>
@@ -293,8 +293,8 @@ r2: student, employed =&gt; busy
 <li>Explanations</li>
 <li>Debugging</li>
 </ul>
-<p><strong>DFL:</strong> Labels are required and appear before the colon:</p>
-<pre><code class="language-dfl">my_rule: bird =&gt; flies
+<p><strong>SPL:</strong> Labels are required and appear before the colon:</p>
+<pre><code class="language-lisp">my_rule: bird =&gt; flies
 </code></pre>
 <p><strong>SPL:</strong> Labels are optional (auto-generated if omitted):</p>
 <pre><code class="language-lisp">(normally r1 bird flies)      ; labeled r1

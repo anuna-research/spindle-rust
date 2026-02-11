@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-c2928118.js";
+            window.path_to_searchindex_js = "searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-116bb599.js"></script>
+        <script src="toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,7 +190,7 @@
 </ul>
 <h2 id="what-is-defeasible-logic"><a class="header" href="#what-is-defeasible-logic">What is Defeasible Logic?</a></h2>
 <p>Defeasible logic is a <strong>non-monotonic reasoning</strong> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.</p>
-<pre><code class="language-dfl"># The classic "Tweety" example
+<pre><code class="language-lisp"># The classic "Tweety" example
 f1: &gt;&gt; bird
 f2: &gt;&gt; penguin
 
@@ -208,7 +208,7 @@ r2 &gt; r1                  # Penguin rule beats bird rule
 <li><strong>First-order variables:</strong> Datalog-style grounding with <code>?x</code> syntax</li>
 <li><strong>Query operators:</strong> what-if, why-not, and abduction</li>
 <li><strong>Trust-aware reasoning:</strong> source attribution and weighted conclusions</li>
-<li><strong>Two input formats:</strong> DFL (textual) and SPL (Lisp-based)</li>
+<li><strong>Two input formats:</strong> SPL (textual) and SPL (Lisp-based)</li>
 <li><strong>WebAssembly support:</strong> run in browsers and Node.js</li>
 </ul>
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
@@ -249,7 +249,7 @@ spindle-parser = { path = "crates/spindle-parser" }
 </thead>
 <tbody>
 <tr><td><code>spindle-core</code></td><td>Core reasoning engine</td></tr>
-<tr><td><code>spindle-parser</code></td><td>DFL and SPL format parsers</td></tr>
+<tr><td><code>spindle-parser</code></td><td>SPL format parsers</td></tr>
 <tr><td><code>spindle-cli</code></td><td>Command-line interface</td></tr>
 <tr><td><code>spindle-wasm</code></td><td>WebAssembly bindings</td></tr>
 </tbody>

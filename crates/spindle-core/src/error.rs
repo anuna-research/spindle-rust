@@ -9,7 +9,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ErrorCategory {
-    /// Input parsing failures (DFL/SPL lexer or parser errors). Exit code 2.
+    /// Input parsing failures (SPL lexer or parser errors). Exit code 2.
     ParseError,
     /// Structural or semantic validation failures. Exit code 2.
     ValidationError,

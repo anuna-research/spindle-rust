@@ -47,7 +47,7 @@
   (and task-modal no_modal_guide)
   completed_modal)
 (meta r-modal
-  (description "Create guides/modal.md: obligation [O], permission [P], forbidden [F] operators with DFL/SPL examples")
+  (description "Create guides/modal.md: obligation [O], permission [P], forbidden [F] operators with SPL examples")
   (agent "claude")
   (priority "high"))
 

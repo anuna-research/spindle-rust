@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,8 +198,8 @@
 </ul>
 <h2 id="syntax"><a class="header" href="#syntax">Syntax</a></h2>
 <p>Both <code>-</code> and <code>~</code> denote negation:</p>
-<p><strong>DFL:</strong></p>
-<pre><code class="language-dfl">f1: &gt;&gt; -guilty       # Explicitly not guilty
+<p><strong>SPL:</strong></p>
+<pre><code class="language-lisp">f1: &gt;&gt; -guilty       # Explicitly not guilty
 r1: penguin =&gt; ~flies
 </code></pre>
 <p><strong>SPL:</strong></p>
@@ -221,7 +221,7 @@ r1: penguin =&gt; ~flies
 </table>
 </div>
 <h2 id="example-unknown-state"><a class="header" href="#example-unknown-state">Example: Unknown State</a></h2>
-<pre><code class="language-dfl">f1: &gt;&gt; bird
+<pre><code class="language-lisp">f1: &gt;&gt; bird
 r1: bird =&gt; flies
 # No information about grounded
 </code></pre>
@@ -236,20 +236,20 @@ r1: bird =&gt; flies
 <p><code>P</code> and <code>-P</code> are <strong>complements</strong>. They interact in specific ways:</p>
 <h3 id="conflict"><a class="header" href="#conflict">Conflict</a></h3>
 <p>If rules prove both <code>P</code> and <code>-P</code>:</p>
-<pre><code class="language-dfl">f1: &gt;&gt; a
+<pre><code class="language-lisp">f1: &gt;&gt; a
 r1: a =&gt; p
 r2: a =&gt; -p
 </code></pre>
 <p>Without superiority, neither is provable (ambiguity).</p>
 <h3 id="definite-blocking"><a class="header" href="#definite-blocking">Definite Blocking</a></h3>
 <p>If <code>-P</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
-<pre><code class="language-dfl">f1: &gt;&gt; -p        # Definite fact: -p
+<pre><code class="language-lisp">f1: &gt;&gt; -p        # Definite fact: -p
 r1: a =&gt; p       # Tries to prove p
 </code></pre>
 <p>Even if r1’s body is satisfied, <code>+d p</code> is blocked because <code>+D -p</code>.</p>
 <h2 id="negation-in-rule-bodies"><a class="header" href="#negation-in-rule-bodies">Negation in Rule Bodies</a></h2>
 <p>Negated literals can appear in rule bodies:</p>
-<pre><code class="language-dfl">r1: bird, -penguin =&gt; flies    # Non-penguin birds fly
+<pre><code class="language-lisp">r1: bird, -penguin =&gt; flies    # Non-penguin birds fly
 r2: student, -employed =&gt; needs_loan
 </code></pre>
 <p><strong>SPL:</strong></p>
@@ -257,11 +257,11 @@ r2: student, -employed =&gt; needs_loan
 </code></pre>
 <h2 id="double-negation"><a class="header" href="#double-negation">Double Negation</a></h2>
 <p><code>--P</code> is equivalent to <code>P</code>:</p>
-<pre><code class="language-dfl">r1: a =&gt; --flies    # Same as: a =&gt; flies
+<pre><code class="language-lisp">r1: a =&gt; --flies    # Same as: a =&gt; flies
 </code></pre>
 <h2 id="consistency"><a class="header" href="#consistency">Consistency</a></h2>
 <p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>-P</code>:</p>
-<pre><code class="language-dfl">f1: &gt;&gt; p
+<pre><code class="language-lisp">f1: &gt;&gt; p
 f2: &gt;&gt; -p
 </code></pre>
 <p>Result:</p>
@@ -274,7 +274,7 @@ f2: &gt;&gt; -p
 <p>To detect inconsistency, check for literals where both <code>+D P</code> and <code>+D -P</code> (or <code>+d P</code> and <code>+d -P</code>) are concluded.</p>
 <h2 id="closed-world-assumption"><a class="header" href="#closed-world-assumption">Closed World Assumption</a></h2>
 <p>Spindle does <strong>not</strong> use the Closed World Assumption by default. If you need it, add explicit rules:</p>
-<pre><code class="language-dfl"># CWA for 'guilty': if not proven guilty, then not guilty
+<pre><code class="language-lisp"># CWA for 'guilty': if not proven guilty, then not guilty
 d1: &gt;&gt; -guilty           # Default: not guilty
 r1: evidence =&gt; guilty   # Can be overridden by evidence
 r1 &gt; d1
@@ -289,7 +289,7 @@ r1 &gt; d1
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/dfl.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/spl.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -303,7 +303,7 @@ r1 &gt; d1
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/dfl.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/spl.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

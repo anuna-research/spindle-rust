@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -318,9 +318,9 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 <li>Use specific predicates to reduce matching</li>
 <li>Add explicit superiority where grounded conflicts should resolve to one side</li>
 </ul>
-<h2 id="dfl-limitations"><a class="header" href="#dfl-limitations">DFL Limitations</a></h2>
-<p>The DFL format does <strong>not</strong> support variables. Use SPL for first-order rules:</p>
-<pre><code class="language-dfl"># DFL - no variables, must enumerate manually
+<h2 id="spl-limitations"><a class="header" href="#spl-limitations">SPL Limitations</a></h2>
+<p>The SPL format does <strong>not</strong> support variables. Use SPL for first-order rules:</p>
+<pre><code class="language-lisp"># SPL - no variables, must enumerate manually
 r1: parent_alice_bob =&gt; ancestor_alice_bob
 r2: parent_bob_charlie =&gt; ancestor_bob_charlie
 </code></pre>

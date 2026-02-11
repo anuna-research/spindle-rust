@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,7 +181,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="process-mining"><a class="header" href="#process-mining">Process Mining</a></h1>
-<p>Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and DFL rule extraction with support/confidence metrics.</p>
+<p>Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and SPL rule extraction with support/confidence metrics.</p>
 <blockquote>
 <p><strong>Note</strong>: Process mining is currently available through the Rust API only. It is not exposed via the CLI or the WebAssembly bindings.</p>
 </blockquote>
@@ -190,7 +190,7 @@
 <pre><code>EventLog -&gt; Footprint -&gt; PetriNet -&gt; LearnedRules
                |                         |
                v                         v
-         Relation analysis       DFL rules with
+         Relation analysis       SPL rules with
          (causal, parallel,      support/confidence
           unrelated)             metrics
 </code></pre>
@@ -469,12 +469,12 @@ for conflict in &amp;conflicts {
 <h3 id="extracting-rules"><a class="header" href="#extracting-rules">Extracting Rules</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use spindle_core::mining::{petri_net_to_dfl, make_repeated_log};
+</span>use spindle_core::mining::{petri_net_to_rules, make_repeated_log};
 
 let log = make_repeated_log(10, &amp;["submit", "review", "approve"]);
 
 // Extract rules with minimum support of 5 and confidence of 0.7
-let rules = petri_net_to_dfl(&amp;log, 5, 0.7);
+let rules = petri_net_to_rules(&amp;log, 5, 0.7);
 
 for lr in &amp;rules {
     println!("Rule: {}", lr.rule.label);
@@ -497,10 +497,10 @@ for lr in &amp;rules {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Strict thresholds: only high-confidence rules
-let strict_rules = petri_net_to_dfl(&amp;log, 10, 0.9);
+let strict_rules = petri_net_to_rules(&amp;log, 10, 0.9);
 
 // Relaxed thresholds: discover more patterns
-let relaxed_rules = petri_net_to_dfl(&amp;log, 1, 0.0);
+let relaxed_rules = petri_net_to_rules(&amp;log, 1, 0.0);
 <span class="boring">}</span></code></pre>
 <h2 id="complete-mining-pipeline"><a class="header" href="#complete-mining-pipeline">Complete Mining Pipeline</a></h2>
 <p>The <code>mine_rules</code> function runs the entire pipeline in a single call.</p>
@@ -522,7 +522,7 @@ let result = mine_rules(&amp;log, 2, 0.5);
 <p>The result bundles all outputs from the pipeline:</p>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Learned DFL rules
+</span>// Learned SPL rules
 for lr in &amp;result.rules {
     println!("{}: support={}, confidence={:.2}", lr.rule.label, lr.support, lr.confidence);
 }
@@ -556,7 +556,7 @@ println!("Min confidence: {}", result.metadata.get("min_confidence").unwrap());
 <li>Build the footprint matrix from the event log</li>
 <li>Run the Alpha miner to discover the Petri net</li>
 <li>Detect conflicts from the net structure and trace analysis</li>
-<li>Extract DFL rules from causal pairs, filtered by support and confidence</li>
+<li>Extract SPL rules from causal pairs, filtered by support and confidence</li>
 <li>Package everything into a <code>MiningResult</code> with metadata</li>
 </ol>
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>

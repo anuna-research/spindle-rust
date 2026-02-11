@@ -15,7 +15,7 @@ Spindle computes four types of conclusions, representing different levels of pro
 
 **Definite provability** uses only facts and strict rules. No defeasible reasoning is involved.
 
-```dfl
+```lisp
 f1: >> bird
 r1: bird -> animal    # Strict rule
 r2: bird => flies     # Defeasible rule
@@ -37,7 +37,7 @@ Use definite provability when you need certainty:
 
 **Defeasible provability** extends definite provability with defeasible rules.
 
-```dfl
+```lisp
 f1: >> bird
 r1: bird => flies
 ```
@@ -60,7 +60,7 @@ Conclusions:
 
 When rules conflict without a superiority relation, neither conclusion is provable:
 
-```dfl
+```lisp
 f1: >> trigger
 r1: trigger => outcome
 r2: trigger => -outcome
@@ -78,7 +78,7 @@ Both outcomes are **ambiguous** - neither can be proven.
 
 With superiority, the conflict is resolved:
 
-```dfl
+```lisp
 f1: >> trigger
 r1: trigger => outcome
 r2: trigger => -outcome
@@ -91,7 +91,7 @@ Conclusions:
 
 ## Example: Multi-Level
 
-```dfl
+```lisp
 f1: >> a
 r1: a -> b           # Strict: a implies b
 r2: b => c           # Defeasible: b typically implies c
@@ -125,7 +125,7 @@ No chain of rules (including defeasible) leads to this literal, OR the literal i
 ## Reading Spindle Output
 
 ```bash
-$ spindle reason penguin.dfl
+$ spindle reason penguin.spl
 +D bird
 +D penguin
 +d bird
@@ -146,7 +146,7 @@ Interpretation:
 
 Show only positive conclusions:
 ```bash
-spindle reason --positive penguin.dfl
+spindle reason --positive penguin.spl
 ```
 
 Output:
