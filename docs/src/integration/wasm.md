@@ -171,12 +171,6 @@ const conclusions = spindle.reason();
 }
 ```
 
-### Scalable Reasoning
-
-```typescript
-const conclusions = spindle.reasonScalable();
-```
-
 ### Query
 
 ```typescript
@@ -371,7 +365,7 @@ function ReasoningComponent() {
 1. **Initialize once**: Call `init()` once at startup
 2. **Reuse Spindle instances**: Create once, reset between uses
 3. **Batch operations**: Add all rules before reasoning
-4. **Use scalable for large theories**: `reasonScalable()` for >1000 rules
+4. **Use explicit superiority for conflict-heavy theories** to avoid unresolved ties
 
 ## Bundle Size
 

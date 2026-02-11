@@ -181,7 +181,7 @@ r2 > r1
 **Fix**:
 - Add constraints to rule bodies
 - Break large joins into smaller rules
-- Use the `--scalable` flag
+- Add explicit superiority where conflicts are expected
 
 ## File Format Issues
 
@@ -199,22 +199,17 @@ r2 > r1
 
 **Fix**: Use UTF-8 encoding. The negation symbol `¬` is supported.
 
-## Algorithm Differences
+## Conflict Expectations
 
-### Different Results: Standard vs Scalable
+### Conflicting Defeasible Rules Both Show As Provable
 
-**Symptom**: `--scalable` gives different results.
+**Symptom**: You see both `+d p` and `+d ~p`.
 
-**This should not happen**. Both algorithms are semantically equivalent.
+**Cause**: No superiority relation resolves the conflict.
 
-**Debug**:
-```bash
-spindle reason theory.dfl > standard.txt
-spindle reason --scalable theory.dfl > scalable.txt
-diff standard.txt scalable.txt
-```
-
-If different, please report a bug.
+**Fix**:
+1. Add an explicit superiority declaration between the conflicting rules.
+2. Re-run reasoning and verify only the preferred side remains `+d`.
 
 ## Performance Issues
 
@@ -222,7 +217,7 @@ If different, please report a bug.
 
 **Check**:
 1. Theory size: `spindle stats theory.dfl`
-2. Algorithm: try `--scalable` for large theories
+2. Conflict graph: add superiority to resolve high-conflict hotspots
 3. Grounding: check for variable explosion
 4. Conflicts: add superiority to reduce ambiguity
 
@@ -235,7 +230,6 @@ If different, please report a bug.
 
 **Fixes**:
 - Reduce variable combinations
-- Use `--scalable` algorithm
 - Restructure theory
 
 ## Debugging Tips

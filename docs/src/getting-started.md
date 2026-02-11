@@ -130,9 +130,6 @@ spindle reason penguin.spl
 # Show only positive conclusions
 spindle reason --positive penguin.dfl
 
-# Use scalable algorithm (for large theories)
-spindle reason --scalable penguin.dfl
-
 # Output as JSON
 spindle reason --json penguin.dfl
 

@@ -181,7 +181,7 @@ Grounding can produce many rules:
 Tips:
 - Keep rule bodies small
 - Use specific predicates to reduce matching
-- Consider the `--scalable` flag for large ground theories
+- Add explicit superiority where grounded conflicts should resolve to one side
 
 ## DFL Limitations
 

@@ -2,36 +2,21 @@
 
 This guide covers performance optimization for Spindle.
 
-## Choosing an Algorithm
+## Reasoning Engine
 
 ### Standard DL(d)
 
-Best for:
-- Small to medium theories (<1000 rules)
-- Simple conflict patterns
-- Low memory environments
+Spindle uses the standard DL(d) forward-chaining engine.
 
 ```bash
 spindle reason theory.dfl
 ```
 
-### Scalable DL(d||)
-
-Best for:
-- Large theories (>1000 rules)
-- Complex conflict resolution
-- Long inference chains
-
-```bash
-spindle reason --scalable theory.dfl
-```
-
 ### Benchmark Your Theory
 
 ```bash
-# Time both algorithms
+# Time a representative run
 time spindle reason theory.dfl > /dev/null
-time spindle reason --scalable theory.dfl > /dev/null
 ```
 
 ## Theory Design
@@ -182,7 +167,7 @@ spindle stats theory.dfl
 ```
 
 Look for:
-- High rule count → consider `--scalable`
+- High rule count → check grounding and rule-body fanout
 - Many defeaters → potential blocking overhead
 - Complex bodies → grounding overhead
 
@@ -294,13 +279,12 @@ Key benchmarks:
 - `reason_penguin` - basic conflict resolution
 - `reason_long_chain` - forward chaining depth
 - `reason_wide` - parallel independent rules
-- `scalable_vs_standard` - algorithm comparison
 
 ## Performance Checklist
 
-1. **Choose the right algorithm**
-   - [ ] Small theory → standard
-   - [ ] Large theory → `--scalable`
+1. **Use explicit superiority in conflicts**
+   - [ ] Conflicting defeasible rules are intentionally unresolved unless ordered
+   - [ ] Add superiority relations where one side must win
 
 2. **Optimize theory design**
    - [ ] Keep rule bodies small
@@ -314,4 +298,4 @@ Key benchmarks:
 4. **Monitor resources**
    - [ ] Check `spindle stats` output
    - [ ] Profile if needed
-   - [ ] Benchmark algorithm choice
+   - [ ] Benchmark representative theories
