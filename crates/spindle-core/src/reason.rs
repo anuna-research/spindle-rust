@@ -621,22 +621,29 @@ fn try_prove_defeasible(
             .get(attacker.label.as_str())
             .copied()
             .unwrap_or(0);
+
+        // Check if any applicable supporter is superior to this attacker.
+        let defeated_by_superior = applicable_supporters
+            .iter()
+            .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
+
         if att_remaining > 0 {
-            // Attacker's body not fully decided — can't conclude yet
+            // Attacker's body is undecided. If a superior applicable rule
+            // defeats it, the attacker is countered regardless of whether
+            // it eventually becomes applicable. Otherwise we must wait.
+            if defeated_by_superior {
+                continue;
+            }
             return;
         }
 
-        // Strict attackers always block
+        // Strict attackers always block (cannot be defeated by superiority)
         if attacker.rule_type == RuleType::Strict {
             return;
         }
 
         // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s
-        let defeated = applicable_supporters
-            .iter()
-            .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
-
-        if !defeated {
+        if !defeated_by_superior {
             return; // undefeated attacker
         }
     }
