@@ -43,7 +43,11 @@ pub(crate) fn run_reason(
     // Compute trust-weighted conclusions if requested
     let weighted = if trust {
         let policy = pipeline_result.theory.trust_policy();
-        Some(compute_weighted_conclusions(&conclusions, &pipeline_result.theory, policy))
+        Some(compute_weighted_conclusions(
+            &conclusions,
+            &pipeline_result.theory,
+            policy,
+        ))
     } else {
         None
     };
@@ -107,10 +111,14 @@ pub(crate) fn run_reason(
                     let sources_str = if wc.sources.is_empty() {
                         String::new()
                     } else {
-                        let src_list: Vec<String> = wc.sources.iter().map(|s| s.id.clone()).collect();
+                        let src_list: Vec<String> =
+                            wc.sources.iter().map(|s| s.id.clone()).collect();
                         format!(" [{}]", src_list.join(", "))
                     };
-                    text.push_str(&format!("  {} {} (trust: {:.2}){}\n", symbol, c.literal, wc.degree, sources_str));
+                    text.push_str(&format!(
+                        "  {} {} (trust: {:.2}){}\n",
+                        symbol, c.literal, wc.degree, sources_str
+                    ));
                 } else {
                     text.push_str(&format!("  {} {}\n", symbol, c.literal));
                 }

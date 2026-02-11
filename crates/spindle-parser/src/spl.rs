@@ -40,8 +40,8 @@ use nom::{
 use chrono::DateTime;
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{Temporal, TimePoint};
-use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 use spindle_core::trust::DecayModel;
+use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 
 use crate::ParseError;
 use crate::error::ParserFormat;
@@ -438,11 +438,7 @@ fn process_claims(
 }
 
 /// Process a trusts directive: (trusts source value)
-fn process_trusts(
-    theory: &mut Theory,
-    args: &[SExpr],
-    line: usize,
-) -> Result<(), ParseError> {
+fn process_trusts(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
     if args.len() != 2 {
         return Err(ParseError::ParserError {
             line,
@@ -477,17 +473,16 @@ fn process_trusts(
         });
     }
 
-    theory.trust_policy_mut().trust_map.insert(source.to_string(), value);
+    theory
+        .trust_policy_mut()
+        .trust_map
+        .insert(source.to_string(), value);
     Ok(())
 }
 
 /// Process a decays directive: (decays source model params...)
 /// Models: exponential half_life_secs, linear rate_per_sec, step cutoff_secs
-fn process_decays(
-    theory: &mut Theory,
-    args: &[SExpr],
-    line: usize,
-) -> Result<(), ParseError> {
+fn process_decays(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
     if args.len() < 3 {
         return Err(ParseError::ParserError {
             line,
@@ -521,8 +516,12 @@ fn process_decays(
     })?;
 
     let model = match model_name {
-        "exponential" => DecayModel::Exponential { half_life_secs: param },
-        "linear" => DecayModel::Linear { rate_per_sec: param },
+        "exponential" => DecayModel::Exponential {
+            half_life_secs: param,
+        },
+        "linear" => DecayModel::Linear {
+            rate_per_sec: param,
+        },
         "step" => DecayModel::StepFunction { cutoff_secs: param },
         _ => {
             return Err(ParseError::ParserError {
@@ -535,16 +534,15 @@ fn process_decays(
         }
     };
 
-    theory.trust_policy_mut().decay_map.insert(source.to_string(), model);
+    theory
+        .trust_policy_mut()
+        .decay_map
+        .insert(source.to_string(), model);
     Ok(())
 }
 
 /// Process a threshold directive: (threshold name value)
-fn process_threshold(
-    theory: &mut Theory,
-    args: &[SExpr],
-    line: usize,
-) -> Result<(), ParseError> {
+fn process_threshold(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
     if args.len() != 2 {
         return Err(ParseError::ParserError {
             line,
@@ -579,7 +577,10 @@ fn process_threshold(
         });
     }
 
-    theory.trust_policy_mut().thresholds.insert(name.to_string(), value);
+    theory
+        .trust_policy_mut()
+        .thresholds
+        .insert(name.to_string(), value);
     Ok(())
 }
 
@@ -1419,7 +1420,8 @@ mod tests {
 
     #[test]
     fn test_parse_trusts_multiple() {
-        let input = "(trusts agent:coder 0.9)\n(trusts agent:security 0.95)\n(trusts system:policy 1.0)";
+        let input =
+            "(trusts agent:coder 0.9)\n(trusts agent:security 0.95)\n(trusts system:policy 1.0)";
         let theory = parse_spl(input).unwrap();
         assert_eq!(theory.trust_policy().get_trust("agent:coder"), 0.9);
         assert_eq!(theory.trust_policy().get_trust("agent:security"), 0.95);
@@ -1430,29 +1432,47 @@ mod tests {
     fn test_parse_trusts_invalid_value() {
         let err = parse_spl("(trusts agent:coder 1.5)").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("[0.0, 1.0]"), "Should reject out-of-range value, got: {msg}");
+        assert!(
+            msg.contains("[0.0, 1.0]"),
+            "Should reject out-of-range value, got: {msg}"
+        );
     }
 
     #[test]
     fn test_parse_trusts_not_a_number() {
         let err = parse_spl("(trusts agent:coder abc)").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("number"), "Should reject non-numeric value, got: {msg}");
+        assert!(
+            msg.contains("number"),
+            "Should reject non-numeric value, got: {msg}"
+        );
     }
 
     #[test]
     fn test_parse_threshold_directive() {
         let theory = parse_spl("(threshold action 0.7)").unwrap();
-        assert_eq!(theory.trust_policy().is_above_threshold(0.8, "action"), Some(true));
-        assert_eq!(theory.trust_policy().is_above_threshold(0.6, "action"), Some(false));
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.8, "action"),
+            Some(true)
+        );
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "action"),
+            Some(false)
+        );
     }
 
     #[test]
     fn test_parse_threshold_multiple() {
         let input = "(threshold action 0.7)\n(threshold warn 0.5)";
         let theory = parse_spl(input).unwrap();
-        assert_eq!(theory.trust_policy().is_above_threshold(0.6, "action"), Some(false));
-        assert_eq!(theory.trust_policy().is_above_threshold(0.6, "warn"), Some(true));
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "action"),
+            Some(false)
+        );
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "warn"),
+            Some(true)
+        );
     }
 
     #[test]
@@ -1480,7 +1500,10 @@ mod tests {
     fn test_parse_decays_unknown_model() {
         let err = parse_spl("(decays agent:x quadratic 1.0)").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("Unknown decay model"), "Should reject unknown model, got: {msg}");
+        assert!(
+            msg.contains("Unknown decay model"),
+            "Should reject unknown model, got: {msg}"
+        );
     }
 
     #[test]
@@ -1497,27 +1520,39 @@ mod tests {
         assert_eq!(theory.rule_count(), 2);
         assert_eq!(theory.trust_policy().get_trust("agent:coder"), 0.9);
         assert_eq!(theory.trust_policy().get_trust("agent:security"), 0.95);
-        assert_eq!(theory.trust_policy().is_above_threshold(0.8, "action"), Some(true));
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.8, "action"),
+            Some(true)
+        );
     }
 
     #[test]
     fn test_trusts_missing_args() {
         let err = parse_spl("(trusts agent:coder)").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("two arguments"), "Should require source + value, got: {msg}");
+        assert!(
+            msg.contains("two arguments"),
+            "Should require source + value, got: {msg}"
+        );
     }
 
     #[test]
     fn test_threshold_missing_args() {
         let err = parse_spl("(threshold action)").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("two arguments"), "Should require name + value, got: {msg}");
+        assert!(
+            msg.contains("two arguments"),
+            "Should require name + value, got: {msg}"
+        );
     }
 
     #[test]
     fn test_decays_missing_args() {
         let err = parse_spl("(decays agent:x exponential)").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("at least"), "Should require source + model + param, got: {msg}");
+        assert!(
+            msg.contains("at least"),
+            "Should require source + model + param, got: {msg}"
+        );
     }
 }

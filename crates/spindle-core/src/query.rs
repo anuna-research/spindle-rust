@@ -16,9 +16,9 @@ use crate::literal::Literal;
 use crate::pipeline::PrepareOptions;
 use crate::reason::{reason, reason_with_options};
 use crate::rule::{Rule, RuleType};
+use crate::theory::MetaValue;
 use crate::theory::Theory;
 use crate::trust::{TrustPolicy, TrustValue};
-use crate::theory::MetaValue;
 
 // =============================================================================
 // QUERY RESULT STRUCTURES
@@ -133,12 +133,12 @@ impl TrustFilter {
 
         // Get source from rule metadata
         let source_id = rule_label.and_then(|label| {
-            theory.get_meta(label).and_then(|meta| {
-                match meta.properties.get("source") {
+            theory
+                .get_meta(label)
+                .and_then(|meta| match meta.properties.get("source") {
                     Some(MetaValue::String(s)) => Some(s.as_str()),
                     _ => None,
-                }
-            })
+                })
         });
 
         // Check source pattern
@@ -2202,9 +2202,7 @@ mod tests {
             .with_trust("agent:trusted", 0.9)
             .with_trust("agent:untrusted", 0.3);
 
-        let filter = TrustFilter::new()
-            .with_min_degree(0.7)
-            .with_policy(policy);
+        let filter = TrustFilter::new().with_min_degree(0.7).with_policy(policy);
 
         let mut theory = Theory::new();
         theory.add_fact("a");
@@ -2213,16 +2211,14 @@ mod tests {
         theory.add_meta_string(&labels[0], "source", "agent:trusted");
         theory.add_meta_string(&labels[1], "source", "agent:untrusted");
 
-        assert!(filter.passes(&theory, Some(&labels[0])));  // 0.9 >= 0.7
+        assert!(filter.passes(&theory, Some(&labels[0]))); // 0.9 >= 0.7
         assert!(!filter.passes(&theory, Some(&labels[1]))); // 0.3 < 0.7
     }
 
     #[test]
     fn test_trust_filter_source_pattern() {
         let policy = TrustPolicy::new(0.5);
-        let filter = TrustFilter::new()
-            .with_source("agent:")
-            .with_policy(policy);
+        let filter = TrustFilter::new().with_source("agent:").with_policy(policy);
 
         let mut theory = Theory::new();
         theory.add_fact("a");
@@ -2231,7 +2227,7 @@ mod tests {
         theory.add_meta_string(&labels[0], "source", "agent:coder");
         theory.add_meta_string(&labels[1], "source", "system:policy");
 
-        assert!(filter.passes(&theory, Some(&labels[0])));  // matches "agent:"
+        assert!(filter.passes(&theory, Some(&labels[0]))); // matches "agent:"
         assert!(!filter.passes(&theory, Some(&labels[1]))); // doesn't match "agent:"
     }
 
@@ -2265,7 +2261,7 @@ mod tests {
         theory.add_meta_string(&labels[1], "source", "agent:low");
         theory.add_meta_string(&labels[2], "source", "system:policy");
 
-        assert!(filter.passes(&theory, Some(&labels[0])));  // agent: match + 0.9 >= 0.5
+        assert!(filter.passes(&theory, Some(&labels[0]))); // agent: match + 0.9 >= 0.5
         assert!(!filter.passes(&theory, Some(&labels[1]))); // agent: match + 0.3 < 0.5
         assert!(!filter.passes(&theory, Some(&labels[2]))); // system: no match
     }

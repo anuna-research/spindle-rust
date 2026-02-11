@@ -36,8 +36,8 @@ use nom::{
     sequence::{delimited, terminated},
 };
 
-use spindle_core::{Literal, Rule, RuleType, Superiority, Theory};
 use spindle_core::trust::DecayModel;
+use spindle_core::{Literal, Rule, RuleType, Superiority, Theory};
 
 use crate::ParseError;
 
@@ -171,7 +171,10 @@ fn parse_directive(theory: &mut Theory, line: &str, line_num: usize) -> Result<(
             let source = parts[1];
             let value: f64 = parts[2].parse().map_err(|_| ParseError::ParserError {
                 line: line_num,
-                message: format!("@trust value must be a number in [0.0, 1.0], got: {}", parts[2]),
+                message: format!(
+                    "@trust value must be a number in [0.0, 1.0], got: {}",
+                    parts[2]
+                ),
                 format: crate::error::ParserFormat::Dfl,
             })?;
             if !(0.0..=1.0).contains(&value) {
@@ -181,7 +184,10 @@ fn parse_directive(theory: &mut Theory, line: &str, line_num: usize) -> Result<(
                     format: crate::error::ParserFormat::Dfl,
                 });
             }
-            theory.trust_policy_mut().trust_map.insert(source.to_string(), value);
+            theory
+                .trust_policy_mut()
+                .trust_map
+                .insert(source.to_string(), value);
             Ok(())
         }
         Some("@decay") => {
@@ -200,18 +206,27 @@ fn parse_directive(theory: &mut Theory, line: &str, line_num: usize) -> Result<(
                 format: crate::error::ParserFormat::Dfl,
             })?;
             let model = match model_name {
-                "exponential" => DecayModel::Exponential { half_life_secs: param },
-                "linear" => DecayModel::Linear { rate_per_sec: param },
+                "exponential" => DecayModel::Exponential {
+                    half_life_secs: param,
+                },
+                "linear" => DecayModel::Linear {
+                    rate_per_sec: param,
+                },
                 "step" => DecayModel::StepFunction { cutoff_secs: param },
                 _ => {
                     return Err(ParseError::ParserError {
                         line: line_num,
-                        message: format!("Unknown decay model: {model_name}. Expected: exponential, linear, or step"),
+                        message: format!(
+                            "Unknown decay model: {model_name}. Expected: exponential, linear, or step"
+                        ),
                         format: crate::error::ParserFormat::Dfl,
                     });
                 }
             };
-            theory.trust_policy_mut().decay_map.insert(source.to_string(), model);
+            theory
+                .trust_policy_mut()
+                .decay_map
+                .insert(source.to_string(), model);
             Ok(())
         }
         Some("@threshold") => {
@@ -225,7 +240,10 @@ fn parse_directive(theory: &mut Theory, line: &str, line_num: usize) -> Result<(
             let name = parts[1];
             let value: f64 = parts[2].parse().map_err(|_| ParseError::ParserError {
                 line: line_num,
-                message: format!("@threshold value must be a number in [0.0, 1.0], got: {}", parts[2]),
+                message: format!(
+                    "@threshold value must be a number in [0.0, 1.0], got: {}",
+                    parts[2]
+                ),
                 format: crate::error::ParserFormat::Dfl,
             })?;
             if !(0.0..=1.0).contains(&value) {
@@ -235,7 +253,10 @@ fn parse_directive(theory: &mut Theory, line: &str, line_num: usize) -> Result<(
                     format: crate::error::ParserFormat::Dfl,
                 });
             }
-            theory.trust_policy_mut().thresholds.insert(name.to_string(), value);
+            theory
+                .trust_policy_mut()
+                .thresholds
+                .insert(name.to_string(), value);
             Ok(())
         }
         Some(directive) => Err(ParseError::ParserError {
@@ -337,16 +358,28 @@ r2 > r1
     fn test_dfl_trust_invalid_value() {
         let err = parse_dfl("@trust agent:coder 1.5").unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("[0.0, 1.0]"), "Should reject out-of-range, got: {msg}");
+        assert!(
+            msg.contains("[0.0, 1.0]"),
+            "Should reject out-of-range, got: {msg}"
+        );
     }
 
     #[test]
     fn test_dfl_threshold_directive() {
         let input = "@threshold action 0.7\n@threshold warn 0.5";
         let theory = parse_dfl(input).unwrap();
-        assert_eq!(theory.trust_policy().is_above_threshold(0.8, "action"), Some(true));
-        assert_eq!(theory.trust_policy().is_above_threshold(0.6, "action"), Some(false));
-        assert_eq!(theory.trust_policy().is_above_threshold(0.6, "warn"), Some(true));
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.8, "action"),
+            Some(true)
+        );
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "action"),
+            Some(false)
+        );
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "warn"),
+            Some(true)
+        );
     }
 
     #[test]
@@ -393,7 +426,10 @@ r2 > r1
         assert_eq!(theory.rule_count(), 3);
         assert_eq!(theory.superiorities().len(), 1);
         assert_eq!(theory.trust_policy().get_trust("agent:coder"), 0.9);
-        assert_eq!(theory.trust_policy().is_above_threshold(0.8, "action"), Some(true));
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.8, "action"),
+            Some(true)
+        );
     }
 
     #[test]
