@@ -13,7 +13,7 @@ In multi-agent and multi-source environments, not all information is equally rel
 - **Threshold evaluation**: Named thresholds determine whether a conclusion is actionable
 - **Multi-perspective evaluation**: Different trust policies can evaluate the same derivation differently
 - **Trust decay**: Time-based trust adjustment with exponential, linear, and step-function models
-- **Trust directives**: Declarative trust configuration in both SPL and DFL formats
+- **Trust directives**: Declarative trust configuration in SPL format
 - **Pipeline integration**: Automatic trust-weighted conclusions from the reasoning pipeline
 - **Trust-filtered queries**: Filter reasoning results by source and minimum trust degree
 - **CLI trust output**: Display trust weights alongside conclusions with `--trust`
@@ -220,53 +220,6 @@ Defines a named threshold for decision-making:
   (normally dev1 tests_pass code_compiles))
 
 (prefer sec1 dev1)
-```
-
-## Trust Directives in DFL
-
-DFL uses `@`-prefixed directives for trust configuration.
-
-### `@trust source value`
-
-```
-@trust agent:security 0.95
-@trust agent:coder 0.9
-@trust system:policy 1.0
-```
-
-### `@decay source model param`
-
-```
-@decay agent:sensor exponential 3600.0
-@decay agent:temp linear 0.001
-@decay agent:ephemeral step 86400.0
-```
-
-Supported models: `exponential`, `linear`, `step`.
-
-### `@threshold name value`
-
-```
-@threshold action 0.7
-@threshold warn 0.5
-```
-
-### Complete DFL Example
-
-```
-# Trust configuration
-@trust agent:security 0.95
-@trust agent:coder 0.9
-@decay agent:sensor exponential 3600.0
-@threshold action 0.7
-@threshold warn 0.5
-
-# Rules
-f1: >> bird
-f2: >> penguin
-r1: bird => flies
-r2: penguin => -flies
-r2 > r1
 ```
 
 ## Decay Models
@@ -733,23 +686,6 @@ Each conclusion shows:
 
 Without `--trust`, conclusions display in the standard format without trust information.
 
-### DFL Example
-
-```bash
-spindle reason --trust theory.dfl
-```
-
-Where `theory.dfl` contains:
-
-```
-@trust agent:security 0.95
-@trust agent:coder 0.9
-@threshold action 0.7
-
-f1: >> bird
-r1: bird => flies
-```
-
 ## Trust-Filtered Queries
 
 The `TrustFilter` struct allows filtering reasoning results by minimum trust degree and source pattern.
@@ -813,7 +749,7 @@ for lr in &learned {
 }
 ```
 
-### Petri Net to DFL with Metrics
+### Petri Net Mining with Metrics
 
 ```rust
 use spindle_core::mining::petri_net_to_dfl;

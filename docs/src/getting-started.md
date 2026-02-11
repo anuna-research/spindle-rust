@@ -27,12 +27,12 @@ This installs the `spindle` command to your Cargo bin directory.
 Create a file called `hello.spl`:
 
 ```lisp
-# Facts
-f1: >> bird
+; Facts
+(given bird)
 
-# Rules
-r1: bird => flies
-r2: bird => has_feathers
+; Rules
+(normally r1 bird flies)
+(normally r2 bird has_feathers)
 ```
 
 Run it:
@@ -66,18 +66,18 @@ Output:
 Create `penguin.spl`:
 
 ```lisp
-# Tweety is a bird and a penguin
-f1: >> bird
-f2: >> penguin
+; Tweety is a bird and a penguin
+(given bird)
+(given penguin)
 
-# Birds typically fly
-r1: bird => flies
+; Birds typically fly
+(normally r1 bird flies)
 
-# Penguins typically don't fly
-r2: penguin => -flies
+; Penguins typically don't fly
+(normally r2 penguin (not flies))
 
-# Penguin rule is more specific
-r2 > r1
+; Penguin rule is more specific
+(prefer r2 r1)
 ```
 
 Run it:
@@ -100,29 +100,6 @@ Output:
 ```
 
 Key result: `+d -flies` - Tweety defeasibly doesn't fly because the penguin rule (`r2`) beats the bird rule (`r1`).
-
-## Using SPL Format
-
-The same theory in SPL (Spindle Lisp) format, `penguin.spl`:
-
-```lisp
-; Facts
-(given bird)
-(given penguin)
-
-; Rules
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-
-; Superiority
-(prefer r2 r1)
-```
-
-Run it:
-
-```bash
-spindle reason penguin.spl
-```
 
 ## CLI Options
 
@@ -180,6 +157,5 @@ fn main() {
 ## Next Steps
 
 - [Concepts](concepts.md) - Understand defeasible logic fundamentals
-- [SPL Reference](reference/spl.md) - Complete SPL syntax
 - [SPL Reference](reference/spl.md) - Complete SPL syntax
 - [Examples](guides/grounding.md) - Advanced examples with variables

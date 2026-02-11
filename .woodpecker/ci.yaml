@@ -41,3 +41,19 @@ steps:
       - rustup target add wasm32-unknown-unknown
       - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - cd crates/spindle-wasm && wasm-pack build --target web --release
+
+  - name: deploy-docs
+    image: node:22-bookworm
+    when:
+      - event: push
+        branch: main
+        path: "docs/**"
+    environment:
+      CLOUDFLARE_API_TOKEN:
+        from_secret: cf_api_token
+      CLOUDFLARE_ACCOUNT_ID:
+        from_secret: cf_account_id
+    commands:
+      - curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.51/mdbook-v0.4.51-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C /usr/local/bin
+      - mdbook build docs
+      - npx wrangler pages deploy docs/book --project-name=spindle-docs --commit-dirty=true

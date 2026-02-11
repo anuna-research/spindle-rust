@@ -237,7 +237,6 @@ The CLI auto-detects format by extension:
 
 | Extension | Format |
 |-----------|--------|
-| `.spl` | SPL (Defeasible Logic Format) |
 | `.spl` | SPL (Spindle Lisp) |
 
 ## Exit Codes

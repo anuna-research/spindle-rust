@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-5ca9790b.js";
+            window.path_to_searchindex_js = "searchindex-d375d7c9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-78568b9e.js"></script>
@@ -188,14 +188,14 @@
 </ul>
 <h2 id="what-is-defeasible-logic"><a class="header" href="#what-is-defeasible-logic">What is Defeasible Logic?</a></h2>
 <p>Defeasible logic is a <strong>non-monotonic reasoning</strong> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.</p>
-<pre><code class="language-lisp"># The classic "Tweety" example
-f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
+<pre><code class="language-lisp">; The classic "Tweety" example
+(given bird)
+(given penguin)
 
-r1: bird =&gt; flies        # Birds typically fly
-r2: penguin =&gt; -flies    # Penguins don't fly
+(normally r1 bird flies)           ; Birds typically fly
+(normally r2 penguin (not flies))  ; Penguins don't fly
 
-r2 &gt; r1                  # Penguin rule beats bird rule
+(prefer r2 r1)                     ; Penguin rule beats bird rule
 </code></pre>
 <p><strong>Result:</strong> <code>-flies</code> is provable (Tweety doesn’t fly).</p>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
@@ -206,7 +206,7 @@ r2 &gt; r1                  # Penguin rule beats bird rule
 <li><strong>First-order variables:</strong> Datalog-style grounding with <code>?x</code> syntax</li>
 <li><strong>Query operators:</strong> what-if, why-not, and abduction</li>
 <li><strong>Trust-aware reasoning:</strong> source attribution and weighted conclusions</li>
-<li><strong>Two input formats:</strong> SPL (textual) and SPL (Lisp-based)</li>
+<li><strong>SPL format:</strong> Lisp-based input with variables, temporal, and trust directives</li>
 <li><strong>WebAssembly support:</strong> run in browsers and Node.js</li>
 </ul>
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
@@ -247,7 +247,7 @@ spindle-parser = { path = "crates/spindle-parser" }
 </thead>
 <tbody>
 <tr><td><code>spindle-core</code></td><td>Core reasoning engine</td></tr>
-<tr><td><code>spindle-parser</code></td><td>SPL format parsers</td></tr>
+<tr><td><code>spindle-parser</code></td><td>SPL format parser</td></tr>
 <tr><td><code>spindle-cli</code></td><td>Command-line interface</td></tr>
 <tr><td><code>spindle-wasm</code></td><td>WebAssembly bindings</td></tr>
 </tbody>
@@ -277,12 +277,12 @@ cargo build --release
 <p>This installs the <code>spindle</code> command to your Cargo bin directory.</p>
 <h2 id="your-first-theory"><a class="header" href="#your-first-theory">Your First Theory</a></h2>
 <p>Create a file called <code>hello.spl</code>:</p>
-<pre><code class="language-lisp"># Facts
-f1: &gt;&gt; bird
+<pre><code class="language-lisp">; Facts
+(given bird)
 
-# Rules
-r1: bird =&gt; flies
-r2: bird =&gt; has_feathers
+; Rules
+(normally r1 bird flies)
+(normally r2 bird has_feathers)
 </code></pre>
 <p>Run it:</p>
 <pre><code class="language-bash">spindle reason hello.spl
@@ -311,18 +311,18 @@ r2: bird =&gt; has_feathers
 </div>
 <h2 id="the-penguin-example"><a class="header" href="#the-penguin-example">The Penguin Example</a></h2>
 <p>Create <code>penguin.spl</code>:</p>
-<pre><code class="language-lisp"># Tweety is a bird and a penguin
-f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
+<pre><code class="language-lisp">; Tweety is a bird and a penguin
+(given bird)
+(given penguin)
 
-# Birds typically fly
-r1: bird =&gt; flies
+; Birds typically fly
+(normally r1 bird flies)
 
-# Penguins typically don't fly
-r2: penguin =&gt; -flies
+; Penguins typically don't fly
+(normally r2 penguin (not flies))
 
-# Penguin rule is more specific
-r2 &gt; r1
+; Penguin rule is more specific
+(prefer r2 r1)
 </code></pre>
 <p>Run it:</p>
 <pre><code class="language-bash">spindle reason penguin.spl
@@ -338,22 +338,6 @@ r2 &gt; r1
 -d flies
 </code></pre>
 <p>Key result: <code>+d -flies</code> - Tweety defeasibly doesn’t fly because the penguin rule (<code>r2</code>) beats the bird rule (<code>r1</code>).</p>
-<h2 id="using-spl-format"><a class="header" href="#using-spl-format">Using SPL Format</a></h2>
-<p>The same theory in SPL (Spindle Lisp) format, <code>penguin.spl</code>:</p>
-<pre><code class="language-lisp">; Facts
-(given bird)
-(given penguin)
-
-; Rules
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-
-; Superiority
-(prefer r2 r1)
-</code></pre>
-<p>Run it:</p>
-<pre><code class="language-bash">spindle reason penguin.spl
-</code></pre>
 <h2 id="cli-options"><a class="header" href="#cli-options">CLI Options</a></h2>
 <pre><code class="language-bash"># Show only positive conclusions
 spindle reason --positive penguin.spl
@@ -399,7 +383,6 @@ fn main() {
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
 <li><a href="#concepts">Concepts</a> - Understand defeasible logic fundamentals</li>
-<li><a href="#spl-format-reference">SPL Reference</a> - Complete SPL syntax</li>
 <li><a href="#spl-format-reference">SPL Reference</a> - Complete SPL syntax</li>
 <li><a href="#variables-and-grounding">Examples</a> - Advanced examples with variables</li>
 </ul>
@@ -1115,25 +1098,6 @@ inf                              ; Positive infinity
 (meta r1 (description "Birds typically fly"))
 (meta r3 (description "Penguins are an exception"))
 </code></pre>
-<h2 id="spl-comparison"><a class="header" href="#spl-comparison">SPL Comparison</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Concept</th><th>SPL</th><th>SPL</th></tr>
-</thead>
-<tbody>
-<tr><td>Fact</td><td><code>f1: &gt;&gt; bird</code></td><td><code>(given bird)</code></td></tr>
-<tr><td>Strict</td><td><code>r1: a -&gt; b</code></td><td><code>(always r1 a b)</code></td></tr>
-<tr><td>Defeasible</td><td><code>r1: a =&gt; b</code></td><td><code>(normally r1 a b)</code></td></tr>
-<tr><td>Defeater</td><td><code>d1: a ~&gt; b</code></td><td><code>(except d1 a b)</code></td></tr>
-<tr><td>Superiority</td><td><code>r2 &gt; r1</code></td><td><code>(prefer r2 r1)</code></td></tr>
-<tr><td>Negation</td><td><code>-flies</code></td><td><code>(not flies)</code></td></tr>
-<tr><td>Conjunction</td><td><code>a, b =&gt; c</code></td><td><code>(normally (and a b) c)</code></td></tr>
-<tr><td>Variables</td><td>Not supported</td><td><code>?x</code>, <code>?y</code></td></tr>
-<tr><td>Predicates</td><td>Not supported</td><td><code>(parent ?x ?y)</code></td></tr>
-</tbody>
-</table>
-</div>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
 <p>The <code>spindle</code> command-line tool for reasoning about defeasible logic theories.</p>
@@ -1309,7 +1273,6 @@ spindle --json validate --stdin &lt; examples/penguin.spl
 <tr><th>Extension</th><th>Format</th></tr>
 </thead>
 <tbody>
-<tr><td><code>.spl</code></td><td>SPL (Defeasible Logic Format)</td></tr>
 <tr><td><code>.spl</code></td><td>SPL (Spindle Lisp)</td></tr>
 </tbody>
 </table>
@@ -2026,6 +1989,11 @@ set.insert(pay.literal_id());
 <li><strong>Partial defeat (diminishment)</strong>: Defeaters can reduce a conclusion’s trust without fully defeating it</li>
 <li><strong>Threshold evaluation</strong>: Named thresholds determine whether a conclusion is actionable</li>
 <li><strong>Multi-perspective evaluation</strong>: Different trust policies can evaluate the same derivation differently</li>
+<li><strong>Trust decay</strong>: Time-based trust adjustment with exponential, linear, and step-function models</li>
+<li><strong>Trust directives</strong>: Declarative trust configuration in SPL format</li>
+<li><strong>Pipeline integration</strong>: Automatic trust-weighted conclusions from the reasoning pipeline</li>
+<li><strong>Trust-filtered queries</strong>: Filter reasoning results by source and minimum trust degree</li>
+<li><strong>CLI trust output</strong>: Display trust weights alongside conclusions with <code>--trust</code></li>
 </ul>
 <h2 id="source-attribution-and-claims"><a class="header" href="#source-attribution-and-claims">Source Attribution and Claims</a></h2>
 <h3 id="source-identifiers"><a class="header" href="#source-identifiers">Source Identifiers</a></h3>
@@ -2152,6 +2120,109 @@ assert_eq!(policy.get_trust("unknown_agent"), 0.5);
 </tbody>
 </table>
 </div>
+<h2 id="trust-directives-in-spl"><a class="header" href="#trust-directives-in-spl">Trust Directives in SPL</a></h2>
+<p>Trust policies can be declared directly in SPL source files using three directive forms.</p>
+<h3 id="trusts-source-value"><a class="header" href="#trusts-source-value"><code>(trusts source value)</code></a></h3>
+<p>Assigns a trust value to a source identifier:</p>
+<pre><code class="language-lisp">(trusts agent:security 0.95)
+(trusts agent:coder 0.9)
+(trusts system:policy 1.0)
+(trusts external:api 0.6)
+</code></pre>
+<p>Values must be in the range <code>[0.0, 1.0]</code>.</p>
+<h3 id="decays-source-model-param"><a class="header" href="#decays-source-model-param"><code>(decays source model param)</code></a></h3>
+<p>Attaches a time-based decay model to a source. The decay model reduces trust as assertions age:</p>
+<pre><code class="language-lisp">; Trust halves every hour (3600 seconds)
+(decays agent:sensor exponential 3600.0)
+
+; Trust decreases at 0.001 per second
+(decays agent:temp linear 0.001)
+
+; Trust drops to zero after 24 hours
+(decays agent:ephemeral step 86400.0)
+</code></pre>
+<p>See <a href="#decay-models">Decay Models</a> for formula details.</p>
+<h3 id="threshold-name-value"><a class="header" href="#threshold-name-value"><code>(threshold name value)</code></a></h3>
+<p>Defines a named threshold for decision-making:</p>
+<pre><code class="language-lisp">(threshold action 0.7)
+(threshold warn 0.5)
+(threshold log 0.3)
+</code></pre>
+<h3 id="complete-spl-example"><a class="header" href="#complete-spl-example">Complete SPL Example</a></h3>
+<pre><code class="language-lisp">; Trust configuration
+(trusts agent:security 0.95)
+(trusts agent:coder 0.9)
+(decays agent:sensor exponential 3600.0)
+(threshold action 0.7)
+(threshold warn 0.5)
+
+; Claims from sources
+(claims agent:security
+  :at "2026-01-20T09:00:00Z"
+  (given vulnerability_detected)
+  (normally sec1 vulnerability_detected security_risk))
+
+(claims agent:coder
+  :at "2026-01-20T09:30:00Z"
+  (given tests_pass)
+  (normally dev1 tests_pass code_compiles))
+
+(prefer sec1 dev1)
+</code></pre>
+<h2 id="decay-models"><a class="header" href="#decay-models">Decay Models</a></h2>
+<p>Decay models compute a time-dependent multiplier in <code>[0.0, 1.0]</code> that is applied to a source’s base trust value. This models the intuition that older assertions become less trustworthy over time.</p>
+<h3 id="exponential-decay"><a class="header" href="#exponential-decay">Exponential Decay</a></h3>
+<pre><code>multiplier = 0.5 ^ (age_secs / half_life_secs)
+</code></pre>
+<p>After one half-life, trust is halved. After two half-lives, trust is quartered. Trust approaches zero asymptotically.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::trust::{DecayModel, TrustPolicy};
+
+let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:sensor", 0.9)
+    .with_decay("agent:sensor", DecayModel::Exponential { half_life_secs: 3600.0 });
+
+// At age 0: effective trust = 0.9
+assert_eq!(policy.get_effective_trust("agent:sensor", 0.0), 0.9);
+
+// At 1 hour: effective trust = 0.9 * 0.5 = 0.45
+let at_1h = policy.get_effective_trust("agent:sensor", 3600.0);
+assert!((at_1h - 0.45).abs() &lt; 1e-10);
+<span class="boring">}</span></code></pre>
+<h3 id="linear-decay"><a class="header" href="#linear-decay">Linear Decay</a></h3>
+<pre><code>multiplier = max(1.0 - rate_per_sec * age_secs, 0.0)
+</code></pre>
+<p>Trust decreases at a constant rate per second, reaching zero at <code>1.0 / rate</code> seconds.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:temp", 1.0)
+    .with_decay("agent:temp", DecayModel::Linear { rate_per_sec: 0.001 });
+
+// At 500 seconds: 1.0 * (1.0 - 0.001 * 500) = 0.5
+let at_500s = policy.get_effective_trust("agent:temp", 500.0);
+assert!((at_500s - 0.5).abs() &lt; 1e-10);
+
+// At 1500 seconds: fully decayed to 0.0
+assert_eq!(policy.get_effective_trust("agent:temp", 1500.0), 0.0);
+<span class="boring">}</span></code></pre>
+<h3 id="step-function"><a class="header" href="#step-function">Step Function</a></h3>
+<pre><code>multiplier = 1.0 if age_secs &lt; cutoff_secs, else 0.0
+</code></pre>
+<p>Trust is full until the cutoff, then drops to zero instantly. Useful for time-limited credentials or ephemeral assertions.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:session", 0.9)
+    .with_decay("agent:session", DecayModel::StepFunction { cutoff_secs: 86400.0 });
+
+// Before cutoff: full trust
+assert_eq!(policy.get_effective_trust("agent:session", 100.0), 0.9);
+
+// At cutoff: zero trust
+assert_eq!(policy.get_effective_trust("agent:session", 86400.0), 0.0);
+<span class="boring">}</span></code></pre>
 <h2 id="weakest-link-trust-model"><a class="header" href="#weakest-link-trust-model">Weakest-Link Trust Model</a></h2>
 <p>The trust degree of a derived conclusion equals the <strong>minimum trust value</strong> encountered along its entire derivation chain. This is the “weakest-link” model: a conclusion is only as trustworthy as the least trusted step that produced it.</p>
 <h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
@@ -2423,6 +2494,140 @@ Diminishers:
 assert_eq!(explanation.final_degree, 0.0);
 assert!(explanation.derivation_tree.is_none());
 <span class="boring">}</span></code></pre>
+<h2 id="pipeline-integration"><a class="header" href="#pipeline-integration">Pipeline Integration</a></h2>
+<p>The reasoning pipeline can automatically compute trust-weighted conclusions after reasoning. The <code>compute_weighted_conclusions</code> function examines each conclusion’s derivation rule, looks up the source metadata, and applies the theory’s trust policy.</p>
+<h3 id="rust-api"><a class="header" href="#rust-api">Rust API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{prepare, PrepareOptions, compute_weighted_conclusions};
+
+// Parse a theory with trust directives
+let theory = spindle_parser::parse_spl(r#"
+    (trusts agent:security 0.95)
+    (trusts agent:coder 0.9)
+    (threshold action 0.7)
+
+    (claims agent:security
+      (given vulnerability_detected)
+      (normally sec1 vulnerability_detected security_risk))
+"#).unwrap();
+
+// Run the pipeline
+let opts = PrepareOptions::default();
+let result = prepare(&amp;theory, opts).unwrap();
+
+// Reason
+let conclusions = spindle_core::reason::reason_prepared(&amp;result.theory).unwrap();
+
+// Compute trust-weighted conclusions
+let policy = result.theory.trust_policy();
+let weighted = compute_weighted_conclusions(&amp;conclusions, &amp;result.theory, policy);
+
+for wc in &amp;weighted {
+    println!("{}: trust={:.2}, sources={:?}",
+        wc.literal, wc.degree,
+        wc.sources.iter().map(|s| &amp;s.id).collect::&lt;Vec&lt;_&gt;&gt;());
+}
+<span class="boring">}</span></code></pre>
+<p>Each <code>WeightedConclusion</code> contains:</p>
+<ul>
+<li><code>degree</code>: Trust value from the source’s policy entry (or default)</li>
+<li><code>sources</code>: Set of contributing source identifiers</li>
+<li><code>above_threshold</code>: Pre-computed pass/fail for each named threshold</li>
+</ul>
+<h2 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h2>
+<h3 id="--trust-flag"><a class="header" href="#--trust-flag"><code>--trust</code> Flag</a></h3>
+<p>The <code>reason</code> command accepts a <code>--trust</code> flag that displays trust weights alongside conclusions:</p>
+<pre><code class="language-bash">spindle reason --trust theory.spl
+</code></pre>
+<p>Output format:</p>
+<pre><code>Conclusions:
+
+  +D bird (trust: 0.95) [agent:security]
+  +d flies (trust: 0.90) [agent:coder]
+  -d -flies (trust: 0.90) [agent:coder]
+</code></pre>
+<p>Each conclusion shows:</p>
+<ul>
+<li>The provability symbol (<code>+D</code>, <code>-D</code>, <code>+d</code>, <code>-d</code>)</li>
+<li>The literal</li>
+<li>The trust degree in parentheses</li>
+<li>The contributing sources in brackets</li>
+</ul>
+<p>Without <code>--trust</code>, conclusions display in the standard format without trust information.</p>
+<h2 id="trust-filtered-queries"><a class="header" href="#trust-filtered-queries">Trust-Filtered Queries</a></h2>
+<p>The <code>TrustFilter</code> struct allows filtering reasoning results by minimum trust degree and source pattern.</p>
+<h3 id="rust-api-1"><a class="header" href="#rust-api-1">Rust API</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::query::TrustFilter;
+use spindle_core::trust::TrustPolicy;
+
+let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:trusted", 0.9)
+    .with_trust("agent:untrusted", 0.3);
+
+// Filter: only conclusions from agent: sources with trust &gt;= 0.7
+let filter = TrustFilter::new()
+    .with_min_degree(0.7)
+    .with_source("agent:")
+    .with_policy(policy);
+
+// Check if a specific rule's conclusion passes the filter
+let passes = filter.passes(&amp;theory, Some("rule_label"));
+<span class="boring">}</span></code></pre>
+<h3 id="filter-fields"><a class="header" href="#filter-fields">Filter Fields</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>min_degree</code></td><td>Minimum trust degree for a conclusion to pass</td></tr>
+<tr><td><code>source_pattern</code></td><td>Substring match on the rule’s source metadata</td></tr>
+<tr><td><code>policy</code></td><td>Trust policy used to look up source trust values</td></tr>
+</tbody>
+</table>
+</div>
+<p>When no policy is set, all conclusions pass the filter (permissive by default).</p>
+<h2 id="mining-confidence-metrics"><a class="header" href="#mining-confidence-metrics">Mining Confidence Metrics</a></h2>
+<p>When rules are learned from process mining, each rule can be annotated with support and confidence metrics.</p>
+<h3 id="learnedrule"><a class="header" href="#learnedrule"><code>LearnedRule</code></a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::{LearnedRule, calculate_support, calculate_confidence};
+
+// Calculate support: number of traces where "submit" directly precedes "review"
+let support = calculate_support(&amp;event_log, "submit", "review");
+
+// Calculate confidence: support / total transitions from "submit"
+let confidence = calculate_confidence(&amp;event_log, "submit", "review");
+<span class="boring">}</span></code></pre>
+<h3 id="filtering-by-metrics"><a class="header" href="#filtering-by-metrics">Filtering by Metrics</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::rules_with_metrics;
+
+// Get only rules with support &gt;= 5 and confidence &gt;= 0.8
+let learned = rules_with_metrics(&amp;event_log, &amp;mined_rules, 5, 0.8);
+
+for lr in &amp;learned {
+    println!("{}", lr); // "r1 (support: 10, confidence: 0.95)"
+}
+<span class="boring">}</span></code></pre>
+<h3 id="petri-net-mining-with-metrics"><a class="header" href="#petri-net-mining-with-metrics">Petri Net Mining with Metrics</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::mining::petri_net_to_dfl;
+
+// Mine rules with minimum support=3, confidence=0.7
+let learned_rules = petri_net_to_dfl(&amp;event_log, 3, 0.7);
+
+for lr in &amp;learned_rules {
+    println!("{}: support={}, confidence={:.2}, source={}",
+        lr.rule.label, lr.support, lr.confidence, lr.source);
+}
+<span class="boring">}</span></code></pre>
 <h2 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h2>
 <h3 id="multi-agent-systems"><a class="header" href="#multi-agent-systems">Multi-Agent Systems</a></h3>
 <p>In a code review pipeline, multiple agents contribute assessments with varying trust levels:</p>
@@ -2488,13 +2693,64 @@ let degree = 0.75;
 assert_eq!(regulatory.is_above_threshold(degree, "compliant"), Some(false));
 assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
 <span class="boring">}</span></code></pre>
+<h3 id="end-to-end-example"><a class="header" href="#end-to-end-example">End-to-End Example</a></h3>
+<p>This example demonstrates the complete trust workflow from theory definition through CLI output.</p>
+<p><strong>1. Define a theory with trust directives</strong> (<code>review.spl</code>):</p>
+<pre><code class="language-lisp">; Trust configuration
+(trusts agent:security 0.95)
+(trusts agent:coder 0.85)
+(trusts agent:qa 0.80)
+(decays agent:qa exponential 86400.0)
+(threshold deploy 0.8)
+(threshold warn 0.5)
+
+; Security agent's findings
+(claims agent:security
+  :at "2026-02-01T10:00:00Z"
+  (given no_vulnerabilities)
+  (normally sec1 no_vulnerabilities security_clear))
+
+; Coder agent's results
+(claims agent:coder
+  :at "2026-02-01T10:30:00Z"
+  (given tests_pass)
+  (given lint_clean)
+  (normally dev1 (and tests_pass lint_clean) code_ready))
+
+; QA agent's assessment
+(claims agent:qa
+  :at "2026-02-01T11:00:00Z"
+  (given manual_review_ok)
+  (normally qa1 manual_review_ok qa_approved))
+
+; Deployment rule: all three must agree
+(normally deploy1
+  (and security_clear code_ready qa_approved)
+  ready_to_deploy)
+</code></pre>
+<p><strong>2. Run with trust output</strong>:</p>
+<pre><code class="language-bash">spindle reason --trust review.spl
+</code></pre>
+<p><strong>3. Output</strong>:</p>
+<pre><code>Conclusions:
+
+  +D no_vulnerabilities (trust: 0.95) [agent:security]
+  +D tests_pass (trust: 0.85) [agent:coder]
+  +D lint_clean (trust: 0.85) [agent:coder]
+  +D manual_review_ok (trust: 0.80) [agent:qa]
+  +d security_clear (trust: 0.95) [agent:security]
+  +d code_ready (trust: 0.85) [agent:coder]
+  +d qa_approved (trust: 0.80) [agent:qa]
+  +d ready_to_deploy (trust: 0.80)
+</code></pre>
+<p>The deployment conclusion (<code>ready_to_deploy</code>) has trust 0.80 — it meets the <code>deploy</code> threshold (0.8) and can proceed.</p>
 <h2 id="limitations-2"><a class="header" href="#limitations-2">Limitations</a></h2>
 <ol>
-<li><strong>Claims parsing</strong>: The <code>(claims ...)</code> SPL syntax is implemented in the SPL parser. Source attribution is available through the Rust API and via SPL <code>claims</code> blocks.</li>
-<li><strong>Static trust values</strong>: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in.</li>
+<li><strong>Static trust values</strong>: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in (use decay models for time-based adjustment).</li>
 <li><strong>Weakest-link only</strong>: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.</li>
 <li><strong>No cryptographic verification</strong>: The <code>:sig</code> metadata field is stored but not verified against any cryptographic infrastructure.</li>
 <li><strong>Floating-point precision</strong>: Trust values are <code>f64</code>, so standard floating-point precision considerations apply to boundary comparisons.</li>
+<li><strong>Decay requires reference time</strong>: Decay models need the age of assertions to be computed externally; the pipeline does not automatically track assertion timestamps for decay purposes.</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="query-operators"><a class="header" href="#query-operators">Query Operators</a></h1>
@@ -2999,7 +3255,7 @@ let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom =&gt; diagn
     .with_annotations(annots);
 <span class="boring">}</span></code></pre>
 <p>Annotations are preserved across all output formats. In natural language, <code>description</code> and <code>source</code> are printed inline. In JSON-LD, they are mapped to <code>rdfs:comment</code>, <code>prov:wasAttributedTo</code>, and <code>spindle:confidence</code> respectively.</p>
-<h2 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h2>
+<h2 id="cli-usage-1"><a class="header" href="#cli-usage-1">CLI Usage</a></h2>
 <h3 id="the-explain-command"><a class="header" href="#the-explain-command">The <code>explain</code> Command</a></h3>
 <p>Show the full derivation proof tree for a provable literal:</p>
 <pre><code class="language-bash">spindle explain "~flies" theory.spl
@@ -4888,7 +5144,7 @@ function ReasoningComponent() {
 <pre><code>spindle-rust/
 ├── crates/
 │   ├── spindle-core/     # Core reasoning engine
-│   ├── spindle-parser/   # SPL parsers
+│   ├── spindle-parser/   # SPL parser
 │   ├── spindle-cli/      # Command-line interface
 │   └── spindle-wasm/     # WebAssembly bindings
 </code></pre>
@@ -5085,7 +5341,7 @@ worklist: VecDeque`LiteralId`
 <h3 id="adding-a-new-rule-type"><a class="header" href="#adding-a-new-rule-type">Adding a New Rule Type</a></h3>
 <ol>
 <li>Add variant to <code>RuleType</code> enum</li>
-<li>Update parsers (spl.rs, spl.rs)</li>
+<li>Update parser (spl.rs)</li>
 <li>Update reasoning logic (reason.rs)</li>
 <li>Add tests</li>
 </ol>
@@ -5117,7 +5373,6 @@ worklist: VecDeque`LiteralId`
 ├── Integration tests
 │   └── End-to-end CLI/API behavior
 ├── Parser tests
-│   ├── spl.rs
 │   └── spl.rs
 └── WASM tests
     └── Basic functionality

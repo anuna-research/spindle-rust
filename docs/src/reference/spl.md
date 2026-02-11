@@ -262,16 +262,3 @@ inf                              ; Positive infinity
 (meta r3 (description "Penguins are an exception"))
 ```
 
-## SPL Comparison
-
-| Concept | SPL | SPL |
-|---------|-----|-----|
-| Fact | `f1: >> bird` | `(given bird)` |
-| Strict | `r1: a -> b` | `(always r1 a b)` |
-| Defeasible | `r1: a => b` | `(normally r1 a b)` |
-| Defeater | `d1: a ~> b` | `(except d1 a b)` |
-| Superiority | `r2 > r1` | `(prefer r2 r1)` |
-| Negation | `-flies` | `(not flies)` |
-| Conjunction | `a, b => c` | `(normally (and a b) c)` |
-| Variables | Not supported | `?x`, `?y` |
-| Predicates | Not supported | `(parent ?x ?y)` |

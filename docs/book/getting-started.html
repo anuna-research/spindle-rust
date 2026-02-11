@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-5ca9790b.js";
+            window.path_to_searchindex_js = "searchindex-d375d7c9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-78568b9e.js"></script>
@@ -195,12 +195,12 @@ cargo build --release
 <p>This installs the <code>spindle</code> command to your Cargo bin directory.</p>
 <h2 id="your-first-theory"><a class="header" href="#your-first-theory">Your First Theory</a></h2>
 <p>Create a file called <code>hello.spl</code>:</p>
-<pre><code class="language-lisp"># Facts
-f1: &gt;&gt; bird
+<pre><code class="language-lisp">; Facts
+(given bird)
 
-# Rules
-r1: bird =&gt; flies
-r2: bird =&gt; has_feathers
+; Rules
+(normally r1 bird flies)
+(normally r2 bird has_feathers)
 </code></pre>
 <p>Run it:</p>
 <pre><code class="language-bash">spindle reason hello.spl
@@ -229,18 +229,18 @@ r2: bird =&gt; has_feathers
 </div>
 <h2 id="the-penguin-example"><a class="header" href="#the-penguin-example">The Penguin Example</a></h2>
 <p>Create <code>penguin.spl</code>:</p>
-<pre><code class="language-lisp"># Tweety is a bird and a penguin
-f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
+<pre><code class="language-lisp">; Tweety is a bird and a penguin
+(given bird)
+(given penguin)
 
-# Birds typically fly
-r1: bird =&gt; flies
+; Birds typically fly
+(normally r1 bird flies)
 
-# Penguins typically don't fly
-r2: penguin =&gt; -flies
+; Penguins typically don't fly
+(normally r2 penguin (not flies))
 
-# Penguin rule is more specific
-r2 &gt; r1
+; Penguin rule is more specific
+(prefer r2 r1)
 </code></pre>
 <p>Run it:</p>
 <pre><code class="language-bash">spindle reason penguin.spl
@@ -256,22 +256,6 @@ r2 &gt; r1
 -d flies
 </code></pre>
 <p>Key result: <code>+d -flies</code> - Tweety defeasibly doesn’t fly because the penguin rule (<code>r2</code>) beats the bird rule (<code>r1</code>).</p>
-<h2 id="using-spl-format"><a class="header" href="#using-spl-format">Using SPL Format</a></h2>
-<p>The same theory in SPL (Spindle Lisp) format, <code>penguin.spl</code>:</p>
-<pre><code class="language-lisp">; Facts
-(given bird)
-(given penguin)
-
-; Rules
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-
-; Superiority
-(prefer r2 r1)
-</code></pre>
-<p>Run it:</p>
-<pre><code class="language-bash">spindle reason penguin.spl
-</code></pre>
 <h2 id="cli-options"><a class="header" href="#cli-options">CLI Options</a></h2>
 <pre><code class="language-bash"># Show only positive conclusions
 spindle reason --positive penguin.spl
@@ -317,7 +301,6 @@ fn main() {
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
 <li><a href="concepts.html">Concepts</a> - Understand defeasible logic fundamentals</li>
-<li><a href="reference/spl.html">SPL Reference</a> - Complete SPL syntax</li>
 <li><a href="reference/spl.html">SPL Reference</a> - Complete SPL syntax</li>
 <li><a href="guides/grounding.html">Examples</a> - Advanced examples with variables</li>
 </ul>
