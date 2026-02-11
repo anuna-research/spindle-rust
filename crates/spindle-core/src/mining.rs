@@ -753,39 +753,40 @@ impl fmt::Display for LearnedRule {
     }
 }
 
-/// Calculate support for a transition a -> b in the event log.
-/// Support is the number of traces where a directly precedes b.
+/// Calculate support for a causal relationship a -> b.
+///
+/// Returns the number of traces (cases) where a directly precedes b at least once.
+/// Each trace contributes at most 1 to the count.
 pub fn calculate_support(log: &EventLog, a: &str, b: &str) -> usize {
     log.cases
         .iter()
-        .map(|c| {
+        .filter(|c| {
             let activities = c.activities();
             (0..activities.len().saturating_sub(1))
-                .filter(|&i| activities[i] == a && activities[i + 1] == b)
-                .count()
+                .any(|i| activities[i] == a && activities[i + 1] == b)
         })
-        .sum()
+        .count()
 }
 
-/// Calculate confidence for a transition a -> b.
-/// Confidence = support(a->b) / total transitions from a.
+/// Calculate confidence for a causal relationship a -> b.
+///
+/// Confidence = support / (number of traces where a has any outgoing transition).
+/// Both numerator and denominator are trace-level counts (each trace contributes at most 1).
 pub fn calculate_confidence(log: &EventLog, a: &str, b: &str) -> f64 {
     let support = calculate_support(log, a, b);
-    let total_a_transitions: usize = log
+    let traces_with_a_transition = log
         .cases
         .iter()
-        .map(|c| {
+        .filter(|c| {
             let activities = c.activities();
-            (0..activities.len().saturating_sub(1))
-                .filter(|&i| activities[i] == a)
-                .count()
+            (0..activities.len().saturating_sub(1)).any(|i| activities[i] == a)
         })
-        .sum();
+        .count();
 
-    if total_a_transitions == 0 {
+    if traces_with_a_transition == 0 {
         0.0
     } else {
-        support as f64 / total_a_transitions as f64
+        support as f64 / traces_with_a_transition as f64
     }
 }
 
