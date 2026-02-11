@@ -734,6 +734,14 @@ fn try_disprove_defeasible(
             continue; // attacker not applicable
         }
 
+        // Strict attackers always block — superiority cannot defeat them,
+        // mirroring the +d logic in try_prove_defeasible.
+        if attacker.rule_type == RuleType::Strict {
+            defeasible_disproven.insert(q);
+            worklist.push_back((q, false));
+            return;
+        }
+
         // Attacker s is applicable. Check: ∀t ∈ Rsd[q]: t discarded OR ¬(t > s)
         // But if any t is undecided (not discarded, not applicable), can't conclude
         let any_t_undecided = sd_rules.iter().any(|t| {
