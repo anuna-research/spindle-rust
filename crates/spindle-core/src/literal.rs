@@ -16,8 +16,64 @@ use crate::intern::{LiteralId, SymbolId, intern, resolve};
 use crate::mode::Mode;
 use crate::temporal::Temporal;
 
-/// Type alias for literal names (for backward compatibility)
-pub type LiteralName = String;
+/// A newtype wrapping `SymbolId` that represents a literal's functor name.
+///
+/// This prevents accidental misuse of a raw `SymbolId` (which could be a
+/// predicate argument, a mode name, or any other interned string) in a
+/// position that expects a literal name.  Conversion to/from `SymbolId` is
+/// available via the `From` implementations when crossing API boundaries
+/// (e.g. grounding substitutions or index keys).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[repr(transparent)]
+pub struct LiteralName(pub(crate) SymbolId);
+
+impl LiteralName {
+    /// The empty / default literal name (wraps `SymbolId::EMPTY`).
+    pub const EMPTY: LiteralName = LiteralName(SymbolId::EMPTY);
+
+    /// Create a `LiteralName` by interning the given string.
+    #[inline]
+    pub fn intern(name: &str) -> Self {
+        LiteralName(intern(name))
+    }
+
+    /// Resolve this name back to a string slice.
+    #[inline]
+    pub fn resolve(self) -> &'static str {
+        resolve(self.0)
+    }
+
+    /// Access the underlying `SymbolId`.
+    #[inline]
+    pub const fn symbol_id(self) -> SymbolId {
+        self.0
+    }
+}
+
+impl From<SymbolId> for LiteralName {
+    #[inline]
+    fn from(id: SymbolId) -> Self {
+        LiteralName(id)
+    }
+}
+
+impl From<LiteralName> for SymbolId {
+    #[inline]
+    fn from(name: LiteralName) -> Self {
+        name.0
+    }
+}
+
+impl std::fmt::Display for LiteralName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.resolve())
+    }
+}
+
+/// Type alias kept for backward compatibility with code that expects a `String`
+/// representation of a literal name.
+pub type LiteralNameString = String;
 
 /// A literal in defeasible logic
 ///
@@ -34,7 +90,7 @@ pub type LiteralName = String;
 #[derive(Debug, Clone, Default)]
 pub struct Literal {
     /// The interned name of the literal (e.g., "flies", "bird")
-    name_id: SymbolId,
+    name_id: LiteralName,
     /// Whether this literal is negated
     pub negation: bool,
     /// Modal operator (if any)
@@ -66,7 +122,7 @@ impl Literal {
     /// Create a simple positive literal
     pub fn simple(name: impl AsRef<str>) -> Self {
         Self {
-            name_id: intern(name.as_ref()),
+            name_id: LiteralName::intern(name.as_ref()),
             negation: false,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
@@ -77,7 +133,7 @@ impl Literal {
     /// Create a negated literal
     pub fn negated(name: impl AsRef<str>) -> Self {
         Self {
-            name_id: intern(name.as_ref()),
+            name_id: LiteralName::intern(name.as_ref()),
             negation: true,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
@@ -94,7 +150,7 @@ impl Literal {
         predicates: Vec<String>,
     ) -> Self {
         Self {
-            name_id: intern(name.as_ref()),
+            name_id: LiteralName::intern(name.as_ref()),
             negation,
             mode,
             temporal,
@@ -102,20 +158,23 @@ impl Literal {
         }
     }
 
-    /// Create a literal directly from interned SymbolIds (zero allocation)
+    /// Create a literal directly from interned IDs (zero allocation)
     ///
-    /// This is an optimized constructor for use when SymbolIds are already
+    /// This is an optimized constructor for use when IDs are already
     /// available, such as during grounding operations.
+    ///
+    /// Accepts anything convertible to `LiteralName` (including `SymbolId`)
+    /// for the functor name.
     #[inline]
     pub fn from_ids(
-        name_id: SymbolId,
+        name_id: impl Into<LiteralName>,
         negation: bool,
         mode: Mode,
         temporal: Temporal,
         predicate_ids: Vec<SymbolId>,
     ) -> Self {
         Self {
-            name_id,
+            name_id: name_id.into(),
             negation,
             mode,
             temporal,
@@ -139,16 +198,22 @@ impl Literal {
 
     /// Get the literal name as a string slice
     ///
-    /// This resolves the interned SymbolId back to its string.
+    /// This resolves the interned name back to its string.
     #[inline]
     pub fn name(&self) -> &'static str {
-        resolve(self.name_id)
+        self.name_id.resolve()
     }
 
-    /// Get the interned name ID (for advanced use)
+    /// Get the interned `LiteralName` for this literal.
+    #[inline]
+    pub fn literal_name(&self) -> LiteralName {
+        self.name_id
+    }
+
+    /// Get the interned name ID as a raw `SymbolId` (for advanced use / backward compat).
     #[inline]
     pub fn name_id(&self) -> SymbolId {
-        self.name_id
+        self.name_id.symbol_id()
     }
 
     /// Get predicates as strings (for display/serialization)
@@ -216,7 +281,7 @@ impl Literal {
     /// ```
     #[inline]
     pub fn name_literal_id(&self) -> LiteralId {
-        LiteralId::new(self.name_id, self.negation)
+        LiteralId::new(self.name_id.symbol_id(), self.negation)
     }
 
     /// Get the canonical name for indexing (includes negation)

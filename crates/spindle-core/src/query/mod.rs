@@ -5,21 +5,135 @@
 //! - **What-If**: Hypothetical reasoning - "What if we assumed X?"
 //! - **Why-Not**: Explanation of failures - "Why isn't X provable?"
 //! - **Abduction**: Finding hypotheses - "What facts would make X provable?"
+//!
+//! # Architecture
+//!
+//! All operators share a common [`QueryOperator`] trait that decouples query
+//! logic from the specific reasoning backend. The trait accepts a
+//! `&dyn Reasoner` (from [`crate::reason::Reasoner`]) so that operators can
+//! be tested against mock reasoners without running the full pipeline.
+//!
+//! Existing free functions ([`query`], [`what_if`], [`why_not`], [`abduce`],
+//! [`requires`]) are preserved for backward compatibility. They internally
+//! use the standard reasoning path via [`crate::reason::reason()`].
 
-use std::collections::{HashMap, HashSet};
+pub mod why_not;
+
+pub use why_not::{BlockingCondition, BlockingType, WhyNotResult, why_not};
+
 use std::fmt;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
+use crate::index::IndexedTheory;
 use crate::literal::Literal;
-use crate::pipeline::{PrepareOptions, compute_weighted_conclusions};
-use crate::reason::{reason, reason_with_options};
-use crate::rule::{Rule, RuleType};
+use crate::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
+use crate::reason::{Reasoner, reason_with_options};
 use crate::temporal::TimePoint;
 use crate::theory::MetaValue;
 use crate::theory::Theory;
 use crate::trust::{TrustPolicy, TrustValue};
+
+pub mod abduce;
+pub use abduce::{AbductionResult, AbductionSolution, abduce};
+
+pub mod requires;
+pub use requires::requires;
+
+pub mod what_if;
+pub use what_if::{HypotheticalClaim, WhatIfResult, what_if, what_if_provable};
+
+// =============================================================================
+// QUERY OPERATOR TRAIT AND SHARED TYPES
+// =============================================================================
+
+/// Arguments common to all query operators.
+///
+/// Bundles pipeline options and operator-specific limits into a single
+/// value that can be threaded through [`QueryOperator::execute`].
+#[derive(Debug, Clone)]
+pub struct QueryArgs {
+    /// Pipeline options for reasoning (temporal filtering, grounding, etc.)
+    pub prepare_options: PrepareOptions,
+    /// Maximum number of solutions (used by abduce/requires operators).
+    pub max_solutions: usize,
+}
+
+impl Default for QueryArgs {
+    fn default() -> Self {
+        Self {
+            prepare_options: PrepareOptions::default(),
+            max_solutions: 10,
+        }
+    }
+}
+
+/// A query operator that can be executed against a theory.
+///
+/// Implementors encapsulate a specific query strategy (what-if, why-not,
+/// abduction, etc.) and produce a typed result. The [`Reasoner`] parameter
+/// decouples the operator from a specific reasoning algorithm, enabling:
+///
+/// - **Mock testing**: inject a stub reasoner that returns fixed conclusions.
+/// - **Backend selection**: use standard DL(d) or scalable DL(d||) without
+///   changing operator code.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use spindle_core::query::{QueryOperator, QueryArgs};
+/// use spindle_core::reason::{Reasoner, StandardReasoner};
+/// use spindle_core::theory::Theory;
+///
+/// struct MyOperator { /* ... */ }
+///
+/// impl QueryOperator for MyOperator {
+///     type Output = bool;
+///
+///     fn execute(
+///         &self,
+///         theory: &Theory,
+///         reasoner: &dyn Reasoner,
+///         args: &QueryArgs,
+///     ) -> spindle_core::error::Result<bool> {
+///         let prepared = spindle_core::pipeline::prepare(theory, args.prepare_options.clone())?;
+///         let mut indexed = spindle_core::index::IndexedTheory::build(&prepared.theory);
+///         let conclusions = reasoner.reason(&mut indexed)?;
+///         Ok(conclusions.iter().any(|c| c.is_positive()))
+///     }
+/// }
+/// ```
+pub trait QueryOperator {
+    /// The specific result type this operator produces.
+    type Output;
+
+    /// Execute the operator against a theory using the given reasoner.
+    ///
+    /// Implementations should call [`prepare`](crate::pipeline::prepare) to
+    /// obtain a grounded/filtered theory, build an [`IndexedTheory`], and
+    /// then invoke `reasoner.reason()` to obtain conclusions.
+    fn execute(
+        &self,
+        theory: &Theory,
+        reasoner: &dyn Reasoner,
+        args: &QueryArgs,
+    ) -> Result<Self::Output>;
+}
+
+/// Helper: run reasoning on a theory using a `dyn Reasoner` and `QueryArgs`.
+///
+/// Handles the prepare -> index -> reason pipeline that most operators need.
+/// This avoids duplicating the boilerplate in every operator implementation.
+#[allow(dead_code)] // Will be used when operators are extracted in follow-up tasks.
+pub(crate) fn run_reasoning(
+    theory: &Theory,
+    reasoner: &dyn Reasoner,
+    args: &QueryArgs,
+) -> Result<Vec<Conclusion>> {
+    let prepared = prepare(theory, args.prepare_options.clone())?;
+    let mut indexed = IndexedTheory::build(&prepared.theory);
+    reasoner.reason(&mut indexed)
+}
 
 // =============================================================================
 // QUERY RESULT STRUCTURES
@@ -252,659 +366,12 @@ pub fn query_with_options(
     Ok(QueryResult::new(literal.clone(), QueryStatus::Unknown))
 }
 
-// =============================================================================
-// WHAT-IF (HYPOTHETICAL REASONING)
-// =============================================================================
-
-/// A hypothetical claim to be assumed
-#[derive(Debug, Clone)]
-pub struct HypotheticalClaim {
-    /// Source of the claim (if any)
-    pub source: Option<String>,
-    /// The claimed literal
-    pub literal: Literal,
-}
-
-impl HypotheticalClaim {
-    /// Create an anonymous hypothetical claim
-    pub fn new(literal: Literal) -> Self {
-        Self {
-            source: None,
-            literal,
-        }
-    }
-
-    /// Create a claim with source attribution
-    pub fn with_source(literal: Literal, source: impl Into<String>) -> Self {
-        Self {
-            source: Some(source.into()),
-            literal,
-        }
-    }
-}
-
-/// Result of a what-if query
-#[derive(Debug, Clone)]
-pub struct WhatIfResult {
-    /// The hypothetical claims that were assumed
-    pub hypotheticals: Vec<HypotheticalClaim>,
-    /// The query result under the hypotheticals
-    pub result: QueryResult,
-    /// New conclusions enabled by the hypotheticals
-    pub new_conclusions: Vec<Literal>,
-    /// Conclusions that changed status
-    pub changed_conclusions: Vec<(Literal, ConclusionType, ConclusionType)>,
-}
-
-impl WhatIfResult {
-    /// Check if the query succeeded under the hypotheticals
-    pub fn is_provable(&self) -> bool {
-        self.result.is_provable()
-    }
-
-    /// Get the new literals that became provable
-    pub fn newly_provable(&self) -> &[Literal] {
-        &self.new_conclusions
-    }
-}
-
-/// Global counter for unique hypothetical labels to avoid collision
-static HYP_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-#[inline]
-fn conclusion_strength(ct: ConclusionType) -> u8 {
-    match ct {
-        ConclusionType::DefinitelyProvable => 4,
-        ConclusionType::DefeasiblyProvable => 3,
-        ConclusionType::DefeasiblyNotProvable => 2,
-        ConclusionType::DefinitelyNotProvable => 1,
-    }
-}
-
-fn strongest_conclusions_by_literal(
-    conclusions: &[crate::conclusion::Conclusion],
-) -> HashMap<Literal, ConclusionType> {
-    let mut by_lit = HashMap::new();
-    for conc in conclusions {
-        by_lit
-            .entry(conc.literal.clone())
-            .and_modify(|old| {
-                if conclusion_strength(conc.conclusion_type) > conclusion_strength(*old) {
-                    *old = conc.conclusion_type;
-                }
-            })
-            .or_insert(conc.conclusion_type);
-    }
-    by_lit
-}
-
-fn next_hyp_label(theory: &Theory, unique_id: u64, start_index: usize) -> String {
-    let mut index = start_index.max(1);
-    loop {
-        let candidate = format!("__hyp_{unique_id}_{index}");
-        if theory.get_rule(&candidate).is_none() {
-            return candidate;
-        }
-        index += 1;
-    }
-}
-
-/// Perform hypothetical reasoning: "What if we assumed these facts?"
-///
-/// Creates a copy of the theory with hypothetical facts added,
-/// runs reasoning, and returns the result. The original theory is unchanged.
-pub fn what_if(
-    theory: &Theory,
-    hypotheticals: Vec<HypotheticalClaim>,
-    goal: &Literal,
-) -> Result<WhatIfResult> {
-    // Get baseline conclusions
-    let baseline = reason(theory)?;
-    let baseline_provable: HashSet<_> = baseline
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
-        .collect();
-
-    // Create modified theory with hypotheticals using unique labels
-    let unique_id = HYP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let mut modified = theory.clone();
-    for (i, hyp) in hypotheticals.iter().enumerate() {
-        let label = next_hyp_label(&modified, unique_id, i + 1);
-        let rule = Rule::fact(&label, hyp.literal.clone());
-        modified.add_rule(rule);
-    }
-
-    // Reason on modified theory (only once, not via query which reasons again)
-    let modified_conclusions = reason(&modified)?;
-
-    // Determine goal status directly from conclusions (avoids calling query->reason again)
-    let goal_complement = goal.complement();
-    let mut result = QueryResult::new(goal.clone(), QueryStatus::Unknown);
-    for conc in &modified_conclusions {
-        if conc.literal == *goal && conc.conclusion_type.is_positive() {
-            result = QueryResult::new(goal.clone(), QueryStatus::Provable)
-                .with_conclusion_type(conc.conclusion_type);
-            break;
-        }
-    }
-    if result.status == QueryStatus::Unknown {
-        for conc in &modified_conclusions {
-            if conc.literal == goal_complement && conc.conclusion_type.is_positive() {
-                result = QueryResult::new(goal.clone(), QueryStatus::Refuted);
-                break;
-            }
-        }
-    }
-
-    // Find new conclusions
-    let new_conclusions: Vec<Literal> = modified_conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive() && !baseline_provable.contains(&c.literal))
-        .map(|c| c.literal.clone())
-        .collect();
-
-    // Track changed conclusions by comparing strongest status per literal.
-    // This captures both positive->positive changes and positive->negative
-    // transitions (e.g. a literal that becomes unprovable under hypotheticals).
-    let mut changed_conclusions = Vec::new();
-    let baseline_by_lit = strongest_conclusions_by_literal(&baseline);
-    let modified_by_lit = strongest_conclusions_by_literal(&modified_conclusions);
-
-    let mut all_literals: HashSet<Literal> = baseline_by_lit.keys().cloned().collect();
-    all_literals.extend(modified_by_lit.keys().cloned());
-    for lit in all_literals {
-        if let (Some(&old_type), Some(&new_type)) =
-            (baseline_by_lit.get(&lit), modified_by_lit.get(&lit))
-            && old_type != new_type
-        {
-            changed_conclusions.push((lit, old_type, new_type));
-        }
-    }
-
-    Ok(WhatIfResult {
-        hypotheticals,
-        result,
-        new_conclusions,
-        changed_conclusions,
-    })
-}
-
-/// Convenience function: Check if a goal would be provable given hypotheticals
-pub fn what_if_provable(
-    theory: &Theory,
-    hypotheticals: Vec<HypotheticalClaim>,
-    goal: &Literal,
-) -> Result<bool> {
-    Ok(what_if(theory, hypotheticals, goal)?.is_provable())
-}
-
-// =============================================================================
-// WHY-NOT (EXPLANATION OF FAILURES)
-// =============================================================================
-
-/// Type of blocking condition
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlockingType {
-    /// Missing premise in rule body
-    MissingPremise,
-    /// Defeated by a defeater
-    Defeated,
-    /// Contradicted by opposing conclusion
-    Contradicted,
-}
-
-impl fmt::Display for BlockingType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BlockingType::MissingPremise => write!(f, "missing premise"),
-            BlockingType::Defeated => write!(f, "defeated"),
-            BlockingType::Contradicted => write!(f, "contradicted"),
-        }
-    }
-}
-
-/// A condition that blocks a derivation
-#[derive(Debug, Clone)]
-pub struct BlockingCondition {
-    /// Type of blocking
-    pub blocking_type: BlockingType,
-    /// The rule that was blocked
-    pub rule_label: String,
-    /// Missing literals (for MissingPremise)
-    pub missing_literals: Vec<Literal>,
-    /// Blocking rule (for Defeated/Contradicted)
-    pub blocking_rule: Option<String>,
-    /// Human-readable explanation
-    pub explanation: String,
-}
-
-impl BlockingCondition {
-    /// Create a missing premise blocking condition
-    pub fn missing_premise(rule_label: impl Into<String>, missing: Vec<Literal>) -> Self {
-        let missing_str: Vec<_> = missing.iter().map(|l| l.to_string()).collect();
-        Self {
-            blocking_type: BlockingType::MissingPremise,
-            rule_label: rule_label.into(),
-            missing_literals: missing,
-            blocking_rule: None,
-            explanation: format!("Missing premises: {}", missing_str.join(", ")),
-        }
-    }
-
-    /// Create a defeated blocking condition
-    pub fn defeated(rule_label: impl Into<String>, by_rule: impl Into<String>) -> Self {
-        let by = by_rule.into();
-        Self {
-            blocking_type: BlockingType::Defeated,
-            rule_label: rule_label.into(),
-            missing_literals: Vec::new(),
-            blocking_rule: Some(by.clone()),
-            explanation: format!("Defeated by rule {by}"),
-        }
-    }
-
-    /// Create a contradicted blocking condition
-    pub fn contradicted(rule_label: impl Into<String>, by_rule: impl Into<String>) -> Self {
-        let by = by_rule.into();
-        Self {
-            blocking_type: BlockingType::Contradicted,
-            rule_label: rule_label.into(),
-            missing_literals: Vec::new(),
-            blocking_rule: Some(by.clone()),
-            explanation: format!("Contradicted by {by}"),
-        }
-    }
-}
-
-/// Result of a why-not query
-#[derive(Debug, Clone)]
-pub struct WhyNotResult {
-    /// The literal queried
-    pub literal: Literal,
-    /// Rule that would derive this literal (if body was satisfied)
-    pub would_derive: Option<String>,
-    /// Conditions blocking the derivation
-    pub blocked_by: Vec<BlockingCondition>,
-}
-
-impl WhyNotResult {
-    /// Create a new why-not result
-    pub fn new(literal: Literal) -> Self {
-        Self {
-            literal,
-            would_derive: None,
-            blocked_by: Vec::new(),
-        }
-    }
-
-    /// Check if the literal is actually provable.
-    ///
-    /// A provable literal has a deriving rule but no blockers.
-    pub fn is_provable(&self) -> bool {
-        self.would_derive.is_some() && self.blocked_by.is_empty()
-    }
-
-    /// Check if there are any blocking conditions
-    pub fn has_blockers(&self) -> bool {
-        !self.blocked_by.is_empty()
-    }
-
-    /// Get missing premises from all blocking conditions
-    pub fn get_missing_premises(&self) -> Vec<&Literal> {
-        self.blocked_by
-            .iter()
-            .filter(|b| b.blocking_type == BlockingType::MissingPremise)
-            .flat_map(|b| b.missing_literals.iter())
-            .collect()
-    }
-}
-
-impl fmt::Display for WhyNotResult {
-    /// Convert to human-readable string
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_provable() {
-            write!(f, "{} is provable", self.literal)?;
-            if let Some(ref rule) = self.would_derive {
-                write!(f, " (derived by rule: {rule})")?;
-            }
-            return Ok(());
-        }
-
-        if self.blocked_by.is_empty() {
-            return write!(
-                f,
-                "{} is not provable: no rules can derive it",
-                self.literal
-            );
-        }
-
-        writeln!(f, "{} is not provable:", self.literal)?;
-
-        if let Some(ref rule) = self.would_derive {
-            writeln!(f, "  Would be derived by rule: {rule}")?;
-        }
-
-        writeln!(f, "  Blocked by:")?;
-        for bc in &self.blocked_by {
-            writeln!(f, "    - Rule {}: {}", bc.rule_label, bc.blocking_type)?;
-            writeln!(f, "      ({})", bc.explanation)?;
-        }
-        Ok(())
-    }
-}
-
-/// Explain why a literal is NOT provable
-pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
-    let conclusions = reason(theory)?;
-
-    // First check if it IS provable (then why-not doesn't apply)
-    let is_provable = conclusions
-        .iter()
-        .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
-
-    if is_provable {
-        // Return a result with would_derive taken from the conclusion's rule_label
-        let mut result = WhyNotResult::new(literal.clone());
-        result.would_derive = conclusions
-            .iter()
-            .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
-            .and_then(|c| c.rule_label.clone());
-        return Ok(result);
-    }
-
-    // Collect proven literals for checking body satisfaction
-    let proven: HashSet<_> = conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
-        .collect();
-
-    let complement = literal.complement();
-    let mut result = WhyNotResult::new(literal.clone());
-    let mut found_rule = false;
-
-    // Find rules that could derive this literal and why they don't fire
-    for rule in theory.rules() {
-        if rule.head_literal() == literal && rule.rule_type != RuleType::Defeater {
-            found_rule = true;
-
-            if result.would_derive.is_none() {
-                result.would_derive = Some(rule.label.clone());
-            }
-
-            // Check which body literals are missing
-            let missing: Vec<_> = rule
-                .body
-                .iter()
-                .filter(|b| !proven.contains(*b))
-                .cloned()
-                .collect();
-
-            if !missing.is_empty() {
-                result
-                    .blocked_by
-                    .push(BlockingCondition::missing_premise(&rule.label, missing));
-            } else {
-                // Body is fully satisfied but conclusion not proven.
-                // Check for defeater blocking.
-                let mut blocked = false;
-                for attacker in theory.rules() {
-                    if attacker.head_literal() == &complement {
-                        let attacker_body_satisfied =
-                            attacker.body.iter().all(|b| proven.contains(b));
-                        if !attacker_body_satisfied {
-                            continue;
-                        }
-
-                        if attacker.rule_type == RuleType::Defeater {
-                            // Defeaters block unless the rule is explicitly superior
-                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
-                            if !rule_superior {
-                                result.blocked_by.push(BlockingCondition::defeated(
-                                    &rule.label,
-                                    &attacker.label,
-                                ));
-                                blocked = true;
-                            }
-                        } else {
-                            // For defeasible rules: check superiority both directions
-                            let attacker_superior =
-                                theory.is_superior(&attacker.label, &rule.label);
-                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
-
-                            if rule_superior && !attacker_superior {
-                                // Rule is superior — skip this attacker
-                                continue;
-                            }
-
-                            // Report as blocker if attacker is superior or ambiguity
-                            result.blocked_by.push(BlockingCondition::contradicted(
-                                &rule.label,
-                                &attacker.label,
-                            ));
-                            blocked = true;
-                        }
-                    }
-                }
-                if !blocked {
-                    // Body satisfied, no attackers found, but still not provable.
-                    // This can happen with ambiguity blocking.
-                    result.blocked_by.push(BlockingCondition {
-                        blocking_type: BlockingType::Contradicted,
-                        rule_label: rule.label.clone(),
-                        missing_literals: Vec::new(),
-                        blocking_rule: None,
-                        explanation: "Body satisfied but conclusion blocked by ambiguity"
-                            .to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    // If no rules found at all
-    if !found_rule {
-        // Check if complement is proven (contradicted)
-        if proven.contains(&complement) {
-            result.blocked_by.push(BlockingCondition {
-                blocking_type: BlockingType::Contradicted,
-                rule_label: String::new(),
-                missing_literals: Vec::new(),
-                blocking_rule: None,
-                explanation: format!("Complement {complement} is proven"),
-            });
-        }
-    }
-
-    Ok(result)
-}
-
-// =============================================================================
-// ABDUCTION (FINDING HYPOTHESES)
-// =============================================================================
-
-/// A solution to an abduction problem
-#[derive(Debug, Clone)]
-pub struct AbductionSolution {
-    /// Facts that need to be assumed
-    pub facts: HashSet<Literal>,
-    /// Rules that would be used in the derivation
-    pub rules_used: HashSet<String>,
-    /// Confidence score (if trust-weighted)
-    pub confidence: f64,
-}
-
-impl AbductionSolution {
-    /// Create a new abduction solution
-    pub fn new(facts: HashSet<Literal>) -> Self {
-        Self {
-            facts,
-            rules_used: HashSet::new(),
-            confidence: 1.0,
-        }
-    }
-
-    /// Check if the goal is already provable (empty solution)
-    pub fn is_already_provable(&self) -> bool {
-        self.facts.is_empty()
-    }
-
-    /// Get the number of facts needed
-    pub fn size(&self) -> usize {
-        self.facts.len()
-    }
-}
-
-/// Result of an abduction query
-#[derive(Debug, Clone)]
-pub struct AbductionResult {
-    /// The goal literal
-    pub goal: Literal,
-    /// Possible solutions (sets of facts to assume)
-    pub solutions: Vec<AbductionSolution>,
-}
-
-impl AbductionResult {
-    /// Create a new abduction result
-    pub fn new(goal: Literal) -> Self {
-        Self {
-            goal,
-            solutions: Vec::new(),
-        }
-    }
-
-    /// Check if any solution exists
-    pub fn has_solutions(&self) -> bool {
-        !self.solutions.is_empty()
-    }
-
-    /// Check if the goal is already provable
-    pub fn is_already_provable(&self) -> bool {
-        self.solutions.iter().any(|s| s.is_already_provable())
-    }
-
-    /// Get the smallest solution (fewest facts needed)
-    pub fn smallest_solution(&self) -> Option<&AbductionSolution> {
-        self.solutions.iter().min_by_key(|s| s.size())
-    }
-}
-
-impl fmt::Display for AbductionResult {
-    /// Convert to human-readable string
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.solutions.is_empty() {
-            return write!(f, "No hypotheses found for {}", self.goal);
-        }
-
-        writeln!(f, "Abduction solutions for {}:", self.goal)?;
-
-        for (i, sol) in self.solutions.iter().enumerate() {
-            if sol.is_already_provable() {
-                writeln!(f, "  {}. Already provable", i + 1)?;
-            } else {
-                let facts: Vec<_> = sol.facts.iter().map(|l| l.to_string()).collect();
-                writeln!(f, "  {}. Add facts: {{{}}}", i + 1, facts.join(", "))?;
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Perform abductive reasoning: "What facts would make this goal provable?"
-///
-/// Uses backward chaining to find minimal sets of facts that would
-/// enable the goal to be proven.
-pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
-    let mut result = AbductionResult::new(goal.clone());
-
-    // First check if already provable
-    let conclusions = reason(theory)?;
-    let is_provable = conclusions
-        .iter()
-        .any(|c| c.literal == *goal && c.conclusion_type.is_positive());
-
-    if is_provable {
-        result
-            .solutions
-            .push(AbductionSolution::new(HashSet::new()));
-        return Ok(result);
-    }
-
-    // Collect what's already proven
-    let proven: HashSet<_> = conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
-        .collect();
-
-    // Find rules that could derive the goal
-    let mut solutions: Vec<HashSet<Literal>> = Vec::new();
-
-    for rule in theory.rules() {
-        if rule.head_literal() == goal && rule.rule_type != RuleType::Defeater {
-            // Find missing body literals
-            let missing: HashSet<_> = rule
-                .body
-                .iter()
-                .filter(|b| !proven.contains(*b))
-                .cloned()
-                .collect();
-
-            if missing.is_empty() {
-                // All body satisfied, shouldn't happen if not provable
-                // (could be blocked by defeater/conflict)
-                continue;
-            }
-
-            // Simple: just add missing as hypotheses
-            // More sophisticated: recursively find hypotheses for each missing
-            solutions.push(missing);
-
-            if solutions.len() >= max_solutions {
-                break;
-            }
-        }
-    }
-
-    // If no direct rules, try to find indirect paths (simplified)
-    if solutions.is_empty() {
-        // Add the goal itself as a hypothesis (trivial solution)
-        let mut trivial = HashSet::new();
-        trivial.insert(goal.clone());
-        solutions.push(trivial);
-    }
-
-    // Sort by size (smallest first) and limit
-    solutions.sort_by_key(|s| s.len());
-    solutions.truncate(max_solutions);
-
-    for facts in solutions {
-        let mut sol = AbductionSolution::new(facts);
-        // Track rules used (simplified)
-        for rule in theory.rules() {
-            if rule.head_literal() == goal {
-                sol.rules_used.insert(rule.label.clone());
-            }
-        }
-        result.solutions.push(sol);
-    }
-
-    Ok(result)
-}
-
-/// Convenience function: Get the minimal facts needed to prove a goal
-pub fn requires(theory: &Theory, goal: &Literal) -> Result<Vec<Literal>> {
-    let result = abduce(theory, goal, 1)?;
-    Ok(result
-        .smallest_solution()
-        .map(|s| s.facts.iter().cloned().collect())
-        .unwrap_or_default())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::reason::reason;
+    use crate::rule::{Rule, RuleType};
 
     // ==========================================================================
     // HELPER FUNCTIONS - Theory Building
@@ -1267,272 +734,6 @@ mod tests {
         );
         assert_eq!(format!("{}", BlockingType::Defeated), "defeated");
         assert_eq!(format!("{}", BlockingType::Contradicted), "contradicted");
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - Basic Functionality
-    // ==========================================================================
-
-    #[test]
-    fn test_abduce_returns_result() {
-        let th = make_missing_premise_theory();
-        let result = abduce(&th, &Literal::simple("ready_review"), 10).unwrap();
-        assert!(result.has_solutions());
-    }
-
-    #[test]
-    fn test_abduce_preserves_goal() {
-        let th = make_missing_premise_theory();
-        let goal = Literal::simple("ready_review");
-        let result = abduce(&th, &goal, 10).unwrap();
-        assert_eq!(result.goal.name(), "ready_review");
-    }
-
-    #[test]
-    fn test_abduce_already_provable() {
-        let th = make_fact_theory();
-        let result = abduce(&th, &Literal::simple("bird"), 10).unwrap();
-        assert!(result.is_already_provable());
-    }
-
-    #[test]
-    fn test_abduce_already_provable_empty_solution() {
-        let th = make_fact_theory();
-        let result = abduce(&th, &Literal::simple("bird"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert!(sol.is_already_provable());
-        assert_eq!(sol.size(), 0);
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - Finding Minimal Fact Sets
-    // ==========================================================================
-
-    #[test]
-    fn test_abduce_finds_missing_facts() {
-        let th = make_missing_premise_theory();
-        let result = abduce(&th, &Literal::simple("ready_review"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        // Should find tests_pass as needed
-        assert!(sol.facts.iter().any(|l| l.name() == "tests_pass"));
-    }
-
-    #[test]
-    fn test_abduce_single_missing_premise() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["p"], "q");
-
-        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert_eq!(sol.size(), 1);
-        assert!(sol.facts.contains(&Literal::simple("p")));
-    }
-
-    #[test]
-    fn test_abduce_multiple_missing_premises() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["a", "b", "c"], "goal");
-
-        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert_eq!(sol.size(), 3);
-    }
-
-    #[test]
-    fn test_abduce_partial_satisfaction() {
-        let mut theory = Theory::new();
-        theory.add_fact("a");
-        theory.add_defeasible_rule(&["a", "b"], "goal");
-
-        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert_eq!(sol.size(), 1);
-        assert!(sol.facts.contains(&Literal::simple("b")));
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - Multiple Solutions
-    // ==========================================================================
-
-    #[test]
-    fn test_abduce_finds_alternative_paths() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["bird"], "flies");
-        theory.add_defeasible_rule(&["plane"], "flies");
-
-        let result = abduce(&theory, &Literal::simple("flies"), 10).unwrap();
-        assert_eq!(result.solutions.len(), 2);
-    }
-
-    #[test]
-    fn test_abduce_solutions_contain_alternatives() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["bird"], "flies");
-        theory.add_defeasible_rule(&["plane"], "flies");
-
-        let result = abduce(&theory, &Literal::simple("flies"), 10).unwrap();
-
-        let has_bird = result
-            .solutions
-            .iter()
-            .any(|s| s.facts.contains(&Literal::simple("bird")));
-        let has_plane = result
-            .solutions
-            .iter()
-            .any(|s| s.facts.contains(&Literal::simple("plane")));
-
-        assert!(has_bird);
-        assert!(has_plane);
-    }
-
-    #[test]
-    fn test_abduce_respects_max_solutions() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["a"], "x");
-        theory.add_defeasible_rule(&["b"], "x");
-        theory.add_defeasible_rule(&["c"], "x");
-
-        let result = abduce(&theory, &Literal::simple("x"), 1).unwrap();
-        assert!(result.solutions.len() <= 1);
-    }
-
-    #[test]
-    fn test_abduce_solutions_sorted_by_size() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["a"], "goal");
-        theory.add_defeasible_rule(&["b", "c"], "goal");
-
-        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
-
-        if result.solutions.len() > 1 {
-            let sizes: Vec<_> = result.solutions.iter().map(|s| s.size()).collect();
-            for i in 1..sizes.len() {
-                assert!(
-                    sizes[i - 1] <= sizes[i],
-                    "Solutions should be sorted by size"
-                );
-            }
-        }
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - No Rules Case
-    // ==========================================================================
-
-    #[test]
-    fn test_abduce_hypothesizes_goal_when_no_rules() {
-        let th = Theory::new();
-        let result = abduce(&th, &Literal::simple("unknown"), 10).unwrap();
-
-        let sol = result.smallest_solution().unwrap();
-        // Should hypothesize the literal itself
-        assert!(sol.facts.contains(&Literal::simple("unknown")));
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - Solution Properties
-    // ==========================================================================
-
-    #[test]
-    fn test_abduction_solution_size() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["a", "b"], "goal");
-
-        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert_eq!(sol.size(), 2);
-    }
-
-    #[test]
-    fn test_abduction_solution_default_confidence() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["p"], "q");
-
-        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert_eq!(sol.confidence, 1.0);
-    }
-
-    #[test]
-    fn test_abduction_solution_tracks_rules() {
-        let mut theory = Theory::new();
-        let r1 = theory.add_defeasible_rule(&["p"], "q");
-
-        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
-        let sol = result.smallest_solution().unwrap();
-        assert!(sol.rules_used.contains(&r1));
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - Convenience Functions
-    // ==========================================================================
-
-    #[test]
-    fn test_requires_convenience_function() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["precondition"], "result");
-
-        let needed = requires(&theory, &Literal::simple("result")).unwrap();
-        assert!(!needed.is_empty());
-        assert!(needed.iter().any(|l| l.name() == "precondition"));
-    }
-
-    #[test]
-    fn test_requires_returns_empty_for_provable() {
-        let mut theory = Theory::new();
-        theory.add_fact("bird");
-
-        let needed = requires(&theory, &Literal::simple("bird")).unwrap();
-        assert!(needed.is_empty());
-    }
-
-    #[test]
-    fn test_smallest_solution() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["a"], "goal");
-        theory.add_defeasible_rule(&["b", "c"], "goal");
-
-        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
-        let smallest = result.smallest_solution().unwrap();
-        assert_eq!(smallest.size(), 1);
-    }
-
-    #[test]
-    fn test_smallest_solution_none_for_empty() {
-        let result = AbductionResult::new(Literal::simple("x"));
-        assert!(result.smallest_solution().is_none());
-    }
-
-    // ==========================================================================
-    // ABDUCTION OPERATOR TESTS - Display and Formatting
-    // ==========================================================================
-
-    #[test]
-    fn test_abduction_result_display() {
-        let mut theory = Theory::new();
-        theory.add_defeasible_rule(&["p"], "q");
-
-        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
-        let s = result.to_string();
-        assert!(s.contains("Abduction"));
-        assert!(s.contains("Add facts"));
-    }
-
-    #[test]
-    fn test_abduction_result_display_already_provable() {
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-
-        let result = abduce(&theory, &Literal::simple("p"), 10).unwrap();
-        let s = result.to_string();
-        assert!(s.contains("Already provable"));
-    }
-
-    #[test]
-    fn test_abduction_result_display_no_solutions() {
-        let result = AbductionResult::new(Literal::simple("x"));
-        let s = result.to_string();
-        assert!(s.contains("No hypotheses"));
     }
 
     // ==========================================================================
@@ -2009,7 +1210,7 @@ mod tests {
         theory.add_rule(Rule::fact("__hyp_42_1", Literal::simple("a")));
         theory.add_rule(Rule::fact("__hyp_42_2", Literal::simple("b")));
 
-        let label = next_hyp_label(&theory, 42, 1);
+        let label = what_if::next_hyp_label(&theory, 42, 1);
         assert_eq!(label, "__hyp_42_3");
     }
 

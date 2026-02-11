@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::conclusion::{Conclusion, ConclusionType};
+use crate::conclusion::ConclusionType;
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::superiority::{Superiority, SuperiorityIndex};
@@ -221,13 +221,6 @@ impl Theory {
         self.rules.len()
     }
 
-    /// Perform reasoning and return conclusions
-    ///
-    /// This is a stub - actual implementation in reason module
-    pub fn reason(&self) -> crate::error::Result<Vec<Conclusion>> {
-        crate::reason::reason(self)
-    }
-
     /// Check if the theory has any circular superiority relations
     /// (where prefer(a,b) and prefer(b,a) both exist).
     pub fn has_circular_superiority(&self) -> bool {
@@ -250,7 +243,7 @@ impl Theory {
         }
 
         // Check contradictory strict conclusions
-        if let Ok(conclusions) = self.reason() {
+        if let Ok(conclusions) = crate::reason::reason(self) {
             let definite: std::collections::HashSet<_> = conclusions
                 .iter()
                 .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
@@ -270,10 +263,31 @@ impl Theory {
         warnings
     }
 
+    /// Iterate over all rules as `(&RuleLabel, &Rule)` pairs.
+    ///
+    /// This provides access to both the label and the rule in a single
+    /// iteration, which is useful for building indexes or performing
+    /// label-based lookups during iteration.
+    pub fn rules_with_labels(&self) -> impl Iterator<Item = (&RuleLabel, &Rule)> {
+        self.rules.iter()
+    }
+
     /// Generate next auto-label with prefix
     fn next_label(&mut self, prefix: &str) -> String {
         self.label_counter += 1;
         format!("{}{}", prefix, self.label_counter)
+    }
+}
+
+/// Iterate over a borrowed `Theory`, yielding `(&RuleLabel, &Rule)` pairs.
+///
+/// This allows using `for (label, rule) in &theory { ... }` syntax.
+impl<'a> IntoIterator for &'a Theory {
+    type Item = (&'a RuleLabel, &'a Rule);
+    type IntoIter = std::collections::hash_map::Iter<'a, RuleLabel, Rule>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rules.iter()
     }
 }
 
@@ -362,7 +376,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
-        let conclusions = theory.reason().unwrap();
+        let conclusions = crate::reason::reason(&theory).unwrap();
         assert!(!conclusions.is_empty());
     }
 
@@ -419,5 +433,44 @@ mod tests {
             !warnings.iter().any(|w| w.contains("Contradictory")),
             "No contradictions expected"
         );
+    }
+
+    // =========================================================================
+    // IntoIterator and rules_with_labels tests
+    // =========================================================================
+
+    #[test]
+    fn test_into_iterator_for_theory_ref() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+
+        let mut count = 0;
+        for (label, rule) in &theory {
+            assert_eq!(&rule.label, label);
+            count += 1;
+        }
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_rules_with_labels() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "flies");
+
+        let pairs: Vec<_> = theory.rules_with_labels().collect();
+        assert_eq!(pairs.len(), 2);
+
+        for (label, rule) in pairs {
+            assert_eq!(&rule.label, label);
+        }
+    }
+
+    #[test]
+    fn test_into_iterator_empty_theory() {
+        let theory = Theory::new();
+        let count = (&theory).into_iter().count();
+        assert_eq!(count, 0);
     }
 }

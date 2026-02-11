@@ -35,7 +35,7 @@ fn test_disjoint_complements_do_not_conflict_at_timepoint() {
     )
     .unwrap();
 
-    let conclusions = prepared.theory.reason().unwrap();
+    let conclusions = spindle_core::reason::reason(&prepared.theory).unwrap();
 
     let has_p = conclusions
         .iter()
@@ -82,7 +82,7 @@ fn test_overlapping_complements_are_active_at_timepoint() {
     )
     .unwrap();
 
-    let conclusions = prepared.theory.reason().unwrap();
+    let conclusions = spindle_core::reason::reason(&prepared.theory).unwrap();
 
     let has_p = conclusions
         .iter()
@@ -214,7 +214,7 @@ fn test_rule_level_temporal_kept_when_active() {
     );
 
     // And reasoning should derive flies
-    let conclusions = prepared.theory.reason().unwrap();
+    let conclusions = spindle_core::reason::reason(&prepared.theory).unwrap();
     let has_flies = conclusions
         .iter()
         .any(|c| c.literal.name() == "flies" && c.is_positive());

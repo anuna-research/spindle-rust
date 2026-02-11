@@ -1,6 +1,27 @@
 //! Reasoning engine for defeasible logic
 //!
-//! Implements the standard DL(d) forward chaining algorithm.
+//! Implements the standard DL(d) forward chaining algorithm and provides
+//! the [`Reasoner`] trait for abstracting over reasoning backends.
+//!
+//! # Architecture
+//!
+//! The reasoning state (worklist, proven sets, body counters, conclusions)
+//! is consolidated into [`ReasoningState`](state::ReasoningState) in the
+//! [`state`] submodule. This makes data-flow dependencies between phases
+//! explicit and enables phase-isolated testing.
+//!
+//! # Trait-based dispatch
+//!
+//! The [`Reasoner`] trait abstracts over reasoning algorithms. Two concrete
+//! implementations are provided:
+//!
+//! - [`StandardReasoner`]: wraps the standard DL(d) forward-chaining
+//!   algorithm (the default).
+//! - [`ScalableReasoner`]: placeholder for the scalable DL(d||) three-phase
+//!   closure algorithm.
+//!
+//! Use [`select_reasoner`] to obtain a boxed trait object by name for
+//! runtime backend selection.
 //!
 //! # Performance
 //!
@@ -8,65 +29,122 @@
 //! checks, eliminating heap allocations and hash computations in the hot
 //! reasoning loop.
 
-use std::collections::VecDeque;
+pub(crate) mod defeasible;
+pub(crate) mod definite;
+pub(crate) mod facts;
+pub(crate) mod state;
 
-use fixedbitset::FixedBitSet;
-use rustc_hash::FxHashMap;
-
-use crate::conclusion::{Conclusion, ConclusionType};
+use crate::conclusion::Conclusion;
 use crate::error::Result;
-use crate::index::{IndexedTheory, LitId};
-use crate::literal::Literal;
+use crate::index::IndexedTheory;
 use crate::pipeline::{PrepareOptions, prepare};
-use crate::rule::RuleType;
 use crate::theory::Theory;
 
-/// A bit set optimized for tracking proven literals.
+use self::state::ReasoningState;
+
+// ---------------------------------------------------------------------------
+// Reasoner trait
+// ---------------------------------------------------------------------------
+
+/// A reasoning engine that computes conclusions from an indexed theory.
 ///
-/// Maps `LitId` to bit indices for O(1) contains/insert operations.
-/// Uses 2 bits per atom (positive + negated).
-struct LiteralBitSet {
-    bits: FixedBitSet,
-}
-
-impl LiteralBitSet {
-    /// Create a new LiteralBitSet sized for the indexed theory.
-    fn new(atom_count: usize) -> Self {
-        // Each atom needs 2 bits: one for positive, one for negated
-        let size = atom_count * 2;
-        Self {
-            bits: FixedBitSet::with_capacity(size),
-        }
-    }
-
-    /// Convert a LitId to a bit index.
-    #[inline]
-    fn to_index(id: LitId) -> usize {
-        let atom_idx = id.atom().as_raw() as usize;
-        let negated = if id.is_negated() { 1 } else { 0 };
-        atom_idx * 2 + negated
-    }
-
-    /// Check if a literal has been proven.
-    #[inline]
-    fn contains(&self, id: LitId) -> bool {
-        let idx = Self::to_index(id);
-        idx < self.bits.len() && self.bits.contains(idx)
-    }
-
-    /// Mark a literal as proven.
+/// Implementors encapsulate a specific defeasible logic algorithm
+/// (e.g., standard DL(d) forward chaining, scalable DL(d||) three-phase
+/// closure, or a test stub).
+///
+/// # Thread safety
+///
+/// The `Send + Sync` bounds are required for sharing a `dyn Reasoner`
+/// across threads in async CLI or WASM-worker contexts.
+///
+/// # Statelessness
+///
+/// Reasoners are stateless algorithm selectors; all mutable working state
+/// lives in stack-local variables within [`reason`](Reasoner::reason).
+pub trait Reasoner: Send + Sync {
+    /// Compute all conclusions (positive and negative) for the given
+    /// indexed theory.
     ///
-    /// Automatically grows the bitset if needed, preventing silent data loss
-    /// when new atoms are interned after the bitset is initially sized.
-    #[inline]
-    fn insert(&mut self, id: LitId) {
-        let idx = Self::to_index(id);
-        if idx >= self.bits.len() {
-            self.bits.grow(idx + 1);
-        }
-        self.bits.insert(idx);
+    /// The theory must already be prepared (grounded, temporally filtered,
+    /// validated) before being passed here. The indexed theory is passed
+    /// as `&mut` because fact initialization may intern new literals into
+    /// the index.
+    fn reason<'t>(&self, theory: &mut IndexedTheory<'t>) -> Result<Vec<Conclusion>>;
+
+    /// Human-readable name for diagnostics and logging.
+    fn name(&self) -> &str;
+}
+
+// ---------------------------------------------------------------------------
+// StandardReasoner
+// ---------------------------------------------------------------------------
+
+/// Standard DL(d) forward-chaining reasoner.
+///
+/// Wraps the existing algorithm from the `reason` module. This is the
+/// default backend.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StandardReasoner;
+
+impl Reasoner for StandardReasoner {
+    fn reason<'t>(&self, indexed: &mut IndexedTheory<'t>) -> Result<Vec<Conclusion>> {
+        reason_indexed(indexed)
+    }
+
+    fn name(&self) -> &str {
+        "standard-dl-d"
     }
 }
+
+// ---------------------------------------------------------------------------
+// ScalableReasoner
+// ---------------------------------------------------------------------------
+
+/// Scalable DL(d||) three-phase closure reasoner.
+///
+/// Implements the parallel/partitioned algorithm described in the
+/// project design documents. Currently a placeholder until the scalable
+/// engine is fully implemented.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ScalableReasoner;
+
+impl Reasoner for ScalableReasoner {
+    fn reason<'t>(&self, _indexed: &mut IndexedTheory<'t>) -> Result<Vec<Conclusion>> {
+        // Phase 1: Delta closure (strict + definite)
+        // Phase 2: Lambda closure (defeasible, with ambiguity blocking)
+        // Phase 3: Negative conclusion generation
+        todo!("scalable DL(d||) not yet implemented")
+    }
+
+    fn name(&self) -> &str {
+        "scalable-dl-d-parallel"
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Factory function
+// ---------------------------------------------------------------------------
+
+/// Select a reasoner implementation by name.
+///
+/// Returns a boxed trait object for runtime backend selection. Recognized
+/// names:
+///
+/// - `"standard"` -- [`StandardReasoner`] (default DL(d) forward chaining)
+/// - `"scalable"` -- [`ScalableReasoner`] (DL(d||) three-phase closure)
+///
+/// Unrecognized names fall back to [`StandardReasoner`].
+pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
+    match name {
+        "standard" => Box::new(StandardReasoner),
+        "scalable" => Box::new(ScalableReasoner),
+        _ => Box::new(StandardReasoner),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Free-function convenience API (unchanged public surface)
+// ---------------------------------------------------------------------------
 
 /// Perform defeasible reasoning on a theory
 pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
@@ -107,275 +185,57 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 /// redundant pipeline work. The theory must have been prepared with the
 /// desired options (grounding, temporal filtering, etc.) before calling
 /// this function.
+///
+/// Internally builds an [`IndexedTheory`] and delegates to
+/// [`reason_indexed`].
 pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
-    // Use the theory directly for indexing and reasoning
     let mut indexed = IndexedTheory::build(theory);
-
-    // Pre-allocate conclusions vector
-    let estimated_size = theory.rule_count() * 2 + indexed.all_literal_ids().count() * 2;
-    let mut conclusions = Vec::with_capacity(estimated_size);
-
-    // Track what we've proven using LiteralBitSet for O(1) operations
-    let atom_count = indexed.atom_count();
-    let mut definite_proven = LiteralBitSet::new(atom_count);
-    let mut defeasible_proven = LiteralBitSet::new(atom_count);
-
-    // Track rule body satisfaction - pre-allocate for all rules
-    let rule_count = theory.rule_count();
-    let mut body_remaining: FxHashMap<&str, usize> =
-        FxHashMap::with_capacity_and_hasher(rule_count, Default::default());
-    for rule in theory.rules() {
-        body_remaining.insert(&rule.label, rule.body.len());
-    }
-
-    // Worklist for forward chaining
-    let mut worklist: VecDeque<Literal> = VecDeque::with_capacity(rule_count);
-    // Track which literals have been enqueued to prevent duplicate processing
-    let mut enqueued = LiteralBitSet::new(atom_count);
-
-    // Phase 1: Initialize with facts (deduplicated)
-    for fact in theory.facts() {
-        let lit = fact.head_literal().clone();
-        // Interning here is safe as facts are already in the theory
-        let lit_id = indexed.intern_literal(&lit);
-
-        // Skip duplicate facts — only process each literal once
-        if enqueued.contains(lit_id) {
-            continue;
-        }
-        enqueued.insert(lit_id);
-
-        definite_proven.insert(lit_id);
-        defeasible_proven.insert(lit_id);
-
-        conclusions.push(Conclusion::definitely_provable(lit.clone()).with_rule(&fact.label));
-        conclusions.push(Conclusion::defeasibly_provable(lit.clone()).with_rule(&fact.label));
-
-        worklist.push_back(lit);
-    }
-
-    // Phase 1b: Initialize empty-body non-fact rules
-    // These rules have no body literals so forward chaining never triggers them.
-    // We must seed their heads into the worklist explicitly.
-    for rule in theory.rules() {
-        if rule.body.is_empty() && rule.rule_type != RuleType::Fact {
-            let head_lit = rule.head_literal().clone();
-            let head_id = indexed.intern_literal(&head_lit);
-
-            match rule.rule_type {
-                RuleType::Strict => {
-                    // Even if the literal was already enqueued/proven defeasibly,
-                    // a strict empty-body rule must still upgrade it to definite.
-                    if !definite_proven.contains(head_id) {
-                        definite_proven.insert(head_id);
-                        defeasible_proven.insert(head_id);
-                        conclusions.push(
-                            Conclusion::definitely_provable(head_lit.clone())
-                                .with_rule(&rule.label),
-                        );
-                        conclusions.push(
-                            Conclusion::defeasibly_provable(head_lit.clone())
-                                .with_rule(&rule.label),
-                        );
-                    }
-                    if !enqueued.contains(head_id) {
-                        enqueued.insert(head_id);
-                        worklist.push_back(head_lit);
-                    }
-                }
-                RuleType::Defeasible => {
-                    // Empty-body defeasible rules fire immediately but can still be blocked
-                    if !defeasible_proven.contains(head_id) {
-                        let blocked =
-                            is_blocked_by_superior(&indexed, theory, rule, &defeasible_proven);
-                        if !blocked {
-                            defeasible_proven.insert(head_id);
-                            conclusions.push(
-                                Conclusion::defeasibly_provable(head_lit.clone())
-                                    .with_rule(&rule.label),
-                            );
-                        }
-                    }
-                    if defeasible_proven.contains(head_id) && !enqueued.contains(head_id) {
-                        enqueued.insert(head_id);
-                        worklist.push_back(head_lit);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    // Phase 2: Forward chaining
-    while let Some(lit) = worklist.pop_front() {
-        // Find rules where this literal appears in body
-        // using immutable lookup
-        for rule in indexed.rules_with_body(&lit) {
-            let remaining = body_remaining.get_mut(rule.label.as_str()).unwrap();
-            if *remaining > 0 {
-                *remaining -= 1;
-
-                // If body fully satisfied, try to fire rule
-                if *remaining == 0 {
-                    let head_lit = rule.head_literal().clone();
-                    // Must exist because it's in a rule in the theory
-                    let head_id = indexed
-                        .get_lit_id(&head_lit)
-                        .expect("Head literal missing from index");
-
-                    match rule.rule_type {
-                        RuleType::Fact => unreachable!("Facts have no body"),
-
-                        RuleType::Strict => {
-                            if !definite_proven.contains(head_id) {
-                                definite_proven.insert(head_id);
-                                defeasible_proven.insert(head_id);
-
-                                conclusions.push(
-                                    Conclusion::definitely_provable(head_lit.clone())
-                                        .with_rule(&rule.label),
-                                );
-                                conclusions.push(
-                                    Conclusion::defeasibly_provable(head_lit.clone())
-                                        .with_rule(&rule.label),
-                                );
-
-                                if !enqueued.contains(head_id) {
-                                    enqueued.insert(head_id);
-                                    worklist.push_back(head_lit);
-                                }
-                            }
-                        }
-
-                        RuleType::Defeasible => {
-                            // Check for conflicts and superiority
-                            let comp_id = head_id.complement();
-
-                            // Only prove if complement isn't definitely proven
-                            if !definite_proven.contains(comp_id)
-                                && !defeasible_proven.contains(head_id)
-                            {
-                                // Check if we're blocked by superior rules
-                                let blocked = is_blocked_by_superior(
-                                    &indexed,
-                                    theory,
-                                    rule,
-                                    &defeasible_proven,
-                                );
-
-                                if !blocked {
-                                    defeasible_proven.insert(head_id);
-                                    conclusions.push(
-                                        Conclusion::defeasibly_provable(head_lit.clone())
-                                            .with_rule(&rule.label),
-                                    );
-                                    if !enqueued.contains(head_id) {
-                                        enqueued.insert(head_id);
-                                        worklist.push_back(head_lit);
-                                    }
-                                }
-                            }
-                        }
-
-                        RuleType::Defeater => {
-                            // Defeaters don't prove anything, but they block
-                            // This is handled in is_blocked_by_superior
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Phase 3: Compute negative conclusions
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
-
-    for lit_id in all_ids {
-        if !definite_proven.contains(lit_id) {
-            let lit = indexed.resolve_literal(lit_id);
-            conclusions.push(Conclusion::new(ConclusionType::DefinitelyNotProvable, lit));
-        }
-
-        if !defeasible_proven.contains(lit_id) {
-            let lit = indexed.resolve_literal(lit_id);
-            conclusions.push(Conclusion::new(ConclusionType::DefeasiblyNotProvable, lit));
-        }
-    }
-
-    Ok(conclusions)
+    reason_indexed(&mut indexed)
 }
 
-/// Check if a rule is blocked by a superior rule or defeater for the complement
-fn is_blocked_by_superior(
-    indexed: &IndexedTheory<'_>,
-    theory: &Theory,
-    rule: &crate::rule::Rule,
-    proven: &LiteralBitSet,
-) -> bool {
-    let head_lit = rule.head_literal();
-    let complement = head_lit.complement();
+/// Core reasoning loop operating on an already-indexed theory.
+///
+/// This is the function that [`StandardReasoner`] delegates to.
+/// Orchestrates three phases:
+///
+/// 1. **Fact Initialization** -- seed facts and empty-body rules into
+///    the worklist and proven sets.
+/// 2. **Forward Chaining** -- drain the worklist, firing rules whose
+///    bodies are fully satisfied.
+/// 3. **Negative Conclusions** -- emit `-D` and `-d` for all unproven
+///    literals.
+pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>> {
+    // Obtain the theory reference with lifetime 'a (independent of &mut self).
+    let theory = indexed.theory();
 
-    let attacking_rules = indexed.rules_with_head(&complement);
+    // Pre-allocate state sized for the theory.
+    let atom_count = indexed.atom_count();
+    let rule_count = theory.rule_count();
+    let estimated_size = rule_count * 2 + indexed.all_literal_ids().count() * 2;
 
-    for attacker in attacking_rules {
-        // Check if attacker's body is satisfied (using BitSet for O(1) lookup)
-        let body_satisfied = attacker.body.iter().all(|b| {
-            if let Some(bid) = indexed.get_lit_id(b) {
-                proven.contains(bid)
-            } else {
-                false
-            }
-        });
+    let mut state = ReasoningState::new(atom_count, rule_count, estimated_size);
 
-        if !body_satisfied {
-            continue;
-        }
+    // Phase 1: Initialize facts, body_remaining, and empty-body rules
+    facts::initialize_facts(theory, indexed, &mut state);
 
-        // Use template_label() for superiority checks to handle grounded instances correctly
+    // Phase 2: Forward chaining
+    definite::forward_chain_strict(theory, indexed, &mut state);
 
-        // Strict attackers always block opposing defeasible conclusions.
-        if attacker.rule_type == RuleType::Strict {
-            return true;
-        }
+    // Phase 3: Compute negative conclusions
+    defeasible::resolve_defeasible(theory, indexed, &mut state);
 
-        // IMPORTANT: Defeaters automatically block without needing explicit superiority
-        // A defeater is a rule that can block a conclusion but cannot prove its head
-        if attacker.rule_type == RuleType::Defeater {
-            // Check if rule is superior over the defeater (can override it)
-            let rule_superior =
-                theory.is_superior(rule.template_label(), attacker.template_label());
-
-            // Defeater blocks unless the rule is explicitly superior
-            if !rule_superior {
-                return true;
-            }
-            continue;
-        }
-
-        // For defeasible rules: check superiority relations
-        // Check superiority: is attacker > rule?
-        let attacker_superior =
-            theory.is_superior(attacker.template_label(), rule.template_label());
-
-        // Check if rule > attacker
-        let rule_superior = theory.is_superior(rule.template_label(), attacker.template_label());
-
-        // If attacker is superior and rule is not superior over it, we're blocked
-        if attacker_superior && !rule_superior {
-            return true;
-        }
-
-        // No-superiority ties are intentionally not blocked here.
-        // In standard mode we allow equal-strength conflicting defeasible rules
-        // to remain defeasibly derivable unless explicit superiority/defeaters apply.
-    }
-
-    false
+    Ok(state.conclusions)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::conclusion::ConclusionType;
+    use crate::index::LitId;
+    use crate::literal::Literal;
+    use crate::rule::RuleType;
+
+    use super::state::LiteralBitSet;
 
     // ==========================================================================
     // BASIC FACTS AND REASONING
@@ -1450,7 +1310,7 @@ mod tests {
     }
 
     // ==========================================================================
-    // reason_with_options API TESTS (spec §3.2, Milestone 5)
+    // reason_with_options API TESTS (spec 3.2, Milestone 5)
     // ==========================================================================
 
     #[test]
@@ -1547,6 +1407,8 @@ mod tests {
 
     // ==========================================================================
     // REGRESSION TESTS: LiteralBitSet auto-grow
+    // (LiteralBitSet is now in state.rs; these tests remain here
+    // to verify integration)
     // ==========================================================================
 
     #[test]
@@ -1590,5 +1452,190 @@ mod tests {
             bitset.contains(lit_10),
             "New bit at atom 10 should be present after grow"
         );
+    }
+
+    // ==========================================================================
+    // REASONER TRAIT TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_standard_reasoner_name() {
+        let r = StandardReasoner;
+        assert_eq!(r.name(), "standard-dl-d");
+    }
+
+    #[test]
+    fn test_scalable_reasoner_name() {
+        let r = ScalableReasoner;
+        assert_eq!(r.name(), "scalable-dl-d-parallel");
+    }
+
+    #[test]
+    fn test_select_reasoner_standard() {
+        let r = select_reasoner("standard");
+        assert_eq!(r.name(), "standard-dl-d");
+    }
+
+    #[test]
+    fn test_select_reasoner_scalable() {
+        let r = select_reasoner("scalable");
+        assert_eq!(r.name(), "scalable-dl-d-parallel");
+    }
+
+    #[test]
+    fn test_select_reasoner_unknown_falls_back_to_standard() {
+        let r = select_reasoner("nonexistent");
+        assert_eq!(r.name(), "standard-dl-d");
+    }
+
+    #[test]
+    fn test_standard_reasoner_matches_free_function() {
+        // Build a non-trivial theory with facts, rules, superiority, and
+        // defeaters so that any divergence between the trait path and the
+        // free-function path would surface.
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+        theory.add_superiority(&r2, &r1);
+
+        theory.add_defeasible_rule(&["bird"], "has_feathers");
+        theory.add_strict_rule(&["bird"], "animal");
+
+        // Free-function path
+        let free_fn_conclusions = reason(&theory).unwrap();
+
+        // Trait path: manually prepare + index + call trait method
+        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+        let mut indexed = IndexedTheory::build(&prepared.theory);
+        let trait_conclusions = StandardReasoner.reason(&mut indexed).unwrap();
+
+        // Compare: sort both by display representation for deterministic comparison
+        let mut free_sorted: Vec<String> =
+            free_fn_conclusions.iter().map(|c| format!("{c}")).collect();
+        let mut trait_sorted: Vec<String> =
+            trait_conclusions.iter().map(|c| format!("{c}")).collect();
+        free_sorted.sort();
+        trait_sorted.sort();
+
+        assert_eq!(
+            free_sorted, trait_sorted,
+            "StandardReasoner trait path should produce identical conclusions to the free function"
+        );
+    }
+
+    #[test]
+    fn test_standard_reasoner_simple_fact() {
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+
+        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+        let mut indexed = IndexedTheory::build(&prepared.theory);
+        let conclusions = StandardReasoner.reason(&mut indexed).unwrap();
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "bird"),
+            "StandardReasoner should prove +D bird"
+        );
+    }
+
+    #[test]
+    fn test_standard_reasoner_defeasible_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+
+        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+        let mut indexed = IndexedTheory::build(&prepared.theory);
+        let conclusions = StandardReasoner.reason(&mut indexed).unwrap();
+
+        for name in &["b", "c"] {
+            assert!(
+                conclusions
+                    .iter()
+                    .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                        && c.literal.name() == *name),
+                "{name} should be defeasibly provable via StandardReasoner"
+            );
+        }
+    }
+
+    #[test]
+    fn test_standard_reasoner_via_dyn_dispatch() {
+        // Verify that dynamic dispatch through Box<dyn Reasoner> works.
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let reasoner: Box<dyn Reasoner> = select_reasoner("standard");
+
+        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+        let mut indexed = IndexedTheory::build(&prepared.theory);
+        let conclusions = reasoner.reason(&mut indexed).unwrap();
+
+        assert!(
+            conclusions
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"),
+            "q should be defeasibly provable via dyn Reasoner dispatch"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "not yet implemented")]
+    fn test_scalable_reasoner_is_unimplemented() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+
+        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+        let mut indexed = IndexedTheory::build(&prepared.theory);
+
+        // Should panic with todo!()
+        let _ = ScalableReasoner.reason(&mut indexed);
+    }
+
+    /// A mock reasoner that returns a fixed set of conclusions.
+    /// Demonstrates that the trait enables test doubles.
+    struct MockReasoner {
+        conclusions: Vec<Conclusion>,
+    }
+
+    impl Reasoner for MockReasoner {
+        fn reason<'t>(&self, _theory: &mut IndexedTheory<'t>) -> Result<Vec<Conclusion>> {
+            Ok(self.conclusions.clone())
+        }
+
+        fn name(&self) -> &str {
+            "mock"
+        }
+    }
+
+    #[test]
+    fn test_mock_reasoner() {
+        let mock = MockReasoner {
+            conclusions: vec![
+                Conclusion::definitely_provable(Literal::simple("bird")),
+                Conclusion::defeasibly_provable(Literal::simple("flies")),
+            ],
+        };
+
+        assert_eq!(mock.name(), "mock");
+
+        let theory = Theory::new();
+        let mut indexed = IndexedTheory::build(&theory);
+        let conclusions = mock.reason(&mut indexed).unwrap();
+
+        assert_eq!(conclusions.len(), 2);
+        assert!(conclusions.iter().any(|c| c.literal.name() == "bird"
+            && c.conclusion_type == ConclusionType::DefinitelyProvable));
+        assert!(conclusions.iter().any(|c| c.literal.name() == "flies"
+            && c.conclusion_type == ConclusionType::DefeasiblyProvable));
     }
 }

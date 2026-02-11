@@ -49,7 +49,7 @@ fn test_wildcard_rewriting() {
     ));
 
     let result = prepare(&theory, PrepareOptions::default()).unwrap();
-    let conclusions = result.theory.reason().unwrap();
+    let conclusions = spindle_core::reason::reason(&result.theory).unwrap();
 
     let found = conclusions
         .iter()
@@ -108,7 +108,7 @@ fn test_wildcard_independence() {
     ));
 
     let result = prepare(&theory, PrepareOptions::default()).unwrap();
-    let conclusions = result.theory.reason().unwrap();
+    let conclusions = spindle_core::reason::reason(&result.theory).unwrap();
 
     let same = conclusions.iter().any(|c| c.literal.name() == "same");
     let diff = conclusions.iter().any(|c| c.literal.name() == "diff");

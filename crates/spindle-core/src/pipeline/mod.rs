@@ -6,15 +6,205 @@
 //! 2. Temporal filtering (Phase T1 "as-of" semantics)
 //! 3. Grounding (variable instantiation)
 //! 4. Indexing (AtomKey/LitId generation)
+//!
+//! # Composable pipeline stages
+//!
+//! The pipeline is built from composable [`PipelineStage`] implementations
+//! assembled via a [`PipelineBuilder`]. The default pipeline (matching the
+//! legacy `prepare()` semantics) is available through [`Pipeline::default_pipeline()`].
+//!
+//! ```rust,no_run
+//! use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
+//!
+//! let pipeline = Pipeline::builder()
+//!     .stage(Validate::default())
+//!     .stage(WildcardRewrite)
+//!     .stage(Ground::default())
+//!     .build();
+//! ```
+
+pub mod ground;
+pub mod temporal;
+pub mod validate;
+pub mod wildcard;
+pub use ground::Ground;
+pub use temporal::TemporalFilter;
+pub use validate::Validate;
+pub use wildcard::WildcardRewrite;
 
 use crate::conclusion::{Conclusion, ConclusionType};
-use crate::error::{Result, SpindleError};
-use crate::grounding::{ground_theory_with_limit, has_variables, is_variable};
+use crate::error::Result;
 use crate::literal::Literal;
 use crate::temporal::TimePoint;
 use crate::theory::{MetaValue, Theory};
 use crate::trust::{Source, TrustDerivationNode, TrustPolicy, TrustValue, WeightedConclusion};
 use std::collections::{HashMap, HashSet};
+
+// ---------------------------------------------------------------------------
+// PipelineStage trait and supporting types
+// ---------------------------------------------------------------------------
+
+/// Severity level for pipeline diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    /// Informational message (e.g., "validation passed").
+    Info,
+    /// Non-fatal warning (e.g., "grounding limit approaching").
+    Warning,
+    /// Error collected for deferred reporting (stage may still return `Ok`).
+    Error,
+}
+
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Info => write!(f, "INFO"),
+            Self::Warning => write!(f, "WARN"),
+            Self::Error => write!(f, "ERROR"),
+        }
+    }
+}
+
+/// A diagnostic message emitted by a pipeline stage.
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    /// Severity of this diagnostic.
+    pub severity: Severity,
+    /// Name of the stage that produced it.
+    pub stage: &'static str,
+    /// Human-readable message.
+    pub message: String,
+}
+
+/// A loosely-typed metadata value that stages can attach to the context.
+#[derive(Debug, Clone)]
+pub enum MetadataVal {
+    /// Boolean metadata.
+    Bool(bool),
+    /// Unsigned integer metadata.
+    Usize(usize),
+    /// String metadata.
+    String(String),
+    /// TimePoint metadata.
+    TimePoint(TimePoint),
+}
+
+/// Metadata and diagnostics accumulator threaded through the pipeline.
+///
+/// Stages can push [`Diagnostic`]s and read/write arbitrary key-value
+/// metadata via [`PipelineContext::metadata`].
+#[derive(Debug, Default)]
+pub struct PipelineContext {
+    /// Diagnostics collected by stages (warnings, info, timing).
+    pub diagnostics: Vec<Diagnostic>,
+    /// Arbitrary key-value metadata that stages can read/write.
+    pub metadata: HashMap<String, MetadataVal>,
+}
+
+/// A single, self-contained transformation over a [`Theory`].
+///
+/// Stages are applied left-to-right. Each stage receives the theory
+/// produced by the previous stage and a shared [`PipelineContext`] for
+/// diagnostics and inter-stage communication.
+pub trait PipelineStage: std::fmt::Debug {
+    /// Human-readable name used in diagnostics and tracing.
+    fn name(&self) -> &'static str;
+
+    /// Apply this stage, returning a (possibly transformed) theory.
+    ///
+    /// Returning `Err` aborts the pipeline. To report a non-fatal
+    /// problem, push a [`Diagnostic`] onto `ctx` and return `Ok`.
+    fn apply(&self, theory: Theory, ctx: &mut PipelineContext) -> Result<Theory>;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline builder
+// ---------------------------------------------------------------------------
+
+/// A configured, ready-to-run pipeline of [`PipelineStage`]s.
+#[derive(Debug)]
+pub struct Pipeline {
+    stages: Vec<Box<dyn PipelineStage>>,
+}
+
+impl Pipeline {
+    /// Start building a pipeline with no stages.
+    pub fn builder() -> PipelineBuilder {
+        PipelineBuilder { stages: Vec::new() }
+    }
+
+    /// The default pipeline that reproduces current `prepare()` semantics.
+    ///
+    /// Equivalent to:
+    /// ```rust,no_run
+    /// # use spindle_core::pipeline::*;
+    /// Pipeline::builder()
+    ///     .stage(Validate::default())
+    ///     .stage(WildcardRewrite)
+    ///     .stage(Ground::default())
+    ///     .build();
+    /// ```
+    ///
+    /// [`TemporalFilter`] is omitted by default because it requires a
+    /// reference time that most callers do not provide.
+    pub fn default_pipeline() -> Self {
+        Self::builder()
+            .stage(Validate::default())
+            .stage(WildcardRewrite)
+            .stage(Ground::default())
+            .build()
+    }
+
+    /// Run all stages in order, returning the final theory and context.
+    pub fn run(&self, theory: Theory) -> Result<(Theory, PipelineContext)> {
+        let mut ctx = PipelineContext::default();
+        let mut current = theory;
+
+        for stage in &self.stages {
+            current = stage.apply(current, &mut ctx)?;
+        }
+
+        Ok((current, ctx))
+    }
+}
+
+/// Builder for constructing a [`Pipeline`] from individual stages.
+#[derive(Debug)]
+pub struct PipelineBuilder {
+    stages: Vec<Box<dyn PipelineStage>>,
+}
+
+impl PipelineBuilder {
+    /// Append a stage to the end of the pipeline.
+    pub fn stage<S: PipelineStage + 'static>(mut self, s: S) -> Self {
+        self.stages.push(Box::new(s));
+        self
+    }
+
+    /// Insert a stage at a specific position (0-indexed).
+    pub fn stage_at<S: PipelineStage + 'static>(mut self, index: usize, s: S) -> Self {
+        self.stages.insert(index, Box::new(s));
+        self
+    }
+
+    /// Consume the builder and produce an immutable [`Pipeline`].
+    pub fn build(self) -> Pipeline {
+        Pipeline {
+            stages: self.stages,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// default_pipeline() free function
+// ---------------------------------------------------------------------------
+
+/// Convenience function returning the default pipeline.
+///
+/// This is equivalent to [`Pipeline::default_pipeline()`].
+pub fn default_pipeline() -> Pipeline {
+    Pipeline::default_pipeline()
+}
 
 /// Options for the prepare pipeline
 #[derive(Debug, Clone, Default)]
@@ -95,255 +285,112 @@ pub struct PipelineResult {
     pub weighted_conclusions: Vec<WeightedConclusion>,
 }
 
-/// Prepare a theory for reasoning
+/// Prepare a theory for reasoning.
 ///
 /// This is the main entry point for the reasoning pipeline. It handles:
-/// - Validation
 /// - Temporal filtering
+/// - Validation
+/// - Wildcard rewrite
 /// - Grounding
+///
+/// Internally delegates to a [`Pipeline`] built from the standard stages,
+/// configured according to `opts`. All existing callers continue to work
+/// without changes.
 pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> {
-    // 1. Temporal Filtering (Phase T1)
-    let filtered_theory = if let Some(t) = opts.reference_time {
-        filter_temporal(theory, t)
-    } else {
-        theory.clone()
-    };
+    let mut builder = Pipeline::builder();
+
+    // 1. Temporal filter (optional)
+    if let Some(t) = opts.reference_time {
+        builder = builder.stage(TemporalFilter { reference_time: t });
+    }
 
     // 2. Validation
-    if opts.validation.reject_wildcard_in_head {
-        validate_wildcards(&filtered_theory)?;
-    }
-    if opts.validation.enforce_range_restricted {
-        validate_range_restriction(&filtered_theory)?;
+    builder = builder.stage(Validate {
+        enforce_range_restricted: opts.validation.enforce_range_restricted,
+        reject_wildcard_in_head: opts.validation.reject_wildcard_in_head,
+    });
+
+    // 3. Wildcard rewrite
+    builder = builder.stage(WildcardRewrite);
+
+    // 4. Grounding (optional)
+    if opts.grounding.enabled {
+        builder = builder.stage(Ground {
+            max_iterations: opts.grounding.max_iterations,
+            max_instances: opts.grounding.max_instances,
+        });
     }
 
-    // 3. Grounding
-    // Rewrite wildcards (_) to unique variables before grounding
-    let theory_with_rewrites = rewrite_wildcards(&filtered_theory);
-
-    let (mut final_theory, report) = if opts.grounding.enabled {
-        let had_vars = theory_with_rewrites.rules().any(has_variables);
-        if had_vars {
-            let (grounded, limit_hit) = ground_theory_with_limit(
-                &theory_with_rewrites,
-                opts.grounding.max_iterations,
-                opts.grounding.max_instances,
-            );
-            // Rough instance count estimation
-            let instances = grounded.rule_count();
-            (
-                grounded,
-                GroundingReport {
-                    performed: true,
-                    had_variables: true,
-                    instances,
-                    limit_hit,
-                },
-            )
-        } else {
-            (
-                theory_with_rewrites,
-                GroundingReport {
-                    performed: true,
-                    had_variables: false,
-                    instances: 0,
-                    limit_hit: false,
-                },
-            )
-        }
-    } else {
-        (
-            theory_with_rewrites,
-            GroundingReport {
-                performed: false,
-                had_variables: false,
-                instances: 0,
-                limit_hit: false,
-            },
-        )
-    };
+    let pipeline = builder.build();
+    let (mut theory, ctx) = pipeline.run(theory.clone())?;
 
     // Apply explicit trust policy from options, overriding the parsed one
     if let Some(tp) = opts.trust_policy {
-        *final_theory.trust_policy_mut() = tp;
+        *theory.trust_policy_mut() = tp;
     }
 
-    Ok(PipelineResult {
-        theory: final_theory,
-        evaluated_at: opts.reference_time,
-        grounding_report: report,
-        weighted_conclusions: Vec::new(),
-    })
-}
-
-/// Filter theory to include only facts/rules active at the given timepoint
-fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
-    let mut new_theory = Theory::new();
-
-    // Filter rules
-    for rule in theory.rules() {
-        // A rule is active if ALL its body literals and its head literals are active
-        // Wait, spec says:
-        // - Rule firing at time t requires all body literals be active at t.
-        // - A rule can only derive a head literal that is active at t.
-        // So we filter the RULES themselves based on their literals.
-        // Actually, we should probably keep the rule if it COULD be active,
-        // but strict filtering removes it if ANY literal is definitely inactive (disjoint).
-        // Since we don't have interval sets yet, we just check if the literal's temporal
-        // includes t.
-
-        // Check head
-        let head_active = rule
-            .head
-            .iter()
-            .all(|lit| lit.temporal.is_empty() || lit.temporal.active_at(t));
-
-        // Check body
-        let body_active = rule
-            .body
-            .iter()
-            .all(|lit| lit.temporal.is_empty() || lit.temporal.active_at(t));
-
-        let rule_active = rule.temporal.is_empty() || rule.temporal.active_at(t);
-
-        if rule_active && head_active && body_active {
-            new_theory.add_rule(rule.clone());
-        }
-    }
-
-    // Copy superiorities for kept rules
-    for sup in theory.superiorities() {
-        if new_theory.get_rule(&sup.superior).is_some()
-            && new_theory.get_rule(&sup.inferior).is_some()
-        {
-            new_theory.add_superiority(&sup.superior, &sup.inferior);
-        }
-    }
-
-    // Copy metadata and trust policy
-    new_theory.copy_metadata_from(theory);
-    *new_theory.trust_policy_mut() = theory.trust_policy().clone();
-
-    new_theory
-}
-
-fn validate_wildcards(theory: &Theory) -> Result<()> {
-    for rule in theory.rules() {
-        for head in &rule.head {
-            if head.name() == "_" || head.predicates().contains(&"_") {
-                return Err(SpindleError::Validation {
-                    message: format!("Wildcard '_' found in rule head: {}", rule.label),
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_range_restriction(theory: &Theory) -> Result<()> {
-    for rule in theory.rules() {
-        // Collect body variables
-        let mut body_vars = HashSet::new();
-        for lit in &rule.body {
-            if is_variable(lit.name()) {
-                body_vars.insert(lit.name().to_string());
-            }
-            for pred in lit.predicates() {
-                if is_variable(pred) {
-                    body_vars.insert(pred.to_string());
-                }
-            }
-        }
-
-        // Check head variables
-        for lit in &rule.head {
-            if is_variable(lit.name()) && !body_vars.contains(lit.name()) {
-                return Err(SpindleError::Validation {
-                    message: format!(
-                        "Unsafe rule '{}': variable {} in head but not in body",
-                        rule.label,
-                        lit.name()
-                    ),
-                });
-            }
-            for pred in lit.predicates() {
-                if is_variable(pred) && !body_vars.contains(pred) {
-                    return Err(SpindleError::Validation {
-                        message: format!(
-                            "Unsafe rule '{}': variable {} in head but not in body",
-                            rule.label, pred
-                        ),
-                    });
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn rewrite_wildcards(theory: &Theory) -> Theory {
-    let mut new_theory = Theory::new();
-    new_theory.copy_metadata_from(theory);
-    *new_theory.trust_policy_mut() = theory.trust_policy().clone();
-
-    // Copy superiorities
-    for sup in theory.superiorities() {
-        new_theory.add_superiority(&sup.superior, &sup.inferior);
-    }
-
-    let mut counter = 0;
-
-    for rule in theory.rules() {
-        let mut new_rule = rule.clone();
-
-        // Rewrite body literals
-        let mut new_body = Vec::new();
-        for lit in &rule.body {
-            new_body.push(rewrite_literal_wildcards(lit, &mut counter));
-        }
-        new_rule.body = new_body.into();
-
-        // Rewrite head literals (though discouraged, handling them keeps consistency)
-        // Spec says they are rejected by validation, but if validation is off, this is safer.
-        let mut new_head = Vec::new();
-        for lit in &rule.head {
-            new_head.push(rewrite_literal_wildcards(lit, &mut counter));
-        }
-        new_rule.head = new_head.into();
-
-        new_theory.add_rule(new_rule);
-    }
-    new_theory
-}
-
-fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
-    let name = if lit.name() == "_" {
-        *counter += 1;
-        format!("?_w{counter}")
-    } else {
-        lit.name().to_string()
-    };
-
-    let predicates = lit
-        .predicates()
-        .iter()
-        .map(|p| {
-            if *p == "_" {
-                *counter += 1;
-                format!("?_w{counter}")
+    // Reconstruct GroundingReport from context metadata
+    let grounding_performed = ctx
+        .metadata
+        .get("grounding_performed")
+        .and_then(|v| {
+            if let MetadataVal::Bool(b) = v {
+                Some(*b)
             } else {
-                p.to_string()
+                None
             }
         })
-        .collect();
+        .unwrap_or(false);
 
-    Literal::new(
-        name,
-        lit.negation,
-        lit.mode.clone(),
-        lit.temporal.clone(),
-        predicates,
-    )
+    let grounding_had_variables = ctx
+        .metadata
+        .get("grounding_had_variables")
+        .and_then(|v| {
+            if let MetadataVal::Bool(b) = v {
+                Some(*b)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(false);
+
+    let grounding_instances = ctx
+        .metadata
+        .get("grounding_instances")
+        .and_then(|v| {
+            if let MetadataVal::Usize(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0);
+
+    let grounding_limit_hit = ctx
+        .metadata
+        .get("grounding_limit_hit")
+        .and_then(|v| {
+            if let MetadataVal::Bool(b) = v {
+                Some(*b)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(false);
+
+    let grounding_report = GroundingReport {
+        performed: grounding_performed,
+        had_variables: grounding_had_variables,
+        instances: grounding_instances,
+        limit_hit: grounding_limit_hit,
+    };
+
+    Ok(PipelineResult {
+        theory,
+        evaluated_at: opts.reference_time,
+        grounding_report,
+        weighted_conclusions: Vec::new(),
+    })
 }
 
 /// Resolve a rule label to its trust value and optional source.

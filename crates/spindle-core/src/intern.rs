@@ -42,7 +42,7 @@ use std::sync::RwLock;
 ///
 /// `SymbolId` is 4 bytes (same as `u32`), compared to 24 bytes for `String`.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 #[repr(transparent)]
 pub struct SymbolId(u32);
 
