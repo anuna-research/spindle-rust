@@ -7,11 +7,13 @@
 //! 3. Grounding (variable instantiation)
 //! 4. Indexing (AtomKey/LitId generation)
 
+use crate::conclusion::Conclusion;
 use crate::error::{Result, SpindleError};
 use crate::grounding::{ground_theory_with_limit, has_variables, is_variable};
 use crate::literal::Literal;
 use crate::temporal::TimePoint;
-use crate::theory::Theory;
+use crate::theory::{MetaValue, Theory};
+use crate::trust::{Source, TrustPolicy, WeightedConclusion};
 use std::collections::HashSet;
 
 /// Options for the prepare pipeline
@@ -24,6 +26,9 @@ pub struct PrepareOptions {
     pub grounding: GroundingOptions,
     /// Validation configuration
     pub validation: ValidationOptions,
+    /// Optional trust policy for computing weighted conclusions.
+    /// If None, the policy from the parsed theory is used.
+    pub trust_policy: Option<TrustPolicy>,
 }
 
 /// Options for grounding
@@ -86,6 +91,8 @@ pub struct PipelineResult {
     pub evaluated_at: Option<TimePoint>,
     /// Report on grounding statistics
     pub grounding_report: GroundingReport,
+    /// Trust-weighted conclusions (populated when a trust policy is available)
+    pub weighted_conclusions: Vec<WeightedConclusion>,
 }
 
 /// Prepare a theory for reasoning
@@ -160,6 +167,7 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
         theory: final_theory,
         evaluated_at: opts.reference_time,
         grounding_report: report,
+        weighted_conclusions: Vec::new(),
     })
 }
 
@@ -329,4 +337,55 @@ fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
         lit.temporal.clone(),
         predicates,
     )
+}
+
+/// Compute trust-weighted conclusions from reasoning results and theory metadata.
+///
+/// For each conclusion:
+/// 1. Find the rule that derived it (from conclusion.rule_label)
+/// 2. Look up the "source" metadata on that rule
+/// 3. Get the trust value from the policy for that source
+/// 4. Build a WeightedConclusion with degree = trust value
+/// 5. Evaluate all named thresholds
+pub fn compute_weighted_conclusions(
+    conclusions: &[Conclusion],
+    theory: &Theory,
+    policy: &TrustPolicy,
+) -> Vec<WeightedConclusion> {
+    conclusions
+        .iter()
+        .map(|c| {
+            // Find the source from rule metadata
+            let (degree, sources) = if let Some(ref label) = c.rule_label {
+                if let Some(meta) = theory.get_meta(label) {
+                    if let Some(MetaValue::String(source_id)) = meta.properties.get("source") {
+                        let trust = policy.get_trust(source_id);
+                        let mut sources = std::collections::HashSet::new();
+                        sources.insert(Source::new(source_id.clone()));
+                        (trust, sources)
+                    } else {
+                        (policy.default_trust, std::collections::HashSet::new())
+                    }
+                } else {
+                    (policy.default_trust, std::collections::HashSet::new())
+                }
+            } else {
+                (policy.default_trust, std::collections::HashSet::new())
+            };
+
+            let mut wc = WeightedConclusion::new(
+                c.literal.clone(),
+                c.conclusion_type.clone(),
+                degree,
+            );
+            wc.sources = sources;
+
+            // Evaluate all named thresholds
+            for (name, &threshold_val) in &policy.thresholds {
+                wc.above_threshold.insert(name.clone(), degree >= threshold_val);
+            }
+
+            wc
+        })
+        .collect()
 }

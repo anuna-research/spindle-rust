@@ -735,10 +735,27 @@ impl LearnedRule {
             source: "mined".to_string(),
         }
     }
+
+    /// Set the source
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = source.into();
+        self
+    }
 }
 
-/// Calculate support for a causal relationship a -> b
-fn calculate_support(log: &EventLog, a: &str, b: &str) -> usize {
+impl fmt::Display for LearnedRule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} (support: {}, confidence: {:.2})",
+            self.rule.label, self.support, self.confidence
+        )
+    }
+}
+
+/// Calculate support for a transition a -> b in the event log.
+/// Support is the number of traces where a directly precedes b.
+pub fn calculate_support(log: &EventLog, a: &str, b: &str) -> usize {
     log.cases
         .iter()
         .map(|c| {
@@ -750,8 +767,9 @@ fn calculate_support(log: &EventLog, a: &str, b: &str) -> usize {
         .sum()
 }
 
-/// Calculate confidence for a causal relationship a -> b
-fn calculate_confidence(log: &EventLog, a: &str, b: &str) -> f64 {
+/// Calculate confidence for a transition a -> b.
+/// Confidence = support(a->b) / total transitions from a.
+pub fn calculate_confidence(log: &EventLog, a: &str, b: &str) -> f64 {
     let support = calculate_support(log, a, b);
     let total_a_transitions: usize = log
         .cases
@@ -801,6 +819,33 @@ pub fn petri_net_to_dfl(
     }
 
     rules
+}
+
+/// Convert footprint-discovered rules to LearnedRules with support/confidence metrics.
+/// Filters by minimum support and confidence thresholds.
+pub fn rules_with_metrics(
+    log: &EventLog,
+    rules: &[Rule],
+    min_support: usize,
+    min_confidence: f64,
+) -> Vec<LearnedRule> {
+    rules
+        .iter()
+        .filter_map(|rule| {
+            // Extract activity names from the rule body and head
+            let body_name = rule.body.first().map(|l| l.name().to_string())?;
+            let head_name = rule.head.first().map(|l| l.name().to_string())?;
+
+            let support = calculate_support(log, &body_name, &head_name);
+            let confidence = calculate_confidence(log, &body_name, &head_name);
+
+            if support >= min_support && confidence >= min_confidence {
+                Some(LearnedRule::new(rule.clone(), support, confidence))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 // =============================================================================
@@ -1670,6 +1715,77 @@ mod tests {
             ArcNode::Transition(id) => assert_eq!(id, "t1"),
             _ => panic!("Expected Transition variant"),
         }
+    }
+
+    // =========================================================================
+    // Support/Confidence Metric Tests
+    // =========================================================================
+
+    #[test]
+    fn test_calculate_support_three_activities() {
+        let log = make_repeated_log(5, &["submit", "review", "approve"]);
+        assert_eq!(calculate_support(&log, "submit", "review"), 5);
+        assert_eq!(calculate_support(&log, "review", "approve"), 5);
+        assert_eq!(calculate_support(&log, "submit", "approve"), 0);
+    }
+
+    #[test]
+    fn test_calculate_confidence_full() {
+        let log = make_repeated_log(10, &["submit", "review", "approve"]);
+        let conf = calculate_confidence(&log, "submit", "review");
+        assert!((conf - 1.0).abs() < 1e-10, "Expected 1.0, got {conf}");
+    }
+
+    #[test]
+    fn test_calculate_confidence_empty_log() {
+        let log = EventLog::new(vec![]);
+        assert_eq!(calculate_confidence(&log, "a", "b"), 0.0);
+    }
+
+    #[test]
+    fn test_learned_rule_display() {
+        let rule = Rule::defeasible("r1", vec![Literal::simple("a")], Literal::simple("b"));
+        let lr = LearnedRule::new(rule, 10, 0.85);
+        let display = format!("{lr}");
+        assert!(display.contains("r1"));
+        assert!(display.contains("10"));
+        assert!(display.contains("0.85"));
+    }
+
+    #[test]
+    fn test_rules_with_metrics_filtering() {
+        let log = make_repeated_log(10, &["submit", "review", "approve"]);
+        let rules = vec![
+            Rule::defeasible(
+                "r1",
+                vec![Literal::simple("submit")],
+                Literal::simple("review"),
+            ),
+            Rule::defeasible(
+                "r2",
+                vec![Literal::simple("review")],
+                Literal::simple("approve"),
+            ),
+        ];
+
+        // High threshold: should include both (support=10, conf=1.0)
+        let learned = rules_with_metrics(&log, &rules, 5, 0.5);
+        assert_eq!(learned.len(), 2);
+
+        // Very high threshold: should include both still
+        let learned = rules_with_metrics(&log, &rules, 10, 1.0);
+        assert_eq!(learned.len(), 2);
+
+        // Too high support: should exclude
+        let learned = rules_with_metrics(&log, &rules, 11, 0.5);
+        assert_eq!(learned.len(), 0);
+    }
+
+    #[test]
+    fn test_learned_rule_with_source() {
+        let rule = Rule::defeasible("r1", vec![Literal::simple("a")], Literal::simple("b"));
+        let lr = LearnedRule::new(rule, 5, 0.9).with_source("alpha-miner");
+        assert_eq!(lr.source, "alpha-miner");
     }
 
     #[test]

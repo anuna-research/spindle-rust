@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use spindle_contract::literal::LiteralStructJson;
 use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
 use spindle_core::conclusion::ConclusionType;
-use spindle_core::pipeline::{PrepareOptions, prepare};
+use spindle_core::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
 use spindle_core::temporal::TimePoint;
 
 use crate::cli::error::CliError;
@@ -19,6 +19,7 @@ pub(crate) fn run_reason(
     json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
+    trust: bool,
 ) -> Result<CommandOutput, CliError> {
     let source = resolve_theory_source(file, stdin)?;
     let theory = load_theory_source(&source)?;
@@ -43,6 +44,14 @@ pub(crate) fn run_reason(
         spindle_core::reason::reason_prepared(&pipeline_result.theory).map_err(|e| {
             CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
         })?
+    };
+
+    // Compute trust-weighted conclusions if requested
+    let weighted = if trust {
+        let policy = pipeline_result.theory.trust_policy();
+        Some(compute_weighted_conclusions(&conclusions, &pipeline_result.theory, policy))
+    } else {
+        None
     };
 
     if json {
@@ -87,7 +96,7 @@ pub(crate) fn run_reason(
         let mut text = String::new();
         text.push_str("Conclusions:\n\n");
 
-        for c in conclusions {
+        for (i, c) in conclusions.iter().enumerate() {
             if positive_only && !c.is_positive() {
                 continue;
             }
@@ -99,7 +108,21 @@ pub(crate) fn run_reason(
                 ConclusionType::DefeasiblyNotProvable => "-d",
             };
 
-            text.push_str(&format!("  {} {}\n", symbol, c.literal));
+            if let Some(ref wcs) = weighted {
+                if let Some(wc) = wcs.get(i) {
+                    let sources_str = if wc.sources.is_empty() {
+                        String::new()
+                    } else {
+                        let src_list: Vec<String> = wc.sources.iter().map(|s| s.id.clone()).collect();
+                        format!(" [{}]", src_list.join(", "))
+                    };
+                    text.push_str(&format!("  {} {} (trust: {:.2}){}\n", symbol, c.literal, wc.degree, sources_str));
+                } else {
+                    text.push_str(&format!("  {} {}\n", symbol, c.literal));
+                }
+            } else {
+                text.push_str(&format!("  {} {}\n", symbol, c.literal));
+            }
         }
 
         Ok(CommandOutput::text(text))

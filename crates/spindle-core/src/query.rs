@@ -17,6 +17,8 @@ use crate::pipeline::PrepareOptions;
 use crate::reason::{reason, reason_with_options};
 use crate::rule::{Rule, RuleType};
 use crate::theory::Theory;
+use crate::trust::{TrustPolicy, TrustValue};
+use crate::theory::MetaValue;
 
 // =============================================================================
 // QUERY RESULT STRUCTURES
@@ -83,6 +85,86 @@ impl QueryResult {
     /// Check if defeasibly provable
     pub fn is_defeasibly_provable(&self) -> bool {
         self.conclusion_type == Some(ConclusionType::DefeasiblyProvable)
+    }
+}
+
+/// Filter for trust-based query results
+#[derive(Debug, Clone, Default)]
+pub struct TrustFilter {
+    /// Minimum trust degree for a conclusion to be included
+    pub min_degree: Option<TrustValue>,
+    /// Only include conclusions from this source pattern
+    pub source_pattern: Option<String>,
+    /// Trust policy to use for evaluating trust
+    pub policy: Option<TrustPolicy>,
+}
+
+impl TrustFilter {
+    /// Create a new empty trust filter
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set minimum trust degree
+    pub fn with_min_degree(mut self, degree: TrustValue) -> Self {
+        self.min_degree = Some(degree);
+        self
+    }
+
+    /// Set source pattern filter
+    pub fn with_source(mut self, pattern: impl Into<String>) -> Self {
+        self.source_pattern = Some(pattern.into());
+        self
+    }
+
+    /// Set trust policy
+    pub fn with_policy(mut self, policy: TrustPolicy) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+
+    /// Check if a conclusion passes this filter.
+    /// Requires a theory to look up rule metadata and a rule label.
+    pub fn passes(&self, theory: &Theory, rule_label: Option<&str>) -> bool {
+        let policy = match &self.policy {
+            Some(p) => p,
+            None => return true, // No policy means everything passes
+        };
+
+        // Get source from rule metadata
+        let source_id = rule_label.and_then(|label| {
+            theory.get_meta(label).and_then(|meta| {
+                match meta.properties.get("source") {
+                    Some(MetaValue::String(s)) => Some(s.as_str()),
+                    _ => None,
+                }
+            })
+        });
+
+        // Check source pattern
+        if let Some(ref pattern) = self.source_pattern {
+            match source_id {
+                Some(src) => {
+                    if !src.contains(pattern.as_str()) {
+                        return false;
+                    }
+                }
+                None => return false, // No source but filter requires one
+            }
+        }
+
+        // Check minimum degree
+        if let Some(min) = self.min_degree {
+            let trust = match source_id {
+                Some(src) => policy.get_trust(src),
+                None => policy.default_trust,
+            };
+            if trust < min {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -2100,5 +2182,91 @@ mod tests {
             !result.has_blockers(),
             "Defeater should not block when rule is superior"
         );
+    }
+
+    // =========================================================================
+    // Trust Filter Tests
+    // =========================================================================
+
+    #[test]
+    fn test_trust_filter_default_passes_all() {
+        let filter = TrustFilter::new();
+        let theory = Theory::new();
+        assert!(filter.passes(&theory, None));
+        assert!(filter.passes(&theory, Some("r1")));
+    }
+
+    #[test]
+    fn test_trust_filter_min_degree() {
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("agent:trusted", 0.9)
+            .with_trust("agent:untrusted", 0.3);
+
+        let filter = TrustFilter::new()
+            .with_min_degree(0.7)
+            .with_policy(policy);
+
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        let labels: Vec<String> = theory.rules().map(|r| r.label.clone()).collect();
+        theory.add_meta_string(&labels[0], "source", "agent:trusted");
+        theory.add_meta_string(&labels[1], "source", "agent:untrusted");
+
+        assert!(filter.passes(&theory, Some(&labels[0])));  // 0.9 >= 0.7
+        assert!(!filter.passes(&theory, Some(&labels[1]))); // 0.3 < 0.7
+    }
+
+    #[test]
+    fn test_trust_filter_source_pattern() {
+        let policy = TrustPolicy::new(0.5);
+        let filter = TrustFilter::new()
+            .with_source("agent:")
+            .with_policy(policy);
+
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        let labels: Vec<String> = theory.rules().map(|r| r.label.clone()).collect();
+        theory.add_meta_string(&labels[0], "source", "agent:coder");
+        theory.add_meta_string(&labels[1], "source", "system:policy");
+
+        assert!(filter.passes(&theory, Some(&labels[0])));  // matches "agent:"
+        assert!(!filter.passes(&theory, Some(&labels[1]))); // doesn't match "agent:"
+    }
+
+    #[test]
+    fn test_trust_filter_no_policy_passes_all() {
+        let filter = TrustFilter::new()
+            .with_min_degree(0.9)
+            .with_source("agent:");
+        // No policy set, so filter should pass everything
+        let theory = Theory::new();
+        assert!(filter.passes(&theory, None));
+    }
+
+    #[test]
+    fn test_trust_filter_combined() {
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("agent:trusted", 0.9)
+            .with_trust("agent:low", 0.3);
+
+        let filter = TrustFilter::new()
+            .with_min_degree(0.5)
+            .with_source("agent:")
+            .with_policy(policy);
+
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_fact("c");
+        let labels: Vec<String> = theory.rules().map(|r| r.label.clone()).collect();
+        theory.add_meta_string(&labels[0], "source", "agent:trusted");
+        theory.add_meta_string(&labels[1], "source", "agent:low");
+        theory.add_meta_string(&labels[2], "source", "system:policy");
+
+        assert!(filter.passes(&theory, Some(&labels[0])));  // agent: match + 0.9 >= 0.5
+        assert!(!filter.passes(&theory, Some(&labels[1]))); // agent: match + 0.3 < 0.5
+        assert!(!filter.passes(&theory, Some(&labels[2]))); // system: no match
     }
 }
