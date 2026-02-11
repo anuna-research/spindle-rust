@@ -457,3 +457,276 @@ The algorithm terminates because:
 2. Only transitions enqueue work onto `pending`
 3. The number of literals is finite
 4. Therefore the total number of transitions (and pending items) is bounded by `2 * |literals|` per phase
+
+---
+
+## Ambiguity Propagation Mode — Pseudocode
+
+In the default **ambiguity blocking** mode, when two rules conflict and neither wins
+(e.g., `r1: => p` and `r2: => -p` with no superiority), both `p` and `-p` are marked
+`-d` — but downstream literals that don't depend on `p` are unaffected.
+
+In **ambiguity propagation** mode, the ambiguity is *infectious*: if a literal is
+ambiguous (has support but is blocked by an equally strong contrary), then anything
+that depends on it also becomes ambiguous — even if those downstream literals have
+other, uncontested support.
+
+### Key Concept: Supported vs Ambiguous
+
+A literal can be in one of four states during AP reasoning:
+
+```
+enum APState {
+    Unknown,     // not yet evaluated
+    Supported,   // has an applicable rule, but not yet checked against attackers
+    Ambiguous,   // has support AND has an unbeatable applicable contrary rule
+    Proved,      // +d: all attackers defeated
+    Disproved,   // -d: no applicable rule, or definitely overridden
+}
+```
+
+The critical distinction from ambiguity blocking: in AB mode, an ambiguous literal
+is simply `-d` and rules depending on it are "discarded" the same as if the literal
+had no support at all. In AP mode, we must distinguish *unsupported* (`-d` because
+no rule fires) from *ambiguous* (`-d` because of unresolved conflict). Ambiguity
+is contagious; lack of support is not.
+
+### Additional Data Structures
+
+```
+// extends the base algorithm's data structures
+let supported: Set<Literal>          // literals that have at least one applicable Rsd rule
+let ambiguous: Set<Literal>          // literals blocked by unresolvable conflict
+let ambiguity_depends: Map<Literal, Set<Literal>>
+    // tracks which literals' ambiguity contributed to this literal's state
+```
+
+### Phase 2-AP: Defeasible Provability with Ambiguity Propagation
+
+Phase 1 (definite provability) is unchanged. Only phase 2 differs.
+
+```
+fn compute_defeasible_ap(theory, D) -> Map<Literal, bool>:
+    let d: Map<Literal, Option<bool>>
+    let supported: Set<Literal>
+    let ambiguous: Set<Literal>
+    let pending: Queue<(Literal, bool)>
+
+    // rule counters — same as blocking mode
+    let rule_pending:  Map<RuleId, usize>
+    let rule_discarded: Map<RuleId, bool>
+
+    for each rule r (strict, defeasible, AND defeater):
+        rule_pending[r] = |body(r)|
+        rule_discarded[r] = false
+
+    // --- seed from definite conclusions (same as blocking) ---
+    for each literal q where D[q] == Some(true):
+        d[q] = Some(true)
+        supported.insert(q)
+        pending.push((q, true))
+
+    for each literal q:
+        if D[q] == Some(false) and Rsd[q] is empty:
+            d[q] = Some(false)
+            pending.push((q, false))
+
+    // === MAIN LOOP: process until worklist is empty ===
+    while let Some((q, proved)) = pending.pop():
+
+        // --- update rule counters (same as blocking) ---
+        for each rule r where q ∈ body(r):
+            if proved:
+                rule_pending[r] -= 1
+            else:
+                rule_discarded[r] = true
+
+        if proved:
+            for each rule r in Rsd where q ∈ body(r):
+                if rule_pending[r] == 0 and not rule_discarded[r]:
+                    supported.insert(head(r))
+                    try_prove_ap(head(r))
+            try_disprove_ap(complement(q))
+        else:
+            for each rule r in Rsd where q ∈ body(r):
+                try_disprove_ap(head(r))
+            try_prove_ap(complement(q))
+
+        // --- AP-specific: propagate ambiguity ---
+        if q ∈ ambiguous:
+            propagate_ambiguity(q)
+
+    // === CLEANUP: anything still Unknown with support is ambiguous ===
+    for each literal q where d[q] is None:
+        if q ∈ supported:
+            ambiguous.insert(q)
+            d[q] = Some(false)     // ambiguous => not defeasibly provable
+        else:
+            d[q] = Some(false)     // no support => simply -d
+
+    return d
+```
+
+### Core: try_prove_ap
+
+Identical to the blocking version — the difference is in how ambiguity propagates,
+not in how individual proofs are attempted.
+
+```
+fn try_prove_ap(q):
+    if d[q] is not None: return
+
+    let nq = complement(q)
+
+    // condition (1): ∃r ∈ Rsd[q] that is applicable
+    let has_applicable = any r in Rsd[q]:
+        rule_pending[r] == 0 and not rule_discarded[r]
+    if not has_applicable: return
+
+    // condition (2): -D ~q
+    if D[nq] != Some(false): return
+
+    // condition (3): every rule for ~q is countered
+    for each s in R[nq]:
+        if rule_discarded[s]: continue
+
+        if rule_pending[s] > 0 and not rule_discarded[s]:
+            return                        // undecided attacker — wait
+
+        // s is applicable — need ∃t ∈ Rsd[q]: t applicable AND t > s
+        let defeated = any t in Rsd[q]:
+            rule_pending[t] == 0
+            and not rule_discarded[t]
+            and t ∈ superiors_of[s]
+        if not defeated: return
+
+    d[q] = Some(true)
+    pending.push((q, true))
+```
+
+### Core: try_disprove_ap
+
+Same structure as blocking, but must distinguish "unsupported" from "ambiguous"
+when recording the `-d` result.
+
+```
+fn try_disprove_ap(q):
+    if d[q] is not None: return
+    if D[q] != Some(false): return
+
+    let nq = complement(q)
+
+    // disjunct (2): +D ~q — strict override
+    if D[nq] == Some(true):
+        d[q] = Some(false)
+        pending.push((q, false))
+        return
+
+    // disjunct (1): all Rsd rules for q are discarded — no support
+    let all_discarded = all r in Rsd[q]: rule_discarded[r]
+    if all_discarded:
+        // NOT ambiguous — genuinely unsupported
+        d[q] = Some(false)
+        pending.push((q, false))
+        return
+
+    // disjunct (3): ∃ unbeatable applicable attacker
+    for each s in R[nq]:
+        if rule_pending[s] > 0 or rule_discarded[s]: continue
+
+        let any_t_undecided = any t in Rsd[q]:
+            not rule_discarded[t]
+            and rule_pending[t] > 0
+            and t ∈ superiors_of[s]
+        if any_t_undecided: continue
+
+        let all_t_fail = all t in Rsd[q]:
+            rule_discarded[t] or t ∉ superiors_of[s]
+
+        if all_t_fail:
+            // q IS supported (has applicable rules) but can't beat the attacker
+            if q ∈ supported:
+                ambiguous.insert(q)       // mark as ambiguous, not merely unsupported
+            d[q] = Some(false)
+            pending.push((q, false))
+            return
+```
+
+### Core: propagate_ambiguity
+
+This is the key difference from ambiguity blocking. When a literal `q` is ambiguous,
+every literal that depends on `q` through an applicable rule chain inherits the ambiguity.
+
+```
+fn propagate_ambiguity(q):
+    // q is ambiguous. Find all literals downstream of q that are still undecided
+    // and infect them with ambiguity.
+
+    let worklist: Queue<Literal> = [q]
+
+    while let Some(a) = worklist.pop():
+        // for each rule r where a appears in body AND r is strict/defeasible
+        for each rule r in Rsd where a ∈ body(r):
+            let h = head(r)
+            if d[h] is not None: continue       // already decided, skip
+            if h ∈ ambiguous: continue          // already infected, skip
+
+            // the rule r has an ambiguous body literal.
+            // in AP mode, h inherits the ambiguity EVEN IF h has other
+            // uncontested rules supporting it.
+            //
+            // however, we only infect h if h actually has support
+            // (otherwise it's just unsupported, not ambiguous)
+            if h ∈ supported or (any r' in Rsd[h]: rule_pending[r'] == 0 and not rule_discarded[r']):
+                ambiguous.insert(h)
+                d[h] = Some(false)
+                pending.push((h, false))
+                worklist.push(h)            // cascade further downstream
+```
+
+### Comparison: Blocking vs Propagation on the Same Theory
+
+```
+Theory:
+    r1: => p
+    r2: => -p
+    r3: => q          // independent support for q
+    r4: p => q         // also supports q, but depends on ambiguous p
+
+Ambiguity Blocking:
+    p  → ambiguous, marked -d
+    -p → ambiguous, marked -d
+    q  → +d  (r3 is uncontested, r4 is discarded because -d p, but r3 suffices)
+
+Ambiguity Propagation:
+    p  → ambiguous, marked -d
+    -p → ambiguous, marked -d
+    q  → -d  (even though r3 supports q independently, the ambiguity from
+              r4's dependency on p infects q — q is marked ambiguous)
+```
+
+### AP Driver
+
+```
+fn reason_ap(theory) -> Vec<Conclusion>:
+    build_indexes(theory)
+    let D = compute_definite(theory)         // phase 1 unchanged
+    let d = compute_defeasible_ap(theory, D) // phase 2 with AP semantics
+
+    let conclusions = []
+    for each literal q in theory:
+        if D[q] == Some(true):  conclusions.push(+D q)
+        if D[q] == Some(false): conclusions.push(-D q)
+        if d[q] == Some(true):  conclusions.push(+d q)
+        if d[q] == Some(false): conclusions.push(-d q)
+
+    return conclusions
+```
+
+### Termination Guarantee (AP)
+
+Same argument as blocking mode, plus:
+
+5. `propagate_ambiguity` visits each literal at most once (guarded by `h ∈ ambiguous` check)
+6. Each literal can be added to `ambiguous` at most once
+7. Total work in propagation is bounded by `|literals| + |rules|`
