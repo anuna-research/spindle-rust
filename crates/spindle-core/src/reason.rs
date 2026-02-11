@@ -227,6 +227,8 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
         // --- Seed +d from +D (subsumption), but respect condition (2) ---
         // +D q → +d q ONLY IF -D ~q (condition 2). When +D q AND +D ~q,
         // neither gets +d.
+        // Carry the +D conclusion's rule label onto the +d conclusion so
+        // downstream trust/source logic preserves derivation metadata.
         let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
         for &lit_id in &all_ids {
             if definite_proven.contains(lit_id) {
@@ -235,7 +237,22 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
                     // Normal case: +D q and -D ~q → +d q
                     defeasible_proven.insert(lit_id);
                     let lit = indexed.resolve_literal(lit_id);
-                    conclusions.push(Conclusion::defeasibly_provable(lit));
+                    // Find the +D conclusion's rule label for this literal
+                    let definite_label = conclusions.iter().find_map(|c| {
+                        if c.conclusion_type == ConclusionType::DefinitelyProvable
+                            && c.literal.name() == lit.name()
+                            && c.literal.negation == lit.negation
+                        {
+                            c.rule_label.as_deref()
+                        } else {
+                            None
+                        }
+                    });
+                    let mut conclusion = Conclusion::defeasibly_provable(lit);
+                    if let Some(label) = definite_label {
+                        conclusion = conclusion.with_rule(label);
+                    }
+                    conclusions.push(conclusion);
                     worklist.push_back((lit_id, true));
                 }
                 // If +D q AND +D ~q: don't seed +d (condition 2 fails).
