@@ -628,9 +628,15 @@ fn try_prove_defeasible(
             .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
 
         if att_remaining > 0 {
-            // Attacker's body is undecided. If a superior applicable rule
-            // defeats it, the attacker is countered regardless of whether
-            // it eventually becomes applicable. Otherwise we must wait.
+            // Strict attackers cannot be defeated by superiority, so a
+            // pending strict attacker must block — if its body later
+            // becomes true it will unconditionally block +d.
+            if attacker.rule_type == RuleType::Strict {
+                return;
+            }
+            // Defeasible attacker with undecided body: if a superior
+            // applicable rule defeats it, the attacker is countered
+            // regardless of whether it eventually becomes applicable.
             if defeated_by_superior {
                 continue;
             }
