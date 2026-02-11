@@ -1,6 +1,6 @@
 # SPL Format Reference
 
-SPL (Spindle Lisp) is a LISP-based DSL for defeasible logic with support for advanced features like variables, temporal reasoning, and metadata.
+SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DFL syntax with a LISP-based DSL whose s-expression structure makes it straightforward to add new constructs (temporal operators, trust directives, claims blocks, etc.) without grammar ambiguity.
 
 ## File Extension
 
