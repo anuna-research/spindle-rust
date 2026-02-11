@@ -11,8 +11,7 @@
 ; Another defeasible with conflicting conclusion + superiority
 (given fish)
 (normally r2 fish (not breathes))
-; Assume fish breathes = gills, not-breathes = doesn't breathe air
-; No superiority => both defeasible sides can be derived
+; No superiority => ambiguity blocks both conclusions (SDL)
 
 ; Defeater blocks a different conclusion
 (given tame)
@@ -22,8 +21,8 @@
 ; EXPECT: +D vertebrate
 ; EXPECT: +D animal
 ; EXPECT: +d animal
-; EXPECT: +d breathes
-; EXPECT: +d ~breathes
+; EXPECT: -d breathes
+; EXPECT: -d ~breathes
 ; EXPECT: +D fish
 ; EXPECT: +d fish
 ; EXPECT: +D tame

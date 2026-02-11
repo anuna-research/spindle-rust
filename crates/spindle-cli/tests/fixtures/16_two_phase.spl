@@ -1,0 +1,23 @@
+; Test: Two-phase reasoning (strict chain blocks defeasible)
+; Coverage: multi-hop strict chain must complete before defeasible phase
+
+; Strict chain: a -> c -> ~p (two hops)
+(given a)
+(given b)
+(always s1 a c)
+(always s2 c (not p))
+
+; Defeasible rule tries to prove p
+(normally r1 b p)
+
+; Phase 1 must derive +D ~p first. Then phase 2 sees +D ~p
+; and blocks +d p via condition (2).
+; EXPECT: +D a
+; EXPECT: +d a
+; EXPECT: +D b
+; EXPECT: +d b
+; EXPECT: +D c
+; EXPECT: +d c
+; EXPECT: +D ~p
+; EXPECT: +d ~p
+; EXPECT: -d p

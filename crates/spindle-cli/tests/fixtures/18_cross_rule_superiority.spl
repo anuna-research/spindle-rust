@@ -1,0 +1,20 @@
+; Test: Cross-rule superiority
+; Coverage: a different Rsd[q] rule (not the one that triggered) defeats the attacker
+
+; r1 and r3 both support q. r2 attacks q.
+; r1 is NOT superior to r2, but r3 IS.
+; So the attacker r2 is defeated via r3, and +d q.
+(given a)
+(given b)
+(normally r1 a q)
+(normally r2 b (not q))
+(normally r3 b q)
+(prefer r3 r2)
+
+; r3 > r2 defeats the attacker, even though r1 != r3
+; EXPECT: +D a
+; EXPECT: +d a
+; EXPECT: +D b
+; EXPECT: +d b
+; EXPECT: +d q
+; EXPECT: -d ~q

@@ -111,27 +111,57 @@ The mirror/dual of `+d`:
 
 ## Worked Example
 
+### Example 1: Conflicting Facts
+
 ```
 f1: >> p
 f2: >> -p
 ```
 
-Both are facts (empty-body defeasible rules). No superiority relation defined.
+Both are facts. Facts are `+D` (definite axioms). No superiority relation defined.
+
+**Phase 1 (Definite):** `+D p`, `+D -p` (both are facts).
 
 **Evaluate `+d p`:**
 
-- Condition (1): `f1` is applicable (empty body) — **pass**
-- Condition (2): `-D -p` — `-p` has no strict rules, so yes — **pass**
-- Condition (3): Check `f2 ∈ R[-p]`: is `f2` discarded? No (empty body). Is there `t ∈ Rsd[p]` with `t > f2`? No superiority defined — **fail**
+- First disjunct: `+D p ∈ P`? Yes — but the second disjunct still requires `-D -p`.
+- Condition (2): `-D -p` — `-p` IS `+D`, so this is **false** — **fail**
 
 **Result:** `+d p` fails. By symmetry `+d -p` also fails.
 
 ```
--d p
--d -p
++D p, +D -p
+-d p, -d -p
 ```
 
-Neither literal is defeasibly provable. **Consistency enforced.**
+Neither literal is defeasibly provable despite both being definite. **Consistency enforced by condition (2).**
+
+### Example 2: Conflicting Defeasible Rules
+
+```
+>> a
+r1: a => q
+r2: a => -q
+```
+
+No superiority relation defined.
+
+**Phase 1:** `+D a` (fact). No strict rules for `q` or `-q`, so `-D q`, `-D -q`.
+
+**Evaluate `+d q`:**
+
+- Condition (1): `r1` is applicable (body `a` is `+d`) — **pass**
+- Condition (2): `-D -q` — yes — **pass**
+- Condition (3): Check `r2 ∈ R[-q]`: is `r2` discarded? No (body `a` is `+d`). Is there `t ∈ Rsd[q]` with `t > r2`? `r1` is applicable but no `r1 > r2` — **fail**
+
+**Result:** `+d q` fails. By symmetry `+d -q` also fails.
+
+```
+-d q
+-d -q
+```
+
+**Ambiguity blocking:** neither conclusion is defeasibly provable.
 
 ---
 
@@ -196,11 +226,16 @@ Defeaters (`~>`) are asymmetric "veto-only" rules:
 
 | Type | Symbol | Can establish conclusions? | Can attack conclusions? | Proof level |
 |---|---|---|---|---|
-| Fact | `>>` | Yes (defeasible) | Yes | Defeasible |
+| Fact | `>>` | Yes (definite + defeasible) | Yes | Definite |
 | Strict | `->` | Yes (definite + defeasible) | Yes | Definite |
 | Defeasible | `=>` | Yes (defeasible) | Yes | Defeasible |
 | Defeater | `~>` | **No** | Yes | — |
 | Superiority | `>` | — | — | — |
+
+> **Design note:** Facts (`>>`) are treated as definite axioms (`+D`), matching the
+> pseudocode below and SPINdle's Java implementation. This means conflicting facts
+> `>> p` and `>> -p` both produce `+D`, but neither produces `+d` because condition (2)
+> of `+d` requires `-D ~q`, which fails when both sides are `+D`.
 
 ---
 

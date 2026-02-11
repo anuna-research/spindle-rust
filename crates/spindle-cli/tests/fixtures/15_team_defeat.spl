@@ -9,10 +9,11 @@
 (normally r2 b p)
 (normally r3 c (not p))
 
-; Without superiority, both p and ~p are defeasibly derivable
-; (superiority is explicit and per-rule, not per-team)
+; Without superiority, ambiguity blocks both p and ~p (SDL).
+; Superiority is per-rule: r3 blocks both r1 and r2 since
+; neither r1 > r3 nor r2 > r3 holds.
 ; EXPECT: +d a
 ; EXPECT: +d b
 ; EXPECT: +d c
-; EXPECT: +d p
-; EXPECT: +d ~p
+; EXPECT: -d p
+; EXPECT: -d ~p
