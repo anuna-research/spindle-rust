@@ -237,11 +237,12 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
                     // Normal case: +D q and -D ~q → +d q
                     defeasible_proven.insert(lit_id);
                     let lit = indexed.resolve_literal(lit_id);
-                    // Find the +D conclusion's rule label for this literal
+                    // Find the +D conclusion's rule label for this literal.
+                    // Match by LitId (full literal identity) so p(a) vs p(b) are
+                    // not confused.
                     let definite_label = conclusions.iter().find_map(|c| {
                         if c.conclusion_type == ConclusionType::DefinitelyProvable
-                            && c.literal.name() == lit.name()
-                            && c.literal.negation == lit.negation
+                            && indexed.get_lit_id(&c.literal) == Some(lit_id)
                         {
                             c.rule_label.as_deref()
                         } else {
