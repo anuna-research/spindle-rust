@@ -69,12 +69,12 @@ theory.add_defeater(&["broken_wing"], "flies");
 theory.add_superiority(&r2, &r1);
 ```
 
-### Parsing DFL
+### Parsing SPL
 
 ```rust
-use spindle_parser::parse_dfl;
+use spindle_parser::parse_spl;
 
-let dfl = r#"
+let spl = r#"
     f1: >> bird
     f2: >> penguin
     r1: bird => flies
@@ -82,7 +82,7 @@ let dfl = r#"
     r2 > r1
 "#;
 
-let theory = parse_dfl(dfl)?;
+let theory = parse_spl(spl)?;
 ```
 
 ### Parsing SPL
@@ -287,8 +287,8 @@ use spindle_parser::ParseError;
 fn load_theory(path: &str) -> Result<Theory> {
     let content = std::fs::read_to_string(path)?;
 
-    if path.ends_with(".dfl") {
-        parse_dfl(&content).map_err(|e| SpindleError::Parse(e.to_string()))
+    if path.ends_with(".spl") {
+        parse_spl(&content).map_err(|e| SpindleError::Parse(e.to_string()))
     } else if path.ends_with(".spl") {
         parse_spl(&content).map_err(|e| SpindleError::Parse(e.to_string()))
     } else {
@@ -339,13 +339,13 @@ let results: Vec<_> = queries
 
 ```rust
 use spindle_core::prelude::*;
-use spindle_parser::parse_dfl;
+use spindle_parser::parse_spl;
 use std::fs;
 
 fn main() -> Result<()> {
     // Load theory
-    let content = fs::read_to_string("rules.dfl")?;
-    let mut theory = parse_dfl(&content)?;
+    let content = fs::read_to_string("rules.spl")?;
+    let mut theory = parse_spl(&content)?;
 
     // Add runtime facts
     theory.add_fact("current_user_admin");

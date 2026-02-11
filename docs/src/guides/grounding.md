@@ -183,12 +183,12 @@ Tips:
 - Use specific predicates to reduce matching
 - Add explicit superiority where grounded conflicts should resolve to one side
 
-## DFL Limitations
+## SPL Limitations
 
-The DFL format does **not** support variables. Use SPL for first-order rules:
+The SPL format does **not** support variables. Use SPL for first-order rules:
 
-```dfl
-# DFL - no variables, must enumerate manually
+```lisp
+# SPL - no variables, must enumerate manually
 r1: parent_alice_bob => ancestor_alice_bob
 r2: parent_bob_charlie => ancestor_bob_charlie
 ```

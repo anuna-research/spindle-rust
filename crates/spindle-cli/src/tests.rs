@@ -713,20 +713,20 @@ fn test_integration_full_workflow() {
 }
 
 #[test]
-fn test_file_based_query_dfl() {
+fn test_file_based_query_spl_text() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("test.dfl");
+    let file_path = temp_dir.path().join("test.spl");
 
-    let dfl_content = r#"
-# Birds fly example
-f1: >> bird
-r1: bird => flies
+    let spl_content = r#"
+; Birds fly example
+(given bird)
+(normally r1 bird flies)
 "#;
 
-    fs::write(&file_path, dfl_content).unwrap();
+    fs::write(&file_path, spl_content).unwrap();
 
     let content = fs::read_to_string(&file_path).unwrap();
-    let theory = spindle_parser::parse_dfl(&content).unwrap();
+    let theory = spindle_parser::parse_spl(&content).unwrap();
 
     let result = query(&theory, &Literal::simple("flies")).unwrap();
     assert!(result.is_provable());
@@ -757,21 +757,21 @@ fn test_file_based_query_spl() {
 #[test]
 fn test_file_based_penguin_example() {
     let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("penguin.dfl");
+    let file_path = temp_dir.path().join("penguin.spl");
 
-    let dfl_content = r#"
-# Classic Tweety/Penguin example
-f1: >> bird
-f2: >> penguin
-r1: bird => flies
-r2: penguin => -flies
-r2 > r1
+    let spl_content = r#"
+; Classic Tweety/Penguin example
+(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 "#;
 
-    fs::write(&file_path, dfl_content).unwrap();
+    fs::write(&file_path, spl_content).unwrap();
 
     let content = fs::read_to_string(&file_path).unwrap();
-    let theory = spindle_parser::parse_dfl(&content).unwrap();
+    let theory = spindle_parser::parse_spl(&content).unwrap();
 
     // flies should be refuted (penguin wins)
     let flies_result = query(&theory, &Literal::simple("flies")).unwrap();

@@ -56,15 +56,15 @@ fn test_version_flag() {
 // ============================================================================
 
 #[test]
-fn test_reason_dfl_file() {
+fn test_reason_spl_file_from_text_fixture() {
     let content = r#"
-# Facts
-f1: >> bird
+; Facts
+(given bird)
 
-# Defeasible rules
-r1: bird => flies
+; Defeasible rules
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("reason")
@@ -95,10 +95,10 @@ fn test_reason_spl_file() {
 #[test]
 fn test_reason_with_positive_flag() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("reason")
@@ -113,10 +113,10 @@ r1: bird => flies
 fn test_reason_direct_file_arg() {
     // Direct invocation without subcommand is rejected.
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg(&path)
@@ -129,10 +129,10 @@ r1: bird => flies
 #[test]
 fn test_reason_with_strict_rules() {
     let content = r#"
-f1: >> human
-s1: human -> mortal
+(given human)
+(always s1 human mortal)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("reason")
@@ -145,13 +145,13 @@ s1: human -> mortal
 #[test]
 fn test_reason_with_superiority() {
     let content = r#"
-f1: >> bird
-f2: >> penguin
-r1: bird => flies
-r2: penguin => -flies
-r2 > r1
+(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("reason")
@@ -166,19 +166,19 @@ r2 > r1
 // ============================================================================
 
 #[test]
-fn test_validate_valid_dfl() {
-    let content = r#"
-f1: >> bird
-r1: bird => flies
-"#;
+fn test_validate_rejects_dfl_file() {
+    let content = "f1: >> bird\nr1: bird => flies\n";
     let (_dir, path) = setup_theory_file(content, "dfl");
 
     spindle()
         .arg("validate")
         .arg(&path)
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Valid theory file"));
+        .failure()
+        .stderr(predicate::str::contains("Validation Error"))
+        .stderr(predicate::str::contains(
+            "DFL format is no longer supported",
+        ));
 }
 
 #[test]
@@ -198,11 +198,11 @@ fn test_validate_valid_spl() {
 }
 
 #[test]
-fn test_validate_invalid_dfl() {
+fn test_validate_invalid_spl() {
     let content = r#"
-this is not valid dfl syntax !!!
+this is not valid syntax !!!
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("validate")
@@ -216,7 +216,7 @@ this is not valid dfl syntax !!!
 fn test_validate_nonexistent_file() {
     spindle()
         .arg("validate")
-        .arg("/nonexistent/path/to/file.dfl")
+        .arg("/nonexistent/path/to/file.spl")
         .assert()
         .failure()
         .stderr(predicate::str::contains("Error reading file"));
@@ -253,14 +253,14 @@ fn test_validate_json_success_from_stdin() {
 #[test]
 fn test_stats_command() {
     let content = r#"
-f1: >> bird
-f2: >> penguin
-r1: bird => flies
-r2: penguin => -flies
-s1: human -> mortal
-r2 > r1
+(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(always s1 human mortal)
+(prefer r2 r1)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("stats")
@@ -281,7 +281,7 @@ fn test_stats_json_success_from_stdin() {
         .arg("--json")
         .arg("stats")
         .arg("--stdin")
-        .write_stdin("f1: >> bird\nr1: bird => flies\n")
+        .write_stdin("(given bird)\n(normally r1 bird flies)\n")
         .output()
         .expect("Failed to execute stats --json --stdin");
 
@@ -309,10 +309,10 @@ fn test_stats_json_success_from_stdin() {
 #[test]
 fn test_query_provable() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("query")
@@ -326,10 +326,10 @@ r1: bird => flies
 #[test]
 fn test_query_unknown() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("query")
@@ -343,10 +343,10 @@ r1: bird => flies
 #[test]
 fn test_query_with_json() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     let output = spindle()
         .arg("query")
@@ -364,13 +364,13 @@ r1: bird => flies
 #[test]
 fn test_query_negated_literal() {
     let content = r#"
-f1: >> bird
-f2: >> penguin
-r1: bird => flies
-r2: penguin => -flies
-r2 > r1
+(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("query")
@@ -388,10 +388,10 @@ r2 > r1
 #[test]
 fn test_explain_provable() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("explain")
@@ -404,10 +404,10 @@ r1: bird => flies
 #[test]
 fn test_explain_not_provable() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     // Per contract §8.2: explain with no proof tree returns exit code 0
     spindle()
@@ -422,10 +422,10 @@ r1: bird => flies
 #[test]
 fn test_explain_with_json() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("explain")
@@ -439,10 +439,10 @@ r1: bird => flies
 #[test]
 fn test_explain_not_provable_json() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     // Per contract §8.2: explain with no proof tree returns exit code 0
     let output = spindle()
@@ -466,10 +466,10 @@ r1: bird => flies
 #[test]
 fn test_why_not() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("why-not")
@@ -482,10 +482,10 @@ r1: bird => flies
 #[test]
 fn test_why_not_json() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     let output = spindle()
         .arg("why-not")
@@ -508,9 +508,9 @@ r1: bird => flies
 #[test]
 fn test_requires() {
     let content = r#"
-r1: bird => flies
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("requires")
@@ -523,10 +523,10 @@ r1: bird => flies
 #[test]
 fn test_requires_with_max() {
     let content = r#"
-r1: bird => flies
-r2: plane => flies
+(normally r1 bird flies)
+(normally r2 plane flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("requires")
@@ -541,10 +541,10 @@ r2: plane => flies
 #[test]
 fn test_requires_with_max_respected_in_text_output() {
     let content = r#"
-r1: bird => flies
-r2: plane => flies
+(normally r1 bird flies)
+(normally r2 plane flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("requires")
@@ -561,9 +561,9 @@ r2: plane => flies
 #[test]
 fn test_requires_json() {
     let content = r#"
-r1: bird => flies
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     let output = spindle()
         .arg("requires")
@@ -649,6 +649,38 @@ fn test_json_flag_parse_error_emits_json_envelope() {
     assert!(json["diagnostics"].is_array());
 }
 
+#[test]
+fn test_reason_rejects_dfl_file() {
+    let content = "f1: >> bird\nr1: bird => flies\n";
+    let (_dir, path) = setup_theory_file(content, "dfl");
+
+    spindle()
+        .arg("reason")
+        .arg(&path)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "DFL format is no longer supported",
+        ));
+}
+
+#[test]
+fn test_reason_rejects_dfl_stdin_json() {
+    let output = spindle()
+        .arg("--json")
+        .arg("reason")
+        .arg("--stdin")
+        .write_stdin("f1: >> bird\nr1: bird => flies\n")
+        .output()
+        .expect("Failed to execute reason --json --stdin");
+
+    assert!(!output.status.success(), "DFL stdin should be rejected");
+    let json: Value = serde_json::from_slice(&output.stdout)
+        .expect("reason --json with DFL stdin should emit JSON envelope");
+    assert_eq!(json["error"]["code"], "UNSUPPORTED_INPUT_FORMAT");
+    assert_eq!(json["error"]["details"]["input_format"], "dfl");
+}
+
 // ============================================================================
 // SPL format detection
 // ============================================================================
@@ -723,14 +755,14 @@ fn test_spl_detection_by_comment() {
 #[test]
 fn test_reason_complex_theory() {
     let content = r#"
-f1: >> bird
-f2: >> penguin
-f3: >> opus
-r1: bird => flies
-r2: penguin => -flies
-r2 > r1
+(given bird)
+(given penguin)
+(given opus)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("reason")
@@ -743,12 +775,12 @@ r2 > r1
 #[test]
 fn test_reason_defeaters() {
     let content = r#"
-f1: >> bird
-f2: >> wounded
-r1: bird => flies
-d1: wounded ~> -flies
+(given bird)
+(given wounded)
+(normally r1 bird flies)
+(except d1 wounded (not flies))
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     spindle()
         .arg("reason")
@@ -799,10 +831,10 @@ fn test_spl_except_rule() {
 #[test]
 fn test_reason_json_schema() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     let output = spindle()
         .arg("reason")
@@ -824,10 +856,10 @@ r1: bird => flies
 #[test]
 fn test_direct_json_flag() {
     let content = r#"
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 "#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
+    let (_dir, path) = setup_theory_file(content, "spl");
 
     let output = spindle()
         .arg(&path)

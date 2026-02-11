@@ -27,9 +27,8 @@ This project is part of the SPINdle family:
 
 - **First-Order Variables**: Datalog-style grounding with `?x` variable syntax
 
-- **Two Input Formats**:
-  - DFL (Defeasible Logic Format) - Textual syntax
-  - SPL (Spindle Lisp) - LISP-based DSL
+- **Input Format**:
+  - SPL (Spindle Lisp) - Lisp-based DSL
 
 - **Explanations**: Proof trees with natural language and JSON output
 
@@ -51,35 +50,17 @@ cargo install --path crates/spindle-cli
 ## Usage
 
 ```bash
-# Reason about a theory (DFL format)
-spindle examples/penguin.dfl
-
 # Reason about a theory (SPL format)
 spindle examples/penguin.spl
 
 # Show only positive conclusions
-spindle --positive examples/penguin.dfl
+spindle --positive examples/penguin.spl
 
 # Validate a theory file
-spindle validate examples/penguin.dfl
+spindle validate examples/penguin.spl
 
 # Show statistics
-spindle stats examples/penguin.dfl
-```
-
-## DFL Format
-
-```dfl
-# Facts
-f1: >> bird
-f2: >> penguin
-
-# Defeasible rules
-r1: bird => flies
-r2: penguin => -flies
-
-# Superiority (r2 beats r1)
-r2 > r1
+spindle stats examples/penguin.spl
 ```
 
 ## SPL Format
@@ -148,13 +129,13 @@ spindle.addDefeasibleRule(["bird"], "flies");
 spindle.addDefeasibleRule(["penguin"], "~flies");
 spindle.addSuperiority("r2", "r1");
 
-// Or parse DFL
-spindle.parseDfl(`
-  f1: >> bird
-  f2: >> penguin
-  r1: bird => flies
-  r2: penguin => ~flies
-  r2 > r1
+// Or parse SPL
+spindle.parseSpl(`
+  (given bird)
+  (given penguin)
+  (normally r1 bird flies)
+  (normally r2 penguin (not flies))
+  (prefer r2 r1)
 `);
 
 // Reason
@@ -187,7 +168,7 @@ const abduce = spindle.abduce("flies", 3);
   - `explanation` - Proof trees and explanations
   - `trust` - Trust-weighted reasoning
   - `query` - What-if, why-not, abduction operators
-- `spindle-parser` - DFL and SPL format parsers
+- `spindle-parser` - SPL format parsers
 - `spindle-cli` - Command-line interface
 - `spindle-wasm` - WebAssembly bindings for JavaScript/TypeScript
 

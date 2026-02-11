@@ -11,7 +11,7 @@ This project is part of the SPINdle family:
 
 Defeasible logic is a **non-monotonic reasoning** system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.
 
-```dfl
+```lisp
 # The classic "Tweety" example
 f1: >> bird
 f2: >> penguin
@@ -32,7 +32,7 @@ r2 > r1                  # Penguin rule beats bird rule
 - **First-order variables:** Datalog-style grounding with `?x` syntax
 - **Query operators:** what-if, why-not, and abduction
 - **Trust-aware reasoning:** source attribution and weighted conclusions
-- **Two input formats:** DFL (textual) and SPL (Lisp-based)
+- **Two input formats:** SPL (textual) and SPL (Lisp-based)
 - **WebAssembly support:** run in browsers and Node.js
 
 ## Quick Example
@@ -78,7 +78,7 @@ spindle-parser = { path = "crates/spindle-parser" }
 | Crate | Description |
 |-------|-------------|
 | `spindle-core` | Core reasoning engine |
-| `spindle-parser` | DFL and SPL format parsers |
+| `spindle-parser` | SPL format parsers |
 | `spindle-cli` | Command-line interface |
 | `spindle-wasm` | WebAssembly bindings |
 

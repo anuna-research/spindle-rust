@@ -6,8 +6,8 @@ Spindle supports four types of rules, each with different semantics for how conc
 
 Facts are unconditional truths. They have no body (antecedent) and are always true.
 
-**DFL:**
-```dfl
+**SPL:**
+```lisp
 f1: >> bird
 f2: >> penguin
 f3: >> -guilty    # Negated fact
@@ -26,8 +26,8 @@ Facts produce **definite conclusions** (`+D`) that cannot be defeated.
 
 Strict rules express necessary implications. If the body is true, the head **must** be true.
 
-**DFL:**
-```dfl
+**SPL:**
+```lisp
 r1: penguin -> bird        # All penguins are birds
 r2: human, mortal -> dies  # All mortal humans die
 ```
@@ -51,8 +51,8 @@ Use strict rules for:
 
 Defeasible rules express typical or default behavior that may have exceptions.
 
-**DFL:**
-```dfl
+**SPL:**
+```lisp
 r1: bird => flies           # Birds typically fly
 r2: student => has_loans    # Students typically have loans
 ```
@@ -79,8 +79,8 @@ Use defeasible rules for:
 
 Defeaters are special rules that **block** conclusions without proving anything themselves.
 
-**DFL:**
-```dfl
+**SPL:**
+```lisp
 d1: broken_wing ~> flies    # A broken wing blocks "flies"
 ```
 
@@ -91,7 +91,7 @@ d1: broken_wing ~> flies    # A broken wing blocks "flies"
 
 ### Defeater vs. Defeasible Rule
 
-```dfl
+```lisp
 # Defeasible rule: proves -flies
 r1: penguin => -flies
 
@@ -115,12 +115,12 @@ Use defeaters when:
 Rule bodies can contain:
 
 ### Single Literal
-```dfl
+```lisp
 r1: bird => flies
 ```
 
 ### Multiple Literals (Conjunction)
-```dfl
+```lisp
 r1: bird, healthy => flies
 r2: student, employed => busy
 ```
@@ -131,7 +131,7 @@ r2: student, employed => busy
 ```
 
 ### Negated Literals
-```dfl
+```lisp
 r1: bird, -penguin => flies   # Non-penguin birds fly
 ```
 
@@ -140,12 +140,12 @@ r1: bird, -penguin => flies   # Non-penguin birds fly
 Rule heads are single literals that can be:
 
 ### Positive
-```dfl
+```lisp
 r1: bird => flies
 ```
 
 ### Negated
-```dfl
+```lisp
 r1: penguin => -flies
 ```
 
@@ -156,8 +156,8 @@ Every rule has a label (identifier) used for:
 - Explanations
 - Debugging
 
-**DFL:** Labels are required and appear before the colon:
-```dfl
+**SPL:** Labels are required and appear before the colon:
+```lisp
 my_rule: bird => flies
 ```
 

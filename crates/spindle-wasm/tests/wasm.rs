@@ -95,33 +95,9 @@ fn test_clear() {
 // =============================================================================
 
 #[wasm_bindgen_test]
-fn test_parse_dfl() {
+fn test_parse_spl_rejects_dfl() {
     let mut spindle = Spindle::new();
-    spindle.parse_dfl("f1: >> bird\nr1: bird => flies").unwrap();
-    assert_eq!(spindle.rule_count(), 2);
-}
-
-#[wasm_bindgen_test]
-fn test_parse_dfl_complex() {
-    let mut spindle = Spindle::new();
-    spindle
-        .parse_dfl(
-            r#"
-            f1: >> bird
-            f2: >> penguin
-            r1: bird => flies
-            r2: penguin => ~flies
-            r2 > r1
-            "#,
-        )
-        .unwrap();
-    assert_eq!(spindle.rule_count(), 4);
-}
-
-#[wasm_bindgen_test]
-fn test_parse_dfl_error() {
-    let mut spindle = Spindle::new();
-    let result = spindle.parse_dfl("invalid syntax @@@ garbage");
+    let result = spindle.parse_spl("f1: >> bird\nr1: bird => flies");
     assert!(result.is_err());
 }
 
@@ -201,19 +177,9 @@ fn test_reason_with_conflict() {
 }
 
 #[wasm_bindgen_test]
-fn test_reason_dfl() {
+fn test_reason_spl_rejects_dfl() {
     let mut spindle = Spindle::new();
-    let result = spindle
-        .reason_dfl("f1: >> bird\nr1: bird => flies")
-        .unwrap();
-    assert!(result.contains("bird"));
-    assert!(result.contains("flies"));
-}
-
-#[wasm_bindgen_test]
-fn test_reason_dfl_error() {
-    let mut spindle = Spindle::new();
-    let result = spindle.reason_dfl("invalid @@ syntax");
+    let result = spindle.reason_spl("f1: >> bird\nr1: bird => flies");
     assert!(result.is_err());
 }
 
@@ -493,13 +459,13 @@ fn test_full_workflow() {
 
     // Parse theory
     spindle
-        .parse_dfl(
+        .parse_spl(
             r#"
-        f1: >> expert
-        f2: >> novice
-        r1: expert => reliable
-        r2: novice => ~reliable
-        r1 > r2
+        (given expert)
+        (given novice)
+        (normally r1 expert reliable)
+        (normally r2 novice (not reliable))
+        (prefer r1 r2)
         "#,
         )
         .unwrap();

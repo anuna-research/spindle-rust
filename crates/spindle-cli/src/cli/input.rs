@@ -1,12 +1,12 @@
 //! Theory source resolution and loading
 //!
-//! Handles input from files and stdin, auto-detecting SPL vs DFL format.
+//! Handles input from files and stdin, parsing SPL format.
 
 use std::path::PathBuf;
 
 use spindle_core::literal::Literal;
+use spindle_parser::parse_spl;
 use spindle_parser::spl::parse_spl as parse_spl_str;
-use spindle_parser::{parse_dfl, parse_spl};
 
 use super::error::CliError;
 
@@ -78,14 +78,6 @@ fn parse_theory_content(
     content: &str,
     file: Option<&PathBuf>,
 ) -> Result<spindle_core::Theory, CliError> {
-    // Auto-detect SPL vs DFL based on file extension or content
-    let is_spl = file
-        .map(|f| f.extension().is_some_and(|ext| ext == "spl"))
-        .unwrap_or(false)
-        || content.trim().starts_with("#lang")
-        || content.trim().starts_with('(')
-        || content.trim().starts_with(';');
-
     let source_name = file
         .map(|f| f.display().to_string())
         .unwrap_or_else(|| "stdin".to_string());
@@ -101,11 +93,63 @@ fn parse_theory_content(
         err
     };
 
-    if is_spl {
-        parse_spl(content).map_err(|e| enrich(&e, CliError::parse(e.code(), e.to_string())))
-    } else {
-        parse_dfl(content).map_err(|e| enrich(&e, CliError::parse(e.code(), e.to_string())))
+    let is_dfl_extension = file
+        .and_then(|f| f.extension())
+        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("dfl"));
+
+    if is_dfl_extension || has_dfl_shape(content) {
+        return Err(CliError::validation(
+            "UNSUPPORTED_INPUT_FORMAT",
+            "DFL format is no longer supported; use SPL input.",
+        )
+        .with_source_name(&source_name)
+        .with_details(serde_json::json!({
+            "input_format": "dfl",
+            "supported_formats": ["spl"],
+            "hint": "Convert DFL rules to SPL, e.g. 'f1: >> bird' -> '(given bird)'."
+        })));
     }
+
+    parse_spl(content).map_err(|e| enrich(&e, CliError::parse(e.code(), e.to_string())))
+}
+
+fn has_dfl_shape(content: &str) -> bool {
+    content.lines().any(is_dfl_line)
+}
+
+fn is_dfl_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        return false;
+    }
+
+    if let Some((label, rest)) = trimmed.split_once(':') {
+        let label = label.trim();
+        if is_dfl_identifier(label)
+            && (rest.contains(">>")
+                || rest.contains("->")
+                || rest.contains("=>")
+                || rest.contains("~>"))
+        {
+            return true;
+        }
+    }
+
+    if let Some((superior, inferior)) = trimmed.split_once('>') {
+        let superior = superior.trim();
+        let inferior = inferior.trim();
+        if is_dfl_identifier(superior) && is_dfl_identifier(inferior) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn is_dfl_identifier(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 pub(crate) fn parse_literal_arg(s: &str) -> Result<Literal, CliError> {
@@ -128,5 +172,25 @@ pub(crate) fn parse_literal_arg(s: &str) -> Result<Literal, CliError> {
         Ok(Literal::negated(stripped))
     } else {
         Ok(Literal::simple(s))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_dfl_shape;
+
+    #[test]
+    fn detects_dfl_rule_shape() {
+        assert!(has_dfl_shape("f1: >> bird\nr1: bird => flies\n"));
+    }
+
+    #[test]
+    fn detects_dfl_superiority_shape() {
+        assert!(has_dfl_shape("r2 > r1\n"));
+    }
+
+    #[test]
+    fn does_not_flag_spl_input() {
+        assert!(!has_dfl_shape("(given bird)\n(normally r1 bird flies)\n"));
     }
 }

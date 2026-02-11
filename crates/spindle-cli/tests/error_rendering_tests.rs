@@ -93,7 +93,7 @@ fn test_human_parse_error_shows_source_location() {
 #[test]
 fn test_human_parse_error_shows_source_context() {
     // Multi-line input where the error is on a specific line
-    let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
+    let input = "(given bird)\nbad syntax!!!\n(normally r2 cat pet)\n";
     let (exit, _stdout, stderr) = run_with_stdin(&["reason", "--stdin"], Some(input));
     assert_eq!(exit, 2);
     // Source context should include line numbers with pipe separator
@@ -105,7 +105,7 @@ fn test_human_parse_error_shows_source_context() {
 
 #[test]
 fn test_json_parse_error_includes_location_fields() {
-    let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
+    let input = "(given bird)\nbad syntax!!!\n(normally r2 cat pet)\n";
     let (exit, stdout, _stderr) = run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
     assert_eq!(exit, 2);
     let json: serde_json::Value =
@@ -123,7 +123,7 @@ fn test_json_parse_error_includes_location_fields() {
 
 #[test]
 fn test_json_parse_error_includes_source_context() {
-    let input = "r1: bird => flies\nbad syntax!!!\nr2: cat => pet\n";
+    let input = "(given bird)\nbad syntax!!!\n(normally r2 cat pet)\n";
     let (exit, stdout, _stderr) = run_with_stdin(&["reason", "--json", "--stdin"], Some(input));
     assert_eq!(exit, 2);
     let json: serde_json::Value =
@@ -181,7 +181,7 @@ fn test_location_shown_without_debug_flag() {
 fn test_redaction_no_abs_paths_in_normal_mode() {
     // Trigger a file-not-found error with an absolute path
     let (exit, _stdout, stderr) =
-        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
+        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.spl"], None);
     assert_eq!(exit, 2);
     assert!(
         stderr.starts_with("Error: "),
@@ -189,7 +189,7 @@ fn test_redaction_no_abs_paths_in_normal_mode() {
     );
     // In normal mode, the absolute path directory should be stripped from source_name
     assert!(
-        stderr.contains("nonexistent_spindle_test_file.dfl"),
+        stderr.contains("nonexistent_spindle_test_file.spl"),
         "Should still mention the filename, got: {stderr}"
     );
     // Should NOT contain the /tmp/ directory prefix in the location line
@@ -199,7 +199,7 @@ fn test_redaction_no_abs_paths_in_normal_mode() {
     );
     // Should NOT contain any absolute path in the detail message either
     assert!(
-        !stderr.contains("/tmp/nonexistent_spindle_test_file.dfl"),
+        !stderr.contains("/tmp/nonexistent_spindle_test_file.spl"),
         "Normal mode should redact absolute paths in detail message, got: {stderr}"
     );
 }
@@ -211,13 +211,13 @@ fn test_redaction_debug_mode_shows_full_path() {
         &[
             "reason",
             "--debug-errors",
-            "/tmp/nonexistent_spindle_test_file.dfl",
+            "/tmp/nonexistent_spindle_test_file.spl",
         ],
         None,
     );
     assert_eq!(exit, 2);
     assert!(
-        stderr.contains("/tmp/nonexistent_spindle_test_file.dfl"),
+        stderr.contains("/tmp/nonexistent_spindle_test_file.spl"),
         "Debug mode should show full absolute path, got: {stderr}"
     );
 }
@@ -229,7 +229,7 @@ fn test_redaction_debug_mode_shows_code() {
         &[
             "reason",
             "--debug-errors",
-            "/tmp/nonexistent_spindle_test_file.dfl",
+            "/tmp/nonexistent_spindle_test_file.spl",
         ],
         None,
     );
@@ -248,7 +248,7 @@ fn test_redaction_debug_mode_shows_code() {
 fn test_redaction_normal_mode_hides_code() {
     // Without --debug-errors, the error type URI and exit code should NOT appear
     let (exit, _stdout, stderr) =
-        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
+        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.spl"], None);
     assert_eq!(exit, 2);
     assert!(
         !stderr.contains("tag:spindle.dev,2026:error:"),
@@ -264,7 +264,7 @@ fn test_redaction_normal_mode_hides_code() {
 fn test_redaction_os_error_stripped_in_normal_mode() {
     // File not found should trigger OS error string in the detail
     let (exit, _stdout, stderr) =
-        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.dfl"], None);
+        run_with_stdin(&["reason", "/tmp/nonexistent_spindle_test_file.spl"], None);
     assert_eq!(exit, 2);
     // OS error codes like "(os error 2)" should be stripped in normal mode
     assert!(
@@ -279,7 +279,7 @@ fn test_redaction_os_error_shown_in_debug_mode() {
         &[
             "reason",
             "--debug-errors",
-            "/tmp/nonexistent_spindle_test_file.dfl",
+            "/tmp/nonexistent_spindle_test_file.spl",
         ],
         None,
     );
@@ -410,8 +410,8 @@ fn test_json_details_preserves_structured_metadata() {
     // CONFLICTING_INPUT_SOURCES passes file and stdin fields in with_details()
     // These should appear in error.details alongside problem
     let (exit, stdout, _stderr) = run_with_stdin(
-        &["reason", "--json", "--stdin", "dummy.dfl"],
-        Some("r1: a => b"),
+        &["reason", "--json", "--stdin", "dummy.spl"],
+        Some("(normally r1 a b)"),
     );
     assert_eq!(exit, 2);
     let json: serde_json::Value =

@@ -224,7 +224,8 @@ impl From<&spindle_core::error::SpindleError> for ProblemDetails {
             }
             SpindleError::Parse { .. } => {
                 pd = pd.with_hint(
-                    "Check the input syntax. Use --stdin with DFL or SPL format.".to_string(),
+                    "Check the input syntax. Use SPL format with --stdin or a .spl file."
+                        .to_string(),
                 );
             }
             _ => {}

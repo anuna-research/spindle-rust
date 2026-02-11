@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,7 +193,7 @@
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operator</th><th>DFL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
+<tr><th>Operator</th><th>SPL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
 </thead>
 <tbody>
 <tr><td>Obligation</td><td><code>[O]</code></td><td><code>(must ...)</code></td><td>The proposition <strong>must</strong> hold</td></tr>
@@ -208,9 +208,9 @@
 <p>A permission states that something is allowed. If <code>[P]access</code> is concluded, then access is permitted.</p>
 <h3 id="forbidden-f"><a class="header" href="#forbidden-f">Forbidden (<code>[F]</code>)</a></h3>
 <p>A prohibition states that something is not allowed. If <code>[F]enter</code> is concluded, then entering is forbidden.</p>
-<h2 id="dfl-syntax"><a class="header" href="#dfl-syntax">DFL Syntax</a></h2>
-<p>In DFL, modal operators are written as square-bracketed prefixes on literals:</p>
-<pre><code class="language-dfl"># Modal facts
+<h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
+<p>In SPL, modal operators are written as square-bracketed prefixes on literals:</p>
+<pre><code class="language-lisp"># Modal facts
 f1: &gt;&gt; [O]pay
 f2: &gt;&gt; [P]access
 f3: &gt;&gt; [F]enter
@@ -220,12 +220,12 @@ r1: signed_contract =&gt; [O]pay
 r2: member =&gt; [P]access
 r3: unauthorized =&gt; [F]enter
 </code></pre>
-<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary DFL literals:</p>
-<pre><code class="language-dfl"># Negated modal literals
+<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary SPL literals:</p>
+<pre><code class="language-lisp"># Negated modal literals
 r4: exemption =&gt; -[O]pay
 r5: revoked =&gt; -[P]access
 </code></pre>
-<h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
+<h2 id="spl-syntax-1"><a class="header" href="#spl-syntax-1">SPL Syntax</a></h2>
 <p>In SPL, modal operators use keyword wrappers:</p>
 <pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
 (given (must pay))
@@ -252,8 +252,8 @@ r5: revoked =&gt; -[P]access
 </code></pre>
 <h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
 <p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
-<h3 id="dfl-examples"><a class="header" href="#dfl-examples">DFL Examples</a></h3>
-<pre><code class="language-dfl"># If you signed a contract, you are obligated to pay
+<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
+<pre><code class="language-lisp"># If you signed a contract, you are obligated to pay
 r1: signed_contract =&gt; [O]pay
 
 # If you are obligated to pay and fail to pay, you are in violation
@@ -272,7 +272,7 @@ r5 &gt; r1
 # A defeater: pending review blocks the permission
 d1: pending_review ~&gt; [P]access
 </code></pre>
-<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
+<h3 id="spl-examples-1"><a class="header" href="#spl-examples-1">SPL Examples</a></h3>
 <pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
 (normally r1 signed-contract (must pay))
 

@@ -22,7 +22,7 @@ The motivating example for defeasible logic:
 
 Classical logic produces a contradiction. Defeasible logic resolves it by recognizing that "penguins don't fly" is a more specific rule that should override "birds fly."
 
-```dfl
+```lisp
 f1: >> bird
 f2: >> penguin
 r1: bird => flies

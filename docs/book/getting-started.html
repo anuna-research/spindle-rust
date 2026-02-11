@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-c2928118.js";
+            window.path_to_searchindex_js = "searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-116bb599.js"></script>
+        <script src="toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,8 +194,8 @@ cargo build --release
 </code></pre>
 <p>This installs the <code>spindle</code> command to your Cargo bin directory.</p>
 <h2 id="your-first-theory"><a class="header" href="#your-first-theory">Your First Theory</a></h2>
-<p>Create a file called <code>hello.dfl</code>:</p>
-<pre><code class="language-dfl"># Facts
+<p>Create a file called <code>hello.spl</code>:</p>
+<pre><code class="language-lisp"># Facts
 f1: &gt;&gt; bird
 
 # Rules
@@ -203,7 +203,7 @@ r1: bird =&gt; flies
 r2: bird =&gt; has_feathers
 </code></pre>
 <p>Run it:</p>
-<pre><code class="language-bash">spindle reason hello.dfl
+<pre><code class="language-bash">spindle reason hello.spl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -228,8 +228,8 @@ r2: bird =&gt; has_feathers
 </table>
 </div>
 <h2 id="the-penguin-example"><a class="header" href="#the-penguin-example">The Penguin Example</a></h2>
-<p>Create <code>penguin.dfl</code>:</p>
-<pre><code class="language-dfl"># Tweety is a bird and a penguin
+<p>Create <code>penguin.spl</code>:</p>
+<pre><code class="language-lisp"># Tweety is a bird and a penguin
 f1: &gt;&gt; bird
 f2: &gt;&gt; penguin
 
@@ -243,7 +243,7 @@ r2: penguin =&gt; -flies
 r2 &gt; r1
 </code></pre>
 <p>Run it:</p>
-<pre><code class="language-bash">spindle reason penguin.dfl
+<pre><code class="language-bash">spindle reason penguin.spl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -274,16 +274,16 @@ r2 &gt; r1
 </code></pre>
 <h2 id="cli-options"><a class="header" href="#cli-options">CLI Options</a></h2>
 <pre><code class="language-bash"># Show only positive conclusions
-spindle reason --positive penguin.dfl
+spindle reason --positive penguin.spl
 
 # Output as JSON
-spindle reason --json penguin.dfl
+spindle reason --json penguin.spl
 
 # Validate syntax without reasoning
-spindle validate penguin.dfl
+spindle validate penguin.spl
 
 # Show theory statistics
-spindle stats penguin.dfl
+spindle stats penguin.spl
 </code></pre>
 <h2 id="using-as-a-library"><a class="header" href="#using-as-a-library">Using as a Library</a></h2>
 <p>Add to your <code>Cargo.toml</code>:</p>
@@ -317,7 +317,7 @@ fn main() {
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
 <li><a href="concepts.html">Concepts</a> - Understand defeasible logic fundamentals</li>
-<li><a href="reference/dfl.html">DFL Reference</a> - Complete DFL syntax</li>
+<li><a href="reference/spl.html">SPL Reference</a> - Complete SPL syntax</li>
 <li><a href="reference/spl.html">SPL Reference</a> - Complete SPL syntax</li>
 <li><a href="guides/grounding.html">Examples</a> - Advanced examples with variables</li>
 </ul>

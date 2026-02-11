@@ -19,8 +19,8 @@ Used in Spindle:
 
 Both `-` and `~` denote negation:
 
-**DFL:**
-```dfl
+**SPL:**
+```lisp
 f1: >> -guilty       # Explicitly not guilty
 r1: penguin => ~flies
 ```
@@ -43,7 +43,7 @@ For any literal `P`, the outcome can be:
 
 ## Example: Unknown State
 
-```dfl
+```lisp
 f1: >> bird
 r1: bird => flies
 # No information about grounded
@@ -62,7 +62,7 @@ The `grounded` literal is in an **unknown** state.
 
 ### Conflict
 If rules prove both `P` and `-P`:
-```dfl
+```lisp
 f1: >> a
 r1: a => p
 r2: a => -p
@@ -71,7 +71,7 @@ Without superiority, neither is provable (ambiguity).
 
 ### Definite Blocking
 If `-P` is **definitely** provable, `P` cannot be defeasibly provable:
-```dfl
+```lisp
 f1: >> -p        # Definite fact: -p
 r1: a => p       # Tries to prove p
 ```
@@ -81,7 +81,7 @@ Even if r1's body is satisfied, `+d p` is blocked because `+D -p`.
 
 Negated literals can appear in rule bodies:
 
-```dfl
+```lisp
 r1: bird, -penguin => flies    # Non-penguin birds fly
 r2: student, -employed => needs_loan
 ```
@@ -95,7 +95,7 @@ r2: student, -employed => needs_loan
 
 `--P` is equivalent to `P`:
 
-```dfl
+```lisp
 r1: a => --flies    # Same as: a => flies
 ```
 
@@ -103,7 +103,7 @@ r1: a => --flies    # Same as: a => flies
 
 Spindle does not enforce consistency. A theory can prove both `P` and `-P`:
 
-```dfl
+```lisp
 f1: >> p
 f2: >> -p
 ```
@@ -122,7 +122,7 @@ To detect inconsistency, check for literals where both `+D P` and `+D -P` (or `+
 
 Spindle does **not** use the Closed World Assumption by default. If you need it, add explicit rules:
 
-```dfl
+```lisp
 # CWA for 'guilty': if not proven guilty, then not guilty
 d1: >> -guilty           # Default: not guilty
 r1: evidence => guilty   # Can be overridden by evidence

@@ -276,7 +276,7 @@ fn test_hint_parse_error_is_actionable() {
     let hint = pd.extensions.hint.as_ref().expect("should have hint");
     // Should suggest checking input format
     assert!(
-        hint.contains("syntax") || hint.contains("format") || hint.contains("DFL"),
+        hint.contains("syntax") || hint.contains("format") || hint.contains("SPL"),
         "Hint should reference input format, got: {hint}"
     );
 }

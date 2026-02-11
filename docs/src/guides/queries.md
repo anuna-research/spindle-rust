@@ -241,7 +241,7 @@ The WASM bindings expose these operators:
 import { Spindle } from 'spindle-wasm';
 
 const spindle = new Spindle();
-spindle.parseDfl(`
+spindle.parseSpl(`
   f1: >> bird
   f2: >> penguin
   r1: bird => flies

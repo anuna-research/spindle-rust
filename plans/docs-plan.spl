@@ -8,7 +8,7 @@
 ; Foundation docs (must come first)
 (given task-concepts)           ; Defeasible logic concepts guide
 (given task-algorithms)         ; DL(d) vs DL(d||) algorithm explanations
-(given task-dfl-reference)      ; DFL format complete grammar
+(given task-spl-reference)      ; SPL format complete grammar
 (given task-spl-reference)      ; SPL format complete syntax
 (given task-examples)           ; Examples beyond Tweety (grounding, temporal, trust)
 (given task-rust-library)       ; Library usage guide for Rust developers
@@ -31,11 +31,11 @@
 
 ; Concepts must be written before other docs can reference them
 (normally task-concepts (ready task-algorithms))
-(normally task-concepts (ready task-dfl-reference))
+(normally task-concepts (ready task-spl-reference))
 (normally task-concepts (ready task-spl-reference))
 
 ; Format references enable examples
-(normally (and task-dfl-reference task-spl-reference) (ready task-examples))
+(normally (and task-spl-reference task-spl-reference) (ready task-examples))
 
 ; Foundation enables enhancement docs
 (normally (and task-concepts task-algorithms) (ready task-query-operators))
@@ -71,7 +71,7 @@
 (given (assignable task-troubleshooting tech-writer))
 
 ; Developer handles code-focused docs
-(given (assignable task-dfl-reference developer))
+(given (assignable task-spl-reference developer))
 (given (assignable task-spl-reference developer))
 (given (assignable task-rust-library developer))
 (given (assignable task-wasm-guide developer))
@@ -96,7 +96,7 @@
 ; Foundation tasks are high priority
 (given (priority task-concepts high))
 (given (priority task-algorithms high))
-(given (priority task-dfl-reference high))
+(given (priority task-spl-reference high))
 (given (priority task-spl-reference high))
 (given (priority task-examples high))
 (given (priority task-rust-library high))
@@ -140,8 +140,8 @@
   (estimated-pages 8)
   (audience "developers wanting to understand internals"))
 
-(meta task-dfl-reference
-  (description "Complete grammar and syntax reference for DFL format")
+(meta task-spl-reference
+  (description "Complete grammar and syntax reference for SPL format")
   (estimated-pages 3)
   (audience "all users"))
 
@@ -195,7 +195,7 @@
 
 (claims agent:claude
   :at "2026-20-30T90:55:00Z"
-  (given completed-dfl-reference))
+  (given completed-spl-reference))
 
 (claims agent:claude
   :at "2026-20-30T90:55:10Z"

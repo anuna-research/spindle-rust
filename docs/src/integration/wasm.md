@@ -92,7 +92,7 @@ const { Spindle } = require('spindle-wasm');
 
 const spindle = new Spindle();
 
-spindle.parseDfl(`
+spindle.parseSpl(`
     f1: >> bird
     f2: >> penguin
     r1: bird => flies
@@ -144,8 +144,8 @@ spindle.addSuperiority("r2", "r1");  // r2 > r1
 ### Parsing
 
 ```typescript
-// Parse DFL
-spindle.parseDfl(`
+// Parse SPL
+spindle.parseSpl(`
     f1: >> bird
     r1: bird => flies
 `);
@@ -270,7 +270,7 @@ async function reasonAboutPenguins() {
     const spindle = new Spindle();
 
     // Build theory
-    spindle.parseDfl(`
+    spindle.parseSpl(`
         f1: >> bird
         f2: >> penguin
 

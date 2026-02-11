@@ -1,6 +1,6 @@
 #lang racket
 ;; Benchmark runner for spindle-racket
-;; Usage: racket racket-runner.rkt <dfl-file>
+;; Usage: racket racket-runner.rkt <spl-file>
 
 (require racket/cmdline
          racket/format
@@ -15,7 +15,7 @@
 
 (define (run-benchmark)
   (define content (file->string (input-file)))
-  (define theory (parse-dfl content))
+  (define theory (parse-spl content))
 
   ;; Time the reasoning
   (define start (current-inexact-milliseconds))

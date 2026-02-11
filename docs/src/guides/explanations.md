@@ -277,7 +277,7 @@ Annotations are preserved across all output formats. In natural language, `descr
 Show the full derivation proof tree for a provable literal:
 
 ```bash
-spindle explain "~flies" theory.dfl
+spindle explain "~flies" theory.spl
 ```
 
 Output includes the derivation chain, blocked alternatives, and conflict resolutions in natural language format.
@@ -285,7 +285,7 @@ Output includes the derivation chain, blocked alternatives, and conflict resolut
 For machine-readable output:
 
 ```bash
-spindle explain "~flies" theory.dfl --json
+spindle explain "~flies" theory.spl --json
 ```
 
 ### The `why-not` Command
@@ -293,7 +293,7 @@ spindle explain "~flies" theory.dfl --json
 Explain why a literal is NOT provable:
 
 ```bash
-spindle why-not flies theory.dfl
+spindle why-not flies theory.spl
 ```
 
 Lists each rule that could have derived the literal and explains why it was blocked (missing premises, defeated by a stronger rule, or contradicted by a strict derivation).
@@ -301,7 +301,7 @@ Lists each rule that could have derived the literal and explains why it was bloc
 For machine-readable output:
 
 ```bash
-spindle why-not flies theory.dfl --json
+spindle why-not flies theory.spl --json
 ```
 
 The JSON output includes `is_provable` to indicate whether the literal is actually provable, and `would_derive` with the rule label when available.
@@ -312,16 +312,16 @@ A typical debugging session combines both commands:
 
 ```bash
 # 1. Check what was concluded
-spindle reason --positive theory.dfl
+spindle reason --positive theory.spl
 
 # 2. A literal you expected is missing -- find out why
-spindle why-not flies theory.dfl
+spindle why-not flies theory.spl
 
 # 3. A literal you did not expect is present -- inspect its proof
-spindle explain "~flies" theory.dfl
+spindle explain "~flies" theory.spl
 
 # 4. Pipe JSON output to other tools for further analysis
-spindle explain "~flies" theory.dfl --json | jq '.blocked_alternatives'
+spindle explain "~flies" theory.spl --json | jq '.blocked_alternatives'
 ```
 
 ## Rust API Examples
@@ -435,7 +435,7 @@ The DOT output format integrates directly with Graphviz for generating visual pr
 
 ```bash
 # Generate DOT and render to PNG
-spindle explain "~flies" theory.dfl --json \
+spindle explain "~flies" theory.spl --json \
   | jq -r '.proof_tree' \
   > /dev/null  # Use the Rust API instead for DOT
 
