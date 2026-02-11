@@ -27,6 +27,8 @@ fn build_reason_output(literals: &[(&str, &str, bool)]) -> ReasonOutput {
                 literal_spl: lit.to_spl(),
                 literal_struct: LiteralStructJson::from(&lit),
                 positive: *positive,
+                trust_degree: None,
+                trust_sources: None,
             }
         })
         .collect();
@@ -111,6 +113,8 @@ fn test_conclusion_entry_fields() {
         literal_spl: lit.to_spl(),
         literal_struct: LiteralStructJson::from(&lit),
         positive: true,
+        trust_degree: None,
+        trust_sources: None,
     };
 
     let value: Value = serde_json::to_value(&entry).unwrap();

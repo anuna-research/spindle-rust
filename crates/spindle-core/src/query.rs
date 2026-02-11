@@ -10,13 +10,16 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::conclusion::ConclusionType;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::pipeline::PrepareOptions;
+use crate::pipeline::{PrepareOptions, compute_weighted_conclusions};
 use crate::reason::{reason, reason_with_options};
 use crate::rule::{Rule, RuleType};
+use crate::temporal::TimePoint;
+use crate::theory::MetaValue;
 use crate::theory::Theory;
+use crate::trust::{TrustPolicy, TrustValue};
 
 // =============================================================================
 // QUERY RESULT STRUCTURES
@@ -83,6 +86,116 @@ impl QueryResult {
     /// Check if defeasibly provable
     pub fn is_defeasibly_provable(&self) -> bool {
         self.conclusion_type == Some(ConclusionType::DefeasiblyProvable)
+    }
+}
+
+/// Filter for trust-based query results
+#[derive(Debug, Clone, Default)]
+pub struct TrustFilter {
+    /// Minimum trust degree for a conclusion to be included
+    pub min_degree: Option<TrustValue>,
+    /// Only include conclusions from this source pattern
+    pub source_pattern: Option<String>,
+    /// Trust policy to use for evaluating trust
+    pub policy: Option<TrustPolicy>,
+}
+
+impl TrustFilter {
+    /// Create a new empty trust filter
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set minimum trust degree
+    pub fn with_min_degree(mut self, degree: TrustValue) -> Self {
+        self.min_degree = Some(degree);
+        self
+    }
+
+    /// Set source pattern filter
+    pub fn with_source(mut self, pattern: impl Into<String>) -> Self {
+        self.source_pattern = Some(pattern.into());
+        self
+    }
+
+    /// Set trust policy
+    pub fn with_policy(mut self, policy: TrustPolicy) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+
+    /// Check if a conclusion passes this filter using derived (weakest-link) trust.
+    ///
+    /// Computes trust degrees via `compute_weighted_conclusions`, so a high-trust
+    /// rule with low-trust premises gets the minimum trust across the chain.
+    ///
+    /// For the source pattern check, rule metadata is consulted directly (with
+    /// template_label fallback for grounded instances).
+    pub fn passes(
+        &self,
+        conclusion: &Conclusion,
+        conclusions: &[Conclusion],
+        theory: &Theory,
+        reference_time: Option<TimePoint>,
+    ) -> bool {
+        let policy = match &self.policy {
+            Some(p) => p,
+            None => return true, // No policy means everything passes
+        };
+
+        // Check source pattern using rule metadata (unchanged — this is per-rule, not per-chain)
+        if let Some(ref pattern) = self.source_pattern {
+            let source_id = conclusion.rule_label.as_deref().and_then(|label| {
+                let meta_source =
+                    theory
+                        .get_meta(label)
+                        .and_then(|meta| match meta.properties.get("source") {
+                            Some(MetaValue::String(s)) => Some(s.as_str()),
+                            _ => None,
+                        });
+                if meta_source.is_some() {
+                    return meta_source;
+                }
+                theory.get_rule(label).and_then(|rule| {
+                    let tl = rule.template_label();
+                    if tl != label {
+                        theory
+                            .get_meta(tl)
+                            .and_then(|meta| match meta.properties.get("source") {
+                                Some(MetaValue::String(s)) => Some(s.as_str()),
+                                _ => None,
+                            })
+                    } else {
+                        None
+                    }
+                })
+            });
+
+            match source_id {
+                Some(src) => {
+                    if !src.contains(pattern.as_str()) {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+
+        // Check minimum degree using derived (weakest-link) trust
+        if let Some(min) = self.min_degree {
+            let weighted =
+                compute_weighted_conclusions(conclusions, theory, policy, reference_time);
+            let wc = weighted.iter().find(|wc| {
+                wc.literal.to_spl() == conclusion.literal.to_spl()
+                    && wc.conclusion_type == conclusion.conclusion_type
+            });
+            let degree = wc.map(|w| w.degree).unwrap_or(policy.default_trust);
+            if degree < min {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -2099,6 +2212,151 @@ mod tests {
         assert!(
             !result.has_blockers(),
             "Defeater should not block when rule is superior"
+        );
+    }
+
+    // =========================================================================
+    // Trust Filter Tests
+    // =========================================================================
+
+    #[test]
+    fn test_trust_filter_default_passes_all() {
+        let filter = TrustFilter::new();
+        let theory = Theory::new();
+        let conclusion = Conclusion::defeasibly_provable(Literal::simple("a")).with_rule("r1");
+        assert!(filter.passes(&conclusion, &[], &theory, None));
+    }
+
+    #[test]
+    fn test_trust_filter_min_degree() {
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("agent:trusted", 0.9)
+            .with_trust("agent:untrusted", 0.3);
+
+        let filter = TrustFilter::new().with_min_degree(0.7).with_policy(policy);
+
+        let mut theory = Theory::new();
+        let label_a = theory.add_fact("a");
+        let label_b = theory.add_fact("b");
+        theory.add_meta_string(&label_a, "source", "agent:trusted");
+        theory.add_meta_string(&label_b, "source", "agent:untrusted");
+
+        let conclusions = reason(&theory).unwrap();
+        let c_a = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "a" && c.is_positive())
+            .unwrap();
+        let c_b = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "b" && c.is_positive())
+            .unwrap();
+
+        // 0.9 >= 0.7 → passes; 0.3 < 0.7 → fails
+        assert!(filter.passes(c_a, &conclusions, &theory, None));
+        assert!(!filter.passes(c_b, &conclusions, &theory, None));
+    }
+
+    #[test]
+    fn test_trust_filter_source_pattern() {
+        let policy = TrustPolicy::new(0.5);
+        let filter = TrustFilter::new().with_source("agent:").with_policy(policy);
+
+        let mut theory = Theory::new();
+        let label_a = theory.add_fact("a");
+        let label_b = theory.add_fact("b");
+        theory.add_meta_string(&label_a, "source", "agent:coder");
+        theory.add_meta_string(&label_b, "source", "system:policy");
+
+        let conclusions = reason(&theory).unwrap();
+        let c_a = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "a" && c.is_positive())
+            .unwrap();
+        let c_b = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "b" && c.is_positive())
+            .unwrap();
+
+        assert!(filter.passes(c_a, &conclusions, &theory, None)); // matches "agent:"
+        assert!(!filter.passes(c_b, &conclusions, &theory, None)); // doesn't match
+    }
+
+    #[test]
+    fn test_trust_filter_no_policy_passes_all() {
+        let filter = TrustFilter::new()
+            .with_min_degree(0.9)
+            .with_source("agent:");
+        // No policy set, so filter should pass everything
+        let theory = Theory::new();
+        let conclusion = Conclusion::defeasibly_provable(Literal::simple("a"));
+        assert!(filter.passes(&conclusion, &[], &theory, None));
+    }
+
+    #[test]
+    fn test_trust_filter_combined() {
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("agent:trusted", 0.9)
+            .with_trust("agent:low", 0.3);
+
+        let filter = TrustFilter::new()
+            .with_min_degree(0.5)
+            .with_source("agent:")
+            .with_policy(policy);
+
+        let mut theory = Theory::new();
+        let label_a = theory.add_fact("a");
+        let label_b = theory.add_fact("b");
+        let label_c = theory.add_fact("c");
+        theory.add_meta_string(&label_a, "source", "agent:trusted");
+        theory.add_meta_string(&label_b, "source", "agent:low");
+        theory.add_meta_string(&label_c, "source", "system:policy");
+
+        let conclusions = reason(&theory).unwrap();
+        let c_a = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "a" && c.is_positive())
+            .unwrap();
+        let c_b = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "b" && c.is_positive())
+            .unwrap();
+        let c_c = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "c" && c.is_positive())
+            .unwrap();
+
+        assert!(filter.passes(c_a, &conclusions, &theory, None)); // agent: + 0.9 >= 0.5
+        assert!(!filter.passes(c_b, &conclusions, &theory, None)); // agent: + 0.3 < 0.5
+        assert!(!filter.passes(c_c, &conclusions, &theory, None)); // system: no match
+    }
+
+    #[test]
+    fn test_trust_filter_weakest_link_chain() {
+        // Chain: low-trust fact → high-trust rule → derived conclusion
+        // TrustFilter should see the weakest-link degree (0.3), not the rule's 0.9
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("agent:low", 0.3)
+            .with_trust("agent:high", 0.9);
+
+        let filter = TrustFilter::new().with_min_degree(0.5).with_policy(policy);
+
+        let mut theory = Theory::new();
+        theory.add_fact("premise");
+        let fact_label: String = theory.rules().next().unwrap().label.clone();
+        theory.add_meta_string(&fact_label, "source", "agent:low");
+        let rule_label = theory.add_defeasible_rule(&["premise"], "derived");
+        theory.add_meta_string(&rule_label, "source", "agent:high");
+
+        let conclusions = reason(&theory).unwrap();
+        let c_derived = conclusions
+            .iter()
+            .find(|c| c.literal.name() == "derived" && c.is_positive())
+            .unwrap();
+
+        // Derived conclusion should have weakest-link degree 0.3 < 0.5 → fails
+        assert!(
+            !filter.passes(c_derived, &conclusions, &theory, None),
+            "Derived conclusion should fail filter because weakest-link degree (0.3) < min (0.5)"
         );
     }
 }

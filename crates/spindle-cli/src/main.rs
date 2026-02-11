@@ -88,12 +88,14 @@ fn main() {
             file,
             positive,
             json: _,
+            trust,
         } => reason::run_reason(
             file.as_ref(),
             positive,
             json_flag,
             cli.stdin,
             reference_time,
+            trust,
         ),
         Commands::Validate { file, stdin } => {
             validate::run_validate(file.as_ref(), stdin || cli.stdin, json_flag)

@@ -9,6 +9,7 @@ use crate::conclusion::{Conclusion, ConclusionType};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::superiority::{Superiority, SuperiorityIndex};
+use crate::trust::TrustPolicy;
 
 /// Parse a string literal, handling negation prefix
 fn parse_literal_str(s: &str) -> Literal {
@@ -50,6 +51,8 @@ pub struct Theory {
     metadata: HashMap<String, Meta>,
     /// Auto-generated label counter
     label_counter: usize,
+    /// Trust policy parsed from trust directives
+    trust_policy: TrustPolicy,
 }
 
 impl Theory {
@@ -196,6 +199,21 @@ impl Theory {
     /// Copy metadata from another theory
     pub fn copy_metadata_from(&mut self, other: &Theory) {
         self.metadata = other.metadata.clone();
+    }
+
+    /// Get the trust policy
+    pub fn trust_policy(&self) -> &TrustPolicy {
+        &self.trust_policy
+    }
+
+    /// Get mutable reference to the trust policy
+    pub fn trust_policy_mut(&mut self) -> &mut TrustPolicy {
+        &mut self.trust_policy
+    }
+
+    /// Set the trust policy
+    pub fn set_trust_policy(&mut self, policy: TrustPolicy) {
+        self.trust_policy = policy;
     }
 
     /// Get the number of rules

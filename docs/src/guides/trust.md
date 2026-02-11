@@ -12,6 +12,11 @@ In multi-agent and multi-source environments, not all information is equally rel
 - **Partial defeat (diminishment)**: Defeaters can reduce a conclusion's trust without fully defeating it
 - **Threshold evaluation**: Named thresholds determine whether a conclusion is actionable
 - **Multi-perspective evaluation**: Different trust policies can evaluate the same derivation differently
+- **Trust decay**: Time-based trust adjustment with exponential, linear, and step-function models
+- **Trust directives**: Declarative trust configuration in both SPL and DFL formats
+- **Pipeline integration**: Automatic trust-weighted conclusions from the reasoning pipeline
+- **Trust-filtered queries**: Filter reasoning results by source and minimum trust degree
+- **CLI trust output**: Display trust weights alongside conclusions with `--trust`
 
 ## Source Attribution and Claims
 
@@ -148,6 +153,189 @@ Trust values are `f64` in the range `[0.0, 1.0]`:
 | `0.0` | No trust (fully untrusted)                   |
 | `0.5` | Neutral / unknown                            |
 | `1.0` | Full trust (axiomatically reliable)           |
+
+## Trust Directives in SPL
+
+Trust policies can be declared directly in SPL source files using three directive forms.
+
+### `(trusts source value)`
+
+Assigns a trust value to a source identifier:
+
+```lisp
+(trusts agent:security 0.95)
+(trusts agent:coder 0.9)
+(trusts system:policy 1.0)
+(trusts external:api 0.6)
+```
+
+Values must be in the range `[0.0, 1.0]`.
+
+### `(decays source model param)`
+
+Attaches a time-based decay model to a source. The decay model reduces trust as assertions age:
+
+```lisp
+; Trust halves every hour (3600 seconds)
+(decays agent:sensor exponential 3600.0)
+
+; Trust decreases at 0.001 per second
+(decays agent:temp linear 0.001)
+
+; Trust drops to zero after 24 hours
+(decays agent:ephemeral step 86400.0)
+```
+
+See [Decay Models](#decay-models) for formula details.
+
+### `(threshold name value)`
+
+Defines a named threshold for decision-making:
+
+```lisp
+(threshold action 0.7)
+(threshold warn 0.5)
+(threshold log 0.3)
+```
+
+### Complete SPL Example
+
+```lisp
+; Trust configuration
+(trusts agent:security 0.95)
+(trusts agent:coder 0.9)
+(decays agent:sensor exponential 3600.0)
+(threshold action 0.7)
+(threshold warn 0.5)
+
+; Claims from sources
+(claims agent:security
+  :at "2026-01-20T09:00:00Z"
+  (given vulnerability_detected)
+  (normally sec1 vulnerability_detected security_risk))
+
+(claims agent:coder
+  :at "2026-01-20T09:30:00Z"
+  (given tests_pass)
+  (normally dev1 tests_pass code_compiles))
+
+(prefer sec1 dev1)
+```
+
+## Trust Directives in DFL
+
+DFL uses `@`-prefixed directives for trust configuration.
+
+### `@trust source value`
+
+```
+@trust agent:security 0.95
+@trust agent:coder 0.9
+@trust system:policy 1.0
+```
+
+### `@decay source model param`
+
+```
+@decay agent:sensor exponential 3600.0
+@decay agent:temp linear 0.001
+@decay agent:ephemeral step 86400.0
+```
+
+Supported models: `exponential`, `linear`, `step`.
+
+### `@threshold name value`
+
+```
+@threshold action 0.7
+@threshold warn 0.5
+```
+
+### Complete DFL Example
+
+```
+# Trust configuration
+@trust agent:security 0.95
+@trust agent:coder 0.9
+@decay agent:sensor exponential 3600.0
+@threshold action 0.7
+@threshold warn 0.5
+
+# Rules
+f1: >> bird
+f2: >> penguin
+r1: bird => flies
+r2: penguin => -flies
+r2 > r1
+```
+
+## Decay Models
+
+Decay models compute a time-dependent multiplier in `[0.0, 1.0]` that is applied to a source's base trust value. This models the intuition that older assertions become less trustworthy over time.
+
+### Exponential Decay
+
+```
+multiplier = 0.5 ^ (age_secs / half_life_secs)
+```
+
+After one half-life, trust is halved. After two half-lives, trust is quartered. Trust approaches zero asymptotically.
+
+```rust
+use spindle_core::trust::{DecayModel, TrustPolicy};
+
+let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:sensor", 0.9)
+    .with_decay("agent:sensor", DecayModel::Exponential { half_life_secs: 3600.0 });
+
+// At age 0: effective trust = 0.9
+assert_eq!(policy.get_effective_trust("agent:sensor", 0.0), 0.9);
+
+// At 1 hour: effective trust = 0.9 * 0.5 = 0.45
+let at_1h = policy.get_effective_trust("agent:sensor", 3600.0);
+assert!((at_1h - 0.45).abs() < 1e-10);
+```
+
+### Linear Decay
+
+```
+multiplier = max(1.0 - rate_per_sec * age_secs, 0.0)
+```
+
+Trust decreases at a constant rate per second, reaching zero at `1.0 / rate` seconds.
+
+```rust
+let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:temp", 1.0)
+    .with_decay("agent:temp", DecayModel::Linear { rate_per_sec: 0.001 });
+
+// At 500 seconds: 1.0 * (1.0 - 0.001 * 500) = 0.5
+let at_500s = policy.get_effective_trust("agent:temp", 500.0);
+assert!((at_500s - 0.5).abs() < 1e-10);
+
+// At 1500 seconds: fully decayed to 0.0
+assert_eq!(policy.get_effective_trust("agent:temp", 1500.0), 0.0);
+```
+
+### Step Function
+
+```
+multiplier = 1.0 if age_secs < cutoff_secs, else 0.0
+```
+
+Trust is full until the cutoff, then drops to zero instantly. Useful for time-limited credentials or ephemeral assertions.
+
+```rust
+let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:session", 0.9)
+    .with_decay("agent:session", DecayModel::StepFunction { cutoff_secs: 86400.0 });
+
+// Before cutoff: full trust
+assert_eq!(policy.get_effective_trust("agent:session", 100.0), 0.9);
+
+// At cutoff: zero trust
+assert_eq!(policy.get_effective_trust("agent:session", 86400.0), 0.0);
+```
 
 ## Weakest-Link Trust Model
 
@@ -474,6 +662,171 @@ assert_eq!(explanation.final_degree, 0.0);
 assert!(explanation.derivation_tree.is_none());
 ```
 
+## Pipeline Integration
+
+The reasoning pipeline can automatically compute trust-weighted conclusions after reasoning. The `compute_weighted_conclusions` function examines each conclusion's derivation rule, looks up the source metadata, and applies the theory's trust policy.
+
+### Rust API
+
+```rust
+use spindle_core::pipeline::{prepare, PrepareOptions, compute_weighted_conclusions};
+
+// Parse a theory with trust directives
+let theory = spindle_parser::parse_spl(r#"
+    (trusts agent:security 0.95)
+    (trusts agent:coder 0.9)
+    (threshold action 0.7)
+
+    (claims agent:security
+      (given vulnerability_detected)
+      (normally sec1 vulnerability_detected security_risk))
+"#).unwrap();
+
+// Run the pipeline
+let opts = PrepareOptions::default();
+let result = prepare(&theory, opts).unwrap();
+
+// Reason
+let conclusions = spindle_core::reason::reason_prepared(&result.theory).unwrap();
+
+// Compute trust-weighted conclusions
+let policy = result.theory.trust_policy();
+let weighted = compute_weighted_conclusions(&conclusions, &result.theory, policy);
+
+for wc in &weighted {
+    println!("{}: trust={:.2}, sources={:?}",
+        wc.literal, wc.degree,
+        wc.sources.iter().map(|s| &s.id).collect::<Vec<_>>());
+}
+```
+
+Each `WeightedConclusion` contains:
+- `degree`: Trust value from the source's policy entry (or default)
+- `sources`: Set of contributing source identifiers
+- `above_threshold`: Pre-computed pass/fail for each named threshold
+
+## CLI Usage
+
+### `--trust` Flag
+
+The `reason` command accepts a `--trust` flag that displays trust weights alongside conclusions:
+
+```bash
+spindle reason --trust theory.spl
+```
+
+Output format:
+
+```
+Conclusions:
+
+  +D bird (trust: 0.95) [agent:security]
+  +d flies (trust: 0.90) [agent:coder]
+  -d -flies (trust: 0.90) [agent:coder]
+```
+
+Each conclusion shows:
+- The provability symbol (`+D`, `-D`, `+d`, `-d`)
+- The literal
+- The trust degree in parentheses
+- The contributing sources in brackets
+
+Without `--trust`, conclusions display in the standard format without trust information.
+
+### DFL Example
+
+```bash
+spindle reason --trust theory.dfl
+```
+
+Where `theory.dfl` contains:
+
+```
+@trust agent:security 0.95
+@trust agent:coder 0.9
+@threshold action 0.7
+
+f1: >> bird
+r1: bird => flies
+```
+
+## Trust-Filtered Queries
+
+The `TrustFilter` struct allows filtering reasoning results by minimum trust degree and source pattern.
+
+### Rust API
+
+```rust
+use spindle_core::query::TrustFilter;
+use spindle_core::trust::TrustPolicy;
+
+let policy = TrustPolicy::new(0.5)
+    .with_trust("agent:trusted", 0.9)
+    .with_trust("agent:untrusted", 0.3);
+
+// Filter: only conclusions from agent: sources with trust >= 0.7
+let filter = TrustFilter::new()
+    .with_min_degree(0.7)
+    .with_source("agent:")
+    .with_policy(policy);
+
+// Check if a specific rule's conclusion passes the filter
+let passes = filter.passes(&theory, Some("rule_label"));
+```
+
+### Filter Fields
+
+| Field | Description |
+|---|---|
+| `min_degree` | Minimum trust degree for a conclusion to pass |
+| `source_pattern` | Substring match on the rule's source metadata |
+| `policy` | Trust policy used to look up source trust values |
+
+When no policy is set, all conclusions pass the filter (permissive by default).
+
+## Mining Confidence Metrics
+
+When rules are learned from process mining, each rule can be annotated with support and confidence metrics.
+
+### `LearnedRule`
+
+```rust
+use spindle_core::mining::{LearnedRule, calculate_support, calculate_confidence};
+
+// Calculate support: number of traces where "submit" directly precedes "review"
+let support = calculate_support(&event_log, "submit", "review");
+
+// Calculate confidence: support / total transitions from "submit"
+let confidence = calculate_confidence(&event_log, "submit", "review");
+```
+
+### Filtering by Metrics
+
+```rust
+use spindle_core::mining::rules_with_metrics;
+
+// Get only rules with support >= 5 and confidence >= 0.8
+let learned = rules_with_metrics(&event_log, &mined_rules, 5, 0.8);
+
+for lr in &learned {
+    println!("{}", lr); // "r1 (support: 10, confidence: 0.95)"
+}
+```
+
+### Petri Net to DFL with Metrics
+
+```rust
+use spindle_core::mining::petri_net_to_dfl;
+
+// Mine rules with minimum support=3, confidence=0.7
+let learned_rules = petri_net_to_dfl(&event_log, 3, 0.7);
+
+for lr in &learned_rules {
+    println!("{}: support={}, confidence={:.2}, source={}",
+        lr.rule.label, lr.support, lr.confidence, lr.source);
+}
+```
+
 ## Use Cases
 
 ### Multi-Agent Systems
@@ -549,10 +902,73 @@ assert_eq!(regulatory.is_above_threshold(degree, "compliant"), Some(false));
 assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
 ```
 
+### End-to-End Example
+
+This example demonstrates the complete trust workflow from theory definition through CLI output.
+
+**1. Define a theory with trust directives** (`review.spl`):
+
+```lisp
+; Trust configuration
+(trusts agent:security 0.95)
+(trusts agent:coder 0.85)
+(trusts agent:qa 0.80)
+(decays agent:qa exponential 86400.0)
+(threshold deploy 0.8)
+(threshold warn 0.5)
+
+; Security agent's findings
+(claims agent:security
+  :at "2026-02-01T10:00:00Z"
+  (given no_vulnerabilities)
+  (normally sec1 no_vulnerabilities security_clear))
+
+; Coder agent's results
+(claims agent:coder
+  :at "2026-02-01T10:30:00Z"
+  (given tests_pass)
+  (given lint_clean)
+  (normally dev1 (and tests_pass lint_clean) code_ready))
+
+; QA agent's assessment
+(claims agent:qa
+  :at "2026-02-01T11:00:00Z"
+  (given manual_review_ok)
+  (normally qa1 manual_review_ok qa_approved))
+
+; Deployment rule: all three must agree
+(normally deploy1
+  (and security_clear code_ready qa_approved)
+  ready_to_deploy)
+```
+
+**2. Run with trust output**:
+
+```bash
+spindle reason --trust review.spl
+```
+
+**3. Output**:
+
+```
+Conclusions:
+
+  +D no_vulnerabilities (trust: 0.95) [agent:security]
+  +D tests_pass (trust: 0.85) [agent:coder]
+  +D lint_clean (trust: 0.85) [agent:coder]
+  +D manual_review_ok (trust: 0.80) [agent:qa]
+  +d security_clear (trust: 0.95) [agent:security]
+  +d code_ready (trust: 0.85) [agent:coder]
+  +d qa_approved (trust: 0.80) [agent:qa]
+  +d ready_to_deploy (trust: 0.80)
+```
+
+The deployment conclusion (`ready_to_deploy`) has trust 0.80 — it meets the `deploy` threshold (0.8) and can proceed.
+
 ## Limitations
 
-1. **Claims parsing**: The `(claims ...)` SPL syntax is implemented in the SPL parser. Source attribution is available through the Rust API and via SPL `claims` blocks.
-2. **Static trust values**: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in.
-3. **Weakest-link only**: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.
-4. **No cryptographic verification**: The `:sig` metadata field is stored but not verified against any cryptographic infrastructure.
-5. **Floating-point precision**: Trust values are `f64`, so standard floating-point precision considerations apply to boundary comparisons.
+1. **Static trust values**: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in (use decay models for time-based adjustment).
+2. **Weakest-link only**: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.
+3. **No cryptographic verification**: The `:sig` metadata field is stored but not verified against any cryptographic infrastructure.
+4. **Floating-point precision**: Trust values are `f64`, so standard floating-point precision considerations apply to boundary comparisons.
+5. **Decay requires reference time**: Decay models need the age of assertions to be computed externally; the pipeline does not automatically track assertion timestamps for decay purposes.

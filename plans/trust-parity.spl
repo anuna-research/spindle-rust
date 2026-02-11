@@ -1,0 +1,147 @@
+; Trust Module Parity Plan
+; Bring spindle-rust trust to feature parity with spindle-racket
+;
+; Gaps identified from feature comparison:
+;   1. No SPL syntax for trust directives (trusts, decays, threshold)
+;   2. No trust decay models (time-based trust adjustment)
+;   3. No reasoning pipeline integration (trust weighting post-reasoning)
+;   4. No trust-filtered queries (filter by source/threshold)
+;   5. No DFL trust syntax
+;   6. No trust info in CLI output (--trust flag)
+;   7. Confidence/support not surfaced in mining CLI
+;
+; Phases:
+;   Phase 1 — Foundation: SPL trust syntax + decay models (parallel)
+;   Phase 2 — Core: pipeline integration + DFL syntax (needs phase 1)
+;   Phase 3 — Surface: query filters + CLI output + mining CLI (needs phase 2)
+;   Phase 4 — Polish: documentation (needs phase 3)
+
+; ── Tasks ───────────────────────────────────────────────────
+
+(given task-spl-trust-syntax)
+(given task-trust-decay)
+(given task-pipeline-integration)
+(given task-trust-query-filter)
+(given task-dfl-trust-syntax)
+(given task-cli-trust-output)
+(given task-mining-confidence-cli)
+(given task-trust-docs)
+
+; ── Phase 1: Foundation (no dependencies) ───────────────────
+
+(given no-deps-spl-trust-syntax)
+(given no-deps-trust-decay)
+
+(normally r-ready-spl-trust-syntax
+  (and task-spl-trust-syntax no-deps-spl-trust-syntax)
+  ready-spl-trust-syntax)
+
+(normally r-ready-trust-decay
+  (and task-trust-decay no-deps-trust-decay)
+  ready-trust-decay)
+
+; ── Phase 2: Core (needs phase 1) ──────────────────────────
+
+(normally r-ready-pipeline-integration
+  (and task-pipeline-integration completed-spl-trust-syntax completed-trust-decay)
+  ready-pipeline-integration)
+
+(normally r-ready-dfl-trust-syntax
+  (and task-dfl-trust-syntax completed-spl-trust-syntax)
+  ready-dfl-trust-syntax)
+
+; ── Phase 3: Surface (needs phase 2) ───────────────────────
+
+(normally r-ready-trust-query-filter
+  (and task-trust-query-filter completed-pipeline-integration)
+  ready-trust-query-filter)
+
+(normally r-ready-cli-trust-output
+  (and task-cli-trust-output completed-pipeline-integration)
+  ready-cli-trust-output)
+
+(normally r-ready-mining-confidence-cli
+  (and task-mining-confidence-cli completed-pipeline-integration)
+  ready-mining-confidence-cli)
+
+; ── Phase 4: Polish (needs phase 3) ────────────────────────
+
+(normally r-ready-trust-docs
+  (and task-trust-docs
+       completed-cli-trust-output
+       completed-trust-query-filter
+       completed-dfl-trust-syntax
+       completed-mining-confidence-cli)
+  ready-trust-docs)
+
+; ── Phase completion gates ─────────────────────────────────
+
+(normally r-phase1-done
+  (and completed-spl-trust-syntax completed-trust-decay)
+  phase-1-complete)
+
+(normally r-phase2-done
+  (and completed-pipeline-integration completed-dfl-trust-syntax)
+  phase-2-complete)
+
+(normally r-phase3-done
+  (and completed-trust-query-filter completed-cli-trust-output completed-mining-confidence-cli)
+  phase-3-complete)
+
+(normally r-phase4-done
+  completed-trust-docs
+  phase-4-complete)
+
+(normally r-project-done
+  (and phase-1-complete phase-2-complete phase-3-complete phase-4-complete)
+  project-complete)
+
+; ── Metadata ────────────────────────────────────────────────
+
+(meta task-spl-trust-syntax
+  (description "Parse (trusts source value), (decays source model params), (threshold literal value) in SPL")
+  (phase "1-foundation")
+  (files "crates/spindle-parser/src/spl.rs, crates/spindle-core/src/theory.rs")
+  (detail "Add three new top-level SPL forms that store parsed directives into Theory as a TrustPolicy. Racket reference: src/trust/policy.rkt. The (trusts src val) form maps source identifiers to [0,1] trust weights. The (decays src model params) form attaches a decay model to a source. The (threshold lit val) form sets a minimum trust degree for a literal to be considered provable."))
+
+(meta task-trust-decay
+  (description "Implement time-based trust decay models in trust.rs")
+  (phase "1-foundation")
+  (files "crates/spindle-core/src/trust.rs")
+  (detail "Add DecayModel enum with variants: Exponential { half_life: Duration }, Linear { rate: f64 }, StepFunction { cutoff: Duration }. Each implements apply(age: Duration) -> TrustValue returning a multiplier in [0,1]. Integrate into TrustPolicy so decay is applied when computing effective trust at a given reference time. Racket reference: (decays source model params)."))
+
+(meta task-pipeline-integration
+  (description "Wire TrustPolicy into the reasoning pipeline so conclusions carry trust degrees")
+  (phase "2-core")
+  (files "crates/spindle-core/src/pipeline.rs, crates/spindle-core/src/trust.rs, crates/spindle-core/src/reason.rs, crates/spindle-core/src/scalable.rs")
+  (detail "After reasoning produces Conclusions, compute WeightedConclusion for each by: (1) extracting source metadata from rules in the derivation chain, (2) looking up trust values from TrustPolicy, (3) applying weakest-link through the derivation tree, (4) applying diminishers from defeaters, (5) evaluating named thresholds. Add TrustPolicy as optional field in PrepareOptions. Add weighted_conclusions to ReasonOutput."))
+
+(meta task-dfl-trust-syntax
+  (description "Parse trust directives in DFL format")
+  (phase "2-core")
+  (files "crates/spindle-parser/src/dfl.rs")
+  (detail "Add @trust source value, @decay source model params, and @threshold literal value directives to the DFL parser. Mirror the SPL semantics exactly. Racket supports trust directives in both DFL and SPL formats."))
+
+(meta task-trust-query-filter
+  (description "Filter query results by trust source and threshold")
+  (phase "3-surface")
+  (files "crates/spindle-core/src/query.rs")
+  (detail "Add TrustFilter struct with optional source pattern and minimum degree. Apply filter in query(), what_if(), why_not(), abduce(). When a trust filter is active, conclusions below the threshold are treated as not provable. Racket reference: filter by trust/source in status queries."))
+
+(meta task-cli-trust-output
+  (description "Add --trust flag to reason/status CLI commands showing trust weights")
+  (phase "3-surface")
+  (files "crates/spindle-cli/src/main.rs, crates/spindle-cli/src/output.rs")
+  (detail "When --trust is passed: (1) display trust degree next to each conclusion, (2) show source attribution, (3) show threshold pass/fail indicators. JSON schema additions: degree (f64), sources (string[]), above_threshold (object). Match the output style of 'hence status --trust'."))
+
+(meta task-mining-confidence-cli
+  (description "Surface confidence/support metrics in mining CLI output")
+  (phase "3-surface")
+  (files "crates/spindle-core/src/mining.rs, crates/spindle-cli/src/main.rs")
+  (detail "When displaying learned rules from process mining, show support count and confidence ratio for each rule. Add --min-support and --min-confidence filter flags. Racket reference: frequency-based rule scoring with configurable thresholds."))
+
+(meta task-trust-docs
+  (description "Update trust guide with new SPL/DFL syntax, decay models, and CLI usage")
+  (phase "4-polish")
+  (files "docs/src/guides/trust.md")
+  (detail "Document: (1) SPL trust directive syntax with examples, (2) DFL trust directive syntax, (3) decay model configuration and formulas, (4) CLI --trust flag usage, (5) trust-filtered queries, (6) mining confidence output. Include end-to-end worked example."))

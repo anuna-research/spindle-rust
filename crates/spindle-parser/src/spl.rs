@@ -40,6 +40,7 @@ use nom::{
 use chrono::DateTime;
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{Temporal, TimePoint};
+use spindle_core::trust::DecayModel;
 use spindle_core::{Literal, MetaValue, Rule, RuleType, Theory};
 
 use crate::ParseError;
@@ -330,6 +331,9 @@ fn process_expr_with_line(
         "prefer" => process_prefer_with_line(theory, &list[1..], line),
         "meta" => process_meta_with_line(theory, &list[1..], line),
         "claims" => process_claims(theory, &list[1..], line, cleaned_input),
+        "trusts" => process_trusts(theory, &list[1..], line),
+        "decays" => process_decays(theory, &list[1..], line),
+        "threshold" => process_threshold(theory, &list[1..], line),
         "#lang" => Ok(()), // Ignore #lang directive
         _ => Err(ParseError::ParserError {
             line,
@@ -430,6 +434,153 @@ fn process_claims(
         }
     }
 
+    Ok(())
+}
+
+/// Process a trusts directive: (trusts source value)
+fn process_trusts(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+    if args.len() != 2 {
+        return Err(ParseError::ParserError {
+            line,
+            message: "trusts requires exactly two arguments: source and value".to_string(),
+            format: ParserFormat::Spl,
+        });
+    }
+
+    let source = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "trusts source must be an atom".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let value_str = args[1].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "trusts value must be a number".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let value: f64 = value_str.parse().map_err(|_| ParseError::ParserError {
+        line,
+        message: format!("trusts value must be a number in [0.0, 1.0], got: {value_str}"),
+        format: ParserFormat::Spl,
+    })?;
+
+    if !(0.0..=1.0).contains(&value) {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!("trusts value must be in [0.0, 1.0], got: {value}"),
+            format: ParserFormat::Spl,
+        });
+    }
+
+    theory
+        .trust_policy_mut()
+        .trust_map
+        .insert(source.to_string(), value);
+    Ok(())
+}
+
+/// Process a decays directive: (decays source model params...)
+/// Models: exponential half_life_secs, linear rate_per_sec, step cutoff_secs
+fn process_decays(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+    if args.len() < 3 {
+        return Err(ParseError::ParserError {
+            line,
+            message: "decays requires at least: source, model, parameter".to_string(),
+            format: ParserFormat::Spl,
+        });
+    }
+
+    let source = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "decays source must be an atom".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let model_name = args[1].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "decays model must be an atom".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let param_str = args[2].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "decays parameter must be a number".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let param: f64 = param_str.parse().map_err(|_| ParseError::ParserError {
+        line,
+        message: format!("decays parameter must be a number, got: {param_str}"),
+        format: ParserFormat::Spl,
+    })?;
+
+    let model = match model_name {
+        "exponential" => DecayModel::Exponential {
+            half_life_secs: param,
+        },
+        "linear" => DecayModel::Linear {
+            rate_per_sec: param,
+        },
+        "step" => DecayModel::StepFunction { cutoff_secs: param },
+        _ => {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "Unknown decay model: {model_name}. Expected: exponential, linear, or step"
+                ),
+                format: ParserFormat::Spl,
+            });
+        }
+    };
+
+    theory
+        .trust_policy_mut()
+        .decay_map
+        .insert(source.to_string(), model);
+    Ok(())
+}
+
+/// Process a threshold directive: (threshold name value)
+fn process_threshold(theory: &mut Theory, args: &[SExpr], line: usize) -> Result<(), ParseError> {
+    if args.len() != 2 {
+        return Err(ParseError::ParserError {
+            line,
+            message: "threshold requires exactly two arguments: name and value".to_string(),
+            format: ParserFormat::Spl,
+        });
+    }
+
+    let name = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "threshold name must be an atom".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let value_str = args[1].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "threshold value must be a number".to_string(),
+        format: ParserFormat::Spl,
+    })?;
+
+    let value: f64 = value_str.parse().map_err(|_| ParseError::ParserError {
+        line,
+        message: format!("threshold value must be a number in [0.0, 1.0], got: {value_str}"),
+        format: ParserFormat::Spl,
+    })?;
+
+    if !(0.0..=1.0).contains(&value) {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!("threshold value must be in [0.0, 1.0], got: {value}"),
+            format: ParserFormat::Spl,
+        });
+    }
+
+    theory
+        .trust_policy_mut()
+        .thresholds
+        .insert(name.to_string(), value);
     Ok(())
 }
 
@@ -1254,6 +1405,154 @@ mod tests {
         assert!(
             message.contains("claims :note requires a note atom"),
             "Expected malformed :note value to fail, got: {message}"
+        );
+    }
+
+    // =========================================================================
+    // Trust Directive Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_trusts_directive() {
+        let theory = parse_spl("(trusts agent:coder 0.9)").unwrap();
+        assert_eq!(theory.trust_policy().get_trust("agent:coder"), 0.9);
+    }
+
+    #[test]
+    fn test_parse_trusts_multiple() {
+        let input =
+            "(trusts agent:coder 0.9)\n(trusts agent:security 0.95)\n(trusts system:policy 1.0)";
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.trust_policy().get_trust("agent:coder"), 0.9);
+        assert_eq!(theory.trust_policy().get_trust("agent:security"), 0.95);
+        assert_eq!(theory.trust_policy().get_trust("system:policy"), 1.0);
+    }
+
+    #[test]
+    fn test_parse_trusts_invalid_value() {
+        let err = parse_spl("(trusts agent:coder 1.5)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("[0.0, 1.0]"),
+            "Should reject out-of-range value, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_parse_trusts_not_a_number() {
+        let err = parse_spl("(trusts agent:coder abc)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("number"),
+            "Should reject non-numeric value, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_parse_threshold_directive() {
+        let theory = parse_spl("(threshold action 0.7)").unwrap();
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.8, "action"),
+            Some(true)
+        );
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "action"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn test_parse_threshold_multiple() {
+        let input = "(threshold action 0.7)\n(threshold warn 0.5)";
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "action"),
+            Some(false)
+        );
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.6, "warn"),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_parse_decays_exponential() {
+        let theory = parse_spl("(decays agent:coder exponential 3600.0)").unwrap();
+        let policy = theory.trust_policy();
+        assert!(policy.decay_map.contains_key("agent:coder"));
+    }
+
+    #[test]
+    fn test_parse_decays_linear() {
+        let theory = parse_spl("(decays agent:sensor linear 0.001)").unwrap();
+        let policy = theory.trust_policy();
+        assert!(policy.decay_map.contains_key("agent:sensor"));
+    }
+
+    #[test]
+    fn test_parse_decays_step() {
+        let theory = parse_spl("(decays agent:temp step 86400.0)").unwrap();
+        let policy = theory.trust_policy();
+        assert!(policy.decay_map.contains_key("agent:temp"));
+    }
+
+    #[test]
+    fn test_parse_decays_unknown_model() {
+        let err = parse_spl("(decays agent:x quadratic 1.0)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Unknown decay model"),
+            "Should reject unknown model, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_trust_directives_with_theory() {
+        let input = r#"
+            (trusts agent:coder 0.9)
+            (trusts agent:security 0.95)
+            (threshold action 0.7)
+            (decays agent:coder exponential 3600.0)
+            (given bird)
+            (normally r1 bird flies)
+        "#;
+        let theory = parse_spl(input).unwrap();
+        assert_eq!(theory.rule_count(), 2);
+        assert_eq!(theory.trust_policy().get_trust("agent:coder"), 0.9);
+        assert_eq!(theory.trust_policy().get_trust("agent:security"), 0.95);
+        assert_eq!(
+            theory.trust_policy().is_above_threshold(0.8, "action"),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_trusts_missing_args() {
+        let err = parse_spl("(trusts agent:coder)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("two arguments"),
+            "Should require source + value, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_threshold_missing_args() {
+        let err = parse_spl("(threshold action)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("two arguments"),
+            "Should require name + value, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_decays_missing_args() {
+        let err = parse_spl("(decays agent:x exponential)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("at least"),
+            "Should require source + model + param, got: {msg}"
         );
     }
 }

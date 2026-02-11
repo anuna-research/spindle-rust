@@ -48,6 +48,9 @@ pub(crate) enum Commands {
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+        /// Show trust weights for conclusions
+        #[arg(long)]
+        trust: bool,
     },
     /// Validate a theory file
     Validate {
