@@ -86,13 +86,11 @@ fn main() {
     let result = match cli.command {
         Commands::Reason {
             file,
-            scalable,
             positive,
             json: _,
             trust,
         } => reason::run_reason(
             file.as_ref(),
-            scalable,
             positive,
             json_flag,
             cli.stdin,

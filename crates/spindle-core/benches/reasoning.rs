@@ -4,14 +4,10 @@
 //!   cargo bench --package spindle-core              # Quick benchmarks
 //!   cargo bench --package spindle-core -- --ignored # Full benchmarks (slower)
 //!
-//! Or filter specific groups:
-//!   cargo bench -- "standard_vs_scalable"
-//!
 //! Benchmarks cover:
 //! - Literal operations (ID vs string lookups)
 //! - Superiority index lookups
 //! - Standard reasoning (facts, chains, conflicts, wide theories)
-//! - Scalable reasoning algorithm
 //! - Temporal reasoning (Allen interval relations)
 //! - Variable grounding
 //! - Query operators (what-if, why-not, abduction)
@@ -25,7 +21,6 @@ use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
 use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
 use spindle_core::reason::reason;
-use spindle_core::scalable::reason_scalable;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::trust::{Source, TrustDerivationNode, TrustPolicy};
 use spindle_parser::{parse_dfl, parse_spl};
@@ -411,52 +406,6 @@ fn bench_reason_conflicts(c: &mut Criterion) {
     group.finish();
 }
 
-// =============================================================================
-// SCALABLE REASONING BENCHMARKS
-// =============================================================================
-
-fn bench_reason_scalable(c: &mut Criterion) {
-    let mut group = c.benchmark_group("reason_scalable");
-
-    for size in [100, 250, 500].iter() {
-        let theory = create_wide_theory(*size);
-        group.throughput(Throughput::Elements(*size as u64));
-        group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| {
-                let grounded = ground_theory(theory);
-                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
-                black_box(reason_scalable(&indexed))
-            })
-        });
-    }
-
-    group.finish();
-}
-
-fn bench_standard_vs_scalable(c: &mut Criterion) {
-    let mut group = c.benchmark_group("standard_vs_scalable");
-
-    // Quick comparison at key sizes
-    for size in [100, 250, 500].iter() {
-        let theory = create_wide_theory(*size);
-        group.throughput(Throughput::Elements(*size as u64));
-
-        group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
-            b.iter(|| black_box(reason(theory).unwrap()))
-        });
-
-        group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| {
-                let grounded = ground_theory(theory);
-                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
-                black_box(reason_scalable(&indexed))
-            })
-        });
-    }
-
-    group.finish();
-}
-
 /// Large-scale benchmarks for finding algorithm crossover points
 /// Run with: cargo bench -- "scaling"
 fn bench_scaling(c: &mut Criterion) {
@@ -471,14 +420,6 @@ fn bench_scaling(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("standard", size), &theory, |b, theory| {
             b.iter(|| black_box(reason(theory).unwrap()))
-        });
-
-        group.bench_with_input(BenchmarkId::new("scalable", size), &theory, |b, theory| {
-            b.iter(|| {
-                let grounded = ground_theory(theory);
-                let indexed = spindle_core::index::IndexedTheory::build(&grounded);
-                black_box(reason_scalable(&indexed))
-            })
         });
     }
 
@@ -765,8 +706,6 @@ criterion_group!(
     bench_reason_chain,
     bench_reason_wide,
     bench_reason_conflicts,
-    bench_reason_scalable,
-    bench_standard_vs_scalable,
     bench_temporal_relations,
     bench_grounding,
     bench_trust,

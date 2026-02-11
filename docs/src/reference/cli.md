@@ -214,19 +214,6 @@ Parse/usage failures also emit JSON envelopes when `--json` is present:
 spindle --json
 ```
 
-### `--scalable`
-
-Use the scalable DL(d||) algorithm instead of standard DL(d).
-
-```bash
-spindle reason --scalable large-theory.dfl
-```
-
-Recommended for theories with:
-- More than 1000 rules
-- Complex conflict resolution
-- Long inference chains
-
 ### `--positive`
 
 Show only positive conclusions (+D, +d).
@@ -296,17 +283,13 @@ spindle query flies penguin.dfl --json
 spindle validate theory.dfl && spindle reason theory.dfl
 ```
 
-### Compare Algorithms
+### Compare Runs
 
 ```bash
-# Standard algorithm
-spindle reason theory.dfl > standard.txt
-
-# Scalable algorithm
-spindle reason --scalable theory.dfl > scalable.txt
-
-# Compare (should be identical for correct theories)
-diff standard.txt scalable.txt
+# Compare two revisions or theories
+spindle reason theory-a.dfl > run-a.txt
+spindle reason theory-b.dfl > run-b.txt
+diff run-a.txt run-b.txt
 ```
 
 ### Scripting

@@ -495,8 +495,7 @@ pub fn compute_weighted_conclusions(
 mod tests {
     use super::*;
     use crate::conclusion::ConclusionType;
-    use crate::index::IndexedTheory;
-    use crate::scalable::reason_scalable;
+    use crate::reason::reason_prepared;
 
     /// Helper: run full pipeline (reason + compute_weighted_conclusions) and
     /// return the WeightedConclusion for a specific literal+conclusion_type.
@@ -506,9 +505,7 @@ mod tests {
         literal_name: &str,
         ctype: ConclusionType,
     ) -> Option<WeightedConclusion> {
-        let indexed = IndexedTheory::build(theory);
-        let result = reason_scalable(&indexed);
-        let conclusions = result.to_conclusions(&indexed);
+        let conclusions = reason_prepared(theory).unwrap();
         let weighted = compute_weighted_conclusions(&conclusions, theory, policy);
         weighted
             .into_iter()
@@ -632,9 +629,7 @@ mod tests {
 
         let policy = TrustPolicy::new(0.3).with_trust("alice", 0.9);
 
-        let indexed = IndexedTheory::build(&theory);
-        let result = reason_scalable(&indexed);
-        let conclusions = result.to_conclusions(&indexed);
+        let conclusions = reason_prepared(&theory).unwrap();
         let weighted = compute_weighted_conclusions(&conclusions, &theory, &policy);
 
         // "b" is not provable, so -D b and -d b should exist

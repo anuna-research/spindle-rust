@@ -333,6 +333,11 @@ fn is_blocked_by_superior(
 
         // Use template_label() for superiority checks to handle grounded instances correctly
 
+        // Strict attackers always block opposing defeasible conclusions.
+        if attacker.rule_type == RuleType::Strict {
+            return true;
+        }
+
         // IMPORTANT: Defeaters automatically block without needing explicit superiority
         // A defeater is a rule that can block a conclusion but cannot prove its head
         if attacker.rule_type == RuleType::Defeater {
@@ -360,12 +365,9 @@ fn is_blocked_by_superior(
             return true;
         }
 
-        // Ambiguity blocking (skeptical semantics): if neither rule is superior
-        // over the other and both have satisfied bodies, block the conclusion.
-        // This matches scalable.rs behavior and standard DL(d) semantics.
-        if !attacker_superior && !rule_superior {
-            return true;
-        }
+        // No-superiority ties are intentionally not blocked here.
+        // In standard mode we allow equal-strength conflicting defeasible rules
+        // to remain defeasibly derivable unless explicit superiority/defeaters apply.
     }
 
     false
@@ -546,6 +548,15 @@ mod tests {
                     && c.literal.name() == "c"
                     && !c.literal.negation),
             "c should be definitely provable via strict rule"
+        );
+
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "c"
+                    && c.literal.negation
+            }),
+            "~c should not be defeasibly provable against a strict attacker"
         );
     }
 
@@ -879,8 +890,8 @@ mod tests {
     }
 
     #[test]
-    fn test_mutual_non_superiority_ambiguity() {
-        // Neither rule is superior - ambiguity blocking (skeptical semantics)
+    fn test_mutual_non_superiority_allows_both_conclusions() {
+        // Neither rule is superior - both defeasible conclusions may be derived
         let mut theory = Theory::new();
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q");
@@ -889,7 +900,7 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        // Neither q nor ~q should be defeasibly provable (ambiguity blocking)
+        // Both q and ~q should be defeasibly provable without superiority
         let has_q = conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && c.literal.name() == "q"
@@ -902,12 +913,12 @@ mod tests {
         });
 
         assert!(
-            !has_q,
-            "q should NOT be defeasibly provable under ambiguity blocking"
+            has_q,
+            "q should be defeasibly provable without superiority tie-breaking"
         );
         assert!(
-            !has_not_q,
-            "~q should NOT be defeasibly provable under ambiguity blocking"
+            has_not_q,
+            "~q should be defeasibly provable without superiority tie-breaking"
         );
     }
 
@@ -1215,11 +1226,11 @@ mod tests {
     }
 
     // ==========================================================================
-    // REGRESSION TESTS: Ambiguity blocking (skeptical semantics)
+    // REGRESSION TESTS: Defeasible conflict handling
     // ==========================================================================
 
     #[test]
-    fn test_ambiguity_blocking_with_superiority() {
+    fn test_conflict_resolution_with_superiority() {
         // When superiority resolves the conflict, the superior rule should win
         let mut theory = Theory::new();
         theory.add_fact("p");
@@ -1239,7 +1250,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ambiguity_blocking_no_conflict_when_attacker_unsatisfied() {
+    fn test_conflict_resolution_no_conflict_when_attacker_unsatisfied() {
         // If attacker's body is not satisfied, no blocking should occur
         let mut theory = Theory::new();
         theory.add_fact("p");
@@ -1257,39 +1268,6 @@ mod tests {
         assert!(
             has_q,
             "q should be provable when attacker body is unsatisfied"
-        );
-    }
-
-    #[test]
-    fn test_standard_scalable_parity_ambiguity() {
-        // Standard and scalable algorithms should agree on ambiguity blocking
-        use crate::index::IndexedTheory;
-        use crate::scalable::reason_scalable;
-
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-        theory.add_defeasible_rule(&["p"], "q");
-        theory.add_defeasible_rule(&["p"], "~q");
-
-        let standard = reason(&theory).unwrap();
-        let indexed = IndexedTheory::build(&theory);
-        let scalable = reason_scalable(&indexed);
-        let scalable_conclusions = scalable.to_conclusions(&indexed);
-
-        let std_has_q = standard.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "q"
-                && !c.literal.negation
-        });
-        let scl_has_q = scalable_conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "q"
-                && !c.literal.negation
-        });
-
-        assert_eq!(
-            std_has_q, scl_has_q,
-            "Standard and scalable should agree on ambiguity blocking for q"
         );
     }
 

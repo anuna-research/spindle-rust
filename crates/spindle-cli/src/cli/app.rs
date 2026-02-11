@@ -42,9 +42,6 @@ pub(crate) enum Commands {
     Reason {
         /// Input file (mutually exclusive with --stdin)
         file: Option<PathBuf>,
-        /// Use scalable mode
-        #[arg(long)]
-        scalable: bool,
         /// Only show positive conclusions
         #[arg(long)]
         positive: bool,

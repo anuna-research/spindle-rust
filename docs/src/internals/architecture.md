@@ -30,7 +30,6 @@ spindle-core/src/
 ├── conclusion.rs       # Conclusion types
 ├── index.rs            # Theory indexing
 ├── reason.rs           # Standard DL(d) algorithm
-├── scalable.rs         # Scalable DL(d||) algorithm
 ├── grounding.rs        # Variable grounding
 ├── worklist.rs         # Worklist data structures
 ├── explanation.rs      # Proof trees
@@ -67,7 +66,7 @@ Input (DFL/SPL)
       │
       ▼
 ┌─────────────┐
-│  Reasoning  │  DL(d) or DL(d||)
+│  Reasoning  │  DL(d)
 └─────────────┘
       │
       ▼
@@ -189,32 +188,6 @@ Phase 3: Negative conclusions
     └── If not in defeasible_proven → -d
 ```
 
-### Scalable DL(d||) (scalable.rs)
-
-```
-Phase 1: Delta Closure
-  ├── Initialize with facts
-  └── Forward chain strict rules only
-  Result: +D conclusions
-
-Phase 2: Lambda Closure
-  ├── Start with delta
-  ├── Add defeasible if:
-  │   ├── Body in lambda
-  │   └── Complement not in delta
-  Result: Over-approximation of +d
-
-Phase 3: Partial Closure (semi-naive)
-  ├── Start with delta
-  ├── Worklist of candidates from lambda
-  └── For each candidate:
-      ├── Check supporting rules
-      ├── Check attacking rules
-      ├── Check superiority
-      └── Add if all attacks defeated
-  Result: Actual +d conclusions
-```
-
 ## Memory Layout
 
 ### Theory
@@ -256,7 +229,7 @@ worklist: VecDeque`LiteralId`
 
 1. Add variant to `RuleType` enum
 2. Update parsers (dfl.rs, spl.rs)
-3. Update reasoning logic (reason.rs, scalable.rs)
+3. Update reasoning logic (reason.rs)
 4. Add tests
 
 ### Adding a New Query Operator
@@ -285,10 +258,9 @@ The mining module provides:
 tests/
 ├── Unit tests (per module)
 │   ├── reason.rs - 40+ tests
-│   ├── scalable.rs - 30+ tests
 │   └── ...
 ├── Integration tests
-│   └── Semantic equivalence (standard vs scalable)
+│   └── End-to-end CLI/API behavior
 ├── Parser tests
 │   ├── dfl.rs
 │   └── spl.rs
@@ -302,7 +274,6 @@ tests/
 2. **Conflict resolution**: superiority, defeaters
 3. **Edge cases**: cycles, empty, self-reference
 4. **Stress tests**: long chains, wide theories
-5. **Semantic equivalence**: standard ≡ scalable
 
 ## Performance Characteristics
 
@@ -315,7 +286,6 @@ tests/
 | Lookup by body | O(1) |
 | Superiority check | O(1) |
 | Standard reasoning | O(n * m) |
-| Scalable reasoning | O(n * m) with better constants |
 
 Where:
 - n = number of rules

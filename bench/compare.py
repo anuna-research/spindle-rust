@@ -149,7 +149,7 @@ def generate_conflict_heavy_theory_dfl(num_chains: int, chain_depth: int) -> str
     return "\n".join(lines)
 
 
-def run_rust_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkResult:
+def run_rust_benchmark(dfl_file: Path) -> BenchmarkResult:
     """Run spindle-rust on a DFL file and measure time."""
     script_dir = Path(__file__).parent
     rust_binary = script_dir.parent / "target" / "release" / "spindle"
@@ -165,8 +165,6 @@ def run_rust_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkResul
         )
 
     cmd = [str(rust_binary), str(dfl_file)]
-    if scalable:
-        cmd.append("--scalable")
 
     try:
         start = time.perf_counter()
@@ -178,7 +176,7 @@ def run_rust_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkResul
         if result.returncode != 0:
             return BenchmarkResult(
                 time_ms=elapsed_ms, conclusions=0,
-                mode="scalable" if scalable else "standard",
+                mode="standard",
                 success=False, error=result.stderr
             )
 
@@ -189,24 +187,24 @@ def run_rust_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkResul
         return BenchmarkResult(
             time_ms=elapsed_ms,
             conclusions=conclusions,
-            mode="scalable" if scalable else "standard",
+            mode="standard",
             success=True
         )
     except subprocess.TimeoutExpired:
         return BenchmarkResult(
             time_ms=300000, conclusions=0,
-            mode="scalable" if scalable else "standard",
+            mode="standard",
             success=False, error="Timeout (5 min)"
         )
     except Exception as e:
         return BenchmarkResult(
             time_ms=0, conclusions=0,
-            mode="scalable" if scalable else "standard",
+            mode="standard",
             success=False, error=str(e)
         )
 
 
-def run_racket_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkResult:
+def run_racket_benchmark(dfl_file: Path) -> BenchmarkResult:
     """Run spindle-racket on a DFL file and measure time."""
     script_dir = Path(__file__).parent
     racket_runner = script_dir / "racket-runner.rkt"
@@ -224,10 +222,7 @@ def run_racket_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkRes
             success=False, error="racket not found in PATH"
         )
 
-    cmd = ["racket", str(racket_runner)]
-    if scalable:
-        cmd.append("--scalable")
-    cmd.append(str(dfl_file))
+    cmd = ["racket", str(racket_runner), str(dfl_file)]
 
     try:
         start = time.perf_counter()
@@ -239,7 +234,7 @@ def run_racket_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkRes
         if result.returncode != 0:
             return BenchmarkResult(
                 time_ms=elapsed_ms, conclusions=0,
-                mode="scalable" if scalable else "standard",
+                mode="standard",
                 success=False, error=result.stderr[:500]
             )
 
@@ -255,19 +250,19 @@ def run_racket_benchmark(dfl_file: Path, scalable: bool = False) -> BenchmarkRes
         except json.JSONDecodeError:
             return BenchmarkResult(
                 time_ms=elapsed_ms, conclusions=0,
-                mode="scalable" if scalable else "standard",
+                mode="standard",
                 success=False, error=f"Invalid JSON output: {result.stdout[:200]}"
             )
     except subprocess.TimeoutExpired:
         return BenchmarkResult(
             time_ms=300000, conclusions=0,
-            mode="scalable" if scalable else "standard",
+            mode="standard",
             success=False, error="Timeout (5 min)"
         )
     except Exception as e:
         return BenchmarkResult(
             time_ms=0, conclusions=0,
-            mode="scalable" if scalable else "standard",
+            mode="standard",
             success=False, error=str(e)
         )
 
@@ -289,7 +284,6 @@ def mean(data: list[float]) -> float:
 def run_tier_benchmark(
     tier: TierConfig,
     iterations: int = 5,
-    scalable: bool = False,
     verbose: bool = True
 ) -> dict:
     """Run a benchmark tier and return results."""
@@ -318,14 +312,14 @@ def run_tier_benchmark(
         rust_error = None
         racket_error = None
 
-        mode_str = "scalable" if scalable else "standard"
+        mode_str = "standard"
 
         for i in range(iterations):
             if verbose:
                 print(f"  Iteration {i + 1}/{iterations}...", end="", flush=True)
 
             # Run Rust
-            rust_result = run_rust_benchmark(dfl_file, scalable=scalable)
+            rust_result = run_rust_benchmark(dfl_file)
             if rust_result.success:
                 rust_times.append(rust_result.time_ms)
                 rust_conclusions = rust_result.conclusions
@@ -333,7 +327,7 @@ def run_tier_benchmark(
                 rust_error = rust_result.error
 
             # Run Racket
-            racket_result = run_racket_benchmark(dfl_file, scalable=scalable)
+            racket_result = run_racket_benchmark(dfl_file)
             if racket_result.success:
                 racket_times.append(racket_result.time_ms)
                 racket_conclusions = racket_result.conclusions
@@ -411,7 +405,7 @@ def print_results(results: list[dict]):
     print("Notes:")
     print("  - Speedup > 1.0 means Rust is faster than Racket")
     print("  - P95 = 95th percentile execution time")
-    print("  - Target from NFR specifications in scalable-perf-tests.rkt")
+    print("  - Target from NFR benchmark specifications")
 
     # Check conclusion matching
     for r in results:
@@ -450,16 +444,6 @@ def main():
         help="Number of iterations per benchmark"
     )
     parser.add_argument(
-        "--scalable", "-s",
-        action="store_true",
-        help="Use scalable reasoning mode"
-    )
-    parser.add_argument(
-        "--both-modes", "-b",
-        action="store_true",
-        help="Run both standard and scalable modes"
-    )
-    parser.add_argument(
         "--json", "-j",
         action="store_true",
         help="Output results as JSON"
@@ -489,27 +473,21 @@ def main():
         print("=" * 60)
         print(f"Tiers: {', '.join(t.name for t in selected_tiers)}")
         print(f"Iterations: {args.iterations}")
-        print(f"Modes: {'both' if args.both_modes else ('scalable' if args.scalable else 'standard')}")
+        print("Modes: standard")
         print()
 
     results = []
 
-    modes = ["standard", "scalable"] if args.both_modes else ["scalable" if args.scalable else "standard"]
+    for tier in selected_tiers:
+        if not args.quiet:
+            print(f"\n[{tier.name}] {tier.rules} rules, {tier.facts} facts (standard mode)")
 
-    for mode in modes:
-        scalable = (mode == "scalable")
-
-        for tier in selected_tiers:
-            if not args.quiet:
-                print(f"\n[{tier.name}] {tier.rules} rules, {tier.facts} facts ({mode} mode)")
-
-            result = run_tier_benchmark(
-                tier,
-                iterations=args.iterations,
-                scalable=scalable,
-                verbose=not args.quiet
-            )
-            results.append(result)
+        result = run_tier_benchmark(
+            tier,
+            iterations=args.iterations,
+            verbose=not args.quiet
+        )
+        results.append(result)
 
     if args.json:
         print(json.dumps(results, indent=2))

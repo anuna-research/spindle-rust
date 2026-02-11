@@ -27,7 +27,7 @@ r2 > r1                  # Penguin rule beats bird rule
 ## Features
 
 - **Four rule types:** facts, strict rules, defeasible rules, and defeaters
-- **Two reasoning modes:** standard DL(d) and scalable DL(d||)
+- **Reasoning engine:** standard DL(d) forward chaining
 - **Temporal reasoning:** Allen interval algebra with 13 temporal relations
 - **First-order variables:** Datalog-style grounding with `?x` syntax
 - **Query operators:** what-if, why-not, and abduction

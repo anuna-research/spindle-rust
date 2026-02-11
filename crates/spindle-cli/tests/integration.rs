@@ -93,23 +93,6 @@ fn test_reason_spl_file() {
 }
 
 #[test]
-fn test_reason_with_scalable_flag() {
-    let content = r#"
-f1: >> bird
-r1: bird => flies
-"#;
-    let (_dir, path) = setup_theory_file(content, "dfl");
-
-    spindle()
-        .arg("reason")
-        .arg(&path)
-        .arg("--scalable")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Conclusions:"));
-}
-
-#[test]
 fn test_reason_with_positive_flag() {
     let content = r#"
 f1: >> bird

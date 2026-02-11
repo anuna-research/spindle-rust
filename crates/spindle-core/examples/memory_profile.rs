@@ -15,7 +15,6 @@ use spindle_core::mode::Mode;
 use spindle_core::prelude::*;
 use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
 use spindle_core::reason::reason;
-use spindle_core::scalable::reason_scalable;
 use spindle_core::temporal::Temporal;
 
 /// Create a wide theory with N independent rule groups
@@ -137,31 +136,22 @@ fn main() {
         let _conclusions = reason(&theory).unwrap();
     }
 
-    // Profile scalable reasoning
-    println!("2. Scalable reasoning (100 rule groups)...");
-    {
-        let theory = create_wide_theory(100);
-        let grounded = ground_theory(&theory);
-        let indexed = spindle_core::index::IndexedTheory::build(&grounded);
-        let _conclusions = reason_scalable(&indexed);
-    }
-
     // Profile chain reasoning
-    println!("3. Chain reasoning (50 rules)...");
+    println!("2. Chain reasoning (50 rules)...");
     {
         let theory = create_chain_theory(50);
         let _conclusions = reason(&theory).unwrap();
     }
 
     // Profile grounding
-    println!("4. Grounding (20 entities)...");
+    println!("3. Grounding (20 entities)...");
     {
         let theory = create_grounding_theory(20);
         let _grounded = ground_theory(&theory);
     }
 
     // Profile query operators
-    println!("5. Query operators...");
+    println!("4. Query operators...");
     {
         let mut theory = Theory::new();
         theory.add_rule(Rule::fact("f1", Literal::simple("code_written")));
@@ -192,7 +182,7 @@ fn main() {
     }
 
     // Profile explanation generation
-    println!("6. Explanation generation...");
+    println!("5. Explanation generation...");
     {
         let theory = create_chain_theory(10);
         let _ = reason(&theory).unwrap();

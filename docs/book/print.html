@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-116bb599.js"></script>
@@ -201,7 +201,7 @@ r2 &gt; r1                  # Penguin rule beats bird rule
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <ul>
 <li><strong>Four rule types:</strong> facts, strict rules, defeasible rules, and defeaters</li>
-<li><strong>Two reasoning modes:</strong> standard DL(d) and scalable DL(d||)</li>
+<li><strong>Reasoning engine:</strong> standard DL(d) forward chaining</li>
 <li><strong>Temporal reasoning:</strong> Allen interval algebra with 13 temporal relations</li>
 <li><strong>First-order variables:</strong> Datalog-style grounding with <code>?x</code> syntax</li>
 <li><strong>Query operators:</strong> what-if, why-not, and abduction</li>
@@ -285,7 +285,7 @@ r1: bird =&gt; flies
 r2: bird =&gt; has_feathers
 </code></pre>
 <p>Run it:</p>
-<pre><code class="language-bash">spindle hello.dfl
+<pre><code class="language-bash">spindle reason hello.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -325,7 +325,7 @@ r2: penguin =&gt; -flies
 r2 &gt; r1
 </code></pre>
 <p>Run it:</p>
-<pre><code class="language-bash">spindle penguin.dfl
+<pre><code class="language-bash">spindle reason penguin.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -352,17 +352,14 @@ r2 &gt; r1
 (prefer r2 r1)
 </code></pre>
 <p>Run it:</p>
-<pre><code class="language-bash">spindle penguin.spl
+<pre><code class="language-bash">spindle reason penguin.spl
 </code></pre>
 <h2 id="cli-options"><a class="header" href="#cli-options">CLI Options</a></h2>
 <pre><code class="language-bash"># Show only positive conclusions
-spindle --positive penguin.dfl
-
-# Use scalable algorithm (for large theories)
-spindle --scalable penguin.dfl
+spindle reason --positive penguin.dfl
 
 # Output as JSON
-spindle --json penguin.dfl
+spindle reason --json penguin.dfl
 
 # Validate syntax without reasoning
 spindle validate penguin.dfl
@@ -702,7 +699,7 @@ r2 &gt; r3              # r2 wins
 <li>A defeater</li>
 </ul>
 <h2 id="reading-spindle-output"><a class="header" href="#reading-spindle-output">Reading Spindle Output</a></h2>
-<pre><code class="language-bash">$ spindle penguin.dfl
+<pre><code class="language-bash">$ spindle reason penguin.dfl
 +D bird
 +D penguin
 +d bird
@@ -721,7 +718,7 @@ r2 &gt; r3              # r2 wins
 </ul>
 <h2 id="filtering-output"><a class="header" href="#filtering-output">Filtering Output</a></h2>
 <p>Show only positive conclusions:</p>
-<pre><code class="language-bash">spindle --positive penguin.dfl
+<pre><code class="language-bash">spindle reason --positive penguin.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -1315,21 +1312,31 @@ inf                              ; Positive infinity
 <pre><code class="language-bash">cargo install --path crates/spindle-cli
 </code></pre>
 <h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
-<pre><code class="language-bash">spindle [OPTIONS] &lt;FILE&gt;
-spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt; [LITERAL]
+<pre><code class="language-bash">spindle &lt;COMMAND&gt; [OPTIONS]
+spindle reason [OPTIONS] [FILE]
+spindle query &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle explain &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle why-not &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle requires &lt;LITERAL&gt; [FILE] [OPTIONS]
 </code></pre>
 <h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
-<h3 id="reason-default"><a class="header" href="#reason-default">reason (default)</a></h3>
+<h3 id="reason"><a class="header" href="#reason">reason</a></h3>
 <p>Perform defeasible reasoning on a theory.</p>
-<pre><code class="language-bash">spindle examples/penguin.dfl
-spindle reason examples/penguin.dfl
+<pre><code class="language-bash">spindle reason examples/penguin.dfl
 </code></pre>
 <h3 id="validate"><a class="header" href="#validate">validate</a></h3>
 <p>Check syntax without reasoning.</p>
 <pre><code class="language-bash">spindle validate examples/penguin.dfl
+spindle --json validate --stdin &lt; examples/penguin.dfl
 </code></pre>
 <p>Output on success:</p>
-<pre><code>Valid DFL theory.
+<pre><code>Valid theory file
+</code></pre>
+<p>With <code>--json</code> success output:</p>
+<pre><code class="language-json">{
+  "valid": true,
+  "diagnostics": []
+}
 </code></pre>
 <p>Output on error:</p>
 <pre><code>Error at line 5: could not parse: invalid =&gt; syntax
@@ -1337,6 +1344,7 @@ spindle reason examples/penguin.dfl
 <h3 id="stats"><a class="header" href="#stats">stats</a></h3>
 <p>Show theory statistics.</p>
 <pre><code class="language-bash">spindle stats examples/penguin.dfl
+spindle --json stats --stdin &lt; examples/penguin.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>Theory Statistics:
@@ -1347,12 +1355,25 @@ spindle reason examples/penguin.dfl
   Superiority: 1
   Total rules: 8
 </code></pre>
+<p>With <code>--json</code> success output:</p>
+<pre><code class="language-json">{
+  "stats": {
+    "total_rules": 8,
+    "facts": 2,
+    "strict": 1,
+    "defeasible": 4,
+    "defeaters": 1,
+    "superiorities": 1
+  },
+  "diagnostics": []
+}
+</code></pre>
 <h3 id="query"><a class="header" href="#query">query</a></h3>
 <p>Query if a literal holds in the theory.</p>
-<pre><code class="language-bash">spindle query examples/penguin.dfl flies
-spindle query examples/penguin.dfl "~flies"
-spindle query examples/penguin.dfl "(not flies)"
-spindle query examples/penguin.dfl --json flies
+<pre><code class="language-bash">spindle query flies examples/penguin.dfl
+spindle query "~flies" examples/penguin.dfl
+spindle query "(not flies)" examples/penguin.dfl
+spindle query flies examples/penguin.dfl --json
 </code></pre>
 <p>The literal argument supports multiple formats: <code>p</code>, <code>~p</code>, <code>(not p)</code>, or complex SPL expressions.</p>
 <p>Returns a <code>QueryStatus</code>:</p>
@@ -1376,8 +1397,8 @@ spindle query examples/penguin.dfl --json flies
 </code></pre>
 <h3 id="explain"><a class="header" href="#explain">explain</a></h3>
 <p>Show the derivation proof tree for why a literal holds.</p>
-<pre><code class="language-bash">spindle explain examples/penguin.dfl "-flies"
-spindle explain examples/penguin.dfl --json "-flies"
+<pre><code class="language-bash">spindle explain "-flies" examples/penguin.dfl
+spindle explain "-flies" examples/penguin.dfl --json
 </code></pre>
 <p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
 <p>Output:</p>
@@ -1392,8 +1413,8 @@ spindle explain examples/penguin.dfl --json "-flies"
 <p>With <code>--json</code>, the output is a JSON or JSON-LD structure containing an <code>Explanation</code> with proof nodes, blocked alternatives, and conflict resolutions.</p>
 <h3 id="why-not"><a class="header" href="#why-not">why-not</a></h3>
 <p>Explain why a literal is NOT provable.</p>
-<pre><code class="language-bash">spindle why-not examples/penguin.dfl flies
-spindle why-not examples/penguin.dfl --json flies
+<pre><code class="language-bash">spindle why-not flies examples/penguin.dfl
+spindle why-not flies examples/penguin.dfl --json
 </code></pre>
 <p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes <code>is_provable: true</code> and <code>blocked_by</code> will be empty.</p>
 <p>Output:</p>
@@ -1417,9 +1438,9 @@ spindle why-not examples/penguin.dfl --json flies
 </div>
 <h3 id="requires"><a class="header" href="#requires">requires</a></h3>
 <p>Abduction: find the minimal sets of facts needed to derive a literal.</p>
-<pre><code class="language-bash">spindle requires examples/penguin.dfl flies
-spindle requires examples/penguin.dfl --max 5 flies
-spindle requires examples/penguin.dfl --json flies
+<pre><code class="language-bash">spindle requires flies examples/penguin.dfl
+spindle requires flies examples/penguin.dfl --max 5
+spindle requires flies examples/penguin.dfl --json
 </code></pre>
 <p>The <code>--max</code> option limits the number of solutions returned (defaults to 10).</p>
 <p>Output:</p>
@@ -1430,24 +1451,19 @@ spindle requires examples/penguin.dfl --json flies
 <p>Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
-<p>Output results in JSON format. Available for <code>reason</code>, <code>query</code>, <code>explain</code>, <code>why-not</code>, and <code>requires</code> commands.</p>
+<p>Output results in JSON format. Available for all commands, including <code>validate</code> and <code>stats</code>.
+When <code>--json</code> is present, success and failure paths are machine-readable JSON.</p>
 <pre><code class="language-bash">spindle reason examples/penguin.dfl --json
-spindle query examples/penguin.dfl --json flies
-spindle explain examples/penguin.dfl --json "-flies"
+spindle query flies examples/penguin.dfl --json
+spindle explain "-flies" examples/penguin.dfl --json
+spindle --json validate --stdin &lt; examples/penguin.dfl
 </code></pre>
-<h3 id="--scalable"><a class="header" href="#--scalable"><code>--scalable</code></a></h3>
-<p>Use the scalable DL(d||) algorithm instead of standard DL(d).</p>
-<pre><code class="language-bash">spindle --scalable large-theory.dfl
+<p>Parse/usage failures also emit JSON envelopes when <code>--json</code> is present:</p>
+<pre><code class="language-bash">spindle --json
 </code></pre>
-<p>Recommended for theories with:</p>
-<ul>
-<li>More than 1000 rules</li>
-<li>Complex conflict resolution</li>
-<li>Long inference chains</li>
-</ul>
 <h3 id="--positive"><a class="header" href="#--positive"><code>--positive</code></a></h3>
 <p>Show only positive conclusions (+D, +d).</p>
-<pre><code class="language-bash">spindle --positive examples/penguin.dfl
+<pre><code class="language-bash">spindle reason --positive examples/penguin.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -1477,53 +1493,48 @@ spindle explain examples/penguin.dfl --json "-flies"
 </thead>
 <tbody>
 <tr><td>0</td><td>Success</td></tr>
-<tr><td>1</td><td>Error (parse error, file not found, etc.)</td></tr>
+<tr><td>2</td><td>User input / parse / validation error</td></tr>
+<tr><td>3</td><td>Execution/internal reasoning error</td></tr>
+<tr><td>4</td><td>Resource/limit/timeout hit</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
 <h3 id="basic-reasoning"><a class="header" href="#basic-reasoning">Basic Reasoning</a></h3>
 <pre><code class="language-bash"># Reason about a theory
-spindle penguin.dfl
-
-# Same with explicit command
 spindle reason penguin.dfl
 </code></pre>
 <h3 id="querying-and-explaining"><a class="header" href="#querying-and-explaining">Querying and Explaining</a></h3>
 <pre><code class="language-bash"># Check if a literal holds
-spindle query penguin.dfl flies
+spindle query flies penguin.dfl
 
 # Get a proof tree for a derived conclusion
-spindle explain penguin.dfl "-flies"
+spindle explain "-flies" penguin.dfl
 
 # Debug why something is not provable
-spindle why-not penguin.dfl flies
+spindle why-not flies penguin.dfl
 
 # Find what facts would make a literal provable
-spindle requires penguin.dfl flies --max 5
+spindle requires flies penguin.dfl --max 5
 
 # Get JSON output for scripting
-spindle query penguin.dfl --json flies
+spindle query flies penguin.dfl --json
 </code></pre>
 <h3 id="validate-before-reasoning"><a class="header" href="#validate-before-reasoning">Validate Before Reasoning</a></h3>
-<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
+<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle reason theory.dfl
 </code></pre>
-<h3 id="compare-algorithms"><a class="header" href="#compare-algorithms">Compare Algorithms</a></h3>
-<pre><code class="language-bash"># Standard algorithm
-spindle theory.dfl &gt; standard.txt
-
-# Scalable algorithm
-spindle --scalable theory.dfl &gt; scalable.txt
-
-# Compare (should be identical for correct theories)
-diff standard.txt scalable.txt
+<h3 id="compare-runs"><a class="header" href="#compare-runs">Compare Runs</a></h3>
+<pre><code class="language-bash"># Compare two revisions or theories
+spindle reason theory-a.dfl &gt; run-a.txt
+spindle reason theory-b.dfl &gt; run-b.txt
+diff run-a.txt run-b.txt
 </code></pre>
 <h3 id="scripting"><a class="header" href="#scripting">Scripting</a></h3>
 <pre><code class="language-bash">#!/bin/bash
 for file in theories/*.dfl; do
     echo "Processing $file..."
     if spindle validate "$file"; then
-        spindle --positive "$file"
+        spindle reason --positive "$file"
     else
         echo "Invalid: $file"
     fi
@@ -1540,222 +1551,57 @@ done
 </tbody>
 </table>
 </div>
-<pre><code class="language-bash">SPINDLE_LOG=debug spindle theory.dfl
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.dfl
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="algorithms"><a class="header" href="#algorithms">Algorithms</a></h1>
-<p>Spindle implements two reasoning algorithms: standard DL(d) and scalable DL(d||).</p>
-<h2 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h2>
-<p>The default algorithm uses <strong>forward chaining</strong> to compute conclusions.</p>
-<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>Spindle uses a single reasoning engine: <strong>standard DL(d) forward chaining</strong>.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The engine computes conclusions in three phases:</p>
 <ol>
-<li><strong>Initialize</strong>: Add all facts to the proven set</li>
-<li><strong>Propagate</strong>: Find rules whose bodies are satisfied</li>
-<li><strong>Fire</strong>: Add conclusions, checking for conflicts</li>
-<li><strong>Repeat</strong>: Until no new conclusions</li>
+<li>Seed facts as both <code>+D</code> and <code>+d</code>.</li>
+<li>Forward-chain strict and defeasible rules until saturation.</li>
+<li>Emit negative conclusions (<code>-D</code>, <code>-d</code>) for literals not proven.</li>
 </ol>
-<h3 id="pseudocode"><a class="header" href="#pseudocode">Pseudocode</a></h3>
-<pre><code>function reason(theory):
-    proven = {}
+<h2 id="forward-chaining"><a class="header" href="#forward-chaining">Forward Chaining</a></h2>
+<p>At a high level:</p>
+<pre><code class="language-text">function reason(theory):
+  proven_definite = {}
+  proven_defeasible = {}
+  worklist = facts + empty-body rule heads
 
-    # Phase 1: Facts
-    for fact in theory.facts:
-        add_conclusion(+D, fact.head)
-        add_conclusion(+d, fact.head)
-        worklist.add(fact.head)
+  while worklist not empty:
+    lit = pop(worklist)
+    for rule triggered by lit:
+      if body_satisfied(rule):
+        fire(rule)
 
-    # Phase 2: Forward chaining
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body_containing(literal):
-            if body_satisfied(rule, proven):
-                if rule.type == Strict:
-                    add_conclusion(+D, rule.head)
-                    add_conclusion(+d, rule.head)
-                elif rule.type == Defeasible:
-                    if not blocked_by_superior(rule):
-                        add_conclusion(+d, rule.head)
-                # Defeaters don't add conclusions
-
-    # Phase 3: Negative conclusions
-    for literal in all_literals:
-        if literal not in proven[+D]:
-            add_conclusion(-D, literal)
-        if literal not in proven[+d]:
-            add_conclusion(-d, literal)
+  emit -D and -d for literals not in proven sets
 </code></pre>
-<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
-<p>When a defeasible rule fires, we check for blocking:</p>
-<pre><code>function blocked_by_superior(rule):
-    complement = negate(rule.head)
-
-    for attacker in rules_for(complement):
-        if body_satisfied(attacker):
-            if attacker.type == Defeater:
-                if not is_superior(rule, attacker):
-                    return true  # Blocked by defeater
-            elif attacker.type == Defeasible:
-                if is_superior(attacker, rule):
-                    return true  # Blocked by superior rule
-
-    return false
-</code></pre>
-<h3 id="complexity"><a class="header" href="#complexity">Complexity</a></h3>
-<ul>
-<li>Time: O(n * m) where n = rules, m = average body size</li>
-<li>Space: O(n) for proven literals</li>
-</ul>
-<h2 id="scalable-dld"><a class="header" href="#scalable-dld">Scalable DL(d||)</a></h2>
-<p>For large theories, the three-phase algorithm is more efficient.</p>
-<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
-<pre><code>Theory → [Delta] → [Lambda] → [Partial] → Conclusions
-            ↓          ↓           ↓
-       Definite   Potential   Defeasible
-       (+D)       (approx)    (+d)
-</code></pre>
-<h3 id="phase-1-delta-closure-p_δ"><a class="header" href="#phase-1-delta-closure-p_δ">Phase 1: Delta Closure (P_Δ)</a></h3>
-<p>Computes <strong>definite conclusions</strong> using only facts and strict rules.</p>
-<pre><code>function compute_delta(theory):
-    delta = {}
-    worklist = theory.facts
-
-    while worklist not empty:
-        literal = worklist.pop()
-        delta.add(literal)
-
-        for rule in strict_rules_with_body(literal):
-            if body_satisfied(rule, delta):
-                if rule.head not in delta:
-                    worklist.add(rule.head)
-
-    return delta
-</code></pre>
-<p><strong>Result</strong>: All <code>+D</code> conclusions.</p>
-<h3 id="phase-2-lambda-closure-p_λ"><a class="header" href="#phase-2-lambda-closure-p_λ">Phase 2: Lambda Closure (P_λ)</a></h3>
-<p>Computes an <strong>over-approximation</strong> of defeasible conclusions.</p>
-<p>A literal is in lambda if:</p>
+<p>Strict rules add both <code>+D</code> and <code>+d</code>.<br>Defeasible rules add <code>+d</code> only if not blocked.</p>
+<h2 id="conflict-handling"><a class="header" href="#conflict-handling">Conflict Handling</a></h2>
+<p>For a defeasible rule <code>r: body =&gt; q</code>, attackers are rules for <code>~q</code>.</p>
+<p><code>r</code> is blocked when:</p>
 <ol>
-<li>It’s in delta, OR</li>
-<li>Some strict/defeasible rule has:
-<ul>
-<li>Body fully in lambda</li>
-<li>Complement NOT in delta</li>
-</ul>
-</li>
+<li>An applicable <strong>defeater</strong> for <code>~q</code> exists, and <code>r</code> is not superior to it.</li>
+<li>An applicable <strong>defeasible</strong> attacker exists that is explicitly superior to <code>r</code>.</li>
 </ol>
-<pre><code>function compute_lambda(theory, delta):
-    lambda = delta.copy()
-    worklist = delta.copy()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body(literal):
-            if rule.type in [Strict, Defeasible]:
-                if body_satisfied(rule, lambda):
-                    if complement(rule.head) not in delta:
-                        if rule.head not in lambda:
-                            lambda.add(rule.head)
-                            worklist.add(rule.head)
-
-    return lambda
-</code></pre>
-<p><strong>Key insight</strong>: If something is NOT in lambda, it’s definitely not defeasibly provable. This allows efficient pruning.</p>
-<h3 id="phase-3-partial-closure-p_"><a class="header" href="#phase-3-partial-closure-p_">Phase 3: Partial Closure (P_∂||)</a></h3>
-<p>Computes actual <strong>defeasible conclusions</strong> with conflict resolution.</p>
-<pre><code>function compute_partial(theory, delta, lambda):
-    partial = delta.copy()
-
-    candidates = lambda - delta  # Only check these
-    changed = true
-
-    while changed:
-        changed = false
-        for literal in candidates:
-            if literal not in partial:
-                if can_prove_defeasibly(literal, partial, lambda):
-                    partial.add(literal)
-                    changed = true
-
-    return partial
-</code></pre>
-<p>The <code>can_prove_defeasibly</code> function:</p>
-<pre><code>function can_prove_defeasibly(literal, partial, lambda):
-    # Need a supporting rule with satisfied body
-    has_support = false
-    for rule in rules_for(literal):
-        if rule.type in [Strict, Defeasible]:
-            if body_satisfied(rule, partial):
-                has_support = true
-                break
-
-    if not has_support:
-        return false
-
-    # All attacks must be defeated
-    for attacker in rules_for(complement(literal)):
-        # Attack fails if body not satisfiable
-        if not body_satisfiable(attacker, lambda):
-            continue
-
-        # Attack fails if we have a superior defender
-        if team_defeats(literal, attacker, partial):
-            continue
-
-        # This attack succeeds
-        return false
-
-    return true
-</code></pre>
-<h3 id="performance-comparison"><a class="header" href="#performance-comparison">Performance Comparison</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Aspect</th><th>Standard</th><th>Scalable</th></tr>
-</thead>
-<tbody>
-<tr><td>Small theories (&lt;100 rules)</td><td>Faster</td><td>Overhead</td></tr>
-<tr><td>Large theories (&gt;1000 rules)</td><td>Slower</td><td>Faster</td></tr>
-<tr><td>Memory</td><td>Lower</td><td>Higher (3 sets)</td></tr>
-<tr><td>Conflicts</td><td>Per-rule check</td><td>Batch processing</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="when-to-use-scalable"><a class="header" href="#when-to-use-scalable">When to Use Scalable</a></h3>
-<p>Use <code>--scalable</code> when:</p>
+<p>If no superiority relation exists between two applicable defeasible opponents, Spindle does <strong>not</strong>
+auto-block ties. Both sides can remain defeasibly derivable unless explicit superiority or defeaters
+resolve the conflict.</p>
+<p>This means superiority declarations are the primary mechanism for deterministic conflict resolution.</p>
+<h2 id="practical-semantics"><a class="header" href="#practical-semantics">Practical Semantics</a></h2>
 <ul>
-<li>Theory has &gt;1000 rules</li>
-<li>Many potential conflicts</li>
-<li>Long inference chains</li>
-<li>Lambda pruning will help</li>
+<li>Add <code>prefer r1 r2</code> / <code>r1 &gt; r2</code> when you want one side to win.</li>
+<li>Without superiority, opposing defeasible rules can yield both <code>+d p</code> and <code>+d ~p</code>.</li>
+<li><code>-d p</code> means “not defeasibly provable”, not “false”.</li>
 </ul>
-<h2 id="semi-naive-evaluation"><a class="header" href="#semi-naive-evaluation">Semi-Naive Evaluation</a></h2>
-<p>Phase 3 uses <strong>semi-naive evaluation</strong> for efficiency:</p>
-<p>Instead of checking all candidates each iteration, only check literals whose dependencies changed:</p>
-<pre><code>function compute_partial_seminaive(theory, delta, lambda):
-    partial = delta.copy()
-    worklist = rules_with_empty_body()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        if can_prove_defeasibly(literal, partial, lambda):
-            partial.add(literal)
-
-            # Only add rules triggered by this literal
-            for rule in rules_with_body(literal):
-                if body_satisfied(rule, partial):
-                    worklist.add(rule.head)
-
-    return partial
-</code></pre>
-<p>This avoids redundant checks and provides significant speedup for large theories.</p>
-<h2 id="semantic-equivalence"><a class="header" href="#semantic-equivalence">Semantic Equivalence</a></h2>
-<p>Both algorithms produce identical results for well-formed theories:</p>
-<pre><code>∀ theory: reason(theory) ≡ reason_scalable(theory)
-</code></pre>
-<p>The test suite verifies this property across many test cases.</p>
+<h2 id="complexity"><a class="header" href="#complexity">Complexity</a></h2>
+<ul>
+<li>Time: roughly <code>O(n * m)</code> where <code>n</code> is rules and <code>m</code> is average body size.</li>
+<li>Space: linear in literals/rules for indexes, worklists, and proven sets.</li>
+</ul>
+<p>The implementation relies on indexing and bitsets for fast membership checks during propagation.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="variables-and-grounding"><a class="header" href="#variables-and-grounding">Variables and Grounding</a></h1>
 <p>Spindle supports first-order variables using Datalog-style bottom-up grounding.</p>
@@ -1893,7 +1739,7 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 <ul>
 <li>Keep rule bodies small</li>
 <li>Use specific predicates to reduce matching</li>
-<li>Consider the <code>--scalable</code> flag for large ground theories</li>
+<li>Add explicit superiority where grounded conflicts should resolve to one side</li>
 </ul>
 <h2 id="dfl-limitations"><a class="header" href="#dfl-limitations">DFL Limitations</a></h2>
 <p>The DFL format does <strong>not</strong> support variables. Use SPL for first-order rules:</p>
@@ -2379,6 +2225,7 @@ user:admin        - An administrative user
 <tbody>
 <tr><td><code>:at</code></td><td>ISO 8601 timestamp</td><td><code>:at "2026-01-20T09:00:00Z"</code></td></tr>
 <tr><td><code>:sig</code></td><td>Cryptographic signature</td><td><code>:sig "abc123signature"</code></td></tr>
+<tr><td><code>:id</code></td><td>Claims block identifier</td><td><code>:id "claim-001"</code></td></tr>
 <tr><td><code>:note</code></td><td>Human-readable annotation</td><td><code>:note "CI pipeline results"</code></td></tr>
 </tbody>
 </table>
@@ -2478,7 +2325,7 @@ assert_eq!(policy.get_trust("unknown_agent"), 0.5);
 </div>
 <h2 id="weakest-link-trust-model"><a class="header" href="#weakest-link-trust-model">Weakest-Link Trust Model</a></h2>
 <p>The trust degree of a derived conclusion equals the <strong>minimum trust value</strong> encountered along its entire derivation chain. This is the “weakest-link” model: a conclusion is only as trustworthy as the least trusted step that produced it.</p>
-<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
 <p>Given a derivation tree, each node has a trust value from its contributing source. The <code>weakest_link_trust()</code> method recursively computes the minimum:</p>
 <pre><code>       root (0.8)
       /         \
@@ -2837,7 +2684,7 @@ let hypotheticals = vec![
 let goal = Literal::negated("flies");
 let result = what_if(&amp;theory, hypotheticals, &amp;goal);
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
+<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
 <ol>
 <li>Create a copy of the theory</li>
 <li>Add hypothetical facts</li>
@@ -2946,7 +2793,7 @@ use spindle_core::literal::Literal;
 let goal = Literal::simple("goal");
 let result = abduce(&amp;theory, &amp;goal, max_solutions);
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-2-1"><a class="header" href="#how-it-works-2-1">How It Works</a></h3>
+<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
 <ol>
 <li>Start with the goal literal</li>
 <li>Find rules that could prove it</li>
@@ -3326,34 +3173,34 @@ let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom =&gt; diagn
 <h2 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h2>
 <h3 id="the-explain-command"><a class="header" href="#the-explain-command">The <code>explain</code> Command</a></h3>
 <p>Show the full derivation proof tree for a provable literal:</p>
-<pre><code class="language-bash">spindle explain theory.dfl "~flies"
+<pre><code class="language-bash">spindle explain "~flies" theory.dfl
 </code></pre>
 <p>Output includes the derivation chain, blocked alternatives, and conflict resolutions in natural language format.</p>
 <p>For machine-readable output:</p>
-<pre><code class="language-bash">spindle explain theory.dfl --json "~flies"
+<pre><code class="language-bash">spindle explain "~flies" theory.dfl --json
 </code></pre>
 <h3 id="the-why-not-command"><a class="header" href="#the-why-not-command">The <code>why-not</code> Command</a></h3>
 <p>Explain why a literal is NOT provable:</p>
-<pre><code class="language-bash">spindle why-not theory.dfl flies
+<pre><code class="language-bash">spindle why-not flies theory.dfl
 </code></pre>
 <p>Lists each rule that could have derived the literal and explains why it was blocked (missing premises, defeated by a stronger rule, or contradicted by a strict derivation).</p>
 <p>For machine-readable output:</p>
-<pre><code class="language-bash">spindle why-not theory.dfl --json flies
+<pre><code class="language-bash">spindle why-not flies theory.dfl --json
 </code></pre>
 <p>The JSON output includes <code>is_provable</code> to indicate whether the literal is actually provable, and <code>would_derive</code> with the rule label when available.</p>
 <h3 id="debugging-workflow-1"><a class="header" href="#debugging-workflow-1">Debugging Workflow</a></h3>
 <p>A typical debugging session combines both commands:</p>
 <pre><code class="language-bash"># 1. Check what was concluded
-spindle --positive theory.dfl
+spindle reason --positive theory.dfl
 
 # 2. A literal you expected is missing -- find out why
-spindle why-not theory.dfl flies
+spindle why-not flies theory.dfl
 
 # 3. A literal you did not expect is present -- inspect its proof
-spindle explain theory.dfl "~flies"
+spindle explain "~flies" theory.dfl
 
 # 4. Pipe JSON output to other tools for further analysis
-spindle explain theory.dfl --json "~flies" | jq '.blocked_alternatives'
+spindle explain "~flies" theory.dfl --json | jq '.blocked_alternatives'
 </code></pre>
 <h2 id="rust-api-examples"><a class="header" href="#rust-api-examples">Rust API Examples</a></h2>
 <h3 id="generating-an-explanation"><a class="header" href="#generating-an-explanation">Generating an Explanation</a></h3>
@@ -3456,7 +3303,7 @@ if let Some(ref tree) = explanation.proof_tree {
 <p>The DOT output format integrates directly with Graphviz for generating visual proof graphs.</p>
 <h3 id="generating-a-graph"><a class="header" href="#generating-a-graph">Generating a Graph</a></h3>
 <pre><code class="language-bash"># Generate DOT and render to PNG
-spindle explain theory.dfl --json "~flies" \
+spindle explain "~flies" theory.dfl --json \
   | jq -r '.proof_tree' \
   &gt; /dev/null  # Use the Rust API instead for DOT
 
@@ -4089,29 +3936,14 @@ for c in &amp;result.conflicts {
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h1>
 <p>This guide covers performance optimization for Spindle.</p>
-<h2 id="choosing-an-algorithm"><a class="header" href="#choosing-an-algorithm">Choosing an Algorithm</a></h2>
-<h3 id="standard-dld-1"><a class="header" href="#standard-dld-1">Standard DL(d)</a></h3>
-<p>Best for:</p>
-<ul>
-<li>Small to medium theories (&lt;1000 rules)</li>
-<li>Simple conflict patterns</li>
-<li>Low memory environments</li>
-</ul>
-<pre><code class="language-bash">spindle theory.dfl
-</code></pre>
-<h3 id="scalable-dld-1"><a class="header" href="#scalable-dld-1">Scalable DL(d||)</a></h3>
-<p>Best for:</p>
-<ul>
-<li>Large theories (&gt;1000 rules)</li>
-<li>Complex conflict resolution</li>
-<li>Long inference chains</li>
-</ul>
-<pre><code class="language-bash">spindle --scalable theory.dfl
+<h2 id="reasoning-engine"><a class="header" href="#reasoning-engine">Reasoning Engine</a></h2>
+<h3 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h3>
+<p>Spindle uses the standard DL(d) forward-chaining engine.</p>
+<pre><code class="language-bash">spindle reason theory.dfl
 </code></pre>
 <h3 id="benchmark-your-theory"><a class="header" href="#benchmark-your-theory">Benchmark Your Theory</a></h3>
-<pre><code class="language-bash"># Time both algorithms
-time spindle theory.dfl &gt; /dev/null
-time spindle --scalable theory.dfl &gt; /dev/null
+<pre><code class="language-bash"># Time a representative run
+time spindle reason theory.dfl &gt; /dev/null
 </code></pre>
 <h2 id="theory-design"><a class="header" href="#theory-design">Theory Design</a></h2>
 <h3 id="minimize-rule-bodies"><a class="header" href="#minimize-rule-bodies">Minimize Rule Bodies</a></h3>
@@ -4230,7 +4062,7 @@ for rule in indexed.rules_with_body(&amp;literal) { ... }
 </code></pre>
 <p>Look for:</p>
 <ul>
-<li>High rule count → consider <code>--scalable</code></li>
+<li>High rule count → check grounding and rule-body fanout</li>
 <li>Many defeaters → potential blocking overhead</li>
 <li>Complex bodies → grounding overhead</li>
 </ul>
@@ -4239,11 +4071,11 @@ for rule in indexed.rules_with_body(&amp;literal) { ... }
 cargo build --release
 
 # Profile with flamegraph
-cargo flamegraph -- spindle theory.dfl
+cargo flamegraph -- spindle reason theory.dfl
 </code></pre>
 <h3 id="memory-profiling"><a class="header" href="#memory-profiling">Memory Profiling</a></h3>
 <pre><code class="language-bash"># Use heaptrack
-heaptrack spindle large-theory.dfl
+heaptrack spindle reason large-theory.dfl
 heaptrack_print heaptrack.spindle.*.gz
 </code></pre>
 <h2 id="recent-optimizations"><a class="header" href="#recent-optimizations">Recent Optimizations</a></h2>
@@ -4320,15 +4152,14 @@ cargo bench
 <li><code>reason_penguin</code> - basic conflict resolution</li>
 <li><code>reason_long_chain</code> - forward chaining depth</li>
 <li><code>reason_wide</code> - parallel independent rules</li>
-<li><code>scalable_vs_standard</code> - algorithm comparison</li>
 </ul>
 <h2 id="performance-checklist"><a class="header" href="#performance-checklist">Performance Checklist</a></h2>
 <ol>
 <li>
-<p><strong>Choose the right algorithm</strong></p>
+<p><strong>Use explicit superiority in conflicts</strong></p>
 <ul>
-<li><input disabled="" type="checkbox"> Small theory → standard</li>
-<li><input disabled="" type="checkbox"> Large theory → <code>--scalable</code></li>
+<li><input disabled="" type="checkbox"> Conflicting defeasible rules are intentionally unresolved unless ordered</li>
+<li><input disabled="" type="checkbox"> Add superiority relations where one side must win</li>
 </ul>
 </li>
 <li>
@@ -4351,7 +4182,7 @@ cargo bench
 <ul>
 <li><input disabled="" type="checkbox"> Check <code>spindle stats</code> output</li>
 <li><input disabled="" type="checkbox"> Profile if needed</li>
-<li><input disabled="" type="checkbox"> Benchmark algorithm choice</li>
+<li><input disabled="" type="checkbox"> Benchmark representative theories</li>
 </ul>
 </li>
 </ol>
@@ -4459,7 +4290,7 @@ r1 &gt; r2                # Must match exactly
 <li>
 <p>Both rules actually fire:</p>
 <pre><code class="language-bash"># Both bodies must be satisfied
-spindle --positive theory.dfl | grep "bird\|penguin"
+spindle reason --positive theory.dfl | grep "bird\|penguin"
 </code></pre>
 </li>
 </ol>
@@ -4506,7 +4337,7 @@ r2 &gt; r1
 <ul>
 <li>Add constraints to rule bodies</li>
 <li>Break large joins into smaller rules</li>
-<li>Use the <code>--scalable</code> flag</li>
+<li>Add explicit superiority where conflicts are expected</li>
 </ul>
 <h2 id="file-format-issues"><a class="header" href="#file-format-issues">File Format Issues</a></h2>
 <h3 id="wrong-format-detection"><a class="header" href="#wrong-format-detection">Wrong Format Detection</a></h3>
@@ -4519,22 +4350,21 @@ r2 &gt; r1
 <h3 id="encoding-issues"><a class="header" href="#encoding-issues">Encoding Issues</a></h3>
 <p><strong>Symptom</strong>: Special characters cause errors.</p>
 <p><strong>Fix</strong>: Use UTF-8 encoding. The negation symbol <code>¬</code> is supported.</p>
-<h2 id="algorithm-differences"><a class="header" href="#algorithm-differences">Algorithm Differences</a></h2>
-<h3 id="different-results-standard-vs-scalable"><a class="header" href="#different-results-standard-vs-scalable">Different Results: Standard vs Scalable</a></h3>
-<p><strong>Symptom</strong>: <code>--scalable</code> gives different results.</p>
-<p><strong>This should not happen</strong>. Both algorithms are semantically equivalent.</p>
-<p><strong>Debug</strong>:</p>
-<pre><code class="language-bash">spindle theory.dfl &gt; standard.txt
-spindle --scalable theory.dfl &gt; scalable.txt
-diff standard.txt scalable.txt
-</code></pre>
-<p>If different, please report a bug.</p>
+<h2 id="conflict-expectations"><a class="header" href="#conflict-expectations">Conflict Expectations</a></h2>
+<h3 id="conflicting-defeasible-rules-both-show-as-provable"><a class="header" href="#conflicting-defeasible-rules-both-show-as-provable">Conflicting Defeasible Rules Both Show As Provable</a></h3>
+<p><strong>Symptom</strong>: You see both <code>+d p</code> and <code>+d ~p</code>.</p>
+<p><strong>Cause</strong>: No superiority relation resolves the conflict.</p>
+<p><strong>Fix</strong>:</p>
+<ol>
+<li>Add an explicit superiority declaration between the conflicting rules.</li>
+<li>Re-run reasoning and verify only the preferred side remains <code>+d</code>.</li>
+</ol>
 <h2 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h2>
 <h3 id="slow-reasoning"><a class="header" href="#slow-reasoning">Slow Reasoning</a></h3>
 <p><strong>Check</strong>:</p>
 <ol>
 <li>Theory size: <code>spindle stats theory.dfl</code></li>
-<li>Algorithm: try <code>--scalable</code> for large theories</li>
+<li>Conflict graph: add superiority to resolve high-conflict hotspots</li>
 <li>Grounding: check for variable explosion</li>
 <li>Conflicts: add superiority to reduce ambiguity</li>
 </ol>
@@ -4548,13 +4378,12 @@ diff standard.txt scalable.txt
 <p><strong>Fixes</strong>:</p>
 <ul>
 <li>Reduce variable combinations</li>
-<li>Use <code>--scalable</code> algorithm</li>
 <li>Restructure theory</li>
 </ul>
 <h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h2>
 <h3 id="validate-first"><a class="header" href="#validate-first">Validate First</a></h3>
 <p>Always validate before reasoning:</p>
-<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
+<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle reason theory.dfl
 </code></pre>
 <h3 id="minimal-reproduction"><a class="header" href="#minimal-reproduction">Minimal Reproduction</a></h3>
 <p>Create a minimal theory that reproduces the issue:</p>
@@ -4565,14 +4394,14 @@ r1: bird =&gt; flies
 </code></pre>
 <h3 id="use-positive-output"><a class="header" href="#use-positive-output">Use Positive Output</a></h3>
 <p>Focus on what IS proven:</p>
-<pre><code class="language-bash">spindle --positive theory.dfl
+<pre><code class="language-bash">spindle reason --positive theory.dfl
 </code></pre>
 <h3 id="check-statistics"><a class="header" href="#check-statistics">Check Statistics</a></h3>
 <pre><code class="language-bash">spindle stats theory.dfl
 </code></pre>
 <p>Look for unexpected counts.</p>
 <h3 id="enable-logging"><a class="header" href="#enable-logging">Enable Logging</a></h3>
-<pre><code class="language-bash">SPINDLE_LOG=debug spindle theory.dfl 2&gt;&amp;1 | less
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.dfl 2&gt;&amp;1 | less
 </code></pre>
 <h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
 <p>If you can’t resolve an issue:</p>
@@ -4673,20 +4502,12 @@ let spl = r#"
 let theory = parse_spl(spl)?;
 <span class="boring">}</span></code></pre>
 <h2 id="reasoning"><a class="header" href="#reasoning">Reasoning</a></h2>
-<h3 id="standard-algorithm"><a class="header" href="#standard-algorithm">Standard Algorithm</a></h3>
+<h3 id="reasoning-api"><a class="header" href="#reasoning-api">Reasoning API</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_core::reason::reason;
 
 let conclusions = reason(&amp;theory);
-<span class="boring">}</span></code></pre>
-<h3 id="scalable-algorithm"><a class="header" href="#scalable-algorithm">Scalable Algorithm</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use spindle_core::scalable::reason_scalable;
-
-let result = reason_scalable(&amp;theory);
-let conclusions = result.to_conclusions(&amp;indexed_theory);
 <span class="boring">}</span></code></pre>
 <h3 id="convenience-method"><a class="header" href="#convenience-method">Convenience Method</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -5044,9 +4865,6 @@ spindle.parseSpl(`
     positive: boolean
 }
 </code></pre>
-<h3 id="scalable-reasoning"><a class="header" href="#scalable-reasoning">Scalable Reasoning</a></h3>
-<pre><code class="language-typescript">const conclusions = spindle.reasonScalable();
-</code></pre>
 <h3 id="query-1"><a class="header" href="#query-1">Query</a></h3>
 <pre><code class="language-typescript">// Check if a literal is provable
 const result = spindle.query("flies");
@@ -5217,7 +5035,7 @@ function ReasoningComponent() {
 <li><strong>Initialize once</strong>: Call <code>init()</code> once at startup</li>
 <li><strong>Reuse Spindle instances</strong>: Create once, reset between uses</li>
 <li><strong>Batch operations</strong>: Add all rules before reasoning</li>
-<li><strong>Use scalable for large theories</strong>: <code>reasonScalable()</code> for &gt;1000 rules</li>
+<li><strong>Use explicit superiority for conflict-heavy theories</strong> to avoid unresolved ties</li>
 </ol>
 <h2 id="bundle-size"><a class="header" href="#bundle-size">Bundle Size</a></h2>
 <p>Approximate sizes (gzipped):</p>
@@ -5259,7 +5077,6 @@ function ReasoningComponent() {
 ├── conclusion.rs       # Conclusion types
 ├── index.rs            # Theory indexing
 ├── reason.rs           # Standard DL(d) algorithm
-├── scalable.rs         # Scalable DL(d||) algorithm
 ├── grounding.rs        # Variable grounding
 ├── worklist.rs         # Worklist data structures
 ├── explanation.rs      # Proof trees
@@ -5293,7 +5110,7 @@ function ReasoningComponent() {
       │
       ▼
 ┌─────────────┐
-│  Reasoning  │  DL(d) or DL(d||)
+│  Reasoning  │  DL(d)
 └─────────────┘
       │
       ▼
@@ -5403,29 +5220,6 @@ Phase 3: Negative conclusions
     ├── If not in definite_proven → -D
     └── If not in defeasible_proven → -d
 </code></pre>
-<h3 id="scalable-dld-scalablers"><a class="header" href="#scalable-dld-scalablers">Scalable DL(d||) (scalable.rs)</a></h3>
-<pre><code>Phase 1: Delta Closure
-  ├── Initialize with facts
-  └── Forward chain strict rules only
-  Result: +D conclusions
-
-Phase 2: Lambda Closure
-  ├── Start with delta
-  ├── Add defeasible if:
-  │   ├── Body in lambda
-  │   └── Complement not in delta
-  Result: Over-approximation of +d
-
-Phase 3: Partial Closure (semi-naive)
-  ├── Start with delta
-  ├── Worklist of candidates from lambda
-  └── For each candidate:
-      ├── Check supporting rules
-      ├── Check attacking rules
-      ├── Check superiority
-      └── Add if all attacks defeated
-  Result: Actual +d conclusions
-</code></pre>
 <h2 id="memory-layout"><a class="header" href="#memory-layout">Memory Layout</a></h2>
 <h3 id="theory"><a class="header" href="#theory">Theory</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -5463,7 +5257,7 @@ worklist: VecDeque`LiteralId`
 <ol>
 <li>Add variant to <code>RuleType</code> enum</li>
 <li>Update parsers (dfl.rs, spl.rs)</li>
-<li>Update reasoning logic (reason.rs, scalable.rs)</li>
+<li>Update reasoning logic (reason.rs)</li>
 <li>Add tests</li>
 </ol>
 <h3 id="adding-a-new-query-operator"><a class="header" href="#adding-a-new-query-operator">Adding a New Query Operator</a></h3>
@@ -5490,10 +5284,9 @@ worklist: VecDeque`LiteralId`
 <pre><code>tests/
 ├── Unit tests (per module)
 │   ├── reason.rs - 40+ tests
-│   ├── scalable.rs - 30+ tests
 │   └── ...
 ├── Integration tests
-│   └── Semantic equivalence (standard vs scalable)
+│   └── End-to-end CLI/API behavior
 ├── Parser tests
 │   ├── dfl.rs
 │   └── spl.rs
@@ -5506,7 +5299,6 @@ worklist: VecDeque`LiteralId`
 <li><strong>Conflict resolution</strong>: superiority, defeaters</li>
 <li><strong>Edge cases</strong>: cycles, empty, self-reference</li>
 <li><strong>Stress tests</strong>: long chains, wide theories</li>
-<li><strong>Semantic equivalence</strong>: standard ≡ scalable</li>
 </ol>
 <h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
 <div class="table-wrapper">
@@ -5522,7 +5314,6 @@ worklist: VecDeque`LiteralId`
 <tr><td>Lookup by body</td><td>O(1)</td></tr>
 <tr><td>Superiority check</td><td>O(1)</td></tr>
 <tr><td>Standard reasoning</td><td>O(n * m)</td></tr>
-<tr><td>Scalable reasoning</td><td>O(n * m) with better constants</td></tr>
 </tbody>
 </table>
 </div>
