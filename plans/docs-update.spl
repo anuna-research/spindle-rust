@@ -1,184 +1,90 @@
-; docs-update.spl — Plan to bring docs/book up to date with implementation
+; Docs Update Plan v2 — Post DFL-removal & trust-parity cleanup
 ;
-; Identified gaps:
-;   1. CLI reference missing: query, explain, why-not, requires commands
-;   2. No guide for modal operators (deontic logic)
-;   3. No guide for trust-weighted reasoning
-;   4. No guide for process mining
-;   5. No guide for explanation system (proof trees, JSON-LD, DOT output)
-;   6. Performance guide missing recent optimizations (SmallVec, BitSet, FxHash)
-;   7. Architecture guide missing mining.rs module
-;   8. SUMMARY.md needs new sections
-;   9. Book needs rebuilding
+; Recent commits requiring doc updates:
+;   - 0e1b9f2: refactor: remove dfl support and enforce spl-only input
+;   - 2506b0c: Remove scalable reasoner and consolidate on standard DL(d)
+;   - d332ca6: feat/trust-parity merge (weakest-link, decay, mining metrics)
+;
+; All DFL syntax/references must be removed from docs.
+; Duplicate/stale parser references (dfl.rs) must be cleaned up.
 
-; ── task declarations ────────────────────────────────────────────────
+; ── state ────────────────────────────────────────────────────────
+(given docs_reviewed)
 
-(given task-cli)
-(given task-modal)
-(given task-trust)
-(given task-mining)
-(given task-explain)
-(given task-perf)
-(given task-arch)
-(given task-summary)
-(given task-build)
-
-; ── current state facts ──────────────────────────────────────────────
-
-(given cli_missing_commands)
-(given no_modal_guide)
-(given no_trust_guide)
-(given no_mining_guide)
-(given no_explanation_guide)
-(given perf_guide_stale)
-(given arch_guide_stale)
-
-; ── task rules: content tasks (independent, parallelizable) ──────────
-
-(normally r-cli
-  (and task-cli cli_missing_commands)
-  completed_cli)
-(meta r-cli
-  (description "Update reference/cli.md: add query, explain, why-not, requires subcommands with options, examples, and output formats")
+; ── t1: trust guide — remove DFL directives section ──────────────
+(normally t1 docs_reviewed update_trust_guide)
+(meta t1
+  (description "Remove DFL trust directives section (lines 225-270) and DFL CLI example (lines 736-751) from guides/trust.md")
   (agent "claude")
-  (priority "high"))
+  (file "docs/src/guides/trust.md"))
 
-(normally r-modal
-  (and task-modal no_modal_guide)
-  completed_modal)
-(meta r-modal
-  (description "Create guides/modal.md: obligation [O], permission [P], forbidden [F] operators with SPL examples")
+; ── t2: getting-started — convert DFL examples to SPL ────────────
+(normally t2 docs_reviewed update_getting_started)
+(meta t2
+  (description "Convert DFL syntax examples to SPL in getting-started.md. Remove the separate 'Using SPL Format' section since SPL is now the only format")
   (agent "claude")
-  (priority "high"))
+  (file "docs/src/getting-started.md"))
 
-(normally r-trust
-  (and task-trust no_trust_guide)
-  completed_trust)
-(meta r-trust
-  (description "Create guides/trust.md: TrustPolicy, WeightedConclusion, diminishers, weakest-link model, multi-perspective reasoning")
+; ── t3: README — fix two-format references ───────────────────────
+(normally t3 docs_reviewed update_readme)
+(meta t3
+  (description "Fix README.md: convert DFL example to SPL, change 'Two input formats' to SPL-only")
   (agent "claude")
-  (priority "high"))
+  (file "docs/src/README.md"))
 
-(normally r-mining
-  (and task-mining no_mining_guide)
-  completed_mining)
-(meta r-mining
-  (description "Create guides/mining.md: event logs, footprint matrix, alpha algorithm, Petri net discovery, rule learning, conflict detection")
+; ── t4: SPL reference — remove broken comparison table ───────────
+(normally t4 docs_reviewed update_spl_reference)
+(meta t4
+  (description "Remove the 'SPL Comparison' table (lines 267-278) from reference/spl.md — it compared DFL vs SPL but DFL no longer exists")
   (agent "claude")
-  (priority "medium"))
+  (file "docs/src/reference/spl.md"))
 
-(normally r-explain
-  (and task-explain no_explanation_guide)
-  completed_explain)
-(meta r-explain
-  (description "Create guides/explanations.md: proof trees, ProofNode, multi-format output (natural language, JSON, JSON-LD, DOT), annotations")
+; ── t5: CLI reference — fix duplicate format table ───────────────
+(normally t5 docs_reviewed update_cli_reference)
+(meta t5
+  (description "Fix file format detection table in reference/cli.md — lists .spl twice (was .dfl and .spl). Remove duplicate row")
   (agent "claude")
-  (priority "high"))
+  (file "docs/src/reference/cli.md"))
 
-(normally r-perf
-  (and task-perf perf_guide_stale)
-  completed_perf)
-(meta r-perf
-  (description "Update guides/performance.md: add SmallVec for rule body/head, BitSet for proven literals, FxHash for faster hashing, pre-allocation")
+; ── t6: architecture — fix parser references ─────────────────────
+(normally t6 docs_reviewed update_architecture)
+(meta t6
+  (description "Fix internals/architecture.md: remove duplicate spl.rs references in parser update and test sections (was dfl.rs + spl.rs)")
   (agent "claude")
-  (priority "medium"))
+  (file "docs/src/internals/architecture.md"))
 
-(normally r-arch
-  (and task-arch arch_guide_stale)
-  completed_arch)
-(meta r-arch
-  (description "Update internals/architecture.md: add mining.rs module, trust.rs detail, SmallVec/BitSet changes to memory layout")
-  (agent "claude")
-  (priority "medium"))
-
-; ── summary depends on all content tasks ─────────────────────────────
-
-(normally r-summary
-  (and task-summary completed_cli completed_modal completed_trust completed_mining completed_explain completed_perf completed_arch)
-  completed_summary)
-(meta r-summary
-  (description "Update SUMMARY.md: add Modal Operators, Trust Reasoning, Process Mining, Explanations guides")
-  (agent "claude")
-  (priority "high"))
-
-; ── build depends on summary ─────────────────────────────────────────
-
-(normally r-build
-  (and task-build completed_summary)
-  completed_build)
-(meta r-build
+; ── t7: rebuild mdbook ──────────────────────────────────────────
+(normally t7
+  (and update_trust_guide update_getting_started update_readme update_spl_reference update_cli_reference update_architecture)
+  rebuild_book)
+(meta t7
   (description "Run mdbook build to regenerate docs/book/ from updated sources")
-  (agent "claude")
-  (priority "high"))
-
-; ── completion gate ──────────────────────────────────────────────────
-
-(normally r-done
-  completed_build
-  docs_up_to_date)
-(meta r-done
-  (description "All documentation is current with implementation"))
-
-(claims agent:system
-  :at "2026-20-50T19:30:28Z"
-  (given claimed-cli))
-
-(claims agent:system
-  :at "2026-20-50T19:30:32Z"
-  (given claimed-modal))
-
-(claims agent:system
-  :at "2026-20-50T19:30:32Z"
-  (given claimed-trust))
-
-(claims agent:system
-  :at "2026-20-50T19:30:33Z"
-  (given claimed-mining))
-
-(claims agent:system
-  :at "2026-20-50T19:30:33Z"
-  (given claimed-explain))
-
-(claims agent:system
-  :at "2026-20-50T19:30:33Z"
-  (given claimed-perf))
-
-(claims agent:system
-  :at "2026-20-50T19:30:34Z"
-  (given claimed-arch))
+  (agent "claude"))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:48Z"
-  (given completed-cli))
+  :at "2026-20-11T17:00:20Z"
+  (given completed_t1))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:48Z"
-  (given completed-modal))
+  :at "2026-20-11T17:00:10Z"
+  (given completed_t2))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:49Z"
-  (given completed-trust))
+  :at "2026-20-11T17:00:10Z"
+  (given completed_t3))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:49Z"
-  (given completed-mining))
+  :at "2026-20-11T17:00:10Z"
+  (given completed_t4))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:49Z"
-  (given completed-explain))
+  :at "2026-20-11T17:00:11Z"
+  (given completed_t5))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:50Z"
-  (given completed-perf))
+  :at "2026-20-11T17:00:11Z"
+  (given completed_t6))
 
 (claims agent:claude
-  :at "2026-20-50T19:36:50Z"
-  (given completed-arch))
-
-(claims agent:claude
-  :at "2026-20-50T19:36:53Z"
-  (given completed-summary))
-
-(claims agent:claude
-  :at "2026-20-50T19:36:54Z"
-  (given completed-build))
+  :at "2026-20-11T17:10:19Z"
+  (given completed_t7))

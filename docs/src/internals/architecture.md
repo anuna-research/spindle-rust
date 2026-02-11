@@ -8,7 +8,7 @@ This document describes the internal architecture of Spindle-Rust.
 spindle-rust/
 ├── crates/
 │   ├── spindle-core/     # Core reasoning engine
-│   ├── spindle-parser/   # SPL parsers
+│   ├── spindle-parser/   # SPL parser
 │   ├── spindle-cli/      # Command-line interface
 │   └── spindle-wasm/     # WebAssembly bindings
 ```
@@ -228,7 +228,7 @@ worklist: VecDeque`LiteralId`
 ### Adding a New Rule Type
 
 1. Add variant to `RuleType` enum
-2. Update parsers (spl.rs, spl.rs)
+2. Update parser (spl.rs)
 3. Update reasoning logic (reason.rs)
 4. Add tests
 
@@ -262,7 +262,6 @@ tests/
 ├── Integration tests
 │   └── End-to-end CLI/API behavior
 ├── Parser tests
-│   ├── spl.rs
 │   └── spl.rs
 └── WASM tests
     └── Basic functionality
