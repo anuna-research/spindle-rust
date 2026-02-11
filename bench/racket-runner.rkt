@@ -4,7 +4,7 @@
 
 (require racket/cmdline
          racket/format
-         "../../spindle-racket/src/spindle.rkt")
+         "../../spindle-racket/src/unified.rkt")
 
 (define input-file (make-parameter #f))
 
@@ -15,7 +15,10 @@
 
 (define (run-benchmark)
   (define content (file->string (input-file)))
-  (define theory (parse-spl content))
+  (define-values (ast errors) (parse-spl-string content))
+  (unless (null? errors)
+    (error 'run-benchmark "Parse errors: ~a" errors))
+  (define theory (spl-ast-to-theory ast))
 
   ;; Time the reasoning
   (define start (current-inexact-milliseconds))
