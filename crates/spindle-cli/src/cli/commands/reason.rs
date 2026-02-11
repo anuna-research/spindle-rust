@@ -136,8 +136,9 @@ pub(crate) fn run_reason(
                     let sources_str = if wc.sources.is_empty() {
                         String::new()
                     } else {
-                        let src_list: Vec<String> =
+                        let mut src_list: Vec<String> =
                             wc.sources.iter().map(|s| s.id.clone()).collect();
+                        src_list.sort();
                         format!(" [{}]", src_list.join(", "))
                     };
                     text.push_str(&format!(

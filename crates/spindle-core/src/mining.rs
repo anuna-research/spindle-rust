@@ -833,12 +833,17 @@ pub fn rules_with_metrics(
     rules
         .iter()
         .filter_map(|rule| {
-            // Extract activity names from the rule body and head
-            let body_name = rule.body.first().map(|l| l.name().to_string())?;
-            let head_name = rule.head.first().map(|l| l.name().to_string())?;
+            // Only compute metrics for unary rules (single body, single head literal).
+            // Multi-literal rules cannot be meaningfully mapped to a single a->b
+            // directly-follows relationship, so skip them.
+            if rule.body.len() != 1 || rule.head.len() != 1 {
+                return None;
+            }
+            let body_name = rule.body[0].name();
+            let head_name = rule.head[0].name();
 
-            let support = calculate_support(log, &body_name, &head_name);
-            let confidence = calculate_confidence(log, &body_name, &head_name);
+            let support = calculate_support(log, body_name, head_name);
+            let confidence = calculate_confidence(log, body_name, head_name);
 
             if support >= min_support && confidence >= min_confidence {
                 Some(LearnedRule::new(rule.clone(), support, confidence))
