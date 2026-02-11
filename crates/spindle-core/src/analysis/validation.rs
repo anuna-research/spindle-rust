@@ -73,9 +73,8 @@ fn check_duplicate_labels(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>
                 severity: Severity::Error,
                 code: "E001",
                 message: format!(
-                    "Duplicate rule label '{}' appears {} times; \
-                     each rule must have a unique label.",
-                    label, count,
+                    "Duplicate rule label '{label}' appears {count} times; \
+                     each rule must have a unique label."
                 ),
                 rules: vec![label.to_string()],
             });
