@@ -7,7 +7,7 @@
 //! 3. Grounding (variable instantiation)
 //! 4. Indexing (AtomKey/LitId generation)
 
-use crate::conclusion::Conclusion;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::{Result, SpindleError};
 use crate::grounding::{ground_theory_with_limit, has_variables, is_variable};
 use crate::literal::Literal;
@@ -404,11 +404,28 @@ fn parse_iso8601_millis(ts: &str) -> Option<i64> {
         .map(|dt| dt.timestamp_millis())
 }
 
+/// Select the best positive conclusion for trust chain traversal.
+///
+/// Prefers `+D` (definitely provable) over `+d` (defeasibly provable) since
+/// definite proofs are stronger. Among same type, prefers conclusions that
+/// have a `rule_label` set so the derivation chain can be traced.
+fn best_conclusion<'a>(conclusions: &[&'a Conclusion]) -> Option<&'a Conclusion> {
+    conclusions.iter().copied().max_by_key(|c| {
+        let type_rank = if c.conclusion_type == ConclusionType::DefinitelyProvable {
+            1
+        } else {
+            0
+        };
+        let label_rank = if c.rule_label.is_some() { 1 } else { 0 };
+        (type_rank, label_rank)
+    })
+}
+
 /// Build a trust derivation tree for a literal by tracing back through deriving rules.
 fn build_trust_tree(
     literal: &Literal,
     rule_label: Option<&str>,
-    positive_conclusions: &HashMap<String, &Conclusion>,
+    positive_conclusions: &HashMap<String, Vec<&Conclusion>>,
     theory: &Theory,
     policy: &TrustPolicy,
     reference_time: Option<TimePoint>,
@@ -440,10 +457,12 @@ fn build_trust_tree(
         let mut children = Vec::new();
         for body_lit in &rule.body {
             let body_key = body_lit.to_spl();
-            if let Some(body_conclusion) = positive_conclusions.get(&body_key) {
+            if let Some(body_conclusions) = positive_conclusions.get(&body_key)
+                && let Some(best) = best_conclusion(body_conclusions)
+            {
                 let child = build_trust_tree(
                     body_lit,
-                    body_conclusion.rule_label.as_deref(),
+                    best.rule_label.as_deref(),
                     positive_conclusions,
                     theory,
                     policy,
@@ -490,12 +509,15 @@ pub fn compute_weighted_conclusions(
 ) -> Vec<WeightedConclusion> {
     // Build index of positive conclusions for fast body-literal lookup.
     // Key by to_spl() so that literals with different arguments (e.g. p(a) vs p(b))
-    // remain distinct.
-    let positive_conclusions: HashMap<String, &Conclusion> = conclusions
-        .iter()
-        .filter(|c| c.is_positive())
-        .map(|c| (c.literal.to_spl(), c))
-        .collect();
+    // remain distinct. Store all conclusions per key so we can pick the best one
+    // (e.g. +D over +d) rather than silently overwriting.
+    let mut positive_conclusions: HashMap<String, Vec<&Conclusion>> = HashMap::new();
+    for c in conclusions.iter().filter(|c| c.is_positive()) {
+        positive_conclusions
+            .entry(c.literal.to_spl())
+            .or_default()
+            .push(c);
+    }
 
     conclusions
         .iter()
