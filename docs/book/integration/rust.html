@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -270,20 +270,12 @@ let spl = r#"
 let theory = parse_spl(spl)?;
 <span class="boring">}</span></code></pre>
 <h2 id="reasoning"><a class="header" href="#reasoning">Reasoning</a></h2>
-<h3 id="standard-algorithm"><a class="header" href="#standard-algorithm">Standard Algorithm</a></h3>
+<h3 id="reasoning-api"><a class="header" href="#reasoning-api">Reasoning API</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_core::reason::reason;
 
 let conclusions = reason(&amp;theory);
-<span class="boring">}</span></code></pre>
-<h3 id="scalable-algorithm"><a class="header" href="#scalable-algorithm">Scalable Algorithm</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use spindle_core::scalable::reason_scalable;
-
-let result = reason_scalable(&amp;theory);
-let conclusions = result.to_conclusions(&amp;indexed_theory);
 <span class="boring">}</span></code></pre>
 <h3 id="convenience-method"><a class="header" href="#convenience-method">Convenience Method</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]

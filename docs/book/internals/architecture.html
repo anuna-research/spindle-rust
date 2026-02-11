@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -204,7 +204,6 @@
 ├── conclusion.rs       # Conclusion types
 ├── index.rs            # Theory indexing
 ├── reason.rs           # Standard DL(d) algorithm
-├── scalable.rs         # Scalable DL(d||) algorithm
 ├── grounding.rs        # Variable grounding
 ├── worklist.rs         # Worklist data structures
 ├── explanation.rs      # Proof trees
@@ -238,7 +237,7 @@
       │
       ▼
 ┌─────────────┐
-│  Reasoning  │  DL(d) or DL(d||)
+│  Reasoning  │  DL(d)
 └─────────────┘
       │
       ▼
@@ -348,29 +347,6 @@ Phase 3: Negative conclusions
     ├── If not in definite_proven → -D
     └── If not in defeasible_proven → -d
 </code></pre>
-<h3 id="scalable-dld-scalablers"><a class="header" href="#scalable-dld-scalablers">Scalable DL(d||) (scalable.rs)</a></h3>
-<pre><code>Phase 1: Delta Closure
-  ├── Initialize with facts
-  └── Forward chain strict rules only
-  Result: +D conclusions
-
-Phase 2: Lambda Closure
-  ├── Start with delta
-  ├── Add defeasible if:
-  │   ├── Body in lambda
-  │   └── Complement not in delta
-  Result: Over-approximation of +d
-
-Phase 3: Partial Closure (semi-naive)
-  ├── Start with delta
-  ├── Worklist of candidates from lambda
-  └── For each candidate:
-      ├── Check supporting rules
-      ├── Check attacking rules
-      ├── Check superiority
-      └── Add if all attacks defeated
-  Result: Actual +d conclusions
-</code></pre>
 <h2 id="memory-layout"><a class="header" href="#memory-layout">Memory Layout</a></h2>
 <h3 id="theory"><a class="header" href="#theory">Theory</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -408,7 +384,7 @@ worklist: VecDeque`LiteralId`
 <ol>
 <li>Add variant to <code>RuleType</code> enum</li>
 <li>Update parsers (dfl.rs, spl.rs)</li>
-<li>Update reasoning logic (reason.rs, scalable.rs)</li>
+<li>Update reasoning logic (reason.rs)</li>
 <li>Add tests</li>
 </ol>
 <h3 id="adding-a-new-query-operator"><a class="header" href="#adding-a-new-query-operator">Adding a New Query Operator</a></h3>
@@ -435,10 +411,9 @@ worklist: VecDeque`LiteralId`
 <pre><code>tests/
 ├── Unit tests (per module)
 │   ├── reason.rs - 40+ tests
-│   ├── scalable.rs - 30+ tests
 │   └── ...
 ├── Integration tests
-│   └── Semantic equivalence (standard vs scalable)
+│   └── End-to-end CLI/API behavior
 ├── Parser tests
 │   ├── dfl.rs
 │   └── spl.rs
@@ -451,7 +426,6 @@ worklist: VecDeque`LiteralId`
 <li><strong>Conflict resolution</strong>: superiority, defeaters</li>
 <li><strong>Edge cases</strong>: cycles, empty, self-reference</li>
 <li><strong>Stress tests</strong>: long chains, wide theories</li>
-<li><strong>Semantic equivalence</strong>: standard ≡ scalable</li>
 </ol>
 <h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
 <div class="table-wrapper">
@@ -467,7 +441,6 @@ worklist: VecDeque`LiteralId`
 <tr><td>Lookup by body</td><td>O(1)</td></tr>
 <tr><td>Superiority check</td><td>O(1)</td></tr>
 <tr><td>Standard reasoning</td><td>O(n * m)</td></tr>
-<tr><td>Scalable reasoning</td><td>O(n * m) with better constants</td></tr>
 </tbody>
 </table>
 </div>

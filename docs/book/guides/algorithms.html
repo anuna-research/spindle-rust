@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -181,218 +181,53 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="algorithms"><a class="header" href="#algorithms">Algorithms</a></h1>
-<p>Spindle implements two reasoning algorithms: standard DL(d) and scalable DL(d||).</p>
-<h2 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h2>
-<p>The default algorithm uses <strong>forward chaining</strong> to compute conclusions.</p>
-<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>Spindle uses a single reasoning engine: <strong>standard DL(d) forward chaining</strong>.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The engine computes conclusions in three phases:</p>
 <ol>
-<li><strong>Initialize</strong>: Add all facts to the proven set</li>
-<li><strong>Propagate</strong>: Find rules whose bodies are satisfied</li>
-<li><strong>Fire</strong>: Add conclusions, checking for conflicts</li>
-<li><strong>Repeat</strong>: Until no new conclusions</li>
+<li>Seed facts as both <code>+D</code> and <code>+d</code>.</li>
+<li>Forward-chain strict and defeasible rules until saturation.</li>
+<li>Emit negative conclusions (<code>-D</code>, <code>-d</code>) for literals not proven.</li>
 </ol>
-<h3 id="pseudocode"><a class="header" href="#pseudocode">Pseudocode</a></h3>
-<pre><code>function reason(theory):
-    proven = {}
+<h2 id="forward-chaining"><a class="header" href="#forward-chaining">Forward Chaining</a></h2>
+<p>At a high level:</p>
+<pre><code class="language-text">function reason(theory):
+  proven_definite = {}
+  proven_defeasible = {}
+  worklist = facts + empty-body rule heads
 
-    # Phase 1: Facts
-    for fact in theory.facts:
-        add_conclusion(+D, fact.head)
-        add_conclusion(+d, fact.head)
-        worklist.add(fact.head)
+  while worklist not empty:
+    lit = pop(worklist)
+    for rule triggered by lit:
+      if body_satisfied(rule):
+        fire(rule)
 
-    # Phase 2: Forward chaining
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body_containing(literal):
-            if body_satisfied(rule, proven):
-                if rule.type == Strict:
-                    add_conclusion(+D, rule.head)
-                    add_conclusion(+d, rule.head)
-                elif rule.type == Defeasible:
-                    if not blocked_by_superior(rule):
-                        add_conclusion(+d, rule.head)
-                # Defeaters don't add conclusions
-
-    # Phase 3: Negative conclusions
-    for literal in all_literals:
-        if literal not in proven[+D]:
-            add_conclusion(-D, literal)
-        if literal not in proven[+d]:
-            add_conclusion(-d, literal)
+  emit -D and -d for literals not in proven sets
 </code></pre>
-<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
-<p>When a defeasible rule fires, we check for blocking:</p>
-<pre><code>function blocked_by_superior(rule):
-    complement = negate(rule.head)
-
-    for attacker in rules_for(complement):
-        if body_satisfied(attacker):
-            if attacker.type == Defeater:
-                if not is_superior(rule, attacker):
-                    return true  # Blocked by defeater
-            elif attacker.type == Defeasible:
-                if is_superior(attacker, rule):
-                    return true  # Blocked by superior rule
-
-    return false
-</code></pre>
-<h3 id="complexity"><a class="header" href="#complexity">Complexity</a></h3>
-<ul>
-<li>Time: O(n * m) where n = rules, m = average body size</li>
-<li>Space: O(n) for proven literals</li>
-</ul>
-<h2 id="scalable-dld"><a class="header" href="#scalable-dld">Scalable DL(d||)</a></h2>
-<p>For large theories, the three-phase algorithm is more efficient.</p>
-<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
-<pre><code>Theory → [Delta] → [Lambda] → [Partial] → Conclusions
-            ↓          ↓           ↓
-       Definite   Potential   Defeasible
-       (+D)       (approx)    (+d)
-</code></pre>
-<h3 id="phase-1-delta-closure-p_δ"><a class="header" href="#phase-1-delta-closure-p_δ">Phase 1: Delta Closure (P_Δ)</a></h3>
-<p>Computes <strong>definite conclusions</strong> using only facts and strict rules.</p>
-<pre><code>function compute_delta(theory):
-    delta = {}
-    worklist = theory.facts
-
-    while worklist not empty:
-        literal = worklist.pop()
-        delta.add(literal)
-
-        for rule in strict_rules_with_body(literal):
-            if body_satisfied(rule, delta):
-                if rule.head not in delta:
-                    worklist.add(rule.head)
-
-    return delta
-</code></pre>
-<p><strong>Result</strong>: All <code>+D</code> conclusions.</p>
-<h3 id="phase-2-lambda-closure-p_λ"><a class="header" href="#phase-2-lambda-closure-p_λ">Phase 2: Lambda Closure (P_λ)</a></h3>
-<p>Computes an <strong>over-approximation</strong> of defeasible conclusions.</p>
-<p>A literal is in lambda if:</p>
+<p>Strict rules add both <code>+D</code> and <code>+d</code>.<br>Defeasible rules add <code>+d</code> only if not blocked.</p>
+<h2 id="conflict-handling"><a class="header" href="#conflict-handling">Conflict Handling</a></h2>
+<p>For a defeasible rule <code>r: body =&gt; q</code>, attackers are rules for <code>~q</code>.</p>
+<p><code>r</code> is blocked when:</p>
 <ol>
-<li>It’s in delta, OR</li>
-<li>Some strict/defeasible rule has:
-<ul>
-<li>Body fully in lambda</li>
-<li>Complement NOT in delta</li>
-</ul>
-</li>
+<li>An applicable <strong>defeater</strong> for <code>~q</code> exists, and <code>r</code> is not superior to it.</li>
+<li>An applicable <strong>defeasible</strong> attacker exists that is explicitly superior to <code>r</code>.</li>
 </ol>
-<pre><code>function compute_lambda(theory, delta):
-    lambda = delta.copy()
-    worklist = delta.copy()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        for rule in rules_with_body(literal):
-            if rule.type in [Strict, Defeasible]:
-                if body_satisfied(rule, lambda):
-                    if complement(rule.head) not in delta:
-                        if rule.head not in lambda:
-                            lambda.add(rule.head)
-                            worklist.add(rule.head)
-
-    return lambda
-</code></pre>
-<p><strong>Key insight</strong>: If something is NOT in lambda, it’s definitely not defeasibly provable. This allows efficient pruning.</p>
-<h3 id="phase-3-partial-closure-p_"><a class="header" href="#phase-3-partial-closure-p_">Phase 3: Partial Closure (P_∂||)</a></h3>
-<p>Computes actual <strong>defeasible conclusions</strong> with conflict resolution.</p>
-<pre><code>function compute_partial(theory, delta, lambda):
-    partial = delta.copy()
-
-    candidates = lambda - delta  # Only check these
-    changed = true
-
-    while changed:
-        changed = false
-        for literal in candidates:
-            if literal not in partial:
-                if can_prove_defeasibly(literal, partial, lambda):
-                    partial.add(literal)
-                    changed = true
-
-    return partial
-</code></pre>
-<p>The <code>can_prove_defeasibly</code> function:</p>
-<pre><code>function can_prove_defeasibly(literal, partial, lambda):
-    # Need a supporting rule with satisfied body
-    has_support = false
-    for rule in rules_for(literal):
-        if rule.type in [Strict, Defeasible]:
-            if body_satisfied(rule, partial):
-                has_support = true
-                break
-
-    if not has_support:
-        return false
-
-    # All attacks must be defeated
-    for attacker in rules_for(complement(literal)):
-        # Attack fails if body not satisfiable
-        if not body_satisfiable(attacker, lambda):
-            continue
-
-        # Attack fails if we have a superior defender
-        if team_defeats(literal, attacker, partial):
-            continue
-
-        # This attack succeeds
-        return false
-
-    return true
-</code></pre>
-<h3 id="performance-comparison"><a class="header" href="#performance-comparison">Performance Comparison</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Aspect</th><th>Standard</th><th>Scalable</th></tr>
-</thead>
-<tbody>
-<tr><td>Small theories (&lt;100 rules)</td><td>Faster</td><td>Overhead</td></tr>
-<tr><td>Large theories (&gt;1000 rules)</td><td>Slower</td><td>Faster</td></tr>
-<tr><td>Memory</td><td>Lower</td><td>Higher (3 sets)</td></tr>
-<tr><td>Conflicts</td><td>Per-rule check</td><td>Batch processing</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="when-to-use-scalable"><a class="header" href="#when-to-use-scalable">When to Use Scalable</a></h3>
-<p>Use <code>--scalable</code> when:</p>
+<p>If no superiority relation exists between two applicable defeasible opponents, Spindle does <strong>not</strong>
+auto-block ties. Both sides can remain defeasibly derivable unless explicit superiority or defeaters
+resolve the conflict.</p>
+<p>This means superiority declarations are the primary mechanism for deterministic conflict resolution.</p>
+<h2 id="practical-semantics"><a class="header" href="#practical-semantics">Practical Semantics</a></h2>
 <ul>
-<li>Theory has &gt;1000 rules</li>
-<li>Many potential conflicts</li>
-<li>Long inference chains</li>
-<li>Lambda pruning will help</li>
+<li>Add <code>prefer r1 r2</code> / <code>r1 &gt; r2</code> when you want one side to win.</li>
+<li>Without superiority, opposing defeasible rules can yield both <code>+d p</code> and <code>+d ~p</code>.</li>
+<li><code>-d p</code> means “not defeasibly provable”, not “false”.</li>
 </ul>
-<h2 id="semi-naive-evaluation"><a class="header" href="#semi-naive-evaluation">Semi-Naive Evaluation</a></h2>
-<p>Phase 3 uses <strong>semi-naive evaluation</strong> for efficiency:</p>
-<p>Instead of checking all candidates each iteration, only check literals whose dependencies changed:</p>
-<pre><code>function compute_partial_seminaive(theory, delta, lambda):
-    partial = delta.copy()
-    worklist = rules_with_empty_body()
-
-    while worklist not empty:
-        literal = worklist.pop()
-
-        if can_prove_defeasibly(literal, partial, lambda):
-            partial.add(literal)
-
-            # Only add rules triggered by this literal
-            for rule in rules_with_body(literal):
-                if body_satisfied(rule, partial):
-                    worklist.add(rule.head)
-
-    return partial
-</code></pre>
-<p>This avoids redundant checks and provides significant speedup for large theories.</p>
-<h2 id="semantic-equivalence"><a class="header" href="#semantic-equivalence">Semantic Equivalence</a></h2>
-<p>Both algorithms produce identical results for well-formed theories:</p>
-<pre><code>∀ theory: reason(theory) ≡ reason_scalable(theory)
-</code></pre>
-<p>The test suite verifies this property across many test cases.</p>
+<h2 id="complexity"><a class="header" href="#complexity">Complexity</a></h2>
+<ul>
+<li>Time: roughly <code>O(n * m)</code> where <code>n</code> is rules and <code>m</code> is average body size.</li>
+<li>Space: linear in literals/rules for indexes, worklists, and proven sets.</li>
+</ul>
+<p>The implementation relies on indexing and bitsets for fast membership checks during propagation.</p>
 
                     </main>
 
