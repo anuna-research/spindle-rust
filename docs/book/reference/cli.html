@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -186,21 +186,31 @@
 <pre><code class="language-bash">cargo install --path crates/spindle-cli
 </code></pre>
 <h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
-<pre><code class="language-bash">spindle [OPTIONS] &lt;FILE&gt;
-spindle &lt;COMMAND&gt; [OPTIONS] &lt;FILE&gt; [LITERAL]
+<pre><code class="language-bash">spindle &lt;COMMAND&gt; [OPTIONS]
+spindle reason [OPTIONS] [FILE]
+spindle query &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle explain &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle why-not &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle requires &lt;LITERAL&gt; [FILE] [OPTIONS]
 </code></pre>
 <h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
-<h3 id="reason-default"><a class="header" href="#reason-default">reason (default)</a></h3>
+<h3 id="reason"><a class="header" href="#reason">reason</a></h3>
 <p>Perform defeasible reasoning on a theory.</p>
-<pre><code class="language-bash">spindle examples/penguin.dfl
-spindle reason examples/penguin.dfl
+<pre><code class="language-bash">spindle reason examples/penguin.dfl
 </code></pre>
 <h3 id="validate"><a class="header" href="#validate">validate</a></h3>
 <p>Check syntax without reasoning.</p>
 <pre><code class="language-bash">spindle validate examples/penguin.dfl
+spindle --json validate --stdin &lt; examples/penguin.dfl
 </code></pre>
 <p>Output on success:</p>
-<pre><code>Valid DFL theory.
+<pre><code>Valid theory file
+</code></pre>
+<p>With <code>--json</code> success output:</p>
+<pre><code class="language-json">{
+  "valid": true,
+  "diagnostics": []
+}
 </code></pre>
 <p>Output on error:</p>
 <pre><code>Error at line 5: could not parse: invalid =&gt; syntax
@@ -208,6 +218,7 @@ spindle reason examples/penguin.dfl
 <h3 id="stats"><a class="header" href="#stats">stats</a></h3>
 <p>Show theory statistics.</p>
 <pre><code class="language-bash">spindle stats examples/penguin.dfl
+spindle --json stats --stdin &lt; examples/penguin.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>Theory Statistics:
@@ -218,12 +229,25 @@ spindle reason examples/penguin.dfl
   Superiority: 1
   Total rules: 8
 </code></pre>
+<p>With <code>--json</code> success output:</p>
+<pre><code class="language-json">{
+  "stats": {
+    "total_rules": 8,
+    "facts": 2,
+    "strict": 1,
+    "defeasible": 4,
+    "defeaters": 1,
+    "superiorities": 1
+  },
+  "diagnostics": []
+}
+</code></pre>
 <h3 id="query"><a class="header" href="#query">query</a></h3>
 <p>Query if a literal holds in the theory.</p>
-<pre><code class="language-bash">spindle query examples/penguin.dfl flies
-spindle query examples/penguin.dfl "~flies"
-spindle query examples/penguin.dfl "(not flies)"
-spindle query examples/penguin.dfl --json flies
+<pre><code class="language-bash">spindle query flies examples/penguin.dfl
+spindle query "~flies" examples/penguin.dfl
+spindle query "(not flies)" examples/penguin.dfl
+spindle query flies examples/penguin.dfl --json
 </code></pre>
 <p>The literal argument supports multiple formats: <code>p</code>, <code>~p</code>, <code>(not p)</code>, or complex SPL expressions.</p>
 <p>Returns a <code>QueryStatus</code>:</p>
@@ -247,8 +271,8 @@ spindle query examples/penguin.dfl --json flies
 </code></pre>
 <h3 id="explain"><a class="header" href="#explain">explain</a></h3>
 <p>Show the derivation proof tree for why a literal holds.</p>
-<pre><code class="language-bash">spindle explain examples/penguin.dfl "-flies"
-spindle explain examples/penguin.dfl --json "-flies"
+<pre><code class="language-bash">spindle explain "-flies" examples/penguin.dfl
+spindle explain "-flies" examples/penguin.dfl --json
 </code></pre>
 <p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
 <p>Output:</p>
@@ -263,8 +287,8 @@ spindle explain examples/penguin.dfl --json "-flies"
 <p>With <code>--json</code>, the output is a JSON or JSON-LD structure containing an <code>Explanation</code> with proof nodes, blocked alternatives, and conflict resolutions.</p>
 <h3 id="why-not"><a class="header" href="#why-not">why-not</a></h3>
 <p>Explain why a literal is NOT provable.</p>
-<pre><code class="language-bash">spindle why-not examples/penguin.dfl flies
-spindle why-not examples/penguin.dfl --json flies
+<pre><code class="language-bash">spindle why-not flies examples/penguin.dfl
+spindle why-not flies examples/penguin.dfl --json
 </code></pre>
 <p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes <code>is_provable: true</code> and <code>blocked_by</code> will be empty.</p>
 <p>Output:</p>
@@ -288,9 +312,9 @@ spindle why-not examples/penguin.dfl --json flies
 </div>
 <h3 id="requires"><a class="header" href="#requires">requires</a></h3>
 <p>Abduction: find the minimal sets of facts needed to derive a literal.</p>
-<pre><code class="language-bash">spindle requires examples/penguin.dfl flies
-spindle requires examples/penguin.dfl --max 5 flies
-spindle requires examples/penguin.dfl --json flies
+<pre><code class="language-bash">spindle requires flies examples/penguin.dfl
+spindle requires flies examples/penguin.dfl --max 5
+spindle requires flies examples/penguin.dfl --json
 </code></pre>
 <p>The <code>--max</code> option limits the number of solutions returned (defaults to 10).</p>
 <p>Output:</p>
@@ -301,24 +325,19 @@ spindle requires examples/penguin.dfl --json flies
 <p>Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
-<p>Output results in JSON format. Available for <code>reason</code>, <code>query</code>, <code>explain</code>, <code>why-not</code>, and <code>requires</code> commands.</p>
+<p>Output results in JSON format. Available for all commands, including <code>validate</code> and <code>stats</code>.
+When <code>--json</code> is present, success and failure paths are machine-readable JSON.</p>
 <pre><code class="language-bash">spindle reason examples/penguin.dfl --json
-spindle query examples/penguin.dfl --json flies
-spindle explain examples/penguin.dfl --json "-flies"
+spindle query flies examples/penguin.dfl --json
+spindle explain "-flies" examples/penguin.dfl --json
+spindle --json validate --stdin &lt; examples/penguin.dfl
 </code></pre>
-<h3 id="--scalable"><a class="header" href="#--scalable"><code>--scalable</code></a></h3>
-<p>Use the scalable DL(d||) algorithm instead of standard DL(d).</p>
-<pre><code class="language-bash">spindle --scalable large-theory.dfl
+<p>Parse/usage failures also emit JSON envelopes when <code>--json</code> is present:</p>
+<pre><code class="language-bash">spindle --json
 </code></pre>
-<p>Recommended for theories with:</p>
-<ul>
-<li>More than 1000 rules</li>
-<li>Complex conflict resolution</li>
-<li>Long inference chains</li>
-</ul>
 <h3 id="--positive"><a class="header" href="#--positive"><code>--positive</code></a></h3>
 <p>Show only positive conclusions (+D, +d).</p>
-<pre><code class="language-bash">spindle --positive examples/penguin.dfl
+<pre><code class="language-bash">spindle reason --positive examples/penguin.dfl
 </code></pre>
 <p>Output:</p>
 <pre><code>+D bird
@@ -348,53 +367,48 @@ spindle explain examples/penguin.dfl --json "-flies"
 </thead>
 <tbody>
 <tr><td>0</td><td>Success</td></tr>
-<tr><td>1</td><td>Error (parse error, file not found, etc.)</td></tr>
+<tr><td>2</td><td>User input / parse / validation error</td></tr>
+<tr><td>3</td><td>Execution/internal reasoning error</td></tr>
+<tr><td>4</td><td>Resource/limit/timeout hit</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
 <h3 id="basic-reasoning"><a class="header" href="#basic-reasoning">Basic Reasoning</a></h3>
 <pre><code class="language-bash"># Reason about a theory
-spindle penguin.dfl
-
-# Same with explicit command
 spindle reason penguin.dfl
 </code></pre>
 <h3 id="querying-and-explaining"><a class="header" href="#querying-and-explaining">Querying and Explaining</a></h3>
 <pre><code class="language-bash"># Check if a literal holds
-spindle query penguin.dfl flies
+spindle query flies penguin.dfl
 
 # Get a proof tree for a derived conclusion
-spindle explain penguin.dfl "-flies"
+spindle explain "-flies" penguin.dfl
 
 # Debug why something is not provable
-spindle why-not penguin.dfl flies
+spindle why-not flies penguin.dfl
 
 # Find what facts would make a literal provable
-spindle requires penguin.dfl flies --max 5
+spindle requires flies penguin.dfl --max 5
 
 # Get JSON output for scripting
-spindle query penguin.dfl --json flies
+spindle query flies penguin.dfl --json
 </code></pre>
 <h3 id="validate-before-reasoning"><a class="header" href="#validate-before-reasoning">Validate Before Reasoning</a></h3>
-<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
+<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle reason theory.dfl
 </code></pre>
-<h3 id="compare-algorithms"><a class="header" href="#compare-algorithms">Compare Algorithms</a></h3>
-<pre><code class="language-bash"># Standard algorithm
-spindle theory.dfl &gt; standard.txt
-
-# Scalable algorithm
-spindle --scalable theory.dfl &gt; scalable.txt
-
-# Compare (should be identical for correct theories)
-diff standard.txt scalable.txt
+<h3 id="compare-runs"><a class="header" href="#compare-runs">Compare Runs</a></h3>
+<pre><code class="language-bash"># Compare two revisions or theories
+spindle reason theory-a.dfl &gt; run-a.txt
+spindle reason theory-b.dfl &gt; run-b.txt
+diff run-a.txt run-b.txt
 </code></pre>
 <h3 id="scripting"><a class="header" href="#scripting">Scripting</a></h3>
 <pre><code class="language-bash">#!/bin/bash
 for file in theories/*.dfl; do
     echo "Processing $file..."
     if spindle validate "$file"; then
-        spindle --positive "$file"
+        spindle reason --positive "$file"
     else
         echo "Invalid: $file"
     fi
@@ -411,7 +425,7 @@ done
 </tbody>
 </table>
 </div>
-<pre><code class="language-bash">SPINDLE_LOG=debug spindle theory.dfl
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.dfl
 </code></pre>
 
                     </main>

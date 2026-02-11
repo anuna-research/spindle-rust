@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -182,29 +182,14 @@
                     <main>
                         <h1 id="performance-tuning"><a class="header" href="#performance-tuning">Performance Tuning</a></h1>
 <p>This guide covers performance optimization for Spindle.</p>
-<h2 id="choosing-an-algorithm"><a class="header" href="#choosing-an-algorithm">Choosing an Algorithm</a></h2>
+<h2 id="reasoning-engine"><a class="header" href="#reasoning-engine">Reasoning Engine</a></h2>
 <h3 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h3>
-<p>Best for:</p>
-<ul>
-<li>Small to medium theories (&lt;1000 rules)</li>
-<li>Simple conflict patterns</li>
-<li>Low memory environments</li>
-</ul>
-<pre><code class="language-bash">spindle theory.dfl
-</code></pre>
-<h3 id="scalable-dld"><a class="header" href="#scalable-dld">Scalable DL(d||)</a></h3>
-<p>Best for:</p>
-<ul>
-<li>Large theories (&gt;1000 rules)</li>
-<li>Complex conflict resolution</li>
-<li>Long inference chains</li>
-</ul>
-<pre><code class="language-bash">spindle --scalable theory.dfl
+<p>Spindle uses the standard DL(d) forward-chaining engine.</p>
+<pre><code class="language-bash">spindle reason theory.dfl
 </code></pre>
 <h3 id="benchmark-your-theory"><a class="header" href="#benchmark-your-theory">Benchmark Your Theory</a></h3>
-<pre><code class="language-bash"># Time both algorithms
-time spindle theory.dfl &gt; /dev/null
-time spindle --scalable theory.dfl &gt; /dev/null
+<pre><code class="language-bash"># Time a representative run
+time spindle reason theory.dfl &gt; /dev/null
 </code></pre>
 <h2 id="theory-design"><a class="header" href="#theory-design">Theory Design</a></h2>
 <h3 id="minimize-rule-bodies"><a class="header" href="#minimize-rule-bodies">Minimize Rule Bodies</a></h3>
@@ -323,7 +308,7 @@ for rule in indexed.rules_with_body(&amp;literal) { ... }
 </code></pre>
 <p>Look for:</p>
 <ul>
-<li>High rule count → consider <code>--scalable</code></li>
+<li>High rule count → check grounding and rule-body fanout</li>
 <li>Many defeaters → potential blocking overhead</li>
 <li>Complex bodies → grounding overhead</li>
 </ul>
@@ -332,11 +317,11 @@ for rule in indexed.rules_with_body(&amp;literal) { ... }
 cargo build --release
 
 # Profile with flamegraph
-cargo flamegraph -- spindle theory.dfl
+cargo flamegraph -- spindle reason theory.dfl
 </code></pre>
 <h3 id="memory-profiling"><a class="header" href="#memory-profiling">Memory Profiling</a></h3>
 <pre><code class="language-bash"># Use heaptrack
-heaptrack spindle large-theory.dfl
+heaptrack spindle reason large-theory.dfl
 heaptrack_print heaptrack.spindle.*.gz
 </code></pre>
 <h2 id="recent-optimizations"><a class="header" href="#recent-optimizations">Recent Optimizations</a></h2>
@@ -413,15 +398,14 @@ cargo bench
 <li><code>reason_penguin</code> - basic conflict resolution</li>
 <li><code>reason_long_chain</code> - forward chaining depth</li>
 <li><code>reason_wide</code> - parallel independent rules</li>
-<li><code>scalable_vs_standard</code> - algorithm comparison</li>
 </ul>
 <h2 id="performance-checklist"><a class="header" href="#performance-checklist">Performance Checklist</a></h2>
 <ol>
 <li>
-<p><strong>Choose the right algorithm</strong></p>
+<p><strong>Use explicit superiority in conflicts</strong></p>
 <ul>
-<li><input disabled="" type="checkbox"> Small theory → standard</li>
-<li><input disabled="" type="checkbox"> Large theory → <code>--scalable</code></li>
+<li><input disabled="" type="checkbox"> Conflicting defeasible rules are intentionally unresolved unless ordered</li>
+<li><input disabled="" type="checkbox"> Add superiority relations where one side must win</li>
 </ul>
 </li>
 <li>
@@ -444,7 +428,7 @@ cargo bench
 <ul>
 <li><input disabled="" type="checkbox"> Check <code>spindle stats</code> output</li>
 <li><input disabled="" type="checkbox"> Profile if needed</li>
-<li><input disabled="" type="checkbox"> Benchmark algorithm choice</li>
+<li><input disabled="" type="checkbox"> Benchmark representative theories</li>
 </ul>
 </li>
 </ol>

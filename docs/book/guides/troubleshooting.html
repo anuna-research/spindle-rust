@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -283,7 +283,7 @@ r1 &gt; r2                # Must match exactly
 <li>
 <p>Both rules actually fire:</p>
 <pre><code class="language-bash"># Both bodies must be satisfied
-spindle --positive theory.dfl | grep "bird\|penguin"
+spindle reason --positive theory.dfl | grep "bird\|penguin"
 </code></pre>
 </li>
 </ol>
@@ -330,7 +330,7 @@ r2 &gt; r1
 <ul>
 <li>Add constraints to rule bodies</li>
 <li>Break large joins into smaller rules</li>
-<li>Use the <code>--scalable</code> flag</li>
+<li>Add explicit superiority where conflicts are expected</li>
 </ul>
 <h2 id="file-format-issues"><a class="header" href="#file-format-issues">File Format Issues</a></h2>
 <h3 id="wrong-format-detection"><a class="header" href="#wrong-format-detection">Wrong Format Detection</a></h3>
@@ -343,22 +343,21 @@ r2 &gt; r1
 <h3 id="encoding-issues"><a class="header" href="#encoding-issues">Encoding Issues</a></h3>
 <p><strong>Symptom</strong>: Special characters cause errors.</p>
 <p><strong>Fix</strong>: Use UTF-8 encoding. The negation symbol <code>¬</code> is supported.</p>
-<h2 id="algorithm-differences"><a class="header" href="#algorithm-differences">Algorithm Differences</a></h2>
-<h3 id="different-results-standard-vs-scalable"><a class="header" href="#different-results-standard-vs-scalable">Different Results: Standard vs Scalable</a></h3>
-<p><strong>Symptom</strong>: <code>--scalable</code> gives different results.</p>
-<p><strong>This should not happen</strong>. Both algorithms are semantically equivalent.</p>
-<p><strong>Debug</strong>:</p>
-<pre><code class="language-bash">spindle theory.dfl &gt; standard.txt
-spindle --scalable theory.dfl &gt; scalable.txt
-diff standard.txt scalable.txt
-</code></pre>
-<p>If different, please report a bug.</p>
+<h2 id="conflict-expectations"><a class="header" href="#conflict-expectations">Conflict Expectations</a></h2>
+<h3 id="conflicting-defeasible-rules-both-show-as-provable"><a class="header" href="#conflicting-defeasible-rules-both-show-as-provable">Conflicting Defeasible Rules Both Show As Provable</a></h3>
+<p><strong>Symptom</strong>: You see both <code>+d p</code> and <code>+d ~p</code>.</p>
+<p><strong>Cause</strong>: No superiority relation resolves the conflict.</p>
+<p><strong>Fix</strong>:</p>
+<ol>
+<li>Add an explicit superiority declaration between the conflicting rules.</li>
+<li>Re-run reasoning and verify only the preferred side remains <code>+d</code>.</li>
+</ol>
 <h2 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h2>
 <h3 id="slow-reasoning"><a class="header" href="#slow-reasoning">Slow Reasoning</a></h3>
 <p><strong>Check</strong>:</p>
 <ol>
 <li>Theory size: <code>spindle stats theory.dfl</code></li>
-<li>Algorithm: try <code>--scalable</code> for large theories</li>
+<li>Conflict graph: add superiority to resolve high-conflict hotspots</li>
 <li>Grounding: check for variable explosion</li>
 <li>Conflicts: add superiority to reduce ambiguity</li>
 </ol>
@@ -372,13 +371,12 @@ diff standard.txt scalable.txt
 <p><strong>Fixes</strong>:</p>
 <ul>
 <li>Reduce variable combinations</li>
-<li>Use <code>--scalable</code> algorithm</li>
 <li>Restructure theory</li>
 </ul>
 <h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging Tips</a></h2>
 <h3 id="validate-first"><a class="header" href="#validate-first">Validate First</a></h3>
 <p>Always validate before reasoning:</p>
-<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle theory.dfl
+<pre><code class="language-bash">spindle validate theory.dfl &amp;&amp; spindle reason theory.dfl
 </code></pre>
 <h3 id="minimal-reproduction"><a class="header" href="#minimal-reproduction">Minimal Reproduction</a></h3>
 <p>Create a minimal theory that reproduces the issue:</p>
@@ -389,14 +387,14 @@ r1: bird =&gt; flies
 </code></pre>
 <h3 id="use-positive-output"><a class="header" href="#use-positive-output">Use Positive Output</a></h3>
 <p>Focus on what IS proven:</p>
-<pre><code class="language-bash">spindle --positive theory.dfl
+<pre><code class="language-bash">spindle reason --positive theory.dfl
 </code></pre>
 <h3 id="check-statistics"><a class="header" href="#check-statistics">Check Statistics</a></h3>
 <pre><code class="language-bash">spindle stats theory.dfl
 </code></pre>
 <p>Look for unexpected counts.</p>
 <h3 id="enable-logging"><a class="header" href="#enable-logging">Enable Logging</a></h3>
-<pre><code class="language-bash">SPINDLE_LOG=debug spindle theory.dfl 2&gt;&amp;1 | less
+<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.dfl 2&gt;&amp;1 | less
 </code></pre>
 <h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
 <p>If you can’t resolve an issue:</p>

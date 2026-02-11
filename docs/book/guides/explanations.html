@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -444,34 +444,34 @@ let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom =&gt; diagn
 <h2 id="cli-usage"><a class="header" href="#cli-usage">CLI Usage</a></h2>
 <h3 id="the-explain-command"><a class="header" href="#the-explain-command">The <code>explain</code> Command</a></h3>
 <p>Show the full derivation proof tree for a provable literal:</p>
-<pre><code class="language-bash">spindle explain theory.dfl "~flies"
+<pre><code class="language-bash">spindle explain "~flies" theory.dfl
 </code></pre>
 <p>Output includes the derivation chain, blocked alternatives, and conflict resolutions in natural language format.</p>
 <p>For machine-readable output:</p>
-<pre><code class="language-bash">spindle explain theory.dfl --json "~flies"
+<pre><code class="language-bash">spindle explain "~flies" theory.dfl --json
 </code></pre>
 <h3 id="the-why-not-command"><a class="header" href="#the-why-not-command">The <code>why-not</code> Command</a></h3>
 <p>Explain why a literal is NOT provable:</p>
-<pre><code class="language-bash">spindle why-not theory.dfl flies
+<pre><code class="language-bash">spindle why-not flies theory.dfl
 </code></pre>
 <p>Lists each rule that could have derived the literal and explains why it was blocked (missing premises, defeated by a stronger rule, or contradicted by a strict derivation).</p>
 <p>For machine-readable output:</p>
-<pre><code class="language-bash">spindle why-not theory.dfl --json flies
+<pre><code class="language-bash">spindle why-not flies theory.dfl --json
 </code></pre>
 <p>The JSON output includes <code>is_provable</code> to indicate whether the literal is actually provable, and <code>would_derive</code> with the rule label when available.</p>
 <h3 id="debugging-workflow"><a class="header" href="#debugging-workflow">Debugging Workflow</a></h3>
 <p>A typical debugging session combines both commands:</p>
 <pre><code class="language-bash"># 1. Check what was concluded
-spindle --positive theory.dfl
+spindle reason --positive theory.dfl
 
 # 2. A literal you expected is missing -- find out why
-spindle why-not theory.dfl flies
+spindle why-not flies theory.dfl
 
 # 3. A literal you did not expect is present -- inspect its proof
-spindle explain theory.dfl "~flies"
+spindle explain "~flies" theory.dfl
 
 # 4. Pipe JSON output to other tools for further analysis
-spindle explain theory.dfl --json "~flies" | jq '.blocked_alternatives'
+spindle explain "~flies" theory.dfl --json | jq '.blocked_alternatives'
 </code></pre>
 <h2 id="rust-api-examples"><a class="header" href="#rust-api-examples">Rust API Examples</a></h2>
 <h3 id="generating-an-explanation"><a class="header" href="#generating-an-explanation">Generating an Explanation</a></h3>
@@ -574,7 +574,7 @@ if let Some(ref tree) = explanation.proof_tree {
 <p>The DOT output format integrates directly with Graphviz for generating visual proof graphs.</p>
 <h3 id="generating-a-graph"><a class="header" href="#generating-a-graph">Generating a Graph</a></h3>
 <pre><code class="language-bash"># Generate DOT and render to PNG
-spindle explain theory.dfl --json "~flies" \
+spindle explain "~flies" theory.dfl --json \
   | jq -r '.proof_tree' \
   &gt; /dev/null  # Use the Rust API instead for DOT
 

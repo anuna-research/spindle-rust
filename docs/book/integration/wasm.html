@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-0ddfcf6c.js";
+            window.path_to_searchindex_js = "../searchindex-c2928118.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-116bb599.js"></script>
@@ -301,9 +301,6 @@ spindle.parseSpl(`
     positive: boolean
 }
 </code></pre>
-<h3 id="scalable-reasoning"><a class="header" href="#scalable-reasoning">Scalable Reasoning</a></h3>
-<pre><code class="language-typescript">const conclusions = spindle.reasonScalable();
-</code></pre>
 <h3 id="query"><a class="header" href="#query">Query</a></h3>
 <pre><code class="language-typescript">// Check if a literal is provable
 const result = spindle.query("flies");
@@ -474,7 +471,7 @@ function ReasoningComponent() {
 <li><strong>Initialize once</strong>: Call <code>init()</code> once at startup</li>
 <li><strong>Reuse Spindle instances</strong>: Create once, reset between uses</li>
 <li><strong>Batch operations</strong>: Add all rules before reasoning</li>
-<li><strong>Use scalable for large theories</strong>: <code>reasonScalable()</code> for &gt;1000 rules</li>
+<li><strong>Use explicit superiority for conflict-heavy theories</strong> to avoid unresolved ties</li>
 </ol>
 <h2 id="bundle-size"><a class="header" href="#bundle-size">Bundle Size</a></h2>
 <p>Approximate sizes (gzipped):</p>

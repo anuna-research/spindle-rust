@@ -1,8 +1,7 @@
 //! Integration tests that verify SPL fixture files against expected conclusions.
 //!
 //! Each `.spl` file in `tests/fixtures/` contains `; EXPECT: <conclusion>` and
-//! `; EXPECT-NOT: <conclusion>` comments that are verified against the scalable
-//! reasoner output.
+//! `; EXPECT-NOT: <conclusion>` comments that are verified against reasoner output.
 
 use assert_cmd::cargo::cargo_bin_cmd;
 use std::path::Path;
@@ -22,12 +21,11 @@ fn parse_expectations(content: &str) -> (Vec<String>, Vec<String>) {
     (expect, expect_not)
 }
 
-/// Run the scalable reasoner on a fixture file and return stdout.
+/// Run the reasoner on a fixture file and return stdout.
 fn run_reason(path: &Path) -> String {
     let output = cargo_bin_cmd!("spindle")
         .arg("reason")
         .arg(path)
-        .arg("--scalable")
         .output()
         .expect("failed to execute spindle");
     assert!(

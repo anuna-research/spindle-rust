@@ -103,21 +103,12 @@ let theory = parse_spl(spl)?;
 
 ## Reasoning
 
-### Standard Algorithm
+### Reasoning API
 
 ```rust
 use spindle_core::reason::reason;
 
 let conclusions = reason(&theory);
-```
-
-### Scalable Algorithm
-
-```rust
-use spindle_core::scalable::reason_scalable;
-
-let result = reason_scalable(&theory);
-let conclusions = result.to_conclusions(&indexed_theory);
 ```
 
 ### Convenience Method
