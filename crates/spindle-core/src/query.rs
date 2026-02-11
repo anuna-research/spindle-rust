@@ -131,14 +131,33 @@ impl TrustFilter {
             None => return true, // No policy means everything passes
         };
 
-        // Get source from rule metadata
+        // Get source from rule metadata, falling back to template label for grounded instances
         let source_id = rule_label.and_then(|label| {
-            theory
-                .get_meta(label)
-                .and_then(|meta| match meta.properties.get("source") {
-                    Some(MetaValue::String(s)) => Some(s.as_str()),
-                    _ => None,
-                })
+            // Try the concrete label first
+            let meta_source =
+                theory
+                    .get_meta(label)
+                    .and_then(|meta| match meta.properties.get("source") {
+                        Some(MetaValue::String(s)) => Some(s.as_str()),
+                        _ => None,
+                    });
+            if meta_source.is_some() {
+                return meta_source;
+            }
+            // Fall back to template label for grounded rule instances
+            theory.get_rule(label).and_then(|rule| {
+                let tl = rule.template_label();
+                if tl != label {
+                    theory
+                        .get_meta(tl)
+                        .and_then(|meta| match meta.properties.get("source") {
+                            Some(MetaValue::String(s)) => Some(s.as_str()),
+                            _ => None,
+                        })
+                } else {
+                    None
+                }
+            })
         });
 
         // Check source pattern

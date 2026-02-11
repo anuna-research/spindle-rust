@@ -451,6 +451,7 @@ pub fn ground_theory_with_limit(
     }
 
     grounded.copy_metadata_from(theory);
+    *grounded.trust_policy_mut() = theory.trust_policy().clone();
 
     (grounded, limit_hit)
 }

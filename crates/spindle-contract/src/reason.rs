@@ -33,6 +33,12 @@ pub struct ConclusionEntry {
     pub literal_spl: String,
     pub literal_struct: LiteralStructJson,
     pub positive: bool,
+    /// Trust degree (weakest-link across derivation chain). Present when `--trust` is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_degree: Option<f64>,
+    /// Source IDs contributing to this conclusion. Present when `--trust` is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_sources: Option<Vec<String>>,
 }
 
 /// Theory statistics (rule and fact counts).

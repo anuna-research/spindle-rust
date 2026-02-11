@@ -19,6 +19,8 @@ fn test_reason_output_serializes_with_literal_struct() {
             literal_spl: "(bird)".to_string(),
             literal_struct: LiteralStructJson::from(&Literal::simple("bird")),
             positive: true,
+            trust_degree: None,
+            trust_sources: None,
         }],
         diagnostics: vec![],
         stats: Some(TheoryStats {

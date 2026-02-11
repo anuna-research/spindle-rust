@@ -121,7 +121,7 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
     // Rewrite wildcards (_) to unique variables before grounding
     let theory_with_rewrites = rewrite_wildcards(&filtered_theory);
 
-    let (final_theory, report) = if opts.grounding.enabled {
+    let (mut final_theory, report) = if opts.grounding.enabled {
         let had_vars = theory_with_rewrites.rules().any(has_variables);
         if had_vars {
             let (grounded, limit_hit) = ground_theory_with_limit(
@@ -162,6 +162,11 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
             },
         )
     };
+
+    // Apply explicit trust policy from options, overriding the parsed one
+    if let Some(tp) = opts.trust_policy {
+        *final_theory.trust_policy_mut() = tp;
+    }
 
     Ok(PipelineResult {
         theory: final_theory,
@@ -215,8 +220,9 @@ fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
         }
     }
 
-    // Copy metadata
+    // Copy metadata and trust policy
     new_theory.copy_metadata_from(theory);
+    *new_theory.trust_policy_mut() = theory.trust_policy().clone();
 
     new_theory
 }
@@ -278,6 +284,7 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
 fn rewrite_wildcards(theory: &Theory) -> Theory {
     let mut new_theory = Theory::new();
     new_theory.copy_metadata_from(theory);
+    *new_theory.trust_policy_mut() = theory.trust_policy().clone();
 
     // Copy superiorities
     for sup in theory.superiorities() {

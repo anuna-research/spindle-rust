@@ -54,13 +54,37 @@ pub(crate) fn run_reason(
 
     if json {
         let mut output_conclusions: Vec<ConclusionEntry> = conclusions
-            .into_iter()
-            .filter(|c| !positive_only || c.is_positive())
-            .map(|c| ConclusionEntry {
-                conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStructJson::from(&c.literal),
-                positive: c.is_positive(),
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| !positive_only || c.is_positive())
+            .map(|(i, c)| {
+                let (trust_degree, trust_sources) = if let Some(ref wcs) = weighted {
+                    if let Some(wc) = wcs.get(i) {
+                        let mut sources: Vec<String> =
+                            wc.sources.iter().map(|s| s.id.clone()).collect();
+                        sources.sort();
+                        (
+                            Some(wc.degree),
+                            if sources.is_empty() {
+                                None
+                            } else {
+                                Some(sources)
+                            },
+                        )
+                    } else {
+                        (None, None)
+                    }
+                } else {
+                    (None, None)
+                };
+                ConclusionEntry {
+                    conclusion_type: c.conclusion_type.symbol().to_string(),
+                    literal_spl: c.literal.to_spl(),
+                    literal_struct: LiteralStructJson::from(&c.literal),
+                    positive: c.is_positive(),
+                    trust_degree,
+                    trust_sources,
+                }
             })
             .collect();
 

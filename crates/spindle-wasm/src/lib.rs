@@ -212,6 +212,8 @@ impl Spindle {
                 literal_spl: c.literal.to_spl(),
                 literal_struct: LiteralStructJson::from(&c.literal),
                 positive: c.conclusion_type.is_positive(),
+                trust_degree: None,
+                trust_sources: None,
             })
             .collect();
         // Sort for deterministic output matching CLI behavior
