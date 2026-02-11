@@ -24,6 +24,8 @@ pub struct ScalableResult {
     pub lambda: FxHashSet<LitId>,
     /// Partial closure: defeasibly provable (+∂||)
     pub partial: FxHashSet<LitId>,
+    /// Maps each proven literal to the rule that derived it
+    pub deriving_rule: FxHashMap<LitId, RuleLabel>,
 }
 
 impl ScalableResult {
@@ -37,21 +39,33 @@ impl ScalableResult {
         // Delta -> Definitely Provable
         for &lit_id in &self.delta {
             let lit = indexed.resolve_literal(lit_id);
-            conclusions.push(Conclusion::definitely_provable(lit.clone()));
+            let mut c = Conclusion::definitely_provable(lit.clone());
+            if let Some(label) = self.deriving_rule.get(&lit_id) {
+                c = c.with_rule(label);
+            }
+            conclusions.push(c);
         }
 
         // Partial - Delta -> Defeasibly Provable
         for &lit_id in &self.partial {
             if !self.delta.contains(&lit_id) {
                 let lit = indexed.resolve_literal(lit_id);
-                conclusions.push(Conclusion::defeasibly_provable(lit));
+                let mut c = Conclusion::defeasibly_provable(lit);
+                if let Some(label) = self.deriving_rule.get(&lit_id) {
+                    c = c.with_rule(label);
+                }
+                conclusions.push(c);
             }
         }
 
         // Add defeasibly provable for delta items too (Definite implies Defeasible)
         for &lit_id in &self.delta {
             let lit = indexed.resolve_literal(lit_id);
-            conclusions.push(Conclusion::defeasibly_provable(lit));
+            let mut c = Conclusion::defeasibly_provable(lit);
+            if let Some(label) = self.deriving_rule.get(&lit_id) {
+                c = c.with_rule(label);
+            }
+            conclusions.push(c);
         }
 
         // Negative conclusions
@@ -141,19 +155,22 @@ pub fn reason_scalable(indexed: &IndexedTheory<'_>) -> ScalableResult {
         );
     }
 
+    let mut deriving_rule: FxHashMap<LitId, RuleLabel> = FxHashMap::default();
+
     // Phase 1: Delta Closure
-    let delta = compute_delta_closure(indexed, &mut states);
+    let delta = compute_delta_closure(indexed, &mut states, &mut deriving_rule);
 
     // Phase 2: Lambda Closure
-    let lambda = compute_lambda_closure(indexed, &delta);
+    let lambda = compute_lambda_closure(indexed, &delta, &mut deriving_rule);
 
     // Phase 3: Partial Closure
-    let partial = compute_partial_closure(indexed, &delta, &lambda);
+    let partial = compute_partial_closure(indexed, &delta, &lambda, &mut deriving_rule);
 
     ScalableResult {
         delta,
         lambda,
         partial,
+        deriving_rule,
     }
 }
 
@@ -161,6 +178,7 @@ pub fn reason_scalable(indexed: &IndexedTheory<'_>) -> ScalableResult {
 fn compute_delta_closure(
     indexed: &IndexedTheory<'_>,
     states: &mut FxHashMap<RuleLabel, RuleState>,
+    deriving_rule: &mut FxHashMap<LitId, RuleLabel>,
 ) -> FxHashSet<LitId> {
     let mut delta: FxHashSet<LitId> = FxHashSet::default();
     let mut worklist: VecDeque<LitId> = VecDeque::new();
@@ -176,6 +194,7 @@ fn compute_delta_closure(
                 if !delta.contains(&lit_id) {
                     delta.insert(lit_id);
                     worklist.push_back(lit_id);
+                    deriving_rule.entry(lit_id).or_insert_with(|| rule.label.clone());
                 }
             }
         }
@@ -199,6 +218,7 @@ fn compute_delta_closure(
                         if !delta.contains(&head_id) {
                             delta.insert(head_id);
                             worklist.push_back(head_id);
+                            deriving_rule.entry(head_id).or_insert_with(|| rule.label.clone());
                         }
                     }
                 }
@@ -213,6 +233,7 @@ fn compute_delta_closure(
 fn compute_lambda_closure(
     indexed: &IndexedTheory<'_>,
     delta: &FxHashSet<LitId>,
+    deriving_rule: &mut FxHashMap<LitId, RuleLabel>,
 ) -> FxHashSet<LitId> {
     let mut lambda: FxHashSet<LitId> = delta.clone();
     let mut worklist: VecDeque<LitId> = delta.iter().copied().collect();
@@ -237,6 +258,7 @@ fn compute_lambda_closure(
                 if !delta.contains(&comp_id) && !lambda.contains(&head_id) {
                     lambda.insert(head_id);
                     worklist.push_back(head_id);
+                    deriving_rule.entry(head_id).or_insert_with(|| rule.label.clone());
                 }
             }
         }
@@ -269,6 +291,7 @@ fn compute_lambda_closure(
                         if !delta.contains(&comp_id) && !lambda.contains(&head_id) {
                             lambda.insert(head_id);
                             worklist.push_back(head_id);
+                            deriving_rule.entry(head_id).or_insert_with(|| rule.label.clone());
                         }
                     }
                 }
@@ -284,6 +307,7 @@ fn compute_partial_closure(
     indexed: &IndexedTheory<'_>,
     delta: &FxHashSet<LitId>,
     lambda: &FxHashSet<LitId>,
+    deriving_rule: &mut FxHashMap<LitId, RuleLabel>,
 ) -> FxHashSet<LitId> {
     let theory = indexed.theory();
     let mut partial: FxHashSet<LitId> = delta.clone();
@@ -363,26 +387,32 @@ fn compute_partial_closure(
         true
     };
 
-    // Helper: can literal be proven defeasibly?
-    let can_prove = |lit_id: LitId, partial: &FxHashSet<LitId>| -> bool {
-        // Already in delta
+    // Helper: can literal be proven defeasibly? Returns the supporting rule label if provable.
+    let can_prove = |lit_id: LitId, partial: &FxHashSet<LitId>| -> Option<RuleLabel> {
+        // Already in delta (deriving_rule already tracked from delta phase)
         if delta.contains(&lit_id) {
-            return true;
+            return Some(String::new());
         }
         // Complement in delta blocks (precomputed)
         if blocked_by_delta.contains(&lit_id) {
-            return false;
+            return None;
         }
         // Need a supporting rule with satisfied body
-        let has_support = indexed.rules_with_head_id(lit_id).iter().any(|r| {
-            (r.rule_type == RuleType::Strict || r.rule_type == RuleType::Defeasible)
+        let supporting_label = indexed.rules_with_head_id(lit_id).iter().find_map(|r| {
+            if (r.rule_type == RuleType::Strict || r.rule_type == RuleType::Defeasible)
                 && body_satisfied(r, partial)
-        });
-        if !has_support {
-            return false;
-        }
+            {
+                Some(r.label.clone())
+            } else {
+                None
+            }
+        })?;
         // All attacks must be defeated
-        all_attacks_defeated(lit_id, partial)
+        if all_attacks_defeated(lit_id, partial) {
+            Some(supporting_label)
+        } else {
+            None
+        }
     };
 
     // Worklist of literals to process (semi-naive: only process triggered literals)
@@ -415,8 +445,11 @@ fn compute_partial_closure(
         }
 
         // Try to prove this literal
-        if can_prove(lit_id, &partial) {
+        if let Some(rule_label) = can_prove(lit_id, &partial) {
             partial.insert(lit_id);
+            if !rule_label.is_empty() {
+                deriving_rule.entry(lit_id).or_insert(rule_label);
+            }
 
             // Trigger rules that have this literal in body
             for rule in indexed.rules_with_body_id(lit_id) {
@@ -915,5 +948,74 @@ mod tests {
 
         // Checks theory didn't change... theory is referenced by indexed, so it couldn't change
         // logic holds
+    }
+
+    #[test]
+    fn test_deriving_rule_facts() {
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+
+        let indexed = IndexedTheory::build(&theory);
+        let result = reason_scalable(&indexed);
+        let conclusions = result.to_conclusions(&indexed);
+
+        let definitely_a = conclusions
+            .iter()
+            .find(|c| {
+                c.literal.canonical_name() == "a"
+                    && c.conclusion_type == ConclusionType::DefinitelyProvable
+            });
+        assert!(definitely_a.is_some());
+        assert_eq!(definitely_a.unwrap().rule_label, Some(f1));
+    }
+
+    #[test]
+    fn test_deriving_rule_strict_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        let s1 = theory.add_strict_rule(&["p"], "q");
+
+        let indexed = IndexedTheory::build(&theory);
+        let result = reason_scalable(&indexed);
+        let conclusions = result.to_conclusions(&indexed);
+
+        let definitely_q = conclusions
+            .iter()
+            .find(|c| {
+                c.literal.canonical_name() == "q"
+                    && c.conclusion_type == ConclusionType::DefinitelyProvable
+            });
+        assert!(definitely_q.is_some());
+        assert_eq!(definitely_q.unwrap().rule_label, Some(s1));
+    }
+
+    #[test]
+    fn test_deriving_rule_defeasible_chain() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        let r1 = theory.add_defeasible_rule(&["a"], "b");
+        let r2 = theory.add_defeasible_rule(&["b"], "c");
+
+        let indexed = IndexedTheory::build(&theory);
+        let result = reason_scalable(&indexed);
+        let conclusions = result.to_conclusions(&indexed);
+
+        let defeasible_b = conclusions
+            .iter()
+            .find(|c| {
+                c.literal.canonical_name() == "b"
+                    && c.conclusion_type == ConclusionType::DefeasiblyProvable
+            });
+        assert!(defeasible_b.is_some());
+        assert_eq!(defeasible_b.unwrap().rule_label, Some(r1));
+
+        let defeasible_c = conclusions
+            .iter()
+            .find(|c| {
+                c.literal.canonical_name() == "c"
+                    && c.conclusion_type == ConclusionType::DefeasiblyProvable
+            });
+        assert!(defeasible_c.is_some());
+        assert_eq!(defeasible_c.unwrap().rule_label, Some(r2));
     }
 }

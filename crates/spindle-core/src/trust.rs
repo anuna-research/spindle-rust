@@ -431,11 +431,13 @@ impl DecayModel {
                 }
                 (0.5_f64).powf(age_secs / half_life_secs)
             }
-            DecayModel::Linear { rate_per_sec } => {
-                (1.0 - rate_per_sec * age_secs).max(0.0).min(1.0)
-            }
+            DecayModel::Linear { rate_per_sec } => (1.0 - rate_per_sec * age_secs).clamp(0.0, 1.0),
             DecayModel::StepFunction { cutoff_secs } => {
-                if age_secs < *cutoff_secs { 1.0 } else { 0.0 }
+                if age_secs < *cutoff_secs {
+                    1.0
+                } else {
+                    0.0
+                }
             }
         }
     }
@@ -1164,52 +1166,81 @@ mod tests {
 
     #[test]
     fn test_exponential_decay_at_zero_age() {
-        let model = DecayModel::Exponential { half_life_secs: 3600.0 };
+        let model = DecayModel::Exponential {
+            half_life_secs: 3600.0,
+        };
         assert_eq!(model.apply(0.0), 1.0);
     }
 
     #[test]
     fn test_exponential_decay_at_half_life() {
-        let model = DecayModel::Exponential { half_life_secs: 3600.0 };
+        let model = DecayModel::Exponential {
+            half_life_secs: 3600.0,
+        };
         let result = model.apply(3600.0);
-        assert!((result - 0.5).abs() < 1e-10, "At half-life, multiplier should be 0.5, got {result}");
+        assert!(
+            (result - 0.5).abs() < 1e-10,
+            "At half-life, multiplier should be 0.5, got {result}"
+        );
     }
 
     #[test]
     fn test_exponential_decay_at_two_half_lives() {
-        let model = DecayModel::Exponential { half_life_secs: 3600.0 };
+        let model = DecayModel::Exponential {
+            half_life_secs: 3600.0,
+        };
         let result = model.apply(7200.0);
-        assert!((result - 0.25).abs() < 1e-10, "At 2x half-life, multiplier should be 0.25, got {result}");
+        assert!(
+            (result - 0.25).abs() < 1e-10,
+            "At 2x half-life, multiplier should be 0.25, got {result}"
+        );
     }
 
     #[test]
     fn test_exponential_decay_negative_age() {
-        let model = DecayModel::Exponential { half_life_secs: 3600.0 };
+        let model = DecayModel::Exponential {
+            half_life_secs: 3600.0,
+        };
         assert_eq!(model.apply(-100.0), 1.0, "Negative age should return 1.0");
     }
 
     #[test]
     fn test_exponential_decay_zero_half_life() {
-        let model = DecayModel::Exponential { half_life_secs: 0.0 };
-        assert_eq!(model.apply(100.0), 0.0, "Zero half-life should decay instantly");
+        let model = DecayModel::Exponential {
+            half_life_secs: 0.0,
+        };
+        assert_eq!(
+            model.apply(100.0),
+            0.0,
+            "Zero half-life should decay instantly"
+        );
     }
 
     #[test]
     fn test_linear_decay_at_zero() {
-        let model = DecayModel::Linear { rate_per_sec: 0.001 };
+        let model = DecayModel::Linear {
+            rate_per_sec: 0.001,
+        };
         assert_eq!(model.apply(0.0), 1.0);
     }
 
     #[test]
     fn test_linear_decay_midway() {
-        let model = DecayModel::Linear { rate_per_sec: 0.001 };
+        let model = DecayModel::Linear {
+            rate_per_sec: 0.001,
+        };
         let result = model.apply(500.0);
-        assert!((result - 0.5).abs() < 1e-10, "At 500s with rate 0.001, multiplier should be 0.5, got {result}");
+        assert!(
+            (result - 0.5).abs() < 1e-10,
+            "At 500s with rate 0.001, multiplier should be 0.5, got {result}"
+        );
     }
 
     #[test]
     fn test_linear_decay_fully_decayed() {
-        let model = DecayModel::Linear { rate_per_sec: 0.001 };
+        let model = DecayModel::Linear {
+            rate_per_sec: 0.001,
+        };
         let result = model.apply(1500.0);
         assert_eq!(result, 0.0, "Beyond full decay should be 0.0");
     }
@@ -1222,19 +1253,25 @@ mod tests {
 
     #[test]
     fn test_step_function_before_cutoff() {
-        let model = DecayModel::StepFunction { cutoff_secs: 86400.0 };
+        let model = DecayModel::StepFunction {
+            cutoff_secs: 86400.0,
+        };
         assert_eq!(model.apply(100.0), 1.0);
     }
 
     #[test]
     fn test_step_function_at_cutoff() {
-        let model = DecayModel::StepFunction { cutoff_secs: 86400.0 };
+        let model = DecayModel::StepFunction {
+            cutoff_secs: 86400.0,
+        };
         assert_eq!(model.apply(86400.0), 0.0, "At exactly cutoff should be 0.0");
     }
 
     #[test]
     fn test_step_function_after_cutoff() {
-        let model = DecayModel::StepFunction { cutoff_secs: 86400.0 };
+        let model = DecayModel::StepFunction {
+            cutoff_secs: 86400.0,
+        };
         assert_eq!(model.apply(100000.0), 0.0);
     }
 
@@ -1242,20 +1279,27 @@ mod tests {
     fn test_policy_with_decay() {
         let policy = TrustPolicy::new(0.5)
             .with_trust("agent:coder", 0.9)
-            .with_decay("agent:coder", DecayModel::Exponential { half_life_secs: 3600.0 });
+            .with_decay(
+                "agent:coder",
+                DecayModel::Exponential {
+                    half_life_secs: 3600.0,
+                },
+            );
 
         // At age 0, effective trust = base trust
         assert_eq!(policy.get_effective_trust("agent:coder", 0.0), 0.9);
 
         // At half-life, effective trust = base * 0.5
         let at_half = policy.get_effective_trust("agent:coder", 3600.0);
-        assert!((at_half - 0.45).abs() < 1e-10, "Expected 0.45, got {at_half}");
+        assert!(
+            (at_half - 0.45).abs() < 1e-10,
+            "Expected 0.45, got {at_half}"
+        );
     }
 
     #[test]
     fn test_policy_effective_trust_no_decay() {
-        let policy = TrustPolicy::new(0.5)
-            .with_trust("agent:coder", 0.9);
+        let policy = TrustPolicy::new(0.5).with_trust("agent:coder", 0.9);
 
         // No decay model: effective trust = base trust regardless of age
         assert_eq!(policy.get_effective_trust("agent:coder", 999999.0), 0.9);
@@ -1263,12 +1307,15 @@ mod tests {
 
     #[test]
     fn test_policy_effective_trust_unknown_source_with_decay() {
-        let policy = TrustPolicy::new(0.5)
-            .with_decay("unknown", DecayModel::Linear { rate_per_sec: 0.01 });
+        let policy =
+            TrustPolicy::new(0.5).with_decay("unknown", DecayModel::Linear { rate_per_sec: 0.01 });
 
         // Unknown source uses default trust + decay
         let result = policy.get_effective_trust("unknown", 50.0);
-        assert!((result - 0.25).abs() < 1e-10, "Expected 0.5 * 0.5 = 0.25, got {result}");
+        assert!(
+            (result - 0.25).abs() < 1e-10,
+            "Expected 0.5 * 0.5 = 0.25, got {result}"
+        );
     }
 
     #[test]
@@ -1276,14 +1323,30 @@ mod tests {
         let policy = TrustPolicy::new(0.5)
             .with_trust("fast", 1.0)
             .with_trust("slow", 1.0)
-            .with_decay("fast", DecayModel::Exponential { half_life_secs: 60.0 })
-            .with_decay("slow", DecayModel::Exponential { half_life_secs: 86400.0 });
+            .with_decay(
+                "fast",
+                DecayModel::Exponential {
+                    half_life_secs: 60.0,
+                },
+            )
+            .with_decay(
+                "slow",
+                DecayModel::Exponential {
+                    half_life_secs: 86400.0,
+                },
+            );
 
         let age = 3600.0; // 1 hour
         let fast_trust = policy.get_effective_trust("fast", age);
         let slow_trust = policy.get_effective_trust("slow", age);
 
-        assert!(fast_trust < slow_trust, "Fast-decaying source should have lower trust at 1h");
-        assert!(fast_trust < 0.01, "Fast decay (1min half-life at 1h) should be near zero");
+        assert!(
+            fast_trust < slow_trust,
+            "Fast-decaying source should have lower trust at 1h"
+        );
+        assert!(
+            fast_trust < 0.01,
+            "Fast decay (1min half-life at 1h) should be near zero"
+        );
     }
 }

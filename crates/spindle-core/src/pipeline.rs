@@ -13,8 +13,8 @@ use crate::grounding::{ground_theory_with_limit, has_variables, is_variable};
 use crate::literal::Literal;
 use crate::temporal::TimePoint;
 use crate::theory::{MetaValue, Theory};
-use crate::trust::{Source, TrustPolicy, WeightedConclusion};
-use std::collections::HashSet;
+use crate::trust::{Source, TrustDerivationNode, TrustPolicy, TrustValue, WeightedConclusion};
+use std::collections::{HashMap, HashSet};
 
 /// Options for the prepare pipeline
 #[derive(Debug, Clone, Default)]
@@ -339,53 +339,353 @@ fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
     )
 }
 
-/// Compute trust-weighted conclusions from reasoning results and theory metadata.
+/// Resolve a rule label to its trust value and optional source.
 ///
-/// For each conclusion:
-/// 1. Find the rule that derived it (from conclusion.rule_label)
-/// 2. Look up the "source" metadata on that rule
-/// 3. Get the trust value from the policy for that source
-/// 4. Build a WeightedConclusion with degree = trust value
-/// 5. Evaluate all named thresholds
+/// Handles grounded instances by falling back to the template label for metadata lookup.
+fn resolve_rule_trust(
+    rule_label: &str,
+    theory: &Theory,
+    policy: &TrustPolicy,
+) -> (TrustValue, Option<Source>) {
+    // Try the rule label directly, then fall back to template label
+    let labels_to_try = if let Some(rule) = theory.get_rule(rule_label) {
+        let tl = rule.template_label();
+        if tl != rule_label {
+            vec![rule_label, tl]
+        } else {
+            vec![rule_label]
+        }
+    } else {
+        vec![rule_label]
+    };
+
+    for label in labels_to_try {
+        if let Some(meta) = theory.get_meta(label)
+            && let Some(MetaValue::String(source_id)) = meta.properties.get("source")
+        {
+            let trust = policy.get_trust(source_id);
+            return (trust, Some(Source::new(source_id.clone())));
+        }
+    }
+    (policy.default_trust, None)
+}
+
+/// Build a trust derivation tree for a literal by tracing back through deriving rules.
+fn build_trust_tree(
+    literal: &Literal,
+    rule_label: Option<&str>,
+    positive_conclusions: &HashMap<String, &Conclusion>,
+    theory: &Theory,
+    policy: &TrustPolicy,
+    visited: &mut HashSet<String>,
+) -> TrustDerivationNode {
+    let canonical = literal.canonical_name();
+
+    // Cycle detection
+    if visited.contains(&canonical) {
+        return TrustDerivationNode::new(literal.clone(), policy.default_trust);
+    }
+    visited.insert(canonical.clone());
+
+    let (trust, source) = if let Some(label) = rule_label {
+        resolve_rule_trust(label, theory, policy)
+    } else {
+        (policy.default_trust, None)
+    };
+
+    let mut node = TrustDerivationNode::new(literal.clone(), trust);
+    if let Some(src) = source {
+        node = node.with_source(src);
+    }
+
+    // Recurse into body literals of the deriving rule
+    if let Some(label) = rule_label
+        && let Some(rule) = theory.get_rule(label)
+    {
+        let mut children = Vec::new();
+        for body_lit in &rule.body {
+            let body_canonical = body_lit.canonical_name();
+            if let Some(body_conclusion) = positive_conclusions.get(&body_canonical) {
+                let child = build_trust_tree(
+                    body_lit,
+                    body_conclusion.rule_label.as_deref(),
+                    positive_conclusions,
+                    theory,
+                    policy,
+                    visited,
+                );
+                children.push(child);
+            }
+        }
+        if !children.is_empty() {
+            node = node.with_children(children);
+        }
+    }
+
+    visited.remove(&canonical);
+    node
+}
+
+/// Recursively collect all sources from a derivation tree.
+fn collect_tree_sources(node: &TrustDerivationNode) -> HashSet<Source> {
+    let mut sources = HashSet::new();
+    if let Some(ref src) = node.source {
+        sources.insert(src.clone());
+    }
+    for child in &node.children {
+        sources.extend(collect_tree_sources(child));
+    }
+    sources
+}
+
+/// Compute trust-weighted conclusions using weakest-link propagation through derivation chains.
+///
+/// For each positive conclusion, traces the full derivation chain back through
+/// body literals, building a trust tree. The conclusion's degree is the minimum
+/// trust value across the entire chain (weakest link). Sources from all chain
+/// nodes are collected.
+///
+/// Negative conclusions get the default trust value.
 pub fn compute_weighted_conclusions(
     conclusions: &[Conclusion],
     theory: &Theory,
     policy: &TrustPolicy,
 ) -> Vec<WeightedConclusion> {
+    // Build index of positive conclusions for fast body-literal lookup
+    let positive_conclusions: HashMap<String, &Conclusion> = conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .map(|c| (c.literal.canonical_name(), c))
+        .collect();
+
     conclusions
         .iter()
         .map(|c| {
-            // Find the source from rule metadata
-            let (degree, sources) = if let Some(ref label) = c.rule_label {
-                if let Some(meta) = theory.get_meta(label) {
-                    if let Some(MetaValue::String(source_id)) = meta.properties.get("source") {
-                        let trust = policy.get_trust(source_id);
-                        let mut sources = std::collections::HashSet::new();
-                        sources.insert(Source::new(source_id.clone()));
-                        (trust, sources)
-                    } else {
-                        (policy.default_trust, std::collections::HashSet::new())
-                    }
-                } else {
-                    (policy.default_trust, std::collections::HashSet::new())
-                }
+            let (degree, sources) = if c.is_positive() {
+                let tree = build_trust_tree(
+                    &c.literal,
+                    c.rule_label.as_deref(),
+                    &positive_conclusions,
+                    theory,
+                    policy,
+                    &mut HashSet::new(),
+                );
+                let degree = tree.weakest_link_trust();
+                let sources = collect_tree_sources(&tree);
+                (degree, sources)
             } else {
-                (policy.default_trust, std::collections::HashSet::new())
+                (policy.default_trust, HashSet::new())
             };
 
-            let mut wc = WeightedConclusion::new(
-                c.literal.clone(),
-                c.conclusion_type.clone(),
-                degree,
-            );
+            let mut wc = WeightedConclusion::new(c.literal.clone(), c.conclusion_type, degree);
             wc.sources = sources;
 
             // Evaluate all named thresholds
             for (name, &threshold_val) in &policy.thresholds {
-                wc.above_threshold.insert(name.clone(), degree >= threshold_val);
+                wc.above_threshold
+                    .insert(name.clone(), degree >= threshold_val);
             }
 
             wc
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::conclusion::ConclusionType;
+    use crate::index::IndexedTheory;
+    use crate::scalable::reason_scalable;
+
+    /// Helper: run full pipeline (reason + compute_weighted_conclusions) and
+    /// return the WeightedConclusion for a specific literal+conclusion_type.
+    fn weighted_for(
+        theory: &Theory,
+        policy: &TrustPolicy,
+        literal_name: &str,
+        ctype: ConclusionType,
+    ) -> Option<WeightedConclusion> {
+        let indexed = IndexedTheory::build(theory);
+        let result = reason_scalable(&indexed);
+        let conclusions = result.to_conclusions(&indexed);
+        let weighted = compute_weighted_conclusions(&conclusions, theory, policy);
+        weighted
+            .into_iter()
+            .find(|wc| wc.literal.canonical_name() == literal_name && wc.conclusion_type == ctype)
+    }
+
+    #[test]
+    fn test_single_fact_degree_equals_source_trust() {
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "alice");
+
+        let policy = TrustPolicy::new(0.5).with_trust("alice", 0.8);
+
+        let wc = weighted_for(&theory, &policy, "a", ConclusionType::DefinitelyProvable).unwrap();
+        assert!((wc.degree - 0.8).abs() < 1e-10);
+        assert!(wc.sources.contains(&Source::new("alice")));
+    }
+
+    #[test]
+    fn test_two_step_chain_weakest_link() {
+        // fact a (source: alice, trust 0.6) => rule r1 (source: bob, trust 0.9) => b
+        // weakest link = 0.6
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "alice");
+        let r1 = theory.add_defeasible_rule(&["a"], "b");
+        theory.add_meta_string(&r1, "source", "bob");
+
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("alice", 0.6)
+            .with_trust("bob", 0.9);
+
+        let wc = weighted_for(&theory, &policy, "b", ConclusionType::DefeasiblyProvable).unwrap();
+        assert!(
+            (wc.degree - 0.6).abs() < 1e-10,
+            "Expected 0.6 (weakest link), got {}",
+            wc.degree
+        );
+        assert!(wc.sources.contains(&Source::new("alice")));
+        assert!(wc.sources.contains(&Source::new("bob")));
+    }
+
+    #[test]
+    fn test_three_step_chain_weakest_link() {
+        // a(0.9) -> b(0.4) -> c(0.8) => min = 0.4
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "s1");
+        let r1 = theory.add_defeasible_rule(&["a"], "b");
+        theory.add_meta_string(&r1, "source", "s2");
+        let r2 = theory.add_defeasible_rule(&["b"], "c");
+        theory.add_meta_string(&r2, "source", "s3");
+
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("s1", 0.9)
+            .with_trust("s2", 0.4)
+            .with_trust("s3", 0.8);
+
+        let wc = weighted_for(&theory, &policy, "c", ConclusionType::DefeasiblyProvable).unwrap();
+        assert!(
+            (wc.degree - 0.4).abs() < 1e-10,
+            "Expected 0.4, got {}",
+            wc.degree
+        );
+        assert_eq!(wc.sources.len(), 3);
+    }
+
+    #[test]
+    fn test_diamond_dependency() {
+        // a(0.9) is used by two rules: r1(0.7) => b, r2(0.8) => c
+        // Both b and c are used by r3(0.6) => d
+        // Chain for d: min(0.6, min(0.7, 0.9), min(0.8, 0.9)) = min(0.6, 0.7, 0.8, 0.9) = 0.6
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "s_a");
+        let r1 = theory.add_defeasible_rule(&["a"], "b");
+        theory.add_meta_string(&r1, "source", "s_r1");
+        let r2 = theory.add_defeasible_rule(&["a"], "c");
+        theory.add_meta_string(&r2, "source", "s_r2");
+        let r3 = theory.add_defeasible_rule(&["b", "c"], "d");
+        theory.add_meta_string(&r3, "source", "s_r3");
+
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("s_a", 0.9)
+            .with_trust("s_r1", 0.7)
+            .with_trust("s_r2", 0.8)
+            .with_trust("s_r3", 0.6);
+
+        let wc = weighted_for(&theory, &policy, "d", ConclusionType::DefeasiblyProvable).unwrap();
+        assert!(
+            (wc.degree - 0.6).abs() < 1e-10,
+            "Expected 0.6, got {}",
+            wc.degree
+        );
+    }
+
+    #[test]
+    fn test_missing_source_metadata_uses_default() {
+        let mut theory = Theory::new();
+        theory.add_fact("a"); // no source metadata
+        theory.add_defeasible_rule(&["a"], "b"); // no source metadata
+
+        let policy = TrustPolicy::new(0.5);
+
+        let wc = weighted_for(&theory, &policy, "b", ConclusionType::DefeasiblyProvable).unwrap();
+        assert!(
+            (wc.degree - 0.5).abs() < 1e-10,
+            "Expected default 0.5, got {}",
+            wc.degree
+        );
+    }
+
+    #[test]
+    fn test_negative_conclusions_use_default_trust() {
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "alice");
+        // Add a rule mentioning "b" so it appears in the literal set, but b is not provable
+        theory.add_defeasible_rule(&["b"], "c");
+
+        let policy = TrustPolicy::new(0.3).with_trust("alice", 0.9);
+
+        let indexed = IndexedTheory::build(&theory);
+        let result = reason_scalable(&indexed);
+        let conclusions = result.to_conclusions(&indexed);
+        let weighted = compute_weighted_conclusions(&conclusions, &theory, &policy);
+
+        // "b" is not provable, so -D b and -d b should exist
+        let neg = weighted
+            .iter()
+            .find(|wc| wc.literal.canonical_name() == "b" && !wc.conclusion_type.is_positive());
+        assert!(neg.is_some());
+        assert!((neg.unwrap().degree - 0.3).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_multi_source_collection() {
+        // Chain: a(alice) -> r1(bob) -> b -> r2(charlie) -> c
+        // c should have all three sources
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "alice");
+        let r1 = theory.add_defeasible_rule(&["a"], "b");
+        theory.add_meta_string(&r1, "source", "bob");
+        let r2 = theory.add_defeasible_rule(&["b"], "c");
+        theory.add_meta_string(&r2, "source", "charlie");
+
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("alice", 0.9)
+            .with_trust("bob", 0.8)
+            .with_trust("charlie", 0.7);
+
+        let wc = weighted_for(&theory, &policy, "c", ConclusionType::DefeasiblyProvable).unwrap();
+        assert_eq!(wc.sources.len(), 3);
+        assert!(wc.sources.contains(&Source::new("alice")));
+        assert!(wc.sources.contains(&Source::new("bob")));
+        assert!(wc.sources.contains(&Source::new("charlie")));
+    }
+
+    #[test]
+    fn test_threshold_evaluation_with_weakest_link() {
+        let mut theory = Theory::new();
+        let f1 = theory.add_fact("a");
+        theory.add_meta_string(&f1, "source", "low_trust");
+        let r1 = theory.add_defeasible_rule(&["a"], "b");
+        theory.add_meta_string(&r1, "source", "high_trust");
+
+        let policy = TrustPolicy::new(0.5)
+            .with_trust("low_trust", 0.4)
+            .with_trust("high_trust", 0.9)
+            .with_threshold("action", 0.7)
+            .with_threshold("warn", 0.3);
+
+        let wc = weighted_for(&theory, &policy, "b", ConclusionType::DefeasiblyProvable).unwrap();
+        // degree = 0.4 (weakest link)
+        assert_eq!(wc.is_above_threshold("action"), Some(false));
+        assert_eq!(wc.is_above_threshold("warn"), Some(true));
+    }
 }
