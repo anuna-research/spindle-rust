@@ -149,8 +149,7 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
             enqueued.insert(lit_id);
             definite_proven.insert(lit_id);
 
-            conclusions
-                .push(Conclusion::definitely_provable(lit.clone()).with_rule(&fact.label));
+            conclusions.push(Conclusion::definitely_provable(lit.clone()).with_rule(&fact.label));
             worklist.push_back(lit);
         }
 
@@ -163,8 +162,7 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
                 if !definite_proven.contains(head_id) {
                     definite_proven.insert(head_id);
                     conclusions.push(
-                        Conclusion::definitely_provable(head_lit.clone())
-                            .with_rule(&rule.label),
+                        Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
                     );
                 }
                 if !enqueued.contains(head_id) {
@@ -261,10 +259,12 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
             }
 
             // -D q: check if Rsd[q] is empty (no strict/defeasible rules can fire)
-            let has_sd_rule = indexed
-                .rules_with_head_id(lit_id)
-                .iter()
-                .any(|r| matches!(r.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact));
+            let has_sd_rule = indexed.rules_with_head_id(lit_id).iter().any(|r| {
+                matches!(
+                    r.rule_type,
+                    RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                )
+            });
 
             if !has_sd_rule {
                 defeasible_disproven.insert(lit_id);
@@ -328,7 +328,10 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
                 // 1. Try to prove/disprove heads of newly-applicable rules
                 for rule_label in &rules_with_q {
                     let rule = theory.get_rule(rule_label).unwrap();
-                    if !matches!(rule.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact) {
+                    if !matches!(
+                        rule.rule_type,
+                        RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                    ) {
                         continue;
                     }
                     let remaining = defeasible_body_remaining[rule_label.as_str()];
@@ -446,7 +449,10 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
                         .get_lit_id(rule.head_literal())
                         .expect("Head literal missing from index");
 
-                    if matches!(rule.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact) {
+                    if matches!(
+                        rule.rule_type,
+                        RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                    ) {
                         try_disprove_defeasible(
                             head_id,
                             &indexed,
@@ -545,11 +551,16 @@ fn try_prove_defeasible(
     // Condition (1): ∃r ∈ Rsd[q] that is applicable
     let supporting_rules = indexed.rules_with_head_id(q);
     let has_applicable = supporting_rules.iter().any(|r| {
-        matches!(r.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact)
-            && body_remaining
+        matches!(
+            r.rule_type,
+            RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+        ) && body_remaining
+            .get(r.label.as_str())
+            .is_some_and(|&rem| rem == 0)
+            && !rule_discarded
                 .get(r.label.as_str())
-                .is_some_and(|&rem| rem == 0)
-            && !rule_discarded.get(r.label.as_str()).copied().unwrap_or(false)
+                .copied()
+                .unwrap_or(false)
     });
     if !has_applicable {
         return;
@@ -565,11 +576,16 @@ fn try_prove_defeasible(
     let applicable_supporters: Vec<&crate::rule::Rule> = supporting_rules
         .iter()
         .filter(|r| {
-            matches!(r.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact)
-                && body_remaining
+            matches!(
+                r.rule_type,
+                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+            ) && body_remaining
+                .get(r.label.as_str())
+                .is_some_and(|&rem| rem == 0)
+                && !rule_discarded
                     .get(r.label.as_str())
-                    .is_some_and(|&rem| rem == 0)
-                && !rule_discarded.get(r.label.as_str()).copied().unwrap_or(false)
+                    .copied()
+                    .unwrap_or(false)
         })
         .copied()
         .collect();
@@ -598,9 +614,9 @@ fn try_prove_defeasible(
         }
 
         // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s
-        let defeated = applicable_supporters.iter().any(|t| {
-            theory.is_superior(t.template_label(), attacker.template_label())
-        });
+        let defeated = applicable_supporters
+            .iter()
+            .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
 
         if !defeated {
             return; // undefeated attacker
@@ -620,7 +636,7 @@ fn try_prove_defeasible(
 }
 
 /// Try to disprove `q` (prove `-d q`). Implements the dual/mirror of `+d`.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::ptr_arg)]
 fn try_disprove_defeasible(
     q: LitId,
     indexed: &IndexedTheory<'_>,
@@ -655,7 +671,12 @@ fn try_disprove_defeasible(
     let supporting_rules = indexed.rules_with_head_id(q);
     let sd_rules: Vec<&crate::rule::Rule> = supporting_rules
         .iter()
-        .filter(|r| matches!(r.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact))
+        .filter(|r| {
+            matches!(
+                r.rule_type,
+                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+            )
+        })
         .copied()
         .collect();
 
@@ -695,10 +716,7 @@ fn try_disprove_defeasible(
                 .get(t.label.as_str())
                 .copied()
                 .unwrap_or(false);
-            let t_remaining = body_remaining
-                .get(t.label.as_str())
-                .copied()
-                .unwrap_or(0);
+            let t_remaining = body_remaining.get(t.label.as_str()).copied().unwrap_or(0);
             !t_discarded
                 && t_remaining > 0
                 && theory.is_superior(t.template_label(), attacker.template_label())
@@ -1995,7 +2013,13 @@ mod tests {
             "r2",
             RuleType::Defeasible,
             vec![],
-            vec![Literal::new("p", true, Default::default(), Default::default(), vec![])],
+            vec![Literal::new(
+                "p",
+                true,
+                Default::default(),
+                Default::default(),
+                vec![],
+            )],
         ));
         theory.add_rule(Rule::new(
             "r3",
