@@ -8,7 +8,7 @@
 ;; PHASE 1: CORE DEFEASIBLE LOGIC GAPS (Critical Priority)
 ;; ============================================================
 
-; Task: Port format equivalence tests (DFL vs SPL)
+; Task: Port format equivalence tests (SPL vs SPL)
 (given task-format-equiv)
 (given no-deps-format-equiv)
 (meta task-format-equiv
@@ -174,7 +174,7 @@
 (meta task-mining
   (description "Port process mining tests (TEST-001 to TEST-009)")
   (source "../spindle-racket/tests/mining-tests.rkt")
-  (tests "event-structure, footprint-matrix, alpha-algorithm, dfl-conversion"))
+  (tests "event-structure, footprint-matrix, alpha-algorithm, spl-conversion"))
 
 ;; ============================================================
 ;; READINESS RULES

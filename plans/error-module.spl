@@ -514,7 +514,7 @@
   (effort "2h"))
 
 (meta task-parser-code-category
-  (description "Add code() -> &'static str and category() -> ErrorCategory methods to ParseError. Map: LexerError->DFL_LEXER_ERROR/ParseError, ParserError->DFL_PARSE_ERROR/ParseError, UnexpectedToken->UNEXPECTED_TOKEN/ParseError, IoError->IO_ERROR/InternalError. Import ErrorCategory from spindle-core.")
+  (description "Add code() -> &'static str and category() -> ErrorCategory methods to ParseError. Map: LexerError->SPL_LEXER_ERROR/ParseError, ParserError->SPL_PARSE_ERROR/ParseError, UnexpectedToken->UNEXPECTED_TOKEN/ParseError, IoError->IO_ERROR/InternalError. Import ErrorCategory from spindle-core.")
   (phase "d1-core-types")
   (target-file "crates/spindle-parser/src/error.rs")
   (implements "REQ-105 REQ-109 REQ-206")

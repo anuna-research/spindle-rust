@@ -12,7 +12,7 @@
 //! - Variable grounding
 //! - Query operators (what-if, why-not, abduction)
 //! - Explanation generation
-//! - Parser performance (DFL and SPL formats)
+//! - Parser performance (SPL format)
 
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use spindle_core::explanation::explain;
@@ -23,7 +23,7 @@ use spindle_core::query::{HypotheticalClaim, abduce, what_if, why_not};
 use spindle_core::reason::reason;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::trust::{Source, TrustDerivationNode, TrustPolicy};
-use spindle_parser::{parse_dfl, parse_spl};
+use spindle_parser::parse_spl;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -228,28 +228,6 @@ fn create_query_theory() -> Theory {
     theory.add_superiority("r_no_merge", "r_merge");
 
     theory
-}
-
-/// Generate DFL format string for N rules
-fn generate_dfl(n: usize) -> String {
-    let mut dfl = String::new();
-
-    // Facts
-    for i in 0..n {
-        dfl.push_str(&format!("f{i}: >> prop{i}\n"));
-    }
-
-    // Rules
-    for i in 0..n {
-        dfl.push_str(&format!("r{i}: prop{i} => derived{i}\n"));
-    }
-
-    // Some superiorities
-    for i in 0..n / 2 {
-        dfl.push_str(&format!("r{} > r{}\n", i * 2, i * 2 + 1));
-    }
-
-    dfl
 }
 
 /// Generate SPL format string for N rules
@@ -676,14 +654,9 @@ fn bench_parser(c: &mut Criterion) {
     let mut group = c.benchmark_group("parser");
 
     for size in [100, 500, 1_000].iter() {
-        let dfl_input = generate_dfl(*size);
         let spl_input = generate_spl(*size);
 
         group.throughput(Throughput::Elements(*size as u64));
-
-        group.bench_with_input(BenchmarkId::new("dfl", size), &dfl_input, |b, input| {
-            b.iter(|| black_box(parse_dfl(input)))
-        });
 
         group.bench_with_input(BenchmarkId::new("spl", size), &spl_input, |b, input| {
             b.iter(|| black_box(parse_spl(input)))

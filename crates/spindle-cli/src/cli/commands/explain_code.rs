@@ -55,7 +55,16 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
             "Empty theory provided",
             "Invalid command argument combination",
         ],
-        example: "spindle validate --stdin < theory.dfl",
+        example: "spindle validate --stdin < theory.spl",
+    },
+    ErrorCodeInfo {
+        code: "UNSUPPORTED_INPUT_FORMAT",
+        meaning: "The provided input format is not supported.",
+        causes: &[
+            "Input file has .dfl extension",
+            "Input content appears to use legacy DFL syntax",
+        ],
+        example: "Use SPL syntax, e.g. (given bird) and (normally r1 bird flies).",
     },
     ErrorCodeInfo {
         code: "PARSE_ERROR",
@@ -64,16 +73,7 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
             "Syntax error in the input file",
             "Unrecognized format or malformed structure",
         ],
-        example: "Check the input syntax. Use spindle explain-code DFL_PARSE_ERROR or SPL_PARSE_ERROR for format-specific guidance.",
-    },
-    ErrorCodeInfo {
-        code: "DFL_LEXER_ERROR",
-        meaning: "The DFL lexer encountered an unexpected character.",
-        causes: &[
-            "Unrecognized characters in the input",
-            "Encoding issues (non-UTF-8 input)",
-        ],
-        example: "Check the input file for special characters. DFL uses ASCII operators: =>, ->",
+        example: "Check the input syntax. Use spindle explain-code SPL_PARSE_ERROR for format-specific guidance.",
     },
     ErrorCodeInfo {
         code: "SPL_LEXER_ERROR",
@@ -85,15 +85,6 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
         example: "Check the input file for special characters. SPL uses S-expressions: (normally ...)",
     },
     ErrorCodeInfo {
-        code: "DFL_PARSE_ERROR",
-        meaning: "The DFL parser could not understand the input structure.",
-        causes: &[
-            "Missing or extra tokens in rule definitions",
-            "Incorrect rule syntax",
-        ],
-        example: "r1: bird => flies   ; correct DFL\nr1: bird -> flies   ; wrong arrow for defeasible rule",
-    },
-    ErrorCodeInfo {
         code: "SPL_PARSE_ERROR",
         meaning: "The SPL parser could not understand the input structure.",
         causes: &[
@@ -101,12 +92,6 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
             "Incorrect SPL form syntax",
         ],
         example: "(normally r1 bird flies)   ; correct SPL\n(normally r1 bird)         ; missing head literal",
-    },
-    ErrorCodeInfo {
-        code: "DFL_UNEXPECTED_TOKEN",
-        meaning: "The DFL parser found a token where a different one was expected.",
-        causes: &["Mismatched delimiters", "Missing operator between terms"],
-        example: "Check the syntax around the reported position.",
     },
     ErrorCodeInfo {
         code: "SPL_UNEXPECTED_TOKEN",
@@ -127,13 +112,13 @@ const ERROR_CODES: &[ErrorCodeInfo] = &[
         code: "MISSING_INPUT_SOURCE",
         meaning: "No input source was specified.",
         causes: &["Neither a file path nor --stdin was provided"],
-        example: "spindle reason theory.dfl      ; from file\nspindle reason --stdin         ; from stdin",
+        example: "spindle reason theory.spl      ; from file\nspindle reason --stdin         ; from stdin",
     },
     ErrorCodeInfo {
         code: "CONFLICTING_INPUT_SOURCES",
         meaning: "Both a file path and --stdin were specified.",
         causes: &["Provide exactly one input source, not both"],
-        example: "spindle reason theory.dfl      ; file only\nspindle reason --stdin         ; stdin only",
+        example: "spindle reason theory.spl      ; file only\nspindle reason --stdin         ; stdin only",
     },
     ErrorCodeInfo {
         code: "FILE_READ_ERROR",

@@ -132,12 +132,12 @@ Functional Requirements:
 - REQ-116: When source text and location data are available, human-readable rendering SHOULD include a context window showing surrounding source lines with the error position visually indicated, rather than reporting only a bare line number.
 - REQ-117: All error categories (lexical, syntactic, semantic, execution) SHALL use the same rendering template for human-readable output. The user-facing format MUST NOT vary based on which internal subsystem detected the error.
 - REQ-118: The `hint` extension member, when present, SHALL suggest a specific corrective action rather than restating the error. Hints SHOULD be omitted when no actionable suggestion can be made with reasonable confidence.
-- REQ-119: The `detail` text SHOULD communicate the violated constraint — the semantic rule or expectation that makes the input invalid — not just the location or symptom. For DFL/SPL errors, this means stating what the grammar or logic requires (e.g., "a strict rule requires exactly one head literal") rather than only what was found.
+- REQ-119: The `detail` text SHOULD communicate the violated constraint — the semantic rule or expectation that makes the input invalid — not just the location or symptom. For SPL errors, this means stating what the grammar or logic requires (e.g., "a strict rule requires exactly one head literal") rather than only what was found.
 - REQ-120: Source location data (`line`, `column`, `source_context`) SHALL identify the program fragment most relevant to *repairing* the error, not merely the point where the system first detected the inconsistency. When the detection point differs from the likely repair site, the location SHOULD favor the repair site.
 - REQ-121: User-facing error messages SHALL use neutral or constructive language. Messages MUST NOT blame the user ("you failed to", "illegal input") or anthropomorphize the system ("I expected", "the compiler found"). Negative-valence words ("illegal", "forbidden") SHOULD be replaced with neutral alternatives ("unexpected", "unrecognized", "missing") in `title`, `detail`, and `hint` text.
 - REQ-122: The `title` and `detail` fields SHALL NOT repeat the same text. `title` provides the stable per-type summary; `detail` adds occurrence-specific information (location, values, constraint) that goes beyond the title.
 - REQ-123: For non-trivial errors involving multiple interacting rules or derivation chains, the `detail` text SHOULD present a causal narrative connecting the user's input to the violated constraint, rather than isolated facts.
-- REQ-124: The Error module SHOULD support an `--explain CODE` mechanism that provides expanded explanations, examples of correct DFL/SPL usage, and references to documentation for each stable error code. This is separate from `--debug-errors` (which exposes the `source()` chain for developers).
+- REQ-124: The Error module SHOULD support an `--explain CODE` mechanism that provides expanded explanations, examples of correct SPL usage, and references to documentation for each stable error code. This is separate from `--debug-errors` (which exposes the `source()` chain for developers).
 
 Non-Functional Requirements:
 
@@ -543,12 +543,12 @@ Error model:
   "schema_version": "spindle.result.v1",
   "diagnostics": [],
   "error": {
-    "code": "DFL_PARSE_ERROR",
-    "message": "DFL parse error",
+    "code": "SPL_PARSE_ERROR",
+    "message": "SPL parse error",
     "details": {
       "problem": {
-        "type": "tag:spindle.dev,2026:error:DFL_PARSE_ERROR",
-        "title": "DFL parse error",
+        "type": "tag:spindle.dev,2026:error:SPL_PARSE_ERROR",
+        "title": "SPL parse error",
         "detail": "Unexpected token near '=>'.",
         "instance": "trace-01HXYZ",
         "exit_code": 2,
@@ -606,7 +606,7 @@ The Error module defines a stable taxonomy with explicit exit code mappings:
 
 | Category | Exit Code | Description |
 |---|---|---|
-| `PARSE_ERROR` | 2 | Input parsing failures (DFL/SPL lexer or parser errors). |
+| `PARSE_ERROR` | 2 | Input parsing failures (SPL lexer or parser errors). |
 | `VALIDATION_ERROR` | 2 | Structural or semantic validation failures in the pipeline. |
 | `EXECUTION_ERROR` | 3 | Reasoning or query execution failures. |
 | `RESOURCE_LIMIT` | 4 | Timeouts, size limits, or truncation errors. |
@@ -615,16 +615,16 @@ The Error module defines a stable taxonomy with explicit exit code mappings:
 Each taxonomy entry maps to:
 
 - A stable `exit_code` extension value per the contract: `2` (input/parse/validation), `3` (execution/internal), or `4` (resource/limit).
-- A stable `code` for the error envelope (e.g., `DFL_PARSE_ERROR`).
-- A `type` URI (e.g., `tag:spindle.dev,2026:error:DFL_PARSE_ERROR`).
+- A stable `code` for the error envelope (e.g., `SPL_PARSE_ERROR`).
+- A `type` URI (e.g., `tag:spindle.dev,2026:error:SPL_PARSE_ERROR`).
 - Default `title` and `detail` templates.
 
 ### 10.2. Mapping from Existing Error Variants
 
 | Existing Variant | Category | Code | Exit Code |
 |---|---|---|---|
-| `ParseError::LexerError` | `PARSE_ERROR` | `DFL_LEXER_ERROR` / `SPL_LEXER_ERROR` | 2 |
-| `ParseError::ParserError` | `PARSE_ERROR` | `DFL_PARSE_ERROR` / `SPL_PARSE_ERROR` | 2 |
+| `ParseError::LexerError` | `PARSE_ERROR` | `SPL_LEXER_ERROR` / `SPL_LEXER_ERROR` | 2 |
+| `ParseError::ParserError` | `PARSE_ERROR` | `SPL_PARSE_ERROR` / `SPL_PARSE_ERROR` | 2 |
 | `ParseError::UnexpectedToken` | `PARSE_ERROR` | `UNEXPECTED_TOKEN` | 2 |
 | `ParseError::IoError` | `INTERNAL_ERROR` | `IO_ERROR` | 3 |
 | `SpindleError::RuleNotFound` | `EXECUTION_ERROR` | `RULE_NOT_FOUND` | 3 |
@@ -651,7 +651,7 @@ These principles (derived from Brown 1983, Horning 1974, and Wrenn & Krishnamurt
 3. **Source context window (REQ-116).** When source text is available, display 1-3 lines before and after the error line, with the offending line visually marked (e.g., a `>` prefix or underline caret). This lets the user locate the error without cross-referencing a separate file. Example:
 
    ```
-   Error: DFL parse error
+   Error: SPL parse error
      --> stdin:5:13
      |
    4 |   r1: a, b => c
@@ -676,11 +676,11 @@ These principles (derived from Brown 1983, Horning 1974, and Wrenn & Krishnamurt
 
 10. **Positive, non-blaming tone (REQ-121).** Messages use neutral, constructive language. Bad: "illegal literal `foo`". Good: "unrecognized literal `foo`". Bad: "you forgot to close the parenthesis". Good: "missing closing parenthesis". Avoid words with negative valence ("illegal", "forbidden", "invalid") when neutral alternatives exist ("unexpected", "unrecognized", "missing").
 
-11. **Non-redundant title/detail (REQ-122).** The `title` is the stable per-type summary; `detail` adds occurrence-specific context. Repeating the same text in both wastes the user's cognitive budget. Bad: title "parse error", detail "parse error". Good: title "DFL parse error", detail "unexpected end of rule at column 13 — a rule body requires at least one literal after the arrow."
+11. **Non-redundant title/detail (REQ-122).** The `title` is the stable per-type summary; `detail` adds occurrence-specific context. Repeating the same text in both wastes the user's cognitive budget. Bad: title "parse error", detail "parse error". Good: title "SPL parse error", detail "unexpected end of rule at column 13 — a rule body requires at least one literal after the arrow."
 
 12. **Causal narrative for complex errors (REQ-123).** For errors involving rule conflicts, derivation chains, or multi-step validation, `detail` presents a coherent cause-to-symptom narrative rather than isolated facts. Example: "rule `r1: a => b` and rule `r2: a => ~b` both fire, but no superiority relation `r1 > r2` or `r2 > r1` is declared to resolve the conflict."
 
-13. **Tiered verbosity via `--explain` (REQ-124).** `--explain CODE` provides an expanded explanation for a stable error code: what the error means, common causes, a correct usage example, and a reference to documentation. This complements `--debug-errors` (which prints the `source()` chain for developers). Example: `spindle --explain DFL_PARSE_ERROR`.
+13. **Tiered verbosity via `--explain` (REQ-124).** `--explain CODE` provides an expanded explanation for a stable error code: what the error means, common causes, a correct usage example, and a reference to documentation. This complements `--debug-errors` (which prints the `source()` chain for developers). Example: `spindle --explain SPL_PARSE_ERROR`.
 
 ### 11.2. Human-Readable CLI Errors
 

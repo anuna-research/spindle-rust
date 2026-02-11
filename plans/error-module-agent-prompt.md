@@ -7,7 +7,7 @@ You are implementing the Spindle error module plan. Your work is tracked in a de
 Spindle is a Rust defeasible logic reasoning engine. It is a Cargo workspace with four crates:
 
 - `spindle-core` — reasoning algorithms, pipeline, error types, query engine
-- `spindle-parser` — DFL and SPL format parsers, parser error types
+- `spindle-parser` — SPL format parsers, parser error types
 - `spindle-cli` — command-line interface (clap-based, ~1400-line main.rs)
 - `spindle-wasm` — WebAssembly bindings
 

@@ -36,7 +36,7 @@ use spindle_core::query::{self, QueryStatus};
 use spindle_core::reason::reason;
 use spindle_core::temporal::Temporal;
 use spindle_core::theory::{MetaValue, Theory};
-use spindle_parser::{parse_dfl, parse_spl};
+use spindle_parser::parse_spl;
 
 // Set up better panic messages in debug mode
 #[cfg(feature = "console_error_panic_hook")]
@@ -150,16 +150,10 @@ impl Spindle {
         }
     }
 
-    /// Parse a DFL theory string
-    #[wasm_bindgen(js_name = parseDfl)]
-    pub fn parse_dfl(&mut self, input: &str) -> Result<(), JsError> {
-        self.theory = parse_dfl(input).map_err(|e| JsError::new(&e.to_string()))?;
-        Ok(())
-    }
-
     /// Parse an SPL theory string
     #[wasm_bindgen(js_name = parseSpl)]
     pub fn parse_spl(&mut self, input: &str) -> Result<(), JsError> {
+        reject_dfl_input(input)?;
         self.theory = parse_spl(input).map_err(|e| JsError::new(&e.to_string()))?;
         Ok(())
     }
@@ -394,26 +388,6 @@ impl Spindle {
         self.theory = Theory::new();
     }
 
-    /// Parse DFL and reason in one call, returning string output (spinguile-compatible)
-    ///
-    /// Output format:
-    /// ```text
-    /// +D literal
-    /// +d literal
-    /// -D literal
-    /// -d literal
-    /// ```
-    #[wasm_bindgen(js_name = reasonDfl)]
-    pub fn reason_dfl(&mut self, input: &str) -> Result<String, JsError> {
-        self.theory = parse_dfl(input).map_err(|e| JsError::new(&e.to_string()))?;
-        let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
-        Ok(conclusions
-            .iter()
-            .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
-            .collect::<Vec<_>>()
-            .join("\n"))
-    }
-
     /// Parse SPL and reason in one call, returning string output (spinguile-compatible)
     ///
     /// Output format:
@@ -426,6 +400,7 @@ impl Spindle {
     /// ```
     #[wasm_bindgen(js_name = reasonSpl)]
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
+        reject_dfl_input(input)?;
         self.theory = parse_spl(input).map_err(|e| JsError::new(&e.to_string()))?;
         let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
 
@@ -458,6 +433,54 @@ impl Default for Spindle {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn reject_dfl_input(input: &str) -> Result<(), JsError> {
+    if has_dfl_shape(input) {
+        return Err(JsError::new(
+            "UNSUPPORTED_INPUT_FORMAT: DFL format is no longer supported; use SPL.",
+        ));
+    }
+    Ok(())
+}
+
+fn has_dfl_shape(content: &str) -> bool {
+    content.lines().any(is_dfl_line)
+}
+
+fn is_dfl_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        return false;
+    }
+
+    if let Some((label, rest)) = trimmed.split_once(':') {
+        let label = label.trim();
+        if is_dfl_identifier(label)
+            && (rest.contains(">>")
+                || rest.contains("->")
+                || rest.contains("=>")
+                || rest.contains("~>"))
+        {
+            return true;
+        }
+    }
+
+    if let Some((superior, inferior)) = trimmed.split_once('>') {
+        let superior = superior.trim();
+        let inferior = inferior.trim();
+        if is_dfl_identifier(superior) && is_dfl_identifier(inferior) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn is_dfl_identifier(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// Parse a literal string, handling negation prefix, predicate arguments, and (not ...) syntax
@@ -537,11 +560,14 @@ mod tests {
         assert_eq!(spindle.rule_count(), 2);
     }
 
+    #[cfg(target_arch = "wasm32")]
     #[test]
-    fn test_parse_dfl() {
+    fn test_parse_spl_rejects_dfl() {
         let mut spindle = Spindle::new();
-        spindle.parse_dfl("f1: >> bird\nr1: bird => flies").unwrap();
-        assert_eq!(spindle.rule_count(), 2);
+        let result = spindle
+            .parse_spl("f1: >> bird\nr1: bird => flies")
+            .map(|_| ());
+        assert!(result.is_err(), "DFL must be rejected");
     }
 
     #[test]
@@ -659,13 +685,13 @@ mod tests {
 
         // Parse theory
         spindle
-            .parse_dfl(
+            .parse_spl(
                 r#"
-            f1: >> expert
-            f2: >> novice
-            r1: expert => reliable
-            r2: novice => ~reliable
-            r1 > r2
+            (given expert)
+            (given novice)
+            (normally r1 expert reliable)
+            (normally r2 novice (not reliable))
+            (prefer r1 r2)
             "#,
             )
             .unwrap();
@@ -688,14 +714,14 @@ mod tests {
         assert_eq!(spindle.rule_count(), 0);
     }
 
+    #[cfg(target_arch = "wasm32")]
     #[test]
-    fn test_reason_dfl() {
+    fn test_reason_spl_rejects_dfl() {
         let mut spindle = Spindle::new();
         let result = spindle
-            .reason_dfl("f1: >> bird\nr1: bird => flies")
-            .unwrap();
-        assert!(result.contains("bird"));
-        assert!(result.contains("flies"));
+            .reason_spl("f1: >> bird\nr1: bird => flies")
+            .map(|_| ());
+        assert!(result.is_err(), "DFL must be rejected");
     }
 
     #[test]
@@ -767,24 +793,6 @@ mod tests {
     // EXTENDED COVERAGE TESTS (native-compatible)
     // These tests use functions that don't return JsValue
     // ==========================================================================
-
-    #[test]
-    fn test_reason_dfl_with_complex_theory() {
-        let mut spindle = Spindle::new();
-        let result = spindle
-            .reason_dfl(
-                r#"
-                f1: >> bird
-                f2: >> penguin
-                r1: bird => flies
-                r2: penguin => ~flies
-                r2 > r1
-                "#,
-            )
-            .unwrap();
-        assert!(result.contains("bird"));
-        assert!(result.contains("penguin"));
-    }
 
     #[test]
     fn test_reason_spl_with_complex_theory() {

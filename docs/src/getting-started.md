@@ -24,9 +24,9 @@ This installs the `spindle` command to your Cargo bin directory.
 
 ## Your First Theory
 
-Create a file called `hello.dfl`:
+Create a file called `hello.spl`:
 
-```dfl
+```lisp
 # Facts
 f1: >> bird
 
@@ -38,7 +38,7 @@ r2: bird => has_feathers
 Run it:
 
 ```bash
-spindle reason hello.dfl
+spindle reason hello.spl
 ```
 
 Output:
@@ -63,9 +63,9 @@ Output:
 
 ## The Penguin Example
 
-Create `penguin.dfl`:
+Create `penguin.spl`:
 
-```dfl
+```lisp
 # Tweety is a bird and a penguin
 f1: >> bird
 f2: >> penguin
@@ -83,7 +83,7 @@ r2 > r1
 Run it:
 
 ```bash
-spindle reason penguin.dfl
+spindle reason penguin.spl
 ```
 
 Output:
@@ -128,16 +128,16 @@ spindle reason penguin.spl
 
 ```bash
 # Show only positive conclusions
-spindle reason --positive penguin.dfl
+spindle reason --positive penguin.spl
 
 # Output as JSON
-spindle reason --json penguin.dfl
+spindle reason --json penguin.spl
 
 # Validate syntax without reasoning
-spindle validate penguin.dfl
+spindle validate penguin.spl
 
 # Show theory statistics
-spindle stats penguin.dfl
+spindle stats penguin.spl
 ```
 
 ## Using as a Library
@@ -180,6 +180,6 @@ fn main() {
 ## Next Steps
 
 - [Concepts](concepts.md) - Understand defeasible logic fundamentals
-- [DFL Reference](reference/dfl.md) - Complete DFL syntax
+- [SPL Reference](reference/spl.md) - Complete SPL syntax
 - [SPL Reference](reference/spl.md) - Complete SPL syntax
 - [Examples](guides/grounding.md) - Advanced examples with variables

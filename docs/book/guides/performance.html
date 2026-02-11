@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,11 +185,11 @@
 <h2 id="reasoning-engine"><a class="header" href="#reasoning-engine">Reasoning Engine</a></h2>
 <h3 id="standard-dld"><a class="header" href="#standard-dld">Standard DL(d)</a></h3>
 <p>Spindle uses the standard DL(d) forward-chaining engine.</p>
-<pre><code class="language-bash">spindle reason theory.dfl
+<pre><code class="language-bash">spindle reason theory.spl
 </code></pre>
 <h3 id="benchmark-your-theory"><a class="header" href="#benchmark-your-theory">Benchmark Your Theory</a></h3>
 <pre><code class="language-bash"># Time a representative run
-time spindle reason theory.dfl &gt; /dev/null
+time spindle reason theory.spl &gt; /dev/null
 </code></pre>
 <h2 id="theory-design"><a class="header" href="#theory-design">Theory Design</a></h2>
 <h3 id="minimize-rule-bodies"><a class="header" href="#minimize-rule-bodies">Minimize Rule Bodies</a></h3>
@@ -304,7 +304,7 @@ for rule in indexed.rules_with_body(&amp;literal) { ... }
 <span class="boring">}</span></code></pre>
 <h2 id="profiling"><a class="header" href="#profiling">Profiling</a></h2>
 <h3 id="theory-statistics"><a class="header" href="#theory-statistics">Theory Statistics</a></h3>
-<pre><code class="language-bash">spindle stats theory.dfl
+<pre><code class="language-bash">spindle stats theory.spl
 </code></pre>
 <p>Look for:</p>
 <ul>
@@ -317,11 +317,11 @@ for rule in indexed.rules_with_body(&amp;literal) { ... }
 cargo build --release
 
 # Profile with flamegraph
-cargo flamegraph -- spindle reason theory.dfl
+cargo flamegraph -- spindle reason theory.spl
 </code></pre>
 <h3 id="memory-profiling"><a class="header" href="#memory-profiling">Memory Profiling</a></h3>
 <pre><code class="language-bash"># Use heaptrack
-heaptrack spindle reason large-theory.dfl
+heaptrack spindle reason large-theory.spl
 heaptrack_print heaptrack.spindle.*.gz
 </code></pre>
 <h2 id="recent-optimizations"><a class="header" href="#recent-optimizations">Recent Optimizations</a></h2>

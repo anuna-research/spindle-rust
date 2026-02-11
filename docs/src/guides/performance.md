@@ -9,14 +9,14 @@ This guide covers performance optimization for Spindle.
 Spindle uses the standard DL(d) forward-chaining engine.
 
 ```bash
-spindle reason theory.dfl
+spindle reason theory.spl
 ```
 
 ### Benchmark Your Theory
 
 ```bash
 # Time a representative run
-time spindle reason theory.dfl > /dev/null
+time spindle reason theory.spl > /dev/null
 ```
 
 ## Theory Design
@@ -163,7 +163,7 @@ for rule in indexed.rules_with_body(&literal) { ... }
 ### Theory Statistics
 
 ```bash
-spindle stats theory.dfl
+spindle stats theory.spl
 ```
 
 Look for:
@@ -178,14 +178,14 @@ Look for:
 cargo build --release
 
 # Profile with flamegraph
-cargo flamegraph -- spindle reason theory.dfl
+cargo flamegraph -- spindle reason theory.spl
 ```
 
 ### Memory Profiling
 
 ```bash
 # Use heaptrack
-heaptrack spindle reason large-theory.dfl
+heaptrack spindle reason large-theory.spl
 heaptrack_print heaptrack.spindle.*.gz
 ```
 

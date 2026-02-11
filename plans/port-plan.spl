@@ -61,24 +61,24 @@
 (given dep-indexing-on-theory)
 
 ;; =============================================================================
-;; PHASE 2: DFL PARSER
+;; PHASE 2: SPL PARSER
 ;; =============================================================================
 
 (given task-port-lexer)
 (meta task-port-lexer
-  (description "Port DFL lexer using nom or logos")
+  (description "Port SPL lexer using nom or logos")
   (phase "2-parser")
   (source-file "src/parser/lexer.rkt"))
 
 (given task-port-parser)
 (meta task-port-parser
-  (description "Port DFL parser with AST generation")
+  (description "Port SPL parser with AST generation")
   (phase "2-parser")
   (source-file "src/parser/parser.rkt"))
 
 (given task-port-ast)
 (meta task-port-ast
-  (description "Port DFL AST types and conversions")
+  (description "Port SPL AST types and conversions")
   (phase "2-parser")
   (source-file "src/parser/ast.rkt"))
 

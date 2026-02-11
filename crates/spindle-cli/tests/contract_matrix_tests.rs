@@ -103,7 +103,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
         MatrixCase {
             name: "query refuted literal",
             args: &["query", "flies", "--json", "--stdin"],
-            stdin: Some("f1: >> penguin\nr1: penguin => -flies\n"),
+            stdin: Some("(given penguin)\n(normally r1 penguin (not flies))\n"),
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "query",
@@ -131,7 +131,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 "--at",
                 "2024-06-15T12:00:00Z",
             ],
-            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            stdin: Some("(given bird)\n(normally r1 bird flies)\n"),
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "query",
@@ -155,7 +155,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
         MatrixCase {
             name: "global --stdin before reason",
             args: &["--stdin", "reason", "--json"],
-            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            stdin: Some("(given bird)\n(normally r1 bird flies)\n"),
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "reason",
@@ -231,7 +231,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
         MatrixCase {
             name: "why-not refuted literal",
             args: &["why-not", "flies", "--json", "--stdin"],
-            stdin: Some("f1: >> ~flies\n"),
+            stdin: Some("(given (not flies))\n"),
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
                 schema: "why_not",
@@ -276,7 +276,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
         MatrixCase {
             name: "stats --json success",
             args: &["--json", "stats", "--stdin"],
-            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            stdin: Some("(given bird)\n(normally r1 bird flies)\n"),
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccessNoSchema {
                 required_fields: &["stats", "diagnostics"],
@@ -513,7 +513,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
         // ============================================================================
         MatrixCase {
             name: "reason invalid file path exits 2",
-            args: &["reason", "/nonexistent/path/that/does/not/exist.dfl"],
+            args: &["reason", "/nonexistent/path/that/does/not/exist.spl"],
             stdin: None,
             expected_exit: 2,
             expected_output: ExpectedOutput::ExitOnly {
@@ -525,7 +525,7 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
         MatrixCase {
             name: "query unknown exits 0 without json",
             args: &["query", "unknown_literal", "--stdin"],
-            stdin: Some("f1: >> bird\nr1: bird => flies\n"),
+            stdin: Some("(given bird)\n(normally r1 bird flies)\n"),
             expected_exit: 0,
             expected_output: ExpectedOutput::ExitOnly {
                 stdout_contains: None,

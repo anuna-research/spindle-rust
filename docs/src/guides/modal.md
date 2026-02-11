@@ -14,7 +14,7 @@ Spindle integrates deontic modalities directly into its literal representation. 
 
 Spindle provides three built-in deontic operators:
 
-| Operator | DFL Syntax | SPL Syntax | Meaning |
+| Operator | SPL Syntax | SPL Syntax | Meaning |
 |----------|------------|------------|---------|
 | Obligation | `[O]` | `(must ...)` | The proposition **must** hold |
 | Permission | `[P]` | `(may ...)` | The proposition **may** hold |
@@ -32,11 +32,11 @@ A permission states that something is allowed. If `[P]access` is concluded, then
 
 A prohibition states that something is not allowed. If `[F]enter` is concluded, then entering is forbidden.
 
-## DFL Syntax
+## SPL Syntax
 
-In DFL, modal operators are written as square-bracketed prefixes on literals:
+In SPL, modal operators are written as square-bracketed prefixes on literals:
 
-```dfl
+```lisp
 # Modal facts
 f1: >> [O]pay
 f2: >> [P]access
@@ -48,9 +48,9 @@ r2: member => [P]access
 r3: unauthorized => [F]enter
 ```
 
-Negated modal literals use a tilde or hyphen before the literal name, as with ordinary DFL literals:
+Negated modal literals use a tilde or hyphen before the literal name, as with ordinary SPL literals:
 
-```dfl
+```lisp
 # Negated modal literals
 r4: exemption => -[O]pay
 r5: revoked => -[P]access
@@ -93,9 +93,9 @@ Negation of modal literals in SPL uses the `not` wrapper:
 
 Modal operators can appear in both the body and head of rules, in all rule types.
 
-### DFL Examples
+### SPL Examples
 
-```dfl
+```lisp
 # If you signed a contract, you are obligated to pay
 r1: signed_contract => [O]pay
 

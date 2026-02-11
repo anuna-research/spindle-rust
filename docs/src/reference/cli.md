@@ -26,7 +26,7 @@ spindle requires <LITERAL> [FILE] [OPTIONS]
 Perform defeasible reasoning on a theory.
 
 ```bash
-spindle reason examples/penguin.dfl
+spindle reason examples/penguin.spl
 ```
 
 ### validate
@@ -34,8 +34,8 @@ spindle reason examples/penguin.dfl
 Check syntax without reasoning.
 
 ```bash
-spindle validate examples/penguin.dfl
-spindle --json validate --stdin < examples/penguin.dfl
+spindle validate examples/penguin.spl
+spindle --json validate --stdin < examples/penguin.spl
 ```
 
 Output on success:
@@ -61,8 +61,8 @@ Error at line 5: could not parse: invalid => syntax
 Show theory statistics.
 
 ```bash
-spindle stats examples/penguin.dfl
-spindle --json stats --stdin < examples/penguin.dfl
+spindle stats examples/penguin.spl
+spindle --json stats --stdin < examples/penguin.spl
 ```
 
 Output:
@@ -96,10 +96,10 @@ With `--json` success output:
 Query if a literal holds in the theory.
 
 ```bash
-spindle query flies examples/penguin.dfl
-spindle query "~flies" examples/penguin.dfl
-spindle query "(not flies)" examples/penguin.dfl
-spindle query flies examples/penguin.dfl --json
+spindle query flies examples/penguin.spl
+spindle query "~flies" examples/penguin.spl
+spindle query "(not flies)" examples/penguin.spl
+spindle query flies examples/penguin.spl --json
 ```
 
 The literal argument supports multiple formats: `p`, `~p`, `(not p)`, or complex SPL expressions.
@@ -127,8 +127,8 @@ With `--json`:
 Show the derivation proof tree for why a literal holds.
 
 ```bash
-spindle explain "-flies" examples/penguin.dfl
-spindle explain "-flies" examples/penguin.dfl --json
+spindle explain "-flies" examples/penguin.spl
+spindle explain "-flies" examples/penguin.spl --json
 ```
 
 Shows the proof tree detailing how the reasoning engine derived the conclusion.
@@ -151,8 +151,8 @@ With `--json`, the output is a JSON or JSON-LD structure containing an `Explanat
 Explain why a literal is NOT provable.
 
 ```bash
-spindle why-not flies examples/penguin.dfl
-spindle why-not flies examples/penguin.dfl --json
+spindle why-not flies examples/penguin.spl
+spindle why-not flies examples/penguin.spl --json
 ```
 
 Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes `is_provable: true` and `blocked_by` will be empty.
@@ -178,9 +178,9 @@ Possible blocking reasons:
 Abduction: find the minimal sets of facts needed to derive a literal.
 
 ```bash
-spindle requires flies examples/penguin.dfl
-spindle requires flies examples/penguin.dfl --max 5
-spindle requires flies examples/penguin.dfl --json
+spindle requires flies examples/penguin.spl
+spindle requires flies examples/penguin.spl --max 5
+spindle requires flies examples/penguin.spl --json
 ```
 
 The `--max` option limits the number of solutions returned (defaults to 10).
@@ -202,10 +202,10 @@ Output results in JSON format. Available for all commands, including `validate` 
 When `--json` is present, success and failure paths are machine-readable JSON.
 
 ```bash
-spindle reason examples/penguin.dfl --json
-spindle query flies examples/penguin.dfl --json
-spindle explain "-flies" examples/penguin.dfl --json
-spindle --json validate --stdin < examples/penguin.dfl
+spindle reason examples/penguin.spl --json
+spindle query flies examples/penguin.spl --json
+spindle explain "-flies" examples/penguin.spl --json
+spindle --json validate --stdin < examples/penguin.spl
 ```
 
 Parse/usage failures also emit JSON envelopes when `--json` is present:
@@ -219,7 +219,7 @@ spindle --json
 Show only positive conclusions (+D, +d).
 
 ```bash
-spindle reason --positive examples/penguin.dfl
+spindle reason --positive examples/penguin.spl
 ```
 
 Output:
@@ -237,7 +237,7 @@ The CLI auto-detects format by extension:
 
 | Extension | Format |
 |-----------|--------|
-| `.dfl` | DFL (Defeasible Logic Format) |
+| `.spl` | SPL (Defeasible Logic Format) |
 | `.spl` | SPL (Spindle Lisp) |
 
 ## Exit Codes
@@ -255,40 +255,40 @@ The CLI auto-detects format by extension:
 
 ```bash
 # Reason about a theory
-spindle reason penguin.dfl
+spindle reason penguin.spl
 ```
 
 ### Querying and Explaining
 
 ```bash
 # Check if a literal holds
-spindle query flies penguin.dfl
+spindle query flies penguin.spl
 
 # Get a proof tree for a derived conclusion
-spindle explain "-flies" penguin.dfl
+spindle explain "-flies" penguin.spl
 
 # Debug why something is not provable
-spindle why-not flies penguin.dfl
+spindle why-not flies penguin.spl
 
 # Find what facts would make a literal provable
-spindle requires flies penguin.dfl --max 5
+spindle requires flies penguin.spl --max 5
 
 # Get JSON output for scripting
-spindle query flies penguin.dfl --json
+spindle query flies penguin.spl --json
 ```
 
 ### Validate Before Reasoning
 
 ```bash
-spindle validate theory.dfl && spindle reason theory.dfl
+spindle validate theory.spl && spindle reason theory.spl
 ```
 
 ### Compare Runs
 
 ```bash
 # Compare two revisions or theories
-spindle reason theory-a.dfl > run-a.txt
-spindle reason theory-b.dfl > run-b.txt
+spindle reason theory-a.spl > run-a.txt
+spindle reason theory-b.spl > run-b.txt
 diff run-a.txt run-b.txt
 ```
 
@@ -296,7 +296,7 @@ diff run-a.txt run-b.txt
 
 ```bash
 #!/bin/bash
-for file in theories/*.dfl; do
+for file in theories/*.spl; do
     echo "Processing $file..."
     if spindle validate "$file"; then
         spindle reason --positive "$file"
@@ -313,5 +313,5 @@ done
 | `SPINDLE_LOG` | Set log level (error, warn, info, debug, trace) |
 
 ```bash
-SPINDLE_LOG=debug spindle reason theory.dfl
+SPINDLE_LOG=debug spindle reason theory.spl
 ```

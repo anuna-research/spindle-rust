@@ -3,7 +3,7 @@ name = "spindle-parser"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "DFL and SPL parser for spindle defeasible logic"
+description = "SPL parser for spindle defeasible logic"
 
 [dependencies]
 spindle-core = { path = "../spindle-core" }

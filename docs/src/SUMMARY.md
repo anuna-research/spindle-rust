@@ -13,7 +13,6 @@
 
 # Reference
 
-- [DFL Format](reference/dfl.md)
 - [SPL Format](reference/spl.md)
 - [CLI Reference](reference/cli.md)
 

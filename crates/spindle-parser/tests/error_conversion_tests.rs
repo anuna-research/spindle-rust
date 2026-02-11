@@ -8,23 +8,9 @@ fn test_parse_error_codes() {
     let e = ParseError::LexerError {
         position: 5,
         message: "bad char".into(),
-        format: ParserFormat::Dfl,
-    };
-    assert_eq!(e.code(), "DFL_LEXER_ERROR");
-
-    let e = ParseError::LexerError {
-        position: 5,
-        message: "bad char".into(),
         format: ParserFormat::Spl,
     };
     assert_eq!(e.code(), "SPL_LEXER_ERROR");
-
-    let e = ParseError::ParserError {
-        line: 3,
-        message: "unexpected".into(),
-        format: ParserFormat::Dfl,
-    };
-    assert_eq!(e.code(), "DFL_PARSE_ERROR");
 
     let e = ParseError::ParserError {
         line: 3,
@@ -36,13 +22,6 @@ fn test_parse_error_codes() {
     let e = ParseError::UnexpectedToken {
         expected: "ident".into(),
         found: "number".into(),
-        format: ParserFormat::Dfl,
-    };
-    assert_eq!(e.code(), "DFL_UNEXPECTED_TOKEN");
-
-    let e = ParseError::UnexpectedToken {
-        expected: "ident".into(),
-        found: "number".into(),
         format: ParserFormat::Spl,
     };
     assert_eq!(e.code(), "SPL_UNEXPECTED_TOKEN");
@@ -50,13 +29,6 @@ fn test_parse_error_codes() {
 
 #[test]
 fn test_parse_error_categories() {
-    let e = ParseError::LexerError {
-        position: 0,
-        message: "err".into(),
-        format: ParserFormat::Dfl,
-    };
-    assert_eq!(e.category(), ErrorCategory::ParseError);
-
     let e = ParseError::ParserError {
         line: 1,
         message: "err".into(),
@@ -67,7 +39,7 @@ fn test_parse_error_categories() {
     let e = ParseError::UnexpectedToken {
         expected: "a".into(),
         found: "b".into(),
-        format: ParserFormat::Dfl,
+        format: ParserFormat::Spl,
     };
     assert_eq!(e.category(), ErrorCategory::ParseError);
 }
@@ -77,12 +49,12 @@ fn test_from_parse_error_for_spindle_error() {
     let parse_err = ParseError::LexerError {
         position: 42,
         message: "invalid character '@'".into(),
-        format: ParserFormat::Dfl,
+        format: ParserFormat::Spl,
     };
 
     let spindle_err: SpindleError = parse_err.into();
 
-    assert_eq!(spindle_err.code(), "DFL_LEXER_ERROR");
+    assert_eq!(spindle_err.code(), "SPL_LEXER_ERROR");
     assert_eq!(spindle_err.category(), ErrorCategory::ParseError);
     assert!(format!("{spindle_err}").contains("invalid character '@'"));
 }
@@ -105,25 +77,18 @@ fn test_from_parse_error_via_question_mark() {
         let parse_err = ParseError::UnexpectedToken {
             expected: "=>".into(),
             found: "->".into(),
-            format: ParserFormat::Dfl,
+            format: ParserFormat::Spl,
         };
         Err(parse_err)?
     }
 
     let err = fallible().unwrap_err();
-    assert_eq!(err.code(), "DFL_UNEXPECTED_TOKEN");
+    assert_eq!(err.code(), "SPL_UNEXPECTED_TOKEN");
     assert_eq!(err.category(), ErrorCategory::ParseError);
 }
 
 #[test]
 fn test_parse_error_format_accessor() {
-    let e = ParseError::ParserError {
-        line: 1,
-        message: "err".into(),
-        format: ParserFormat::Dfl,
-    };
-    assert_eq!(e.format(), Some(ParserFormat::Dfl));
-
     let e = ParseError::ParserError {
         line: 1,
         message: "err".into(),
@@ -137,14 +102,14 @@ fn test_parse_error_line_accessor() {
     let e = ParseError::ParserError {
         line: 42,
         message: "err".into(),
-        format: ParserFormat::Dfl,
+        format: ParserFormat::Spl,
     };
     assert_eq!(e.line(), Some(42));
 
     let e = ParseError::LexerError {
         position: 10,
         message: "err".into(),
-        format: ParserFormat::Dfl,
+        format: ParserFormat::Spl,
     };
     assert_eq!(e.line(), None);
 }

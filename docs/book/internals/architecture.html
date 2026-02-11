@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-c2928118.js";
+            window.path_to_searchindex_js = "../searchindex-5ca9790b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-116bb599.js"></script>
+        <script src="../toc-78568b9e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,7 +186,7 @@
 <pre><code>spindle-rust/
 ├── crates/
 │   ├── spindle-core/     # Core reasoning engine
-│   ├── spindle-parser/   # DFL and SPL parsers
+│   ├── spindle-parser/   # SPL parsers
 │   ├── spindle-cli/      # Command-line interface
 │   └── spindle-wasm/     # WebAssembly bindings
 </code></pre>
@@ -213,7 +213,7 @@
 └── error.rs            # Error types
 </code></pre>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
-<pre><code>Input (DFL/SPL)
+<pre><code>Input (SPL)
       │
       ▼
 ┌─────────────┐
@@ -383,7 +383,7 @@ worklist: VecDeque`LiteralId`
 <h3 id="adding-a-new-rule-type"><a class="header" href="#adding-a-new-rule-type">Adding a New Rule Type</a></h3>
 <ol>
 <li>Add variant to <code>RuleType</code> enum</li>
-<li>Update parsers (dfl.rs, spl.rs)</li>
+<li>Update parsers (spl.rs, spl.rs)</li>
 <li>Update reasoning logic (reason.rs)</li>
 <li>Add tests</li>
 </ol>
@@ -415,7 +415,7 @@ worklist: VecDeque`LiteralId`
 ├── Integration tests
 │   └── End-to-end CLI/API behavior
 ├── Parser tests
-│   ├── dfl.rs
+│   ├── spl.rs
 │   └── spl.rs
 └── WASM tests
     └── Basic functionality
