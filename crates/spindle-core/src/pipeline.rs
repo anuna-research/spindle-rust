@@ -386,13 +386,13 @@ fn build_trust_tree(
     policy: &TrustPolicy,
     visited: &mut HashSet<String>,
 ) -> TrustDerivationNode {
-    let canonical = literal.canonical_name();
+    let lit_key = literal.to_spl();
 
     // Cycle detection
-    if visited.contains(&canonical) {
+    if visited.contains(&lit_key) {
         return TrustDerivationNode::new(literal.clone(), policy.default_trust);
     }
-    visited.insert(canonical.clone());
+    visited.insert(lit_key.clone());
 
     let (trust, source) = if let Some(label) = rule_label {
         resolve_rule_trust(label, theory, policy)
@@ -411,8 +411,8 @@ fn build_trust_tree(
     {
         let mut children = Vec::new();
         for body_lit in &rule.body {
-            let body_canonical = body_lit.canonical_name();
-            if let Some(body_conclusion) = positive_conclusions.get(&body_canonical) {
+            let body_key = body_lit.to_spl();
+            if let Some(body_conclusion) = positive_conclusions.get(&body_key) {
                 let child = build_trust_tree(
                     body_lit,
                     body_conclusion.rule_label.as_deref(),
@@ -429,7 +429,7 @@ fn build_trust_tree(
         }
     }
 
-    visited.remove(&canonical);
+    visited.remove(&lit_key);
     node
 }
 
@@ -458,11 +458,13 @@ pub fn compute_weighted_conclusions(
     theory: &Theory,
     policy: &TrustPolicy,
 ) -> Vec<WeightedConclusion> {
-    // Build index of positive conclusions for fast body-literal lookup
+    // Build index of positive conclusions for fast body-literal lookup.
+    // Key by to_spl() so that literals with different arguments (e.g. p(a) vs p(b))
+    // remain distinct.
     let positive_conclusions: HashMap<String, &Conclusion> = conclusions
         .iter()
         .filter(|c| c.is_positive())
-        .map(|c| (c.literal.canonical_name(), c))
+        .map(|c| (c.literal.to_spl(), c))
         .collect();
 
     conclusions
