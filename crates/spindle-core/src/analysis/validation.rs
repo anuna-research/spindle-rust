@@ -18,7 +18,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{Severity, ValidationDiagnostic};
+use super::{analysis_key, analysis_key_unsigned, Severity, ValidationDiagnostic};
 use crate::rule::{Rule, RuleType};
 
 /// Validate a set of rules and produce diagnostics.
@@ -113,33 +113,31 @@ fn check_tautological_bodies(rules: &[&Rule], diags: &mut Vec<ValidationDiagnost
             continue;
         }
 
-        // Collect (name, negation) pairs from the body.
-        let mut positive_names: HashSet<&str> = HashSet::new();
-        let mut negative_names: HashSet<&str> = HashSet::new();
+        // A body is tautological only when it contains two literals that
+        // are exact complements: same name, args, mode, and temporal but
+        // opposite negation.  Comparing by name alone produces false
+        // positives for bodies like `p(a), ~p(b)`.
+        let positive: Vec<_> = rule.body.iter().filter(|l| !l.is_negated()).collect();
+        let negative: Vec<_> = rule.body.iter().filter(|l| l.is_negated()).collect();
 
-        for lit in &rule.body {
-            if lit.is_negated() {
-                negative_names.insert(lit.name());
-            } else {
-                positive_names.insert(lit.name());
-            }
-        }
-
-        // If any name appears both positive and negative, the body is
-        // unsatisfiable.
-        for name in &positive_names {
-            if negative_names.contains(name) {
-                diags.push(ValidationDiagnostic {
-                    severity: Severity::Warning,
-                    code: "W002",
-                    message: format!(
-                        "Rule '{}' has a tautological body: both '{}' and '~{}' \
-                         appear, so the rule can never fire.",
-                        rule.label, name, name,
-                    ),
-                    rules: vec![rule.label.clone()],
-                });
-                break; // one diagnostic per rule is enough
+        'outer: for pos in &positive {
+            let pos_key = analysis_key_unsigned(pos);
+            for neg in &negative {
+                if pos_key == analysis_key_unsigned(neg) {
+                    diags.push(ValidationDiagnostic {
+                        severity: Severity::Warning,
+                        code: "W002",
+                        message: format!(
+                            "Rule '{}' has a tautological body: both '{}' and '~{}' \
+                             appear, so the rule can never fire.",
+                            rule.label,
+                            pos.name(),
+                            pos.name(),
+                        ),
+                        rules: vec![rule.label.clone()],
+                    });
+                    break 'outer; // one diagnostic per rule is enough
+                }
             }
         }
     }
@@ -150,11 +148,13 @@ fn check_tautological_bodies(rules: &[&Rule], diags: &mut Vec<ValidationDiagnost
 // ---------------------------------------------------------------------------
 
 fn check_shadowed_rules(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>) {
-    // Collect all head literals proved by strict rules or facts.
-    let strict_heads: HashSet<(&str, bool)> = rules
+    // Collect full identity keys for all head literals proved by strict
+    // rules or facts.  Using the full key (name, negation, args, mode,
+    // temporal) avoids false positives where `p(a)` strict-shadows `p(b)`.
+    let strict_heads: HashSet<_> = rules
         .iter()
         .filter(|r| matches!(r.rule_type, RuleType::Strict | RuleType::Fact))
-        .flat_map(|r| r.head.iter().map(|h| (h.name(), h.is_negated())))
+        .flat_map(|r| r.head.iter().map(analysis_key))
         .collect();
 
     for rule in rules {
@@ -162,8 +162,7 @@ fn check_shadowed_rules(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>) 
             continue;
         }
         for h in &rule.head {
-            let key = (h.name(), h.is_negated());
-            if strict_heads.contains(&key) {
+            if strict_heads.contains(&analysis_key(h)) {
                 let display = if h.is_negated() {
                     format!("~{}", h.name())
                 } else {
@@ -189,10 +188,12 @@ fn check_shadowed_rules(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>) 
 // ---------------------------------------------------------------------------
 
 fn check_unreachable_rules(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>) {
-    // Collect all head literals (name, negated) across the whole theory.
-    let produced: HashSet<(&str, bool)> = rules
+    // Collect full identity keys for all produced head literals.
+    // Using the full key (name, negation, args, mode, temporal) ensures
+    // that `p(b)` being produced does not suppress a warning for `p(a)`.
+    let produced: HashSet<_> = rules
         .iter()
-        .flat_map(|r| r.head.iter().map(|h| (h.name(), h.is_negated())))
+        .flat_map(|r| r.head.iter().map(analysis_key))
         .collect();
 
     for rule in rules {
@@ -200,8 +201,7 @@ fn check_unreachable_rules(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic
             continue; // facts / empty-body rules checked elsewhere
         }
         for lit in &rule.body {
-            let key = (lit.name(), lit.is_negated());
-            if !produced.contains(&key) {
+            if !produced.contains(&analysis_key(lit)) {
                 let display = if lit.is_negated() {
                     format!("~{}", lit.name())
                 } else {
@@ -342,6 +342,236 @@ mod tests {
         ];
         let diags = validate_theory(&rules);
         assert!(codes(&diags).contains(&"E001"));
+    }
+
+    // ---------------------------------------------------------------
+    // Predicate-argument discrimination tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn w002_different_args_not_tautological() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Body: p(a), ~p(b) — different ground atoms, NOT tautological
+        let pos = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let neg = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let rules = vec![Rule::defeasible("r1", vec![pos, neg], Literal::simple("q"))];
+        let diags = validate_theory(&rules);
+        assert!(
+            !codes(&diags).contains(&"W002"),
+            "p(a) and ~p(b) should not be flagged as tautological: {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w002_same_args_is_tautological() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Body: p(a), ~p(a) — same ground atom, IS tautological
+        let pos = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let neg = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let rules = vec![Rule::defeasible("r1", vec![pos, neg], Literal::simple("q"))];
+        let diags = validate_theory(&rules);
+        assert!(codes(&diags).contains(&"W002"));
+    }
+
+    #[test]
+    fn w002_different_modes_not_tautological() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Body: O(p), ~p — different modalities, NOT tautological
+        let pos = Literal::new("p", false, Mode::obligation(), Temporal::empty(), vec![]);
+        let neg = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec![]);
+        let rules = vec![Rule::defeasible("r1", vec![pos, neg], Literal::simple("q"))];
+        let diags = validate_theory(&rules);
+        assert!(
+            !codes(&diags).contains(&"W002"),
+            "O(p) and ~p should not be flagged as tautological: {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w002_different_temporals_not_tautological() {
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+        // Body: p@[0,10], ~p@[20,30] — different time scopes, NOT tautological
+        let t1 = Temporal::new(TimePoint::Moment(0), TimePoint::Moment(10));
+        let t2 = Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30));
+        let pos = Literal::new("p", false, Mode::empty(), t1, vec![]);
+        let neg = Literal::new("p", true, Mode::empty(), t2, vec![]);
+        let rules = vec![Rule::defeasible("r1", vec![pos, neg], Literal::simple("q"))];
+        let diags = validate_theory(&rules);
+        assert!(
+            !codes(&diags).contains(&"W002"),
+            "p@[0,10] and ~p@[20,30] should not be flagged as tautological: {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w003_different_args_not_shadowed() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Strict p(a) should NOT shadow defeasible p(b)
+        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head_b = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let rules = vec![
+            Rule::strict("s1", vec![Literal::simple("x")], head_a),
+            Rule::defeasible("r1", vec![Literal::simple("y")], head_b),
+        ];
+        let diags = validate_theory(&rules);
+        assert!(
+            !codes(&diags).contains(&"W003"),
+            "strict p(a) should not shadow defeasible p(b): {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w003_same_args_is_shadowed() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Strict p(a) SHOULD shadow defeasible p(a)
+        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head_b = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let rules = vec![
+            Rule::strict("s1", vec![Literal::simple("x")], head_a),
+            Rule::defeasible("r1", vec![Literal::simple("x")], head_b),
+        ];
+        let diags = validate_theory(&rules);
+        assert!(codes(&diags).contains(&"W003"));
+    }
+
+    #[test]
+    fn w003_different_modes_not_shadowed() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Strict O(p) should NOT shadow defeasible p (different modalities)
+        let head_a = Literal::new("p", false, Mode::obligation(), Temporal::empty(), vec![]);
+        let head_b = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec![]);
+        let rules = vec![
+            Rule::strict("s1", vec![Literal::simple("x")], head_a),
+            Rule::defeasible("r1", vec![Literal::simple("y")], head_b),
+        ];
+        let diags = validate_theory(&rules);
+        assert!(
+            !codes(&diags).contains(&"W003"),
+            "strict O(p) should not shadow defeasible p: {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w004_different_args_is_unreachable() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Only p(b) is produced; rule requiring p(a) SHOULD be unreachable
+        let head = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let body = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let rules = vec![
+            Rule::fact("f1", head),
+            Rule::defeasible("r1", vec![body], Literal::simple("q")),
+        ];
+        let diags = validate_theory(&rules);
+        assert!(
+            codes(&diags).contains(&"W004"),
+            "p(a) should be unreachable when only p(b) is produced: {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w004_same_args_is_reachable() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // p(a) is produced; rule requiring p(a) should NOT be flagged
+        let head = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let body = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let rules = vec![
+            Rule::fact("f1", head),
+            Rule::defeasible("r1", vec![body], Literal::simple("q")),
+        ];
+        let diags = validate_theory(&rules);
+        assert!(
+            !codes(&diags).contains(&"W004"),
+            "p(a) should be reachable when p(a) is produced: {:?}",
+            diags,
+        );
+    }
+
+    #[test]
+    fn w004_different_modes_is_unreachable() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // Only O(p) is produced; rule requiring p (no mode) SHOULD be unreachable
+        let head = Literal::new("p", false, Mode::obligation(), Temporal::empty(), vec![]);
+        let body = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec![]);
+        let rules = vec![
+            Rule::fact("f1", head),
+            Rule::defeasible("r1", vec![body], Literal::simple("q")),
+        ];
+        let diags = validate_theory(&rules);
+        assert!(
+            codes(&diags).contains(&"W004"),
+            "p should be unreachable when only O(p) is produced: {:?}",
+            diags,
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // Combined modal+temporal+args integration test
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn well_formed_modal_temporal_theory_produces_no_false_positives() {
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+        // A theory using modes, temporals, and args that should produce
+        // zero diagnostics.
+        let t_morning = Temporal::new(TimePoint::Moment(0), TimePoint::Moment(12));
+        let t_evening = Temporal::new(TimePoint::Moment(18), TimePoint::Moment(24));
+
+        let rules = vec![
+            // Fact: employed(alice, acme)
+            Rule::fact(
+                "f1",
+                Literal::new("employed", false, Mode::empty(), Temporal::empty(), vec!["alice".into(), "acme".into()]),
+            ),
+            // Fact: employed(bob, globex)
+            Rule::fact(
+                "f2",
+                Literal::new("employed", false, Mode::empty(), Temporal::empty(), vec!["bob".into(), "globex".into()]),
+            ),
+            // O(pay(acme, alice)) if employed(alice, acme)
+            Rule::defeasible(
+                "r1",
+                vec![Literal::new("employed", false, Mode::empty(), Temporal::empty(), vec!["alice".into(), "acme".into()])],
+                Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec!["acme".into(), "alice".into()]),
+            ),
+            // ~O(pay(acme, alice))@evening if complaint(alice)@morning
+            // This should NOT conflict with r1 (different temporal)
+            Rule::defeasible(
+                "r2",
+                vec![Literal::new("complaint", false, Mode::empty(), t_morning, vec!["alice".into()])],
+                Literal::new("pay", true, Mode::obligation(), t_evening, vec!["acme".into(), "alice".into()]),
+            ),
+        ];
+        let diags = validate_theory(&rules);
+        // Should have W004 for complaint(alice)@morning (not produced) but
+        // should NOT have W002 or W003 false positives.
+        let diag_codes = codes(&diags);
+        assert!(
+            !diag_codes.contains(&"W002"),
+            "no tautology false positives expected: {:?}",
+            diags,
+        );
+        assert!(
+            !diag_codes.contains(&"W003"),
+            "no shadowing false positives expected: {:?}",
+            diags,
+        );
     }
 
     #[test]

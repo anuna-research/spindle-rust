@@ -6,19 +6,20 @@
 //! This module is distinct from the trace-level conflict detection in
 //! `mining.rs` which operates on `EventLog` + `PetriNet`.
 
-use super::{ConflictKind, ConflictReport};
+use super::{analysis_key_unsigned, ConflictKind, ConflictReport};
 use crate::rule::Rule;
 
 /// Check whether two rules have conflicting heads.
 ///
 /// Two heads conflict when one is the classical negation of the other
-/// (e.g. `flies` vs `~flies`).
+/// **and** they refer to the same ground atom (same name, predicate
+/// arguments, mode, and temporal scope).  For example `flies` vs
+/// `~flies` conflict, but `O(p)` vs `~p` or `p@t1` vs `~p@t2` do not.
 pub fn is_conflicting(a: &Rule, b: &Rule) -> bool {
     a.head.iter().any(|ha| {
         b.head.iter().any(|hb| {
-            ha.name() == hb.name()
-                && ha.predicate_ids() == hb.predicate_ids()
-                && ha.is_negated() != hb.is_negated()
+            ha.is_negated() != hb.is_negated()
+                && analysis_key_unsigned(ha) == analysis_key_unsigned(hb)
         })
     })
 }
@@ -115,6 +116,57 @@ mod tests {
         // p(a) vs ~p(a) SHOULD conflict — same ground atom, opposite negation
         let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
         let head_b = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
+        let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
+        assert!(is_conflicting(&a, &b));
+    }
+
+    #[test]
+    fn test_not_conflicting_different_modes() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // O(p) vs ~p should NOT conflict — different modalities
+        let head_a = Literal::new("p", false, Mode::obligation(), Temporal::empty(), vec![]);
+        let head_b = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec![]);
+        let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
+        let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
+        assert!(!is_conflicting(&a, &b));
+    }
+
+    #[test]
+    fn test_conflicting_same_mode() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // O(p) vs ~O(p) SHOULD conflict — same modality, opposite negation
+        let head_a = Literal::new("p", false, Mode::obligation(), Temporal::empty(), vec![]);
+        let head_b = Literal::new("p", true, Mode::obligation(), Temporal::empty(), vec![]);
+        let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
+        let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
+        assert!(is_conflicting(&a, &b));
+    }
+
+    #[test]
+    fn test_not_conflicting_different_temporals() {
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+        // p@[0,10] vs ~p@[20,30] should NOT conflict — different time scopes
+        let t1 = Temporal::new(TimePoint::Moment(0), TimePoint::Moment(10));
+        let t2 = Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30));
+        let head_a = Literal::new("p", false, Mode::empty(), t1, vec![]);
+        let head_b = Literal::new("p", true, Mode::empty(), t2, vec![]);
+        let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
+        let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
+        assert!(!is_conflicting(&a, &b));
+    }
+
+    #[test]
+    fn test_conflicting_same_temporal() {
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+        // p@[0,10] vs ~p@[0,10] SHOULD conflict — same temporal scope
+        let t = Temporal::new(TimePoint::Moment(0), TimePoint::Moment(10));
+        let head_a = Literal::new("p", false, Mode::empty(), t.clone(), vec![]);
+        let head_b = Literal::new("p", true, Mode::empty(), t, vec![]);
         let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
         let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
         assert!(is_conflicting(&a, &b));

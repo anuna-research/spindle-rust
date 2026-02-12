@@ -13,8 +13,46 @@ pub mod conflicts;
 pub mod superiority;
 pub mod validation;
 
+use crate::intern::SymbolId;
+use crate::literal::Literal;
+use crate::mode::Mode;
 use crate::rule::RuleLabel;
+use crate::temporal::Temporal;
 use std::fmt;
+
+// ---------------------------------------------------------------------------
+// Shared literal identity helpers for analysis
+// ---------------------------------------------------------------------------
+
+/// Full literal identity key for analysis comparisons (includes temporal).
+///
+/// Unlike `Literal::PartialEq` (which excludes temporal for reasoning
+/// correctness), this captures the complete identity of a literal so that
+/// diagnostic checks do not produce false positives when predicates differ
+/// by arguments, mode, or temporal scope.
+pub(crate) type AnalysisKey<'a> = (&'static str, bool, &'a [SymbolId], &'a Mode, &'a Temporal);
+
+/// Return a full-identity key for a literal, **including** temporal.
+///
+/// Two literals with different keys are genuinely distinct atoms and
+/// should not be considered conflicting, tautological, shadowed, etc.
+#[inline]
+pub(crate) fn analysis_key(lit: &Literal) -> AnalysisKey<'_> {
+    (
+        lit.name(),
+        lit.is_negated(),
+        lit.predicate_ids(),
+        &lit.mode,
+        &lit.temporal,
+    )
+}
+
+/// Same as [`analysis_key`] but omits negation, for detecting p/~p pairs
+/// that truly refer to the same ground atom.
+#[inline]
+pub(crate) fn analysis_key_unsigned(lit: &Literal) -> (&'static str, &[SymbolId], &Mode, &Temporal) {
+    (lit.name(), lit.predicate_ids(), &lit.mode, &lit.temporal)
+}
 
 // ---------------------------------------------------------------------------
 // Conflict report
