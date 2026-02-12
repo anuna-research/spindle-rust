@@ -17,6 +17,13 @@ use std::fmt;
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleType};
 
+// Re-export analysis types at the mining:: level for backward compatibility
+// (see ADR-007-mining-split.md).
+pub use crate::analysis::{
+    ConflictKind, ConflictReport, Severity, SuperioritySuggestion, UnresolvedConflict,
+    ValidationDiagnostic,
+};
+
 // =============================================================================
 // EVENT LOG DATA STRUCTURES
 // =============================================================================
@@ -637,7 +644,13 @@ impl Conflict {
     }
 }
 
-/// Detect conflicts in an event log given a mined Petri net
+/// Detect conflicts in an event log given a mined Petri net.
+///
+/// This function operates at the trace/Petri-net level and detects
+/// XOR-choice and mutual-exclusion conflicts between *activities*.
+///
+/// For rule-level conflict detection (classical negation in heads),
+/// use [`crate::analysis::conflicts::find_conflicts`] instead.
 pub fn detect_conflicts(log: &EventLog, net: &PetriNet) -> Vec<Conflict> {
     let mut conflicts = Vec::new();
 
@@ -706,6 +719,35 @@ pub fn detect_conflicts(log: &EventLog, net: &PetriNet) -> Vec<Conflict> {
     }
 
     conflicts
+}
+
+/// Detect rule-level conflicts (classical negation in heads).
+///
+/// This is a convenience wrapper around
+/// [`crate::analysis::conflicts::find_conflicts`] for use within the
+/// mining pipeline.  It delegates entirely to the `analysis` module.
+pub fn detect_rule_conflicts(rules: &[Rule]) -> Vec<crate::analysis::ConflictReport> {
+    crate::analysis::conflicts::find_conflicts(rules)
+}
+
+/// Check whether two rules have conflicting heads (classical negation).
+///
+/// This is a convenience wrapper around
+/// [`crate::analysis::conflicts::is_conflicting`].
+pub fn is_rule_conflicting(a: &Rule, b: &Rule) -> bool {
+    crate::analysis::conflicts::is_conflicting(a, b)
+}
+
+/// Validate a set of rules and produce semantic diagnostics.
+///
+/// This is a convenience wrapper around
+/// [`crate::analysis::validation::validate_theory`] for use within the
+/// mining pipeline.  It delegates entirely to the `analysis` module.
+pub fn validate_theory<'a, I>(rules: I) -> Vec<ValidationDiagnostic>
+where
+    I: IntoIterator<Item = &'a Rule>,
+{
+    crate::analysis::validation::validate_theory(rules)
 }
 
 // =============================================================================
@@ -852,6 +894,34 @@ pub fn rules_with_metrics(
             }
         })
         .collect()
+}
+
+// =============================================================================
+// SUPERIORITY ANALYSIS (delegated to analysis::superiority)
+// =============================================================================
+
+/// Suggest superiority relations for conflicting rule pairs based on
+/// specificity heuristics.
+///
+/// This is a convenience wrapper around
+/// [`analysis::superiority::suggest_superiorities`](crate::analysis::superiority::suggest_superiorities).
+pub fn suggest_superiorities<'a, I>(conflicts: I) -> Vec<SuperioritySuggestion>
+where
+    I: IntoIterator<Item = (&'a Rule, &'a Rule)>,
+{
+    crate::analysis::superiority::suggest_superiorities(conflicts)
+}
+
+/// Check whether every conflicting pair has a declared superiority relation.
+///
+/// This is a convenience wrapper around
+/// [`analysis::superiority::check_completeness`](crate::analysis::superiority::check_completeness).
+pub fn check_completeness<'a, I, S>(conflicts: I, declared: S) -> Vec<UnresolvedConflict>
+where
+    I: IntoIterator<Item = (&'a str, &'a str)>,
+    S: IntoIterator<Item = (&'a str, &'a str)>,
+{
+    crate::analysis::superiority::check_completeness(conflicts, declared)
 }
 
 // =============================================================================

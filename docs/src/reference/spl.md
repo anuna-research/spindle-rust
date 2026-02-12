@@ -1,6 +1,6 @@
 # SPL Format Reference
 
-SPL (Spindle Lisp) is a LISP-based DSL for defeasible logic with support for advanced features like variables, temporal reasoning, and metadata.
+SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DFL syntax with a LISP-based DSL whose s-expression structure makes it straightforward to add new constructs (temporal operators, trust directives, claims blocks, etc.) without grammar ambiguity.
 
 ## File Extension
 
@@ -20,15 +20,37 @@ Semicolon to end of line:
 ```ebnf
 theory      = statement*
 statement   = fact | rule | prefer | meta
+            | claims | trusts | decays | threshold
+
+; Core
 fact        = "(given" literal ")"
 rule        = "(" keyword label? body head ")"
 keyword     = "always" | "normally" | "except"
 prefer      = "(prefer" label+ ")"
 meta        = "(meta" label property* ")"
+
+; Trust
+claims      = "(claims" source claims-meta* statement* ")"
+claims-meta = ":at" atom | ":sig" atom | ":id" atom | ":note" atom
+trusts      = "(trusts" source number ")"
+decays      = "(decays" source decay-model number ")"
+decay-model = "exponential" | "linear" | "step"
+threshold   = "(threshold" name number ")"
+
+; Temporal
+time-expr   = "(moment" rfc3339-string ")" | integer | "inf" | "-inf"
+during      = "(during" literal time-expr time-expr ")"
+
+; Literals
 literal     = atom | "(" atom arg* ")" | "(not" literal ")"
+            | during | modal
+modal       = "(" modal-op literal ")"
+modal-op    = "must" | "may" | "forbidden"
 body        = literal | "(and" literal+ ")"
 atom        = identifier | variable
 variable    = "?" identifier
+source      = atom
+number      = float in [0.0, 1.0]
 ```
 
 ## Facts
@@ -231,7 +253,81 @@ inf                              ; Positive infinity
 
 ### Allen Relations
 
-*Not currently supported in Spindle v1.*
+> **SPL status:** Allen relations are implemented in the core Rust API but are not yet
+> usable as SPL predicates. Exposing them requires interval variables (e.g.,
+> `(during p ?t)`), planned for a future release. The Allen `during` relation
+> (interval containment) is distinct from the [`during` SPL operator](#during)
+> described above.
+
+Allen's interval algebra defines exactly 13 mutually exclusive relations between
+two time intervals **X** and **Y**. Every pair of intervals satisfies exactly one.
+
+```text
+Relation          X              Y           Inverse
+─────────────────────────────────────────────────────────
+before            ██████                     after
+                              ██████
+
+meets             ██████                     met-by
+                        ██████
+
+overlaps          ██████                     overlapped-by
+                     ██████
+
+starts            ████                       started-by
+                  ██████████
+
+during              ████                     contains
+                  ██████████
+
+finishes              ████                   finished-by
+                  ██████████
+
+equals            ██████████
+                  ██████████                 (self-inverse)
+```
+
+Each relation has a strict inverse (reading the diagram with X and Y swapped),
+giving 6 symmetric pairs plus `equals`:
+
+| Relation | Inverse | Condition |
+|---|---|---|
+| `before` | `after` | X ends before Y starts (with gap) |
+| `meets` | `met-by` | X ends exactly where Y starts |
+| `overlaps` | `overlapped-by` | X starts first, they share some time, Y ends last |
+| `starts` | `started-by` | Both start together, X ends first |
+| `during` | `contains` | X is fully enclosed within Y |
+| `finishes` | `finished-by` | Both end together, X starts later |
+| `equals` | `equals` | Identical start and end |
+
+## Claims
+
+The `claims` block attributes statements to a named source, with optional metadata.
+
+```lisp
+(claims agent:alice
+  :at "2024-06-15T12:00:00Z"
+  :sig "abc123"
+  :id "claim-001"
+  :note "sensor reading"
+  (given sunny)
+  (normally r1 sunny (not umbrella)))
+```
+
+### Syntax
+
+```
+(claims source [:at timestamp] [:sig signature] [:id block-id] [:note annotation]
+  statement ...)
+```
+
+- **source** — an atom identifying the claiming agent (e.g., `agent:alice`).
+- **:at** — optional RFC3339 timestamp for when the claim was made.
+- **:sig** — optional signature string for verification.
+- **:id** — optional block identifier.
+- **:note** — optional free-text annotation.
+
+Statements inside a `claims` block are ordinary SPL expressions (`given`, `always`, `normally`, `except`, `prefer`) that automatically receive source metadata. See the [Trust & Multi-Agent guide](../guides/trust.md) for details.
 
 ## Complete Example
 

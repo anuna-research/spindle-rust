@@ -16,6 +16,7 @@ fn test_parse_error_codes() {
         line: 3,
         message: "unexpected".into(),
         format: ParserFormat::Spl,
+        source_line: None,
     };
     assert_eq!(e.code(), "SPL_PARSE_ERROR");
 
@@ -33,6 +34,7 @@ fn test_parse_error_categories() {
         line: 1,
         message: "err".into(),
         format: ParserFormat::Spl,
+        source_line: None,
     };
     assert_eq!(e.category(), ErrorCategory::ParseError);
 
@@ -65,6 +67,7 @@ fn test_from_parse_error_preserves_code() {
         line: 10,
         message: "expected rule body".into(),
         format: ParserFormat::Spl,
+        source_line: None,
     };
 
     let spindle_err: SpindleError = parse_err.into();
@@ -93,6 +96,7 @@ fn test_parse_error_format_accessor() {
         line: 1,
         message: "err".into(),
         format: ParserFormat::Spl,
+        source_line: None,
     };
     assert_eq!(e.format(), Some(ParserFormat::Spl));
 }
@@ -103,6 +107,7 @@ fn test_parse_error_line_accessor() {
         line: 42,
         message: "err".into(),
         format: ParserFormat::Spl,
+        source_line: None,
     };
     assert_eq!(e.line(), Some(42));
 

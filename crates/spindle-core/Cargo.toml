@@ -26,6 +26,7 @@ dhat-heap = ["dep:dhat"]
 pretty_assertions.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
 dhat = "0.3.3"
+proptest = "1"
 spindle-parser = { path = "../spindle-parser" }
 
 [[bench]]

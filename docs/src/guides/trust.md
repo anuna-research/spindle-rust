@@ -752,10 +752,10 @@ for lr in &learned {
 ### Petri Net Mining with Metrics
 
 ```rust
-use spindle_core::mining::petri_net_to_dfl;
+use spindle_core::mining::petri_net_to_rules;
 
 // Mine rules with minimum support=3, confidence=0.7
-let learned_rules = petri_net_to_dfl(&event_log, 3, 0.7);
+let learned_rules = petri_net_to_rules(&event_log, 3, 0.7);
 
 for lr in &learned_rules {
     println!("{}: support={}, confidence={:.2}, source={}",

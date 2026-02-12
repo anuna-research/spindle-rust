@@ -14,51 +14,27 @@ Spindle integrates deontic modalities directly into its literal representation. 
 
 Spindle provides three built-in deontic operators:
 
-| Operator | SPL Syntax | SPL Syntax | Meaning |
-|----------|------------|------------|---------|
+| Operator | Display | SPL Syntax | Meaning |
+|----------|---------|------------|---------|
 | Obligation | `[O]` | `(must ...)` | The proposition **must** hold |
 | Permission | `[P]` | `(may ...)` | The proposition **may** hold |
 | Forbidden | `[F]` | `(forbidden ...)` | The proposition **must not** hold |
 
-### Obligation (`[O]`)
+### Obligation (`must`)
 
-An obligation states that something is required. If `[O]pay` is concluded, then there is an obligation to pay.
+An obligation states that something is required. If `(must pay)` is concluded, then there is an obligation to pay.
 
-### Permission (`[P]`)
+### Permission (`may`)
 
-A permission states that something is allowed. If `[P]access` is concluded, then access is permitted.
+A permission states that something is allowed. If `(may access)` is concluded, then access is permitted.
 
-### Forbidden (`[F]`)
+### Forbidden (`forbidden`)
 
-A prohibition states that something is not allowed. If `[F]enter` is concluded, then entering is forbidden.
-
-## SPL Syntax
-
-In SPL, modal operators are written as square-bracketed prefixes on literals:
-
-```lisp
-# Modal facts
-f1: >> [O]pay
-f2: >> [P]access
-f3: >> [F]enter
-
-# Modal literals in rules
-r1: signed_contract => [O]pay
-r2: member => [P]access
-r3: unauthorized => [F]enter
-```
-
-Negated modal literals use a tilde or hyphen before the literal name, as with ordinary SPL literals:
-
-```lisp
-# Negated modal literals
-r4: exemption => -[O]pay
-r5: revoked => -[P]access
-```
+A prohibition states that something is not allowed. If `(forbidden enter)` is concluded, then entering is forbidden.
 
 ## SPL Syntax
 
-In SPL, modal operators use keyword wrappers:
+Modal operators use keyword wrappers:
 
 ```lisp
 ; Obligation: (must <literal>)
@@ -93,30 +69,7 @@ Negation of modal literals in SPL uses the `not` wrapper:
 
 Modal operators can appear in both the body and head of rules, in all rule types.
 
-### SPL Examples
-
-```lisp
-# If you signed a contract, you are obligated to pay
-r1: signed_contract => [O]pay
-
-# If you are obligated to pay and fail to pay, you are in violation
-r2: [O]pay, -paid => violation
-
-# Members may access resources
-r3: member => [P]access
-
-# Unauthorized users are forbidden from entering
-r4: unauthorized => [F]enter
-
-# An exemption defeats the obligation to pay
-r5: exemption => -[O]pay
-r5 > r1
-
-# A defeater: pending review blocks the permission
-d1: pending_review ~> [P]access
-```
-
-### SPL Examples
+### Examples
 
 ```lisp
 ; If you signed a contract, you are obligated to pay
@@ -278,7 +231,7 @@ assert_eq!(format!("{}", forbidden_enter), "[F]enter(restricted_area)");
 use spindle_core::prelude::*;
 use smallvec::smallvec;
 
-// r1: signed_contract => [O]pay
+// (normally r1 signed-contract (must pay))
 let body = smallvec![Literal::simple("signed_contract")];
 let head = smallvec![Literal::new(
     "pay",
@@ -289,7 +242,7 @@ let head = smallvec![Literal::new(
 )];
 let rule = Rule::new("r1", RuleType::Defeasible, body, head);
 
-// r2: [O]pay, ~paid => violation
+// (normally r2 (and (must pay) (not paid)) violation)
 let body = smallvec![
     Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]),
     Literal::negated("paid"),

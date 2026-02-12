@@ -34,7 +34,7 @@ pub enum ParseError {
     },
 
     /// Parser error at a specific line
-    #[error("{format} parse error at line {line}: {message}")]
+    #[error("{}", format_parser_error(*.line, message, *format, source_line.as_deref()))]
     ParserError {
         /// Line number where the error occurred
         line: usize,
@@ -42,6 +42,8 @@ pub enum ParseError {
         message: String,
         /// Which parser format produced this error
         format: ParserFormat,
+        /// The source line text where the error occurred (if available)
+        source_line: Option<String>,
     },
 
     /// Unexpected token encountered
@@ -58,6 +60,19 @@ pub enum ParseError {
     /// IO error
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+}
+
+/// Format a parser error message, optionally including the source line text.
+fn format_parser_error(
+    line: usize,
+    message: &str,
+    format: ParserFormat,
+    source_line: Option<&str>,
+) -> String {
+    match source_line {
+        Some(src) => format!("{format} parse error at line {line}: {message}\n  | {src}"),
+        None => format!("{format} parse error at line {line}: {message}"),
+    }
 }
 
 impl ParseError {

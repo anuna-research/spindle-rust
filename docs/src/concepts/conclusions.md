@@ -16,15 +16,15 @@ Spindle computes four types of conclusions, representing different levels of pro
 **Definite provability** uses only facts and strict rules. No defeasible reasoning is involved.
 
 ```lisp
-f1: >> bird
-r1: bird -> animal    # Strict rule
-r2: bird => flies     # Defeasible rule
+(given bird)
+(always r1 bird animal)        ; Strict rule
+(normally r2 bird flies)       ; Defeasible rule
 ```
 
 Conclusions:
-- `+D bird` - fact
-- `+D animal` - via strict rule r1
-- `-D flies` - no strict path to prove flies
+- `+D bird` — fact
+- `+D animal` — via strict rule r1
+- `-D flies` — no strict path to prove flies
 
 ### When is +D Useful?
 
@@ -38,13 +38,13 @@ Use definite provability when you need certainty:
 **Defeasible provability** extends definite provability with defeasible rules.
 
 ```lisp
-f1: >> bird
-r1: bird => flies
+(given bird)
+(normally r1 bird flies)
 ```
 
 Conclusions:
-- `+d bird` - fact (also +D)
-- `+d flies` - via defeasible rule r1
+- `+d bird` — fact (also +D)
+- `+d flies` — via defeasible rule r1
 
 ### The Relationship
 
@@ -61,53 +61,53 @@ Conclusions:
 When rules conflict without a superiority relation, neither conclusion is provable:
 
 ```lisp
-f1: >> trigger
-r1: trigger => outcome
-r2: trigger => -outcome
-# No superiority declared
+(given trigger)
+(normally r1 trigger outcome)
+(normally r2 trigger (not outcome))
+; No superiority declared
 ```
 
 Conclusions:
 - `+D trigger`
-- `-d outcome` - blocked by r2
-- `-d -outcome` - blocked by r1
+- `-d outcome` — blocked by r2
+- `-d -outcome` — blocked by r1
 
-Both outcomes are **ambiguous** - neither can be proven.
+Both outcomes are **ambiguous** — neither can be proven.
 
 ## Resolved Conflict
 
 With superiority, the conflict is resolved:
 
 ```lisp
-f1: >> trigger
-r1: trigger => outcome
-r2: trigger => -outcome
-r1 > r2
+(given trigger)
+(normally r1 trigger outcome)
+(normally r2 trigger (not outcome))
+(prefer r1 r2)
 ```
 
 Conclusions:
-- `+d outcome` - r1 wins
-- `-d -outcome` - r2 is defeated
+- `+d outcome` — r1 wins
+- `-d -outcome` — r2 is defeated
 
 ## Example: Multi-Level
 
 ```lisp
-f1: >> a
-r1: a -> b           # Strict: a implies b
-r2: b => c           # Defeasible: b typically implies c
-r3: b => -c          # Defeasible: b typically implies -c
-r2 > r3              # r2 wins
+(given a)
+(always r1 a b)                ; Strict: a implies b
+(normally r2 b c)              ; Defeasible: b typically implies c
+(normally r3 b (not c))        ; Defeasible: b typically implies (not c)
+(prefer r2 r3)                 ; r2 wins
 ```
 
 Conclusions:
-- `+D a` - fact
-- `+D b` - strict from a
-- `+d a` - (implied by +D)
-- `+d b` - (implied by +D)
-- `+d c` - defeasible, r2 wins over r3
-- `-D c` - no strict path
-- `-D -c` - no strict path
-- `-d -c` - r3 defeated
+- `+D a` — fact
+- `+D b` — strict from a
+- `+d a` — (implied by +D)
+- `+d b` — (implied by +D)
+- `+d c` — defeasible, r2 wins over r3
+- `-D c` — no strict path
+- `-D -c` — no strict path
+- `-d -c` — r3 defeated
 
 ## Negative Conclusions
 

@@ -1,6 +1,6 @@
 # Spindle-Rust
 
-[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](.)
+[![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)](.)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
 A Rust implementation of the [SPINdle](http://spindle.data61.csiro.au/) defeasible logic reasoning engine.
@@ -101,7 +101,8 @@ let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
 theory.add_superiority(&r2, &r1);
 
 // Reason
-let conclusions = theory.reason();
+use spindle_core::reason::reason;
+let conclusions = reason(&theory);
 ```
 
 ## WebAssembly Usage
@@ -162,23 +163,30 @@ const abduce = spindle.abduce("flies", 3);
 ## Crate Structure
 
 - `spindle-core` - Core reasoning engine
-  - `reason` - Standard DL(d) forward chaining
+  - `reason/` - Standard DL(d) forward chaining with `Reasoner` trait
+  - `pipeline/` - Composable `PipelineStage` stages (validate, temporal, wildcard, ground)
+  - `query/` - Query operators with `QueryOperator` trait (what-if, why-not, abduction)
+  - `explanation/` - Proof trees with `ExplanationFormatter` trait (natural language, JSON, JSON-LD, DOT)
+  - `analysis/` - Theory analysis (conflicts, validation, superiority suggestions)
   - `temporal` - Allen interval algebra
   - `grounding` - Datalog-style variable grounding
-  - `explanation` - Proof trees and explanations
   - `trust` - Trust-weighted reasoning
-  - `query` - What-if, why-not, abduction operators
-- `spindle-parser` - SPL format parsers
+- `spindle-parser` - SPL format parser
+  - `spl/` - Lexer, expression dispatch, literal/rule/metadata handlers
 - `spindle-cli` - Command-line interface
 - `spindle-wasm` - WebAssembly bindings for JavaScript/TypeScript
 
 ## Testing
 
-830 tests covering:
+1,241 tests covering:
 - Core reasoning (facts, rules, conflicts, superiority)
 - Edge cases (cycles, empty theories, defeaters)
 - Stress tests (long chains, wide theories)
 - Query operators (what-if, why-not, abduction)
+- Property-based tests (proptest)
+- Pipeline integration tests
+- Regression tests for known bugs
+- Golden explanation tests
 
 ```bash
 cargo test

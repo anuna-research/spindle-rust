@@ -136,10 +136,10 @@ Shows the proof tree detailing how the reasoning engine derived the conclusion.
 Output:
 ```
 Explanation for -flies:
-  -flies ← [defeasible] r3: penguin => -flies
+  -flies ← [defeasible] r3: penguin -> -flies
     penguin ← [fact]
   Blocked alternatives:
-    r1: bird => flies (defeated by r3 via superiority)
+    r1: bird -> flies (defeated by r3 via superiority)
   Conflict resolutions:
     r3 > r1 (superiority)
 ```
@@ -160,9 +160,9 @@ Lists the blocking rules and the reasons they prevent the literal from being der
 Output:
 ```
 Why not flies?
-  Rule r1: bird => flies
+  Rule r1: bird -> flies
     Status: Defeated
-    Defeated by: r3 (penguin => -flies) via superiority r3 > r1
+    Defeated by: r3 (penguin -> -flies) via superiority r3 > r1
 ```
 
 Possible blocking reasons:

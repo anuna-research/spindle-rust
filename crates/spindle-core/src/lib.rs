@@ -34,12 +34,13 @@
 //! theory.add_superiority(&r2, &r1);
 //!
 //! // Reason and get conclusions
-//! let conclusions = theory.reason();
+//! let conclusions = reason(&theory);
 //! ```
 
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod analysis;
 pub mod claims;
 pub mod conclusion;
 pub mod error;
@@ -70,9 +71,13 @@ pub mod prelude {
     };
     pub use crate::literal::{Literal, LiteralName};
     pub use crate::mode::Mode;
-    pub use crate::pipeline::{PipelineResult, PrepareOptions};
+    pub use crate::pipeline::{
+        Pipeline, PipelineBuilder, PipelineContext, PipelineResult, PipelineStage, PrepareOptions,
+    };
     pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
-    pub use crate::reason::{reason, reason_with_options};
+    pub use crate::reason::{
+        Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
+    };
     pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
     pub use crate::temporal::{Temporal, TimePoint};

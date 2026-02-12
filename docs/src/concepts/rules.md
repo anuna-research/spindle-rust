@@ -2,40 +2,25 @@
 
 Spindle supports four types of rules, each with different semantics for how conclusions are drawn.
 
-## Facts (`>>`)
+## Facts (`given`)
 
 Facts are unconditional truths. They have no body (antecedent) and are always true.
 
-**SPL:**
-```lisp
-f1: >> bird
-f2: >> penguin
-f3: >> -guilty    # Negated fact
-```
-
-**SPL:**
 ```lisp
 (given bird)
 (given penguin)
-(given (not guilty))
+(given (not guilty))    ; Negated fact
 ```
 
 Facts produce **definite conclusions** (`+D`) that cannot be defeated.
 
-## Strict Rules (`->`)
+## Strict Rules (`always`)
 
 Strict rules express necessary implications. If the body is true, the head **must** be true.
 
-**SPL:**
 ```lisp
-r1: penguin -> bird        # All penguins are birds
-r2: human, mortal -> dies  # All mortal humans die
-```
-
-**SPL:**
-```lisp
-(always r1 penguin bird)
-(always r2 (and human mortal) dies)
+(always r1 penguin bird)              ; All penguins are birds
+(always r2 (and human mortal) dies)   ; All mortal humans die
 ```
 
 Strict rules produce **definite conclusions** (`+D`). They cannot be defeated by defeasible rules.
@@ -43,24 +28,17 @@ Strict rules produce **definite conclusions** (`+D`). They cannot be defeated by
 ### When to Use Strict Rules
 
 Use strict rules for:
-- Definitional relationships (`penguin -> bird`)
-- Logical necessities (`p, p->q -> q`)
+- Definitional relationships (penguins are birds)
+- Logical necessities (modus ponens)
 - Constraints that have no exceptions
 
-## Defeasible Rules (`=>`)
+## Defeasible Rules (`normally`)
 
 Defeasible rules express typical or default behavior that may have exceptions.
 
-**SPL:**
 ```lisp
-r1: bird => flies           # Birds typically fly
-r2: student => has_loans    # Students typically have loans
-```
-
-**SPL:**
-```lisp
-(normally r1 bird flies)
-(normally r2 student has_loans)
+(normally r1 bird flies)            ; Birds typically fly
+(normally r2 student has-loans)     ; Students typically have loans
 ```
 
 Defeasible rules produce **defeasible conclusions** (`+d`) that can be defeated by:
@@ -75,33 +53,27 @@ Use defeasible rules for:
 - Typical properties
 - Rules of thumb
 
-## Defeaters (`~>`)
+## Defeaters (`except`)
 
 Defeaters are special rules that **block** conclusions without proving anything themselves.
 
-**SPL:**
 ```lisp
-d1: broken_wing ~> flies    # A broken wing blocks "flies"
-```
-
-**SPL:**
-```lisp
-(except d1 broken_wing flies)
+(except d1 broken-wing flies)    ; A broken wing blocks "flies"
 ```
 
 ### Defeater vs. Defeasible Rule
 
 ```lisp
-# Defeasible rule: proves -flies
-r1: penguin => -flies
+; Defeasible rule: proves (not flies)
+(normally r1 penguin (not flies))
 
-# Defeater: only blocks flies, doesn't prove -flies
-d1: sick ~> flies
+; Defeater: only blocks flies, doesn't prove (not flies)
+(except d1 sick flies)
 ```
 
 The difference:
-- `r1` can prove `-flies` if its body is satisfied
-- `d1` can only block `flies`, it never proves `-flies`
+- `r1` can prove `(not flies)` if its body is satisfied
+- `d1` can only block `flies`, it never proves `(not flies)`
 
 ### When to Use Defeaters
 
@@ -116,23 +88,18 @@ Rule bodies can contain:
 
 ### Single Literal
 ```lisp
-r1: bird => flies
+(normally r1 bird flies)
 ```
 
 ### Multiple Literals (Conjunction)
 ```lisp
-r1: bird, healthy => flies
-r2: student, employed => busy
-```
-
-**SPL:**
-```lisp
 (normally r1 (and bird healthy) flies)
+(normally r2 (and student employed) busy)
 ```
 
 ### Negated Literals
 ```lisp
-r1: bird, -penguin => flies   # Non-penguin birds fly
+(normally r1 (and bird (not penguin)) flies)   ; Non-penguin birds fly
 ```
 
 ## Rule Heads (Consequents)
@@ -141,27 +108,22 @@ Rule heads are single literals that can be:
 
 ### Positive
 ```lisp
-r1: bird => flies
+(normally r1 bird flies)
 ```
 
 ### Negated
 ```lisp
-r1: penguin => -flies
+(normally r1 penguin (not flies))
 ```
 
 ## Rule Labels
 
 Every rule has a label (identifier) used for:
-- Superiority relations (`r2 > r1`)
+- Superiority relations
 - Explanations
 - Debugging
 
-**SPL:** Labels are required and appear before the colon:
-```lisp
-my_rule: bird => flies
-```
-
-**SPL:** Labels are optional (auto-generated if omitted):
+Labels are optional (auto-generated if omitted):
 ```lisp
 (normally r1 bird flies)      ; labeled r1
 (normally bird flies)         ; auto-labeled
@@ -169,9 +131,9 @@ my_rule: bird => flies
 
 ## Summary
 
-| Rule Type | Symbol | Conclusion | Can be Defeated? |
-|-----------|--------|------------|------------------|
-| Fact | `>>` | +D | No |
-| Strict | `->` | +D | No |
-| Defeasible | `=>` | +d | Yes |
-| Defeater | `~>` | None (blocks only) | N/A |
+| Rule Type | SPL Keyword | Conclusion | Can be Defeated? |
+|-----------|-------------|------------|------------------|
+| Fact | `given` | +D | No |
+| Strict | `always` | +D | No |
+| Defeasible | `normally` | +d | Yes |
+| Defeater | `except` | None (blocks only) | N/A |
