@@ -41,12 +41,12 @@ The core types are:
 
 A proof tree reads from conclusion down to facts. At each node, the `proof_step` tells you which rule was used, and the `body_proofs` within that step give you the sub-trees for each premise.
 
-For example, given a theory where `penguin` is a fact, `penguin -> bird` is strict, and `bird => flies` is defeasible, the proof tree for `flies` would look like:
+For example, given a theory where `penguin` is a fact, `(always s1 penguin bird)` is strict, and `(normally r1 bird flies)` is defeasible, the proof tree for `flies` would look like:
 
 ```
-flies [defeasible, r1: bird => flies]
+flies [defeasible, r1: bird -> flies]
   bird [definite, s1: penguin -> bird]
-    penguin [definite, f1: >> penguin]
+    penguin [definite, f1: penguin]
 ```
 
 Each level corresponds to a `ProofNode` whose `proof_step.body_proofs` contains the children.
@@ -131,7 +131,7 @@ Produces a structured JSON value with nested proof trees:
     "proof_step": {
       "rule_label": "r2",
       "rule_type": "defeasible",
-      "rule_text": "penguin => ~flies",
+      "rule_text": "penguin -> ~flies",
       "body_proofs": [
         {
           "literal": "penguin",
@@ -139,7 +139,7 @@ Produces a structured JSON value with nested proof trees:
           "proof_step": {
             "rule_label": "f1",
             "rule_type": "fact",
-            "rule_text": ">> penguin",
+            "rule_text": "penguin",
             "body_proofs": []
           }
         }
@@ -264,7 +264,7 @@ let annots = Annotations::with_entries(vec![
     ("confidence", "0.85"),
 ]);
 
-let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom => diagnosis")
+let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom -> diagnosis")
     .with_annotations(annots);
 ```
 
@@ -367,11 +367,11 @@ use spindle_core::literal::Literal;
 use spindle_core::rule::RuleType;
 
 // Build a proof tree bottom-up
-let fact_step = ProofStep::new("f1", RuleType::Fact, ">> penguin");
+let fact_step = ProofStep::new("f1", RuleType::Fact, "penguin");
 let fact_node = ProofNode::new(Literal::simple("penguin"), DerivationType::Definite)
     .with_proof_step(fact_step);
 
-let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin => ~flies")
+let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin -> ~flies")
     .with_body_proofs(vec![fact_node]);
 let conclusion_node = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
     .with_proof_step(rule_step);

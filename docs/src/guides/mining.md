@@ -448,7 +448,7 @@ let result = mine_rules(&log, 1, 0.5);
 
 // Discovered rules describe the standard ticket workflow
 for lr in &result.rules {
-    println!("{}: {} => {}  (support={}, confidence={:.0}%)",
+    println!("{}: {} -> {}  (support={}, confidence={:.0}%)",
         lr.rule.label,
         lr.rule.body.iter().map(|l| l.name()).collect::<Vec<_>>().join(", "),
         lr.rule.head.iter().map(|l| l.name()).collect::<Vec<_>>().join(", "),

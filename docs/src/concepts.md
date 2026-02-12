@@ -23,11 +23,11 @@ The motivating example for defeasible logic:
 Classical logic produces a contradiction. Defeasible logic resolves it by recognizing that "penguins don't fly" is a more specific rule that should override "birds fly."
 
 ```lisp
-f1: >> bird
-f2: >> penguin
-r1: bird => flies
-r2: penguin => -flies
-r2 > r1
+(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 ```
 
 Result: Tweety doesn't fly.

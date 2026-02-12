@@ -193,7 +193,7 @@ Abduction considers superiority:
 ```
 
 Abducing `flies` might return:
-- `["bird", "healthy"]` with a rule `r3: bird, healthy => flies` where `r3 > r2`
+- `["bird", "healthy"]` with a rule `(normally r3 (and bird healthy) flies)` where r3 > r2
 - Or indicate that `flies` cannot be achieved given `penguin`
 
 ### Use Cases
@@ -242,11 +242,11 @@ import { Spindle } from 'spindle-wasm';
 
 const spindle = new Spindle();
 spindle.parseSpl(`
-  f1: >> bird
-  f2: >> penguin
-  r1: bird => flies
-  r2: penguin => ~flies
-  r2 > r1
+  (given bird)
+  (given penguin)
+  (normally r1 bird flies)
+  (normally r2 penguin (not flies))
+  (prefer r2 r1)
 `);
 
 // What-if

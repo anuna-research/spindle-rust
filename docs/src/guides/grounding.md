@@ -81,8 +81,8 @@ Apply substitutions to create ground instances:
 
 ```lisp
 ; Ground instances of r1
-r1_1: parent(alice, bob) => ancestor(alice, bob)
-r1_2: parent(bob, charlie) => ancestor(bob, charlie)
+(normally r1_1 (parent alice bob) (ancestor alice bob))
+(normally r1_2 (parent bob charlie) (ancestor bob charlie))
 ```
 
 ### Step 4: Forward Chaining
@@ -183,17 +183,18 @@ Tips:
 - Use specific predicates to reduce matching
 - Add explicit superiority where grounded conflicts should resolve to one side
 
-## SPL Limitations
+## Variables vs. Manual Enumeration
 
-The SPL format does **not** support variables. Use SPL for first-order rules:
+SPL supports variables, so you can write a single rule:
 
 ```lisp
-# SPL - no variables, must enumerate manually
-r1: parent_alice_bob => ancestor_alice_bob
-r2: parent_bob_charlie => ancestor_bob_charlie
+; Single rule with variables
+(normally r1 (parent ?x ?y) (ancestor ?x ?y))
 ```
 
+Without variables, you would need to enumerate all ground instances manually:
+
 ```lisp
-; SPL - single rule with variables
-(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+(normally r1 (parent alice bob) (ancestor alice bob))
+(normally r2 (parent bob charlie) (ancestor bob charlie))
 ```
