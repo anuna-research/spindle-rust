@@ -15,9 +15,11 @@ use crate::rule::Rule;
 /// (e.g. `flies` vs `~flies`).
 pub fn is_conflicting(a: &Rule, b: &Rule) -> bool {
     a.head.iter().any(|ha| {
-        b.head
-            .iter()
-            .any(|hb| ha.name() == hb.name() && ha.is_negated() != hb.is_negated())
+        b.head.iter().any(|hb| {
+            ha.name() == hb.name()
+                && ha.predicate_ids() == hb.predicate_ids()
+                && ha.is_negated() != hb.is_negated()
+        })
     })
 }
 
@@ -92,6 +94,30 @@ mod tests {
         let a = Rule::defeasible("r1", vec![Literal::simple("x")], Literal::simple("p"));
         let b = Rule::defeasible("r2", vec![Literal::simple("y")], Literal::negated("p"));
         assert_eq!(is_conflicting(&a, &b), is_conflicting(&b, &a));
+    }
+
+    #[test]
+    fn test_not_conflicting_different_predicate_args() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // p(a) vs ~p(b) should NOT conflict — different ground atoms
+        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head_b = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
+        let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
+        assert!(!is_conflicting(&a, &b));
+    }
+
+    #[test]
+    fn test_conflicting_same_predicate_args() {
+        use crate::mode::Mode;
+        use crate::temporal::Temporal;
+        // p(a) vs ~p(a) SHOULD conflict — same ground atom, opposite negation
+        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head_b = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
+        let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
+        assert!(is_conflicting(&a, &b));
     }
 
     #[test]
