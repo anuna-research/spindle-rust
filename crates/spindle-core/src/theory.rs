@@ -384,7 +384,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_fact("bird");
         theory.add_defeasible_rule(&["bird"], "flies");
-        let conclusions = crate::reason::reason(&theory).unwrap();
+        let conclusions = theory.reason().unwrap();
         assert!(!conclusions.is_empty());
     }
 

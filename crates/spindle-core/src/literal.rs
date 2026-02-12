@@ -16,26 +16,20 @@ use crate::intern::{LiteralId, SymbolId, intern, resolve};
 use crate::mode::Mode;
 use crate::temporal::Temporal;
 
-/// A newtype wrapping `SymbolId` that represents a literal's functor name.
-///
-/// This prevents accidental misuse of a raw `SymbolId` (which could be a
-/// predicate argument, a mode name, or any other interned string) in a
-/// position that expects a literal name.  Conversion to/from `SymbolId` is
-/// available via the `From` implementations when crossing API boundaries
-/// (e.g. grounding substitutions or index keys).
+/// A newtype wrapping `SymbolId` for internal literal-name storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(transparent)]
-pub struct LiteralName(pub(crate) SymbolId);
+pub struct InternedLiteralName(pub(crate) SymbolId);
 
-impl LiteralName {
+impl InternedLiteralName {
     /// The empty / default literal name (wraps `SymbolId::EMPTY`).
-    pub const EMPTY: LiteralName = LiteralName(SymbolId::EMPTY);
+    pub const EMPTY: InternedLiteralName = InternedLiteralName(SymbolId::EMPTY);
 
-    /// Create a `LiteralName` by interning the given string.
+    /// Create an interned literal name from a string.
     #[inline]
     pub fn intern(name: &str) -> Self {
-        LiteralName(intern(name))
+        InternedLiteralName(intern(name))
     }
 
     /// Resolve this name back to a string slice.
@@ -51,73 +45,75 @@ impl LiteralName {
     }
 }
 
-impl From<SymbolId> for LiteralName {
+impl From<SymbolId> for InternedLiteralName {
     #[inline]
     fn from(id: SymbolId) -> Self {
-        LiteralName(id)
+        InternedLiteralName(id)
     }
 }
 
-impl From<LiteralName> for SymbolId {
+impl From<InternedLiteralName> for SymbolId {
     #[inline]
-    fn from(name: LiteralName) -> Self {
+    fn from(name: InternedLiteralName) -> Self {
         name.0
     }
 }
 
-impl From<&str> for LiteralName {
-    /// Create a `LiteralName` by interning the given string.
+impl From<&str> for InternedLiteralName {
+    /// Create an interned literal name from a string.
     #[inline]
     fn from(s: &str) -> Self {
-        LiteralName::intern(s)
+        InternedLiteralName::intern(s)
     }
 }
 
-impl From<String> for LiteralName {
-    /// Create a `LiteralName` by interning the given string.
+impl From<String> for InternedLiteralName {
+    /// Create an interned literal name from a string.
     #[inline]
     fn from(s: String) -> Self {
-        LiteralName::intern(&s)
+        InternedLiteralName::intern(&s)
     }
 }
 
-impl AsRef<str> for LiteralName {
+impl AsRef<str> for InternedLiteralName {
     #[inline]
     fn as_ref(&self) -> &str {
         self.resolve()
     }
 }
 
-impl PartialEq<str> for LiteralName {
+impl PartialEq<str> for InternedLiteralName {
     #[inline]
     fn eq(&self, other: &str) -> bool {
         self.resolve() == other
     }
 }
 
-impl PartialEq<&str> for LiteralName {
+impl PartialEq<&str> for InternedLiteralName {
     #[inline]
     fn eq(&self, other: &&str) -> bool {
         self.resolve() == *other
     }
 }
 
-impl PartialEq<String> for LiteralName {
+impl PartialEq<String> for InternedLiteralName {
     #[inline]
     fn eq(&self, other: &String) -> bool {
         self.resolve() == other.as_str()
     }
 }
 
-impl std::fmt::Display for LiteralName {
+impl std::fmt::Display for InternedLiteralName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.resolve())
     }
 }
 
-/// Type alias kept for backward compatibility with code that expects a `String`
-/// representation of a literal name.
-pub type LiteralNameString = String;
+/// Public literal-name type (kept source-compatible with pre-refactor API).
+pub type LiteralName = String;
+
+/// Backward-compatible alias for callers that used this name.
+pub type LiteralNameString = LiteralName;
 
 /// A literal in defeasible logic
 ///
@@ -134,7 +130,7 @@ pub type LiteralNameString = String;
 #[derive(Debug, Clone, Default)]
 pub struct Literal {
     /// The interned name of the literal (e.g., "flies", "bird")
-    name_id: LiteralName,
+    name_id: InternedLiteralName,
     /// Whether this literal is negated
     pub negation: bool,
     /// Modal operator (if any)
@@ -166,7 +162,7 @@ impl Literal {
     /// Create a simple positive literal
     pub fn simple(name: impl AsRef<str>) -> Self {
         Self {
-            name_id: LiteralName::intern(name.as_ref()),
+            name_id: InternedLiteralName::intern(name.as_ref()),
             negation: false,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
@@ -177,7 +173,7 @@ impl Literal {
     /// Create a negated literal
     pub fn negated(name: impl AsRef<str>) -> Self {
         Self {
-            name_id: LiteralName::intern(name.as_ref()),
+            name_id: InternedLiteralName::intern(name.as_ref()),
             negation: true,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
@@ -194,7 +190,7 @@ impl Literal {
         predicates: Vec<String>,
     ) -> Self {
         Self {
-            name_id: LiteralName::intern(name.as_ref()),
+            name_id: InternedLiteralName::intern(name.as_ref()),
             negation,
             mode,
             temporal,
@@ -207,11 +203,11 @@ impl Literal {
     /// This is an optimized constructor for use when IDs are already
     /// available, such as during grounding operations.
     ///
-    /// Accepts anything convertible to `LiteralName` (including `SymbolId`)
-    /// for the functor name.
+    /// Accepts anything convertible to `InternedLiteralName` (including
+    /// `SymbolId`) for the functor name.
     #[inline]
     pub fn from_ids(
-        name_id: impl Into<LiteralName>,
+        name_id: impl Into<InternedLiteralName>,
         negation: bool,
         mode: Mode,
         temporal: Temporal,
@@ -248,9 +244,17 @@ impl Literal {
         self.name_id.resolve()
     }
 
-    /// Get the interned `LiteralName` for this literal.
+    /// Get the public literal-name representation.
+    ///
+    /// This allocates a `String` and is kept for source compatibility.
     #[inline]
     pub fn literal_name(&self) -> LiteralName {
+        self.name().to_string()
+    }
+
+    /// Get the interned name wrapper (non-allocating).
+    #[inline]
+    pub fn interned_name(&self) -> InternedLiteralName {
         self.name_id
     }
 
@@ -679,5 +683,20 @@ mod tests {
         let display = format!("{temporal}");
         assert!(display.contains("valid"));
         assert!(display.contains("["));
+    }
+
+    #[test]
+    fn test_literal_name_source_compatibility() {
+        let name: LiteralName = "bird".to_string();
+        let copy: String = name.clone();
+        assert_eq!(name, "bird");
+        assert_eq!(copy, "bird");
+    }
+
+    #[test]
+    fn test_literal_name_method_returns_string() {
+        let lit = Literal::simple("bird");
+        let name: LiteralName = lit.literal_name();
+        assert_eq!(name, "bird".to_string());
     }
 }
