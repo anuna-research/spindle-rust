@@ -17,7 +17,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{analysis_key, analysis_key_unsigned, Severity, ValidationDiagnostic};
+use super::{Severity, ValidationDiagnostic, analysis_key, analysis_key_unsigned};
 use crate::rule::{Rule, RuleType};
 
 /// Validate a set of rules and produce diagnostics.
@@ -312,8 +312,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // Body: p(a), ~p(b) — different ground atoms, NOT tautological
-        let pos = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let neg = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let pos = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let neg = Literal::new(
+            "p",
+            true,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["b".into()],
+        );
         let rules = vec![Rule::defeasible("r1", vec![pos, neg], Literal::simple("q"))];
         let diags = validate_theory(&rules);
         assert!(
@@ -328,8 +340,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // Body: p(a), ~p(a) — same ground atom, IS tautological
-        let pos = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let neg = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let pos = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let neg = Literal::new(
+            "p",
+            true,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
         let rules = vec![Rule::defeasible("r1", vec![pos, neg], Literal::simple("q"))];
         let diags = validate_theory(&rules);
         assert!(codes(&diags).contains(&"W002"));
@@ -374,8 +398,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // Strict p(a) should NOT shadow defeasible p(b)
-        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let head_b = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let head_a = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let head_b = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["b".into()],
+        );
         let rules = vec![
             Rule::strict("s1", vec![Literal::simple("x")], head_a),
             Rule::defeasible("r1", vec![Literal::simple("y")], head_b),
@@ -393,8 +429,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // Strict p(a) SHOULD shadow defeasible p(a)
-        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let head_b = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head_a = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let head_b = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
         let rules = vec![
             Rule::strict("s1", vec![Literal::simple("x")], head_a),
             Rule::defeasible("r1", vec![Literal::simple("x")], head_b),
@@ -427,8 +475,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // Only p(b) is produced; rule requiring p(a) SHOULD be unreachable
-        let head = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["b".into()]);
-        let body = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["b".into()],
+        );
+        let body = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
         let rules = vec![
             Rule::fact("f1", head),
             Rule::defeasible("r1", vec![body], Literal::simple("q")),
@@ -446,8 +506,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // p(a) is produced; rule requiring p(a) should NOT be flagged
-        let head = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let body = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let body = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
         let rules = vec![
             Rule::fact("f1", head),
             Rule::defeasible("r1", vec![body], Literal::simple("q")),
@@ -496,25 +568,61 @@ mod tests {
             // Fact: employed(alice, acme)
             Rule::fact(
                 "f1",
-                Literal::new("employed", false, Mode::empty(), Temporal::empty(), vec!["alice".into(), "acme".into()]),
+                Literal::new(
+                    "employed",
+                    false,
+                    Mode::empty(),
+                    Temporal::empty(),
+                    vec!["alice".into(), "acme".into()],
+                ),
             ),
             // Fact: employed(bob, globex)
             Rule::fact(
                 "f2",
-                Literal::new("employed", false, Mode::empty(), Temporal::empty(), vec!["bob".into(), "globex".into()]),
+                Literal::new(
+                    "employed",
+                    false,
+                    Mode::empty(),
+                    Temporal::empty(),
+                    vec!["bob".into(), "globex".into()],
+                ),
             ),
             // O(pay(acme, alice)) if employed(alice, acme)
             Rule::defeasible(
                 "r1",
-                vec![Literal::new("employed", false, Mode::empty(), Temporal::empty(), vec!["alice".into(), "acme".into()])],
-                Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec!["acme".into(), "alice".into()]),
+                vec![Literal::new(
+                    "employed",
+                    false,
+                    Mode::empty(),
+                    Temporal::empty(),
+                    vec!["alice".into(), "acme".into()],
+                )],
+                Literal::new(
+                    "pay",
+                    false,
+                    Mode::obligation(),
+                    Temporal::empty(),
+                    vec!["acme".into(), "alice".into()],
+                ),
             ),
             // ~O(pay(acme, alice))@evening if complaint(alice)@morning
             // This should NOT conflict with r1 (different temporal)
             Rule::defeasible(
                 "r2",
-                vec![Literal::new("complaint", false, Mode::empty(), t_morning, vec!["alice".into()])],
-                Literal::new("pay", true, Mode::obligation(), t_evening, vec!["acme".into(), "alice".into()]),
+                vec![Literal::new(
+                    "complaint",
+                    false,
+                    Mode::empty(),
+                    t_morning,
+                    vec!["alice".into()],
+                )],
+                Literal::new(
+                    "pay",
+                    true,
+                    Mode::obligation(),
+                    t_evening,
+                    vec!["acme".into(), "alice".into()],
+                ),
             ),
         ];
         let diags = validate_theory(&rules);

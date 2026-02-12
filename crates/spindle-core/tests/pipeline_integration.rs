@@ -419,8 +419,8 @@ fn pipeline_populates_grounding_metadata() {
         });
     assert_eq!(
         performed,
-        Some(true),
-        "grounding_performed metadata should be true"
+        Some(false),
+        "grounding_performed metadata should be false for a ground theory"
     );
 
     // grounding_had_variables should be false for ground fixtures

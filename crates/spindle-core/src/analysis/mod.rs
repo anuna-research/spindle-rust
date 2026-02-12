@@ -50,7 +50,9 @@ pub(crate) fn analysis_key(lit: &Literal) -> AnalysisKey<'_> {
 /// Same as [`analysis_key`] but omits negation, for detecting p/~p pairs
 /// that truly refer to the same ground atom.
 #[inline]
-pub(crate) fn analysis_key_unsigned(lit: &Literal) -> (&'static str, &[SymbolId], &Mode, &Temporal) {
+pub(crate) fn analysis_key_unsigned(
+    lit: &Literal,
+) -> (&'static str, &[SymbolId], &Mode, &Temporal) {
     (lit.name(), lit.predicate_ids(), &lit.mode, &lit.temporal)
 }
 

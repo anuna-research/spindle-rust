@@ -6,7 +6,7 @@
 //! This module is distinct from the trace-level conflict detection in
 //! `mining.rs` which operates on `EventLog` + `PetriNet`.
 
-use super::{analysis_key_unsigned, ConflictKind, ConflictReport};
+use super::{ConflictKind, ConflictReport, analysis_key_unsigned};
 use crate::literal::Literal;
 use crate::rule::Rule;
 
@@ -119,8 +119,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // p(a) vs ~p(b) should NOT conflict — different ground atoms
-        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let head_b = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["b".into()]);
+        let head_a = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let head_b = Literal::new(
+            "p",
+            true,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["b".into()],
+        );
         let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
         let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
         assert!(!is_conflicting(&a, &b));
@@ -131,8 +143,20 @@ mod tests {
         use crate::mode::Mode;
         use crate::temporal::Temporal;
         // p(a) vs ~p(a) SHOULD conflict — same ground atom, opposite negation
-        let head_a = Literal::new("p", false, Mode::empty(), Temporal::empty(), vec!["a".into()]);
-        let head_b = Literal::new("p", true, Mode::empty(), Temporal::empty(), vec!["a".into()]);
+        let head_a = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
+        let head_b = Literal::new(
+            "p",
+            true,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["a".into()],
+        );
         let a = Rule::defeasible("r1", vec![Literal::simple("x")], head_a);
         let b = Rule::defeasible("r2", vec![Literal::simple("y")], head_b);
         assert!(is_conflicting(&a, &b));
