@@ -10,7 +10,6 @@
 //!
 //! | Code  | Severity | Description                                        |
 //! |-------|----------|----------------------------------------------------|
-//! | W001  | Warning  | Non-fact rule with empty body (never fires)         |
 //! | W002  | Warning  | Tautological body (contains `p` and `~p`)           |
 //! | W003  | Warning  | Defeasible rule shadowed by strict rule (same head) |
 //! | W004  | Warning  | Unreachable rule (body literal never produced)      |
@@ -49,7 +48,6 @@ where
     let mut diagnostics = Vec::new();
 
     check_duplicate_labels(&rules, &mut diagnostics);
-    check_empty_body_non_facts(&rules, &mut diagnostics);
     check_tautological_bodies(&rules, &mut diagnostics);
     check_shadowed_rules(&rules, &mut diagnostics);
     check_unreachable_rules(&rules, &mut diagnostics);
@@ -77,27 +75,6 @@ fn check_duplicate_labels(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>
                      each rule must have a unique label."
                 ),
                 rules: vec![label.to_string()],
-            });
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// W001: Empty-body non-fact rules
-// ---------------------------------------------------------------------------
-
-fn check_empty_body_non_facts(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic>) {
-    for rule in rules {
-        if rule.body.is_empty() && rule.rule_type != RuleType::Fact {
-            diags.push(ValidationDiagnostic {
-                severity: Severity::Warning,
-                code: "W001",
-                message: format!(
-                    "Rule '{}' has an empty body but is not a fact; \
-                     it will never fire in the standard reasoner.",
-                    rule.label,
-                ),
-                rules: vec![rule.label.clone()],
             });
         }
     }
@@ -253,24 +230,6 @@ mod tests {
             "expected no diagnostics, got: {:?}",
             diags
         );
-    }
-
-    #[test]
-    fn w001_empty_body_non_fact() {
-        let rules = vec![Rule::defeasible(
-            "r1",
-            Vec::<Literal>::new(),
-            Literal::simple("flies"),
-        )];
-        let diags = validate_theory(&rules);
-        assert!(codes(&diags).contains(&"W001"));
-    }
-
-    #[test]
-    fn w001_fact_is_allowed() {
-        let rules = vec![Rule::fact("f1", Literal::simple("bird"))];
-        let diags = validate_theory(&rules);
-        assert!(!codes(&diags).contains(&"W001"));
     }
 
     #[test]
