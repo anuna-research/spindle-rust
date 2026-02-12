@@ -69,66 +69,76 @@ impl LiteralBitSet {
 
 /// All mutable state for a single reasoning pass.
 ///
-/// Consolidates the six `let mut` bindings that were previously scattered
+/// Consolidates the mutable bindings that were previously scattered
 /// across `reason_prepared()` into a single struct. This makes the data-flow
 /// dependencies between phases explicit and enables phase-isolated testing.
 ///
+/// # Phases
+///
+/// - **Phase 1 (Definite)**: Uses `worklist`, `enqueued`, `definite_proven`,
+///   and `definite_body_remaining` to compute +D via strict-only forward chaining.
+/// - **Phase 2 (Defeasible)**: Uses `defeasible_proven`, `defeasible_disproven`,
+///   `defeasible_body_remaining`, and `rule_discarded` with a separate worklist
+///   to compute +d/-d via a fixed-point loop with ambiguity blocking.
+/// - **Phase 3 (Negatives)**: Emits -D and -d for all unproven literals.
+///
 /// # Invariants
 ///
-/// - **Monotonic proven sets**: once a `LitId` is inserted into
-///   `definite_proven` or `defeasible_proven`, it is never removed.
-/// - **Subset invariant**: `definite_proven` is always a subset of
-///   `defeasible_proven`. Every code path that inserts into `definite_proven`
-///   must also insert into `defeasible_proven`. Use [`mark_definitely_proven`]
-///   to enforce this atomically.
-///
-/// [`mark_definitely_proven`]: ReasoningState::mark_definitely_proven
+/// - **Monotonic proven sets**: once a `LitId` is inserted into any proven/disproven
+///   set, it is never removed.
 pub(crate) struct ReasoningState<'a> {
-    /// Worklist for BFS forward chaining.
+    /// Phase 1 worklist for BFS forward chaining (strict rules only).
     pub(crate) worklist: VecDeque<Literal>,
+
+    /// Tracks which `LitId` values have been enqueued in the Phase 1 worklist
+    /// to prevent duplicate processing.
+    pub(crate) enqueued: LiteralBitSet,
 
     /// Literals proven via facts or strict rules (+D).
     pub(crate) definite_proven: LiteralBitSet,
 
-    /// Literals proven via any rule type (+d). Superset of `definite_proven`.
+    /// Literals proven defeasibly (+d). Populated in Phase 2.
     pub(crate) defeasible_proven: LiteralBitSet,
 
-    /// Per-rule counter: how many body literals remain unsatisfied.
-    /// Keyed by rule label (borrowed from the theory).
-    pub(crate) body_remaining: FxHashMap<&'a str, usize>,
+    /// Literals disproven defeasibly (-d). Populated in Phase 2.
+    pub(crate) defeasible_disproven: LiteralBitSet,
+
+    /// Phase 1 per-rule body counter (strict rules only).
+    pub(crate) definite_body_remaining: FxHashMap<&'a str, usize>,
+
+    /// Phase 2 per-rule body counter (all rule types).
+    pub(crate) defeasible_body_remaining: FxHashMap<&'a str, usize>,
+
+    /// Phase 2 per-rule tracking: has any body literal been proved -d?
+    pub(crate) rule_discarded: FxHashMap<&'a str, bool>,
 
     /// Accumulated conclusions.
     pub(crate) conclusions: Vec<Conclusion>,
-
-    /// Tracks which `LitId` values have been enqueued to prevent duplicate
-    /// processing in the worklist.
-    pub(crate) enqueued: LiteralBitSet,
 }
 
 impl<'a> ReasoningState<'a> {
     /// Construct initial state sized for the given theory.
     ///
-    /// All bitsets start empty, the worklist is empty, and `body_remaining`
-    /// is pre-allocated but not yet populated (that happens in Phase 1).
+    /// All bitsets start empty, the worklist is empty, and body_remaining maps
+    /// are pre-allocated but not yet populated (that happens in Phase 1 init).
     pub(crate) fn new(atom_count: usize, rule_count: usize, estimated_conclusions: usize) -> Self {
         Self {
             worklist: VecDeque::with_capacity(rule_count),
+            enqueued: LiteralBitSet::new(atom_count),
             definite_proven: LiteralBitSet::new(atom_count),
             defeasible_proven: LiteralBitSet::new(atom_count),
-            body_remaining: FxHashMap::with_capacity_and_hasher(rule_count, Default::default()),
+            defeasible_disproven: LiteralBitSet::new(atom_count),
+            definite_body_remaining: FxHashMap::with_capacity_and_hasher(
+                rule_count,
+                Default::default(),
+            ),
+            defeasible_body_remaining: FxHashMap::with_capacity_and_hasher(
+                rule_count,
+                Default::default(),
+            ),
+            rule_discarded: FxHashMap::with_capacity_and_hasher(rule_count, Default::default()),
             conclusions: Vec::with_capacity(estimated_conclusions),
-            enqueued: LiteralBitSet::new(atom_count),
         }
-    }
-
-    /// Mark a literal as definitely (and therefore defeasibly) proven.
-    ///
-    /// Maintains the invariant: `definite_proven` is a subset of
-    /// `defeasible_proven`.
-    #[inline]
-    pub(crate) fn mark_definitely_proven(&mut self, id: LitId) {
-        self.definite_proven.insert(id);
-        self.defeasible_proven.insert(id);
     }
 
     /// Check if a literal is definitely proven (+D).
@@ -137,19 +147,13 @@ impl<'a> ReasoningState<'a> {
         self.definite_proven.contains(id)
     }
 
-    /// Check if a literal is defeasibly proven (+d).
-    #[inline]
-    pub(crate) fn is_defeasibly_proven(&self, id: LitId) -> bool {
-        self.defeasible_proven.contains(id)
-    }
-
     /// Add a conclusion to the accumulated results.
     #[inline]
     pub(crate) fn add_conclusion(&mut self, conclusion: Conclusion) {
         self.conclusions.push(conclusion);
     }
 
-    /// Try to enqueue a literal into the worklist if not already enqueued.
+    /// Try to enqueue a literal into the Phase 1 worklist if not already enqueued.
     ///
     /// Returns `true` if the literal was enqueued (first time), `false` if
     /// it was already in the enqueued set.
@@ -163,7 +167,7 @@ impl<'a> ReasoningState<'a> {
         true
     }
 
-    /// Pop the next literal from the worklist, or `None` if empty.
+    /// Pop the next literal from the Phase 1 worklist, or `None` if empty.
     #[inline]
     pub(crate) fn drain_worklist(&mut self) -> Option<Literal> {
         self.worklist.pop_front()
@@ -238,21 +242,9 @@ mod tests {
         let state = ReasoningState::new(10, 5, 20);
         assert!(state.worklist.is_empty());
         assert!(state.conclusions.is_empty());
-        assert!(state.body_remaining.is_empty());
-    }
-
-    #[test]
-    fn test_mark_definitely_proven_maintains_subset_invariant() {
-        let mut state = ReasoningState::new(10, 5, 20);
-        let lit_id = LitId::new(AtomId::from_raw(3), false);
-
-        state.mark_definitely_proven(lit_id);
-
-        assert!(state.is_definitely_proven(lit_id));
-        assert!(
-            state.is_defeasibly_proven(lit_id),
-            "mark_definitely_proven must also set defeasible_proven"
-        );
+        assert!(state.definite_body_remaining.is_empty());
+        assert!(state.defeasible_body_remaining.is_empty());
+        assert!(state.rule_discarded.is_empty());
     }
 
     #[test]

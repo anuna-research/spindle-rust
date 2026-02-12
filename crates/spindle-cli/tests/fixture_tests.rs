@@ -171,3 +171,28 @@ fn fixture_14_diamond() {
 fn fixture_15_team_defeat() {
     run_fixture("15_team_defeat.spl");
 }
+
+#[test]
+fn fixture_16_two_phase() {
+    run_fixture("16_two_phase.spl");
+}
+
+#[test]
+fn fixture_17_negative_propagation() {
+    run_fixture("17_negative_propagation.spl");
+}
+
+#[test]
+fn fixture_18_cross_rule_superiority() {
+    run_fixture("18_cross_rule_superiority.spl");
+}
+
+#[test]
+fn fixture_19_defeater_superiority() {
+    run_fixture("19_defeater_superiority.spl");
+}
+
+#[test]
+fn fixture_20_conflicting_facts() {
+    run_fixture("20_conflicting_facts.spl");
+}

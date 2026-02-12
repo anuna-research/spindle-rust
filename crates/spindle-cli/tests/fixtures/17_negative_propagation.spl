@@ -1,0 +1,21 @@
+; Test: Negative conclusion propagation
+; Coverage: -d cascades through rule chains, discarding downstream rules
+
+; Chain: a => b => c
+; But b is contested by ~b with no superiority, so b is ambiguous.
+; Since -d b, the rule b => c is discarded, so -d c too.
+(given a)
+(given x)
+(normally r1 a b)
+(normally r2 x (not b))
+(normally r3 b c)
+
+; b is ambiguous (r1 vs r2, no superiority) => -d b, -d ~b
+; c depends on b, so r3 is discarded => -d c
+; EXPECT: +D a
+; EXPECT: +d a
+; EXPECT: +D x
+; EXPECT: +d x
+; EXPECT: -d b
+; EXPECT: -d ~b
+; EXPECT: -d c

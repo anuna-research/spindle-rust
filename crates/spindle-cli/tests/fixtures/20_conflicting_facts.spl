@@ -1,0 +1,12 @@
+; Test: Conflicting facts
+; Coverage: +D p and +D ~p blocks +d for both (condition 2 fails)
+
+(given p)
+(given (not p))
+
+; Both p and ~p are definitely provable (inconsistent theory).
+; But +d condition (2) requires -D complement, which fails for both.
+; EXPECT: +D p
+; EXPECT: +D ~p
+; EXPECT: -d p
+; EXPECT: -d ~p

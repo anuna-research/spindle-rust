@@ -1,0 +1,25 @@
+; Test: Defeater blocked by superiority
+; Coverage: rule superior to defeater can still prove its conclusion
+
+; r1 supports q, d1 is a defeater for ~q.
+; With r1 > d1, the defeater is overcome.
+(given p)
+(normally r1 p q)
+(except d1 p (not q))
+(prefer r1 d1)
+
+; r1 > d1, so q is provable despite the defeater
+; EXPECT: +D p
+; EXPECT: +d p
+; EXPECT: +d q
+
+; Without superiority, defeater blocks:
+(given m)
+(normally r2 m w)
+(except d2 m (not w))
+
+; No prefer => defeater blocks both w and ~w
+; EXPECT: +D m
+; EXPECT: +d m
+; EXPECT: -d w
+; EXPECT: -d ~w

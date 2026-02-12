@@ -167,14 +167,14 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
 /// This is the function that [`StandardReasoner`] delegates to.
 /// Orchestrates three phases:
 ///
-/// 1. **Fact Initialization** -- seed facts and empty-body rules into
-///    the worklist and proven sets.
-/// 2. **Forward Chaining** -- drain the worklist, firing rules whose
-///    bodies are fully satisfied.
+/// 1. **Fact Initialization + Strict Forward Chaining** -- seed facts and
+///    empty-body strict rules, then forward-chain strict rules only until
+///    all definite (+D) conclusions are computed.
+/// 2. **Defeasible Fixed-Point** -- compute +d and -d conclusions using
+///    SDL ambiguity blocking semantics with a worklist-based fixed-point loop.
 /// 3. **Negative Conclusions** -- emit `-D` and `-d` for all unproven
 ///    literals.
 pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>> {
-    // Obtain the theory reference with lifetime 'a (independent of &mut self).
     let theory = indexed.theory();
 
     // Pre-allocate state sized for the theory.
@@ -184,13 +184,13 @@ pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>
 
     let mut state = ReasoningState::new(atom_count, rule_count, estimated_size);
 
-    // Phase 1: Initialize facts, body_remaining, and empty-body rules
+    // Phase 1: Initialize facts and body_remaining counters
     facts::initialize_facts(theory, indexed, &mut state);
 
-    // Phase 2: Forward chaining
+    // Phase 1 continued: Forward chaining with strict rules only
     definite::forward_chain_strict(theory, indexed, &mut state);
 
-    // Phase 3: Compute negative conclusions
+    // Phase 2: Defeasible fixed-point loop + Phase 3: Negative conclusions
     defeasible::resolve_defeasible(theory, indexed, &mut state);
 
     Ok(state.conclusions)
@@ -719,8 +719,9 @@ mod tests {
     }
 
     #[test]
-    fn test_mutual_non_superiority_allows_both_conclusions() {
-        // Neither rule is superior - both defeasible conclusions may be derived
+    fn test_ambiguity_blocking_no_superiority() {
+        // SDL ambiguity blocking: conflicting defeasible rules with no superiority
+        // relation should block BOTH conclusions (neither is +d).
         let mut theory = Theory::new();
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q");
@@ -729,7 +730,6 @@ mod tests {
 
         let conclusions = reason(&theory).unwrap();
 
-        // Both q and ~q should be defeasibly provable without superiority
         let has_q = conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && c.literal.name() == "q"
@@ -742,12 +742,30 @@ mod tests {
         });
 
         assert!(
-            has_q,
-            "q should be defeasibly provable without superiority tie-breaking"
+            !has_q,
+            "q should NOT be defeasibly provable (ambiguity blocking)"
         );
         assert!(
-            has_not_q,
-            "~q should be defeasibly provable without superiority tie-breaking"
+            !has_not_q,
+            "~q should NOT be defeasibly provable (ambiguity blocking)"
+        );
+
+        // Both should be -d
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "-d q expected"
+        );
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+                    && c.literal.name() == "q"
+                    && c.literal.negation
+            }),
+            "-d ~q expected"
         );
     }
 
@@ -1394,6 +1412,329 @@ mod tests {
         assert!(
             bitset.contains(lit_id),
             "Bitset should contain the inserted literal after growing"
+        );
+    }
+
+    // ==========================================================================
+    // SDL SPEC COMPLIANCE TESTS (specs/DEFEASIBLE-LOGIC-SEMANTICS.md)
+    // ==========================================================================
+
+    #[test]
+    fn test_spec_worked_example_conflicting_facts() {
+        // Spec worked example (lines 114-134):
+        //   f1: >> p
+        //   f2: >> -p
+        // Both are facts. No superiority. Result: -d p, -d -p.
+        //
+        // Note: our implementation treats facts as +D (definitively provable).
+        // With +D p and +D -p, condition (2) of +d fails for both:
+        //   +d p requires -D -p, but +D -p, so blocked.
+        //   +d -p requires -D p, but +D p, so blocked.
+        // So neither is defeasibly provable even though both are definite.
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_fact("~p");
+
+        let conclusions = reason(&theory).unwrap();
+
+        // Both should be +D (they are axioms)
+        assert!(conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name() == "p"
+                && !c.literal.negation
+        }));
+        assert!(conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.literal.name() == "p"
+                && c.literal.negation
+        }));
+    }
+
+    #[test]
+    fn test_spec_ambiguity_blocking_localized() {
+        // Spec section "Ambiguity Blocking" (lines 143-148):
+        // When p and ~p are blocked, downstream rules that don't depend on p
+        // proceed normally.
+        //
+        //   r1: => p
+        //   r2: => -p
+        //   r3: => q          (independent support for q)
+        //   r4: p => q         (depends on ambiguous p)
+        //
+        // Result: -d p, -d -p, but +d q (via r3, uncontested)
+        use crate::rule::Rule;
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("p")],
+        ));
+        theory.add_rule(Rule::new(
+            "r2",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::new(
+                "p",
+                true,
+                Default::default(),
+                Default::default(),
+                vec![],
+            )],
+        ));
+        theory.add_rule(Rule::new(
+            "r3",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::simple("q")],
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r4",
+            vec![Literal::simple("p")],
+            Literal::simple("q"),
+        ));
+
+        let conclusions = reason(&theory).unwrap();
+
+        // p and ~p are ambiguous → -d
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            }),
+            "p should NOT be +d (ambiguity blocked)"
+        );
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && c.literal.negation
+            }),
+            "~p should NOT be +d (ambiguity blocked)"
+        );
+
+        // q should be +d via r3 (uncontested, independent of ambiguous p)
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "q should be +d via independent rule r3 (ambiguity blocking is localized)"
+        );
+    }
+
+    #[test]
+    fn test_spec_superiority_defeats_attacker() {
+        // Spec condition (3): an applicable attacker s is defeated if
+        // ∃t ∈ Rsd[q]: t applicable AND t > s.
+        //
+        //   >> bird, >> penguin
+        //   r1: bird => flies
+        //   r2: penguin => ~flies
+        //   r2 > r1
+        //
+        // Result: +d ~flies (r2 wins), -d flies (r1 is defeated)
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+
+        let r1 = theory.add_defeasible_rule(&["bird"], "flies");
+        let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
+        theory.add_superiority(&r2, &r1);
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies"
+                    && c.literal.negation
+            }),
+            "+d ~flies expected (superior rule)"
+        );
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "flies"
+                    && !c.literal.negation
+            }),
+            "flies should NOT be +d (defeated by superior r2)"
+        );
+    }
+
+    #[test]
+    fn test_spec_defeater_uniform_blocking() {
+        // Defeaters and defeasible attackers use the same blocking condition.
+        //   >> p
+        //   r1: p => q
+        //   d1: p ~> ~q     (defeater)
+        //
+        // d1 is an applicable attacker. Need t ∈ Rsd[q] with t > d1.
+        // r1 exists but no superiority → blocked.
+        // Result: -d q AND -d ~q (defeater blocks but can't prove)
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeater(&["p"], "~q");
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "q should NOT be +d (blocked by defeater)"
+        );
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && c.literal.negation
+            }),
+            "~q should NOT be +d (defeater can't prove)"
+        );
+    }
+
+    #[test]
+    fn test_spec_cross_rule_superiority() {
+        // Issue 5: is_blocked_by_superior must check ALL applicable Rsd[q] rules.
+        // Rule t (different from the triggering rule) may be the one that defeats
+        // the attacker.
+        //
+        //   >> a, >> b
+        //   r1: a => q
+        //   r2: b => ~q
+        //   r3: b => q         (r3 > r2)
+        //
+        // r1 fires first. Attacker r2 is applicable. r1 is NOT superior to r2,
+        // but r3 IS superior to r2. So the attacker is defeated, +d q.
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+
+        theory.add_defeasible_rule(&["a"], "q");
+        let r2 = theory.add_defeasible_rule(&["b"], "~q");
+        let r3 = theory.add_defeasible_rule(&["b"], "q");
+        theory.add_superiority(&r3, &r2);
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "+d q expected (r3 > r2 defeats the attacker, even though r1 triggered first)"
+        );
+    }
+
+    #[test]
+    fn test_spec_strict_always_blocks_defeasible() {
+        // Strict attackers always block defeasible conclusions, regardless of
+        // superiority. (+D ~q means condition (2) of +d q fails.)
+        //
+        //   >> a
+        //   r1: a => q
+        //   r2: a -> ~q     (strict)
+        //
+        // Result: +D ~q, -d q
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "q");
+        theory.add_strict_rule(&["a"], "~q");
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "q"
+                    && c.literal.negation
+            }),
+            "+D ~q expected"
+        );
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "q should NOT be +d (strict rule proves ~q)"
+        );
+    }
+
+    #[test]
+    fn test_spec_cascading_chain_uncontested() {
+        // Uncontested defeasible chain should propagate.
+        //   >> a
+        //   r1: a => b
+        //   r2: b => c
+        //   r3: c => d
+        //
+        // Result: +d a, +d b, +d c, +d d
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_defeasible_rule(&["a"], "b");
+        theory.add_defeasible_rule(&["b"], "c");
+        theory.add_defeasible_rule(&["c"], "d");
+
+        let conclusions = reason(&theory).unwrap();
+
+        for lit in &["b", "c", "d"] {
+            assert!(
+                conclusions.iter().any(|c| {
+                    c.conclusion_type == ConclusionType::DefeasiblyProvable
+                        && c.literal.name() == *lit
+                        && !c.literal.negation
+                }),
+                "+d {lit} expected in uncontested chain"
+            );
+        }
+    }
+
+    #[test]
+    fn test_two_phase_strict_chain_blocks_defeasible() {
+        // Regression test for Issue 3 (two-phase reasoning).
+        // A multi-hop strict chain to ~q must complete in phase 1 before
+        // phase 2 checks definite_proven for the complement.
+        //
+        //   >> a, >> b
+        //   r1: a -> c       (strict)
+        //   r2: c -> ~p      (strict chain: a → c → ~p)
+        //   r3: b => p       (defeasible)
+        //
+        // Phase 1 must produce +D ~p. Then phase 2: condition (2) of +d p
+        // requires -D ~p, which is false → -d p.
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_strict_rule(&["a"], "c");
+        theory.add_strict_rule(&["c"], "~p");
+        theory.add_defeasible_rule(&["b"], "p");
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "p"
+                    && c.literal.negation
+            }),
+            "+D ~p expected from strict chain"
+        );
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "p"
+                    && !c.literal.negation
+            }),
+            "p should NOT be +d (blocked by +D ~p from strict chain)"
         );
     }
 

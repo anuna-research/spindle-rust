@@ -1,16 +1,25 @@
-//! Phase 3: Negative conclusion generation for the DL(d) algorithm.
+//! Phase 2: Defeasible provability (+d / -d) with SDL ambiguity blocking.
 //!
-//! After forward chaining has completed (Phases 1 and 2), this module emits
-//! negative conclusions for all unproven literals:
+//! After Phase 1 has completed all definite (+D) derivations, this module
+//! runs a fixed-point loop that propagates both positive (+d) and negative
+//! (-d) defeasible conclusions.
 //!
-//! - **`-D`** (`DefinitelyNotProvable`) for every literal not in
-//!   `definite_proven`.
-//! - **`-d`** (`DefeasiblyNotProvable`) for every literal not in
-//!   `defeasible_proven`.
+//! Also contains Phase 3: emit `-D` and `-d` for all unproven literals.
 //!
-//! Also contains the [`is_blocked_by_superior`] helper used by Phases 1, 2,
-//! and 3 to check whether a defeasible rule is blocked by a superior attacker
-//! or defeater.
+//! # Algorithm
+//!
+//! 1. **Seed +d from +D** (subsumption with condition 2): `+D q` yields
+//!    `+d q` only if `-D ~q`.
+//! 2. **Seed -d** for literals with no Rsd support, and for +D literals
+//!    that fail condition (2).
+//! 3. **Seed empty-body defeasible rules** via `try_prove_defeasible`.
+//! 4. **Fixed-point loop**: process `(LitId, proved)` tuples from a worklist,
+//!    updating body counters, trying to prove/disprove heads and complements.
+//! 5. **Emit negatives**: `-D` and `-d` for all remaining unproven literals.
+
+use std::collections::VecDeque;
+
+use rustc_hash::FxHashMap;
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::{IndexedTheory, LitId};
@@ -19,98 +28,549 @@ use crate::theory::Theory;
 
 use super::state::{LiteralBitSet, ReasoningState};
 
-/// Emit negative conclusions for all unproven literals.
-///
-/// Iterates over every literal known to the indexed theory and emits:
-///
-/// - `-D` if the literal is not in `state.definite_proven`
-/// - `-d` if the literal is not in `state.defeasible_proven`
+/// Run Phase 2 (defeasible fixed-point) and Phase 3 (negative emission).
 pub(crate) fn resolve_defeasible(
-    _theory: &Theory,
+    theory: &Theory,
     indexed: &IndexedTheory<'_>,
     state: &mut ReasoningState<'_>,
 ) {
+    // Phase 2 uses its own worklist carrying (LitId, proved: bool)
+    let rule_count = theory.rule_count();
+    let estimated_size = rule_count * 2;
+    let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
+
+    // --- Seed +d from +D (subsumption), but respect condition (2) ---
+    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    for &lit_id in &all_ids {
+        if state.definite_proven.contains(lit_id) {
+            let comp_id = lit_id.complement();
+            if !state.definite_proven.contains(comp_id) {
+                // Normal case: +D q and -D ~q → +d q
+                state.defeasible_proven.insert(lit_id);
+                let lit = indexed.resolve_literal(lit_id);
+                // Carry the +D conclusion's rule label onto the +d conclusion
+                let definite_label = state.conclusions.iter().find_map(|c| {
+                    if c.conclusion_type == ConclusionType::DefinitelyProvable
+                        && indexed.get_lit_id(&c.literal) == Some(lit_id)
+                    {
+                        c.rule_label.as_deref()
+                    } else {
+                        None
+                    }
+                });
+                let mut conclusion = Conclusion::defeasibly_provable(lit);
+                if let Some(label) = definite_label {
+                    conclusion = conclusion.with_rule(label);
+                }
+                state.conclusions.push(conclusion);
+                worklist.push_back((lit_id, true));
+            }
+            // If +D q AND +D ~q: don't seed +d (condition 2 fails).
+        }
+    }
+
+    // --- Seed -d for literals that can never be defeasibly proved ---
+    for &lit_id in &all_ids {
+        if state.defeasible_proven.contains(lit_id) || state.defeasible_disproven.contains(lit_id) {
+            continue;
+        }
+
+        if state.definite_proven.contains(lit_id) {
+            // +D q but condition (2) failed (+D ~q too) → -d q
+            state.defeasible_disproven.insert(lit_id);
+            worklist.push_back((lit_id, false));
+            continue;
+        }
+
+        // -D q: check if Rsd[q] is empty (no strict/defeasible rules can fire)
+        let has_sd_rule = indexed.rules_with_head_id(lit_id).iter().any(|r| {
+            matches!(
+                r.rule_type,
+                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+            )
+        });
+
+        if !has_sd_rule {
+            state.defeasible_disproven.insert(lit_id);
+            worklist.push_back((lit_id, false));
+        }
+    }
+
+    // --- Seed empty-body defeasible/strict rules not yet decided ---
+    for rule in theory.rules() {
+        if rule.body.is_empty()
+            && matches!(
+                rule.rule_type,
+                RuleType::Defeasible | RuleType::Strict | RuleType::Fact
+            )
+        {
+            let head_id = indexed
+                .get_lit_id(rule.head_literal())
+                .expect("Head literal missing from index");
+            try_prove_defeasible(
+                head_id,
+                indexed,
+                theory,
+                &state.definite_proven,
+                &mut state.defeasible_proven,
+                &mut state.defeasible_disproven,
+                &state.defeasible_body_remaining,
+                &state.rule_discarded,
+                &mut worklist,
+                &mut state.conclusions,
+            );
+        }
+    }
+
+    // --- Fixed-point loop ---
+    while let Some((q_id, proved)) = worklist.pop_front() {
+        // Update rule counters for ALL rules containing q in body
+        let rules_with_q: Vec<String> = indexed
+            .rules_with_body_id(q_id)
+            .iter()
+            .map(|r| r.label.clone())
+            .collect();
+
+        for rule_label in &rules_with_q {
+            if proved {
+                let remaining = state
+                    .defeasible_body_remaining
+                    .get_mut(rule_label.as_str())
+                    .unwrap();
+                if *remaining > 0 {
+                    *remaining -= 1;
+                }
+            } else {
+                *state.rule_discarded.get_mut(rule_label.as_str()).unwrap() = true;
+            }
+        }
+
+        if proved {
+            // q just proved +d
+            // 1. Try to prove/disprove heads of newly-applicable rules
+            for rule_label in &rules_with_q {
+                let rule = theory.get_rule(rule_label).unwrap();
+                if !matches!(
+                    rule.rule_type,
+                    RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                ) {
+                    continue;
+                }
+                let remaining = state.defeasible_body_remaining[rule_label.as_str()];
+                let discarded = state.rule_discarded[rule_label.as_str()];
+                if remaining == 0 && !discarded {
+                    let head_id = indexed
+                        .get_lit_id(rule.head_literal())
+                        .expect("Head literal missing from index");
+                    try_prove_defeasible(
+                        head_id,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                        &mut state.conclusions,
+                    );
+                    // Re-check complement (resolved attacker may unblock)
+                    let comp_head = head_id.complement();
+                    try_prove_defeasible(
+                        comp_head,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                        &mut state.conclusions,
+                    );
+                    try_disprove_defeasible(
+                        comp_head,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                    );
+                }
+            }
+
+            // Handle defeaters that become newly applicable
+            for rule_label in &rules_with_q {
+                let rule = theory.get_rule(rule_label).unwrap();
+                if rule.rule_type != RuleType::Defeater {
+                    continue;
+                }
+                let remaining = state.defeasible_body_remaining[rule_label.as_str()];
+                let discarded = state.rule_discarded[rule_label.as_str()];
+                if remaining == 0 && !discarded {
+                    let head_id = indexed
+                        .get_lit_id(rule.head_literal())
+                        .expect("Head literal missing from index");
+                    let comp_head = head_id.complement();
+                    try_prove_defeasible(
+                        comp_head,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                        &mut state.conclusions,
+                    );
+                    try_disprove_defeasible(
+                        comp_head,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                    );
+                }
+            }
+
+            // q being +d may cause ~q to become -d
+            let comp_id = q_id.complement();
+            try_disprove_defeasible(
+                comp_id,
+                indexed,
+                theory,
+                &state.definite_proven,
+                &mut state.defeasible_proven,
+                &mut state.defeasible_disproven,
+                &state.defeasible_body_remaining,
+                &state.rule_discarded,
+                &mut worklist,
+            );
+        } else {
+            // q just proved -d
+            // 1. Rules with q in body are now discarded → try -d for their heads
+            //    and re-check ~head (attacker removed → might unblock)
+            for rule_label in &rules_with_q {
+                let rule = theory.get_rule(rule_label).unwrap();
+                let head_id = indexed
+                    .get_lit_id(rule.head_literal())
+                    .expect("Head literal missing from index");
+
+                if matches!(
+                    rule.rule_type,
+                    RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                ) {
+                    try_disprove_defeasible(
+                        head_id,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                    );
+                }
+
+                // Rule is now discarded as attacker → re-check complement
+                let comp_head = head_id.complement();
+                try_prove_defeasible(
+                    comp_head,
+                    indexed,
+                    theory,
+                    &state.definite_proven,
+                    &mut state.defeasible_proven,
+                    &mut state.defeasible_disproven,
+                    &state.defeasible_body_remaining,
+                    &state.rule_discarded,
+                    &mut worklist,
+                    &mut state.conclusions,
+                );
+            }
+
+            // q being -d means attackers using q in body are discarded
+            // → try +d for complement(q)
+            let comp_id = q_id.complement();
+            try_prove_defeasible(
+                comp_id,
+                indexed,
+                theory,
+                &state.definite_proven,
+                &mut state.defeasible_proven,
+                &mut state.defeasible_disproven,
+                &state.defeasible_body_remaining,
+                &state.rule_discarded,
+                &mut worklist,
+                &mut state.conclusions,
+            );
+        }
+    }
+
+    // ====================================================================
+    // PHASE 3: Emit remaining conclusions (-D, -d)
+    // ====================================================================
     let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
 
     for lit_id in all_ids {
-        if !state.is_definitely_proven(lit_id) {
+        if !state.definite_proven.contains(lit_id) {
             let lit = indexed.resolve_literal(lit_id);
-            state.add_conclusion(Conclusion::new(ConclusionType::DefinitelyNotProvable, lit));
+            state
+                .conclusions
+                .push(Conclusion::new(ConclusionType::DefinitelyNotProvable, lit));
         }
 
-        if !state.is_defeasibly_proven(lit_id) {
+        if !state.defeasible_proven.contains(lit_id) {
+            if !state.defeasible_disproven.contains(lit_id) {
+                // Safety net: anything still undecided is -d
+                state.defeasible_disproven.insert(lit_id);
+            }
             let lit = indexed.resolve_literal(lit_id);
-            state.add_conclusion(Conclusion::new(ConclusionType::DefeasiblyNotProvable, lit));
+            state
+                .conclusions
+                .push(Conclusion::new(ConclusionType::DefeasiblyNotProvable, lit));
         }
     }
 }
 
-/// Check if a rule is blocked by a superior rule or defeater for the complement
-pub(crate) fn is_blocked_by_superior(
+/// Try to prove `+d q`. Implements spec condition (3) of `+d q`:
+/// for EVERY applicable attacker `s ∈ R[~q]`, either `s` is discarded,
+/// or there exists `t ∈ Rsd[q]` with `t` applicable AND `t > s`.
+#[allow(clippy::too_many_arguments)]
+fn try_prove_defeasible(
+    q: LitId,
     indexed: &IndexedTheory<'_>,
     theory: &Theory,
-    rule: &crate::rule::Rule,
-    proven: &LiteralBitSet,
-) -> bool {
-    let head_lit = rule.head_literal();
-    let complement = head_lit.complement();
-
-    let attacking_rules = indexed.rules_with_head(&complement);
-
-    for attacker in attacking_rules {
-        // Check if attacker's body is satisfied (using BitSet for O(1) lookup)
-        let body_satisfied = attacker.body.iter().all(|b| {
-            if let Some(bid) = indexed.get_lit_id(b) {
-                proven.contains(bid)
-            } else {
-                false
-            }
-        });
-
-        if !body_satisfied {
-            continue;
-        }
-
-        // Use template_label() for superiority checks to handle grounded instances correctly
-
-        // Strict attackers always block opposing defeasible conclusions.
-        if attacker.rule_type == RuleType::Strict {
-            return true;
-        }
-
-        // IMPORTANT: Defeaters automatically block without needing explicit superiority
-        // A defeater is a rule that can block a conclusion but cannot prove its head
-        if attacker.rule_type == RuleType::Defeater {
-            // Check if rule is superior over the defeater (can override it)
-            let rule_superior =
-                theory.is_superior(rule.template_label(), attacker.template_label());
-
-            // Defeater blocks unless the rule is explicitly superior
-            if !rule_superior {
-                return true;
-            }
-            continue;
-        }
-
-        // For defeasible rules: check superiority relations
-        // Check superiority: is attacker > rule?
-        let attacker_superior =
-            theory.is_superior(attacker.template_label(), rule.template_label());
-
-        // Check if rule > attacker
-        let rule_superior = theory.is_superior(rule.template_label(), attacker.template_label());
-
-        // If attacker is superior and rule is not superior over it, we're blocked
-        if attacker_superior && !rule_superior {
-            return true;
-        }
-
-        // No-superiority ties are intentionally not blocked here.
-        // In standard mode we allow equal-strength conflicting defeasible rules
-        // to remain defeasibly derivable unless explicit superiority/defeaters apply.
+    definite_proven: &LiteralBitSet,
+    defeasible_proven: &mut LiteralBitSet,
+    defeasible_disproven: &mut LiteralBitSet,
+    body_remaining: &FxHashMap<&str, usize>,
+    rule_discarded: &FxHashMap<&str, bool>,
+    worklist: &mut VecDeque<(LitId, bool)>,
+    conclusions: &mut Vec<Conclusion>,
+) {
+    if defeasible_proven.contains(q) || defeasible_disproven.contains(q) {
+        return; // already decided
     }
 
-    false
+    let nq = q.complement();
+
+    // Condition (1): ∃r ∈ Rsd[q] that is applicable
+    let supporting_rules = indexed.rules_with_head_id(q);
+    let has_applicable = supporting_rules.iter().any(|r| {
+        matches!(
+            r.rule_type,
+            RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+        ) && body_remaining
+            .get(r.label.as_str())
+            .is_some_and(|&rem| rem == 0)
+            && !rule_discarded
+                .get(r.label.as_str())
+                .copied()
+                .unwrap_or(false)
+    });
+    if !has_applicable {
+        return;
+    }
+
+    // Condition (2): -D ~q (complement is not definitely proved)
+    if definite_proven.contains(nq) {
+        return;
+    }
+
+    // Condition (3): every attacker for ~q is countered
+    let attacking_rules = indexed.rules_with_head_id(nq);
+    let applicable_supporters: Vec<&crate::rule::Rule> = supporting_rules
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.rule_type,
+                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+            ) && body_remaining
+                .get(r.label.as_str())
+                .is_some_and(|&rem| rem == 0)
+                && !rule_discarded
+                    .get(r.label.as_str())
+                    .copied()
+                    .unwrap_or(false)
+        })
+        .copied()
+        .collect();
+
+    for attacker in &attacking_rules {
+        let att_discarded = rule_discarded
+            .get(attacker.label.as_str())
+            .copied()
+            .unwrap_or(false);
+        if att_discarded {
+            continue; // attacker is inapplicable
+        }
+
+        let att_remaining = body_remaining
+            .get(attacker.label.as_str())
+            .copied()
+            .unwrap_or(0);
+
+        // Check if any applicable supporter is superior to this attacker.
+        let defeated_by_superior = applicable_supporters
+            .iter()
+            .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
+
+        if att_remaining > 0 {
+            // Strict attackers cannot be defeated by superiority
+            if attacker.rule_type == RuleType::Strict {
+                return;
+            }
+            // Defeasible attacker with undecided body: if a superior
+            // applicable rule defeats it, the attacker is countered.
+            if defeated_by_superior {
+                continue;
+            }
+            return;
+        }
+
+        // Strict attackers always block (cannot be defeated by superiority)
+        if attacker.rule_type == RuleType::Strict {
+            return;
+        }
+
+        // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s
+        if !defeated_by_superior {
+            return; // undefeated attacker
+        }
+    }
+
+    // All conditions met — pick the first applicable supporter as the deriving rule
+    defeasible_proven.insert(q);
+    let lit = indexed.resolve_literal(q);
+    let conclusion = if let Some(supporter) = applicable_supporters.first() {
+        Conclusion::defeasibly_provable(lit).with_rule(&supporter.label)
+    } else {
+        Conclusion::defeasibly_provable(lit)
+    };
+    conclusions.push(conclusion);
+    worklist.push_back((q, true));
+}
+
+/// Try to disprove `q` (prove `-d q`). Implements the dual/mirror of `+d`.
+#[allow(clippy::too_many_arguments)]
+fn try_disprove_defeasible(
+    q: LitId,
+    indexed: &IndexedTheory<'_>,
+    theory: &Theory,
+    definite_proven: &LiteralBitSet,
+    defeasible_proven: &mut LiteralBitSet,
+    defeasible_disproven: &mut LiteralBitSet,
+    body_remaining: &FxHashMap<&str, usize>,
+    rule_discarded: &FxHashMap<&str, bool>,
+    worklist: &mut VecDeque<(LitId, bool)>,
+) {
+    if defeasible_proven.contains(q) || defeasible_disproven.contains(q) {
+        return; // already decided
+    }
+
+    // Precondition: must be -D q (if +D q, it would already be +d or -d)
+    if definite_proven.contains(q) {
+        return;
+    }
+
+    let nq = q.complement();
+
+    // Disjunct (2): +D ~q → -d q
+    if definite_proven.contains(nq) {
+        defeasible_disproven.insert(q);
+        worklist.push_back((q, false));
+        return;
+    }
+
+    // Disjunct (1): all Rsd[q] rules are discarded → -d q (no support)
+    let supporting_rules = indexed.rules_with_head_id(q);
+    let sd_rules: Vec<&crate::rule::Rule> = supporting_rules
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.rule_type,
+                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+            )
+        })
+        .copied()
+        .collect();
+
+    let all_discarded = sd_rules.iter().all(|r| {
+        rule_discarded
+            .get(r.label.as_str())
+            .copied()
+            .unwrap_or(false)
+    });
+
+    if all_discarded {
+        defeasible_disproven.insert(q);
+        worklist.push_back((q, false));
+        return;
+    }
+
+    // Disjunct (3): ∃ applicable attacker s that no t in Rsd[q] can beat
+    let attacking_rules = indexed.rules_with_head_id(nq);
+    for attacker in &attacking_rules {
+        let att_remaining = body_remaining
+            .get(attacker.label.as_str())
+            .copied()
+            .unwrap_or(0);
+        let att_discarded = rule_discarded
+            .get(attacker.label.as_str())
+            .copied()
+            .unwrap_or(false);
+
+        if att_remaining > 0 || att_discarded {
+            continue; // attacker not applicable
+        }
+
+        // Strict attackers always block
+        if attacker.rule_type == RuleType::Strict {
+            defeasible_disproven.insert(q);
+            worklist.push_back((q, false));
+            return;
+        }
+
+        // Attacker s is applicable. Check: ∀t ∈ Rsd[q]: t discarded OR ¬(t > s)
+        // But if any t is undecided (not discarded, not applicable), can't conclude
+        let any_t_undecided = sd_rules.iter().any(|t| {
+            let t_discarded = rule_discarded
+                .get(t.label.as_str())
+                .copied()
+                .unwrap_or(false);
+            let t_remaining = body_remaining.get(t.label.as_str()).copied().unwrap_or(0);
+            !t_discarded
+                && t_remaining > 0
+                && theory.is_superior(t.template_label(), attacker.template_label())
+        });
+
+        if any_t_undecided {
+            continue; // can't conclude yet for this attacker
+        }
+
+        let all_t_fail = sd_rules.iter().all(|t| {
+            let t_discarded = rule_discarded
+                .get(t.label.as_str())
+                .copied()
+                .unwrap_or(false);
+            t_discarded || !theory.is_superior(t.template_label(), attacker.template_label())
+        });
+
+        if all_t_fail {
+            defeasible_disproven.insert(q);
+            worklist.push_back((q, false));
+            return;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -122,7 +582,7 @@ mod tests {
     use crate::reason::facts;
     use crate::reason::state::ReasoningState;
 
-    /// Helper: build state + indexed theory, run Phase 1, Phase 2, then Phase 3.
+    /// Helper: build state + indexed theory, run all three phases.
     fn run_all_phases(theory: &Theory) -> (ReasoningState<'_>, IndexedTheory<'_>) {
         let mut indexed = IndexedTheory::build(theory);
         let atom_count = indexed.atom_count();
@@ -132,9 +592,9 @@ mod tests {
 
         // Phase 1
         facts::initialize_facts(theory, &mut indexed, &mut state);
-        // Phase 2
+        // Phase 1 continued
         definite::forward_chain_strict(theory, &indexed, &mut state);
-        // Phase 3
+        // Phase 2 + Phase 3
         resolve_defeasible(theory, &indexed, &mut state);
 
         (state, indexed)
@@ -152,7 +612,6 @@ mod tests {
 
         let (state, _) = run_all_phases(&theory);
 
-        // q has no strict path, so -D q
         let has_neg_definite_q = state.conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefinitelyNotProvable
                 && c.literal.name() == "q"
@@ -190,7 +649,6 @@ mod tests {
 
         let (state, _) = run_all_phases(&theory);
 
-        // q is strictly proven, so no -D q
         let has_neg_definite_q = state.conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefinitelyNotProvable
                 && c.literal.name() == "q"
@@ -211,7 +669,6 @@ mod tests {
 
         let (state, _) = run_all_phases(&theory);
 
-        // q is defeasibly proven, so no -d q
         let has_neg_defeasible_q = state.conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyNotProvable
                 && c.literal.name() == "q"
@@ -259,147 +716,49 @@ mod tests {
     }
 
     // ======================================================================
-    // is_blocked_by_superior TESTS
+    // AMBIGUITY BLOCKING
     // ======================================================================
 
     #[test]
-    fn test_not_blocked_when_no_attackers() {
+    fn test_ambiguity_blocking_no_superiority() {
         let mut theory = Theory::new();
         theory.add_fact("p");
         theory.add_defeasible_rule(&["p"], "q");
+        theory.add_defeasible_rule(&["p"], "~q");
 
-        let (state, indexed) = run_all_phases(&theory);
+        let (state, _) = run_all_phases(&theory);
 
-        let rule = theory
-            .rules()
-            .find(|r| r.head_literal().name() == "q")
-            .unwrap();
+        let has_q = state.conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
+        let has_not_q = state.conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && c.literal.negation
+        });
 
-        let blocked = is_blocked_by_superior(&indexed, &theory, rule, &state.defeasible_proven);
-        assert!(
-            !blocked,
-            "Rule should not be blocked when no attackers exist"
-        );
+        assert!(!has_q, "q should NOT be +d (ambiguity blocking)");
+        assert!(!has_not_q, "~q should NOT be +d (ambiguity blocking)");
     }
 
     #[test]
-    fn test_blocked_by_strict_attacker() {
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-        theory.add_defeasible_rule(&["p"], "q");
-        theory.add_strict_rule(&["p"], "~q");
-
-        let (state, indexed) = run_all_phases(&theory);
-
-        let rule = theory
-            .rules()
-            .find(|r| {
-                r.head_literal().name() == "q"
-                    && !r.head_literal().negation
-                    && r.rule_type == RuleType::Defeasible
-            })
-            .unwrap();
-
-        let blocked = is_blocked_by_superior(&indexed, &theory, rule, &state.defeasible_proven);
-        assert!(
-            blocked,
-            "Defeasible rule should be blocked by strict attacker"
-        );
-    }
-
-    #[test]
-    fn test_blocked_by_defeater() {
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-        theory.add_defeasible_rule(&["p"], "q");
-        theory.add_defeater(&["p"], "~q");
-
-        let (state, indexed) = run_all_phases(&theory);
-
-        let rule = theory
-            .rules()
-            .find(|r| {
-                r.head_literal().name() == "q"
-                    && !r.head_literal().negation
-                    && r.rule_type == RuleType::Defeasible
-            })
-            .unwrap();
-
-        let blocked = is_blocked_by_superior(&indexed, &theory, rule, &state.defeasible_proven);
-        assert!(blocked, "Defeasible rule should be blocked by defeater");
-    }
-
-    #[test]
-    fn test_not_blocked_when_attacker_body_unsatisfied() {
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-        theory.add_defeasible_rule(&["p"], "q");
-        theory.add_defeasible_rule(&["unproven"], "~q");
-
-        let (state, indexed) = run_all_phases(&theory);
-
-        let rule = theory
-            .rules()
-            .find(|r| {
-                r.head_literal().name() == "q"
-                    && !r.head_literal().negation
-                    && r.rule_type == RuleType::Defeasible
-            })
-            .unwrap();
-
-        let blocked = is_blocked_by_superior(&indexed, &theory, rule, &state.defeasible_proven);
-        assert!(
-            !blocked,
-            "Rule should not be blocked when attacker body is unsatisfied"
-        );
-    }
-
-    #[test]
-    fn test_blocked_by_superior_attacker() {
+    fn test_superiority_resolves_ambiguity() {
         let mut theory = Theory::new();
         theory.add_fact("p");
         let r1 = theory.add_defeasible_rule(&["p"], "q");
         let r2 = theory.add_defeasible_rule(&["p"], "~q");
-        theory.add_superiority(&r2, &r1); // r2 > r1
+        theory.add_superiority(&r1, &r2);
 
-        let (state, indexed) = run_all_phases(&theory);
+        let (state, _) = run_all_phases(&theory);
 
-        let rule = theory
-            .rules()
-            .find(|r| {
-                r.head_literal().name() == "q"
-                    && !r.head_literal().negation
-                    && r.rule_type == RuleType::Defeasible
-            })
-            .unwrap();
+        let has_q = state.conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
 
-        let blocked = is_blocked_by_superior(&indexed, &theory, rule, &state.defeasible_proven);
-        assert!(blocked, "Rule should be blocked by superior attacker");
-    }
-
-    #[test]
-    fn test_not_blocked_when_rule_is_superior() {
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-        let r1 = theory.add_defeasible_rule(&["p"], "q");
-        let r2 = theory.add_defeasible_rule(&["p"], "~q");
-        theory.add_superiority(&r1, &r2); // r1 > r2
-
-        let (state, indexed) = run_all_phases(&theory);
-
-        let rule = theory
-            .rules()
-            .find(|r| {
-                r.head_literal().name() == "q"
-                    && !r.head_literal().negation
-                    && r.rule_type == RuleType::Defeasible
-            })
-            .unwrap();
-
-        let blocked = is_blocked_by_superior(&indexed, &theory, rule, &state.defeasible_proven);
-        assert!(
-            !blocked,
-            "Rule should NOT be blocked when it is superior to attacker"
-        );
+        assert!(has_q, "q should be +d (r1 > r2 resolves ambiguity)");
     }
 }
