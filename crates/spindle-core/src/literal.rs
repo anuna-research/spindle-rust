@@ -65,6 +65,50 @@ impl From<LiteralName> for SymbolId {
     }
 }
 
+impl From<&str> for LiteralName {
+    /// Create a `LiteralName` by interning the given string.
+    #[inline]
+    fn from(s: &str) -> Self {
+        LiteralName::intern(s)
+    }
+}
+
+impl From<String> for LiteralName {
+    /// Create a `LiteralName` by interning the given string.
+    #[inline]
+    fn from(s: String) -> Self {
+        LiteralName::intern(&s)
+    }
+}
+
+impl AsRef<str> for LiteralName {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.resolve()
+    }
+}
+
+impl PartialEq<str> for LiteralName {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        self.resolve() == other
+    }
+}
+
+impl PartialEq<&str> for LiteralName {
+    #[inline]
+    fn eq(&self, other: &&str) -> bool {
+        self.resolve() == *other
+    }
+}
+
+impl PartialEq<String> for LiteralName {
+    #[inline]
+    fn eq(&self, other: &String) -> bool {
+        self.resolve() == other.as_str()
+    }
+}
+
 impl std::fmt::Display for LiteralName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.resolve())

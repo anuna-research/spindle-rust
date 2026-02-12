@@ -221,6 +221,14 @@ impl Theory {
         self.rules.len()
     }
 
+    /// Perform defeasible reasoning on this theory and return conclusions.
+    ///
+    /// This is a convenience method that forwards to [`crate::reason::reason()`].
+    /// Prefer the free function for new code.
+    pub fn reason(&self) -> crate::error::Result<Vec<crate::conclusion::Conclusion>> {
+        crate::reason::reason(self)
+    }
+
     /// Check if the theory has any circular superiority relations
     /// (where prefer(a,b) and prefer(b,a) both exist).
     pub fn has_circular_superiority(&self) -> bool {
@@ -243,7 +251,7 @@ impl Theory {
         }
 
         // Check contradictory strict conclusions
-        if let Ok(conclusions) = crate::reason::reason(self) {
+        if let Ok(conclusions) = self.reason() {
             let definite: std::collections::HashSet<_> = conclusions
                 .iter()
                 .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
