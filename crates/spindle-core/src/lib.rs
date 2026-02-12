@@ -76,7 +76,7 @@ pub mod prelude {
     };
     pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
     pub use crate::reason::{
-        Reasoner, ScalableReasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
+        Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
     };
     pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};

@@ -12,14 +12,13 @@
 //!
 //! # Trait-based dispatch
 //!
-//! The [`Reasoner`] trait abstracts over reasoning algorithms. Two concrete
-//! implementations are provided:
+//! The [`Reasoner`] trait abstracts over reasoning algorithms. One concrete
+//! implementation is provided:
 //!
 //! - [`StandardReasoner`]: wraps the standard DL(d) forward-chaining
 //!   algorithm (the default).
-//! - [`ScalableReasoner`]: placeholder for the scalable DL(d||) three-phase
-//!   closure algorithm.
 //!
+//! Additional backends can be added by implementing the [`Reasoner`] trait.
 //! Use [`select_reasoner`] to obtain a boxed trait object by name for
 //! runtime backend selection.
 //!
@@ -97,47 +96,17 @@ impl Reasoner for StandardReasoner {
 }
 
 // ---------------------------------------------------------------------------
-// ScalableReasoner
-// ---------------------------------------------------------------------------
-
-/// Scalable DL(d||) three-phase closure reasoner.
-///
-/// Implements the parallel/partitioned algorithm described in the
-/// project design documents. Currently a placeholder until the scalable
-/// engine is fully implemented.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ScalableReasoner;
-
-impl Reasoner for ScalableReasoner {
-    fn reason<'t>(&self, _indexed: &mut IndexedTheory<'t>) -> Result<Vec<Conclusion>> {
-        // Phase 1: Delta closure (strict + definite)
-        // Phase 2: Lambda closure (defeasible, with ambiguity blocking)
-        // Phase 3: Negative conclusion generation
-        todo!("scalable DL(d||) not yet implemented")
-    }
-
-    fn name(&self) -> &str {
-        "scalable-dl-d-parallel"
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Factory function
 // ---------------------------------------------------------------------------
 
 /// Select a reasoner implementation by name.
 ///
-/// Returns a boxed trait object for runtime backend selection. Recognized
-/// names:
-///
-/// - `"standard"` -- [`StandardReasoner`] (default DL(d) forward chaining)
-/// - `"scalable"` -- [`ScalableReasoner`] (DL(d||) three-phase closure)
-///
-/// Unrecognized names fall back to [`StandardReasoner`].
+/// Returns a boxed trait object for runtime backend selection. Currently
+/// only `"standard"` is recognized; all other names fall back to
+/// [`StandardReasoner`].
 pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
     match name {
         "standard" => Box::new(StandardReasoner),
-        "scalable" => Box::new(ScalableReasoner),
         _ => Box::new(StandardReasoner),
     }
 }
@@ -1465,21 +1434,9 @@ mod tests {
     }
 
     #[test]
-    fn test_scalable_reasoner_name() {
-        let r = ScalableReasoner;
-        assert_eq!(r.name(), "scalable-dl-d-parallel");
-    }
-
-    #[test]
     fn test_select_reasoner_standard() {
         let r = select_reasoner("standard");
         assert_eq!(r.name(), "standard-dl-d");
-    }
-
-    #[test]
-    fn test_select_reasoner_scalable() {
-        let r = select_reasoner("scalable");
-        assert_eq!(r.name(), "scalable-dl-d-parallel");
     }
 
     #[test]
@@ -1586,19 +1543,6 @@ mod tests {
                     && c.literal.name() == "q"),
             "q should be defeasibly provable via dyn Reasoner dispatch"
         );
-    }
-
-    #[test]
-    #[should_panic(expected = "not yet implemented")]
-    fn test_scalable_reasoner_is_unimplemented() {
-        let mut theory = Theory::new();
-        theory.add_fact("p");
-
-        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
-        let mut indexed = IndexedTheory::build(&prepared.theory);
-
-        // Should panic with todo!()
-        let _ = ScalableReasoner.reason(&mut indexed);
     }
 
     /// A mock reasoner that returns a fixed set of conclusions.
