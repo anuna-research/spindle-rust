@@ -7,6 +7,7 @@
 //! `mining.rs` which operates on `EventLog` + `PetriNet`.
 
 use super::{analysis_key_unsigned, ConflictKind, ConflictReport};
+use crate::literal::Literal;
 use crate::rule::Rule;
 
 /// Check whether two rules have conflicting heads.
@@ -24,6 +25,21 @@ pub fn is_conflicting(a: &Rule, b: &Rule) -> bool {
     })
 }
 
+/// Return the first pair of conflicting head literals between two rules,
+/// or `None` if no conflict exists.
+fn conflicting_head_pair<'a>(a: &'a Rule, b: &'a Rule) -> Option<(&'a Literal, &'a Literal)> {
+    for ha in &a.head {
+        for hb in &b.head {
+            if ha.is_negated() != hb.is_negated()
+                && analysis_key_unsigned(ha) == analysis_key_unsigned(hb)
+            {
+                return Some((ha, hb));
+            }
+        }
+    }
+    None
+}
+
 /// Scan an iterator of rules and return every pair whose heads conflict.
 ///
 /// Accepts `impl IntoIterator` so callers can pass `&[Rule]`, `Vec<Rule>`,
@@ -37,12 +53,13 @@ where
 
     for i in 0..rules.len() {
         for j in (i + 1)..rules.len() {
-            if is_conflicting(rules[i], rules[j]) {
+            // Find the specific conflicting head pair (not necessarily head[0]).
+            if let Some((ha, hb)) = conflicting_head_pair(rules[i], rules[j]) {
                 reports.push(ConflictReport {
                     rule_a: rules[i].label.clone(),
                     rule_b: rules[j].label.clone(),
-                    head_a: format!("{}", rules[i].head[0]),
-                    head_b: format!("{}", rules[j].head[0]),
+                    head_a: format!("{ha}"),
+                    head_b: format!("{hb}"),
                     conflict_type: ConflictKind::Negation,
                 });
             }

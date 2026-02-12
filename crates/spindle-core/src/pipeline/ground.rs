@@ -41,7 +41,7 @@ impl PipelineStage for Ground {
                 message: "no variables found; grounding skipped".into(),
             });
             ctx.metadata
-                .insert("grounding_performed".into(), MetadataVal::Bool(true));
+                .insert("grounding_performed".into(), MetadataVal::Bool(false));
             ctx.metadata
                 .insert("grounding_had_variables".into(), MetadataVal::Bool(false));
             ctx.metadata
