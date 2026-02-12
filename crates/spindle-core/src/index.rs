@@ -202,8 +202,12 @@ impl<'a> IndexedTheory<'a> {
         )
     }
 
-    /// Get the underlying theory
-    pub fn theory(&self) -> &Theory {
+    /// Get the underlying theory.
+    ///
+    /// Returns a reference with the original `'a` lifetime (not tied to
+    /// `&self`), which allows callers to hold this reference while also
+    /// mutating the index.
+    pub fn theory(&self) -> &'a Theory {
         self.theory
     }
 
