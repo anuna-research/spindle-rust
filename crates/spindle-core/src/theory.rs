@@ -122,6 +122,11 @@ impl Theory {
         self.rules.get(label)
     }
 
+    /// Get a mutable reference to a rule by label
+    pub fn get_rule_mut(&mut self, label: &str) -> Option<&mut Rule> {
+        self.rules.get_mut(label)
+    }
+
     /// Get all rules
     pub fn rules(&self) -> impl Iterator<Item = &Rule> {
         self.rules.values()

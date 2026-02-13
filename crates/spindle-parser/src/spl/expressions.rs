@@ -14,7 +14,7 @@ use crate::error::ParserFormat;
 
 use super::lexer::SExpr;
 use super::lexer::source_line_text;
-use super::literals::parse_literal_with_line;
+use super::literals::{parse_literal_with_line, parse_timepoint_with_line};
 use super::metadata::{
     process_claims, process_decays, process_meta_with_line, process_threshold, process_trusts,
 };
@@ -72,6 +72,7 @@ pub(crate) fn process_expr_with_line(
         "always" => process_rule_with_line(theory, RuleType::Strict, &list[1..], line),
         "normally" => process_rule_with_line(theory, RuleType::Defeasible, &list[1..], line),
         "except" => process_rule_with_line(theory, RuleType::Defeater, &list[1..], line),
+        "during" => process_during_rule_with_line(theory, &list[1..], line, cleaned_input),
         "prefer" => process_prefer_with_line(theory, &list[1..], line),
         "meta" => process_meta_with_line(theory, &list[1..], line),
         "claims" => process_claims(theory, &list[1..], line, cleaned_input),
@@ -178,6 +179,92 @@ fn process_prefer_with_line(
     // Create chain of superiorities: r1 > r2 > r3 ...
     for window in labels.windows(2) {
         theory.add_superiority(window[0], window[1]);
+    }
+
+    Ok(())
+}
+
+/// Process a temporal wrapper around a rule or fact:
+/// `(during (normally label body head) start end)`
+/// `(during (given literal) start end)`
+fn process_during_rule_with_line(
+    theory: &mut Theory,
+    args: &[SExpr],
+    line: usize,
+    cleaned_input: &str,
+) -> Result<(), ParseError> {
+    // Need at least 3 args: inner-expr, start, end
+    if args.len() != 3 {
+        return Err(ParseError::ParserError {
+            line,
+            message: "temporal rule wrapper (during ...) requires exactly 3 arguments: rule-expr start end".to_string(),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+
+    let inner = &args[0];
+    let inner_list = inner.as_list().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "(during ...) first argument must be a rule expression like (normally ...)"
+            .to_string(),
+        format: ParserFormat::Spl,
+        source_line: None,
+    })?;
+
+    if inner_list.is_empty() {
+        return Err(ParseError::ParserError {
+            line,
+            message: "(during ...) inner expression cannot be empty".to_string(),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+
+    let inner_keyword = inner_list[0]
+        .as_atom()
+        .ok_or_else(|| ParseError::ParserError {
+            line,
+            message: "(during ...) inner expression must start with a keyword".to_string(),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+
+    // Parse start and end timepoints
+    let start = parse_timepoint_with_line(&args[1], line)?;
+    let end = parse_timepoint_with_line(&args[2], line)?;
+    let temporal = spindle_core::temporal::Temporal::new(start, end);
+
+    // Collect existing labels so we can find the newly added one
+    let existing_labels: std::collections::HashSet<String> =
+        theory.rules().map(|r| r.label.clone()).collect();
+
+    match inner_keyword {
+        "given" => process_fact_with_line(theory, &inner_list[1..], line)?,
+        "always" => process_rule_with_line(theory, RuleType::Strict, &inner_list[1..], line)?,
+        "normally" => process_rule_with_line(theory, RuleType::Defeasible, &inner_list[1..], line)?,
+        "except" => process_rule_with_line(theory, RuleType::Defeater, &inner_list[1..], line)?,
+        _ => {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "(during ...) inner expression must be given/always/normally/except, got '{inner_keyword}'"
+                ),
+                format: ParserFormat::Spl,
+                source_line: source_line_text(cleaned_input, line),
+            });
+        }
+    }
+
+    // Find and update the newly added rule's temporal bounds
+    let new_label = theory
+        .rules()
+        .find(|r| !existing_labels.contains(&r.label))
+        .map(|r| r.label.clone());
+    if let Some(label) = new_label
+        && let Some(rule) = theory.get_rule_mut(&label)
+    {
+        rule.temporal = temporal;
     }
 
     Ok(())

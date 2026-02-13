@@ -1,0 +1,247 @@
+; =================================================================
+; Expose Temporal Reasoning via Spindle Lisp Syntax
+; =================================================================
+; The core temporal engine (temporal.rs) has rich capabilities that
+; are not fully exposed through SPL: RFC3339 round-trip, temporal
+; conclusions display, state query predicates, rule-level temporal
+; bounds, and Allen constraint visibility in output.
+;
+; This plan closes those gaps so users can write, reason about,
+; and read back temporal theories entirely through SPL.
+; =================================================================
+
+; -----------------------------------------------------------------
+; Agent definitions
+; -----------------------------------------------------------------
+(given agent-claude-available)
+
+; =================================================================
+; Phase 1: RFC3339 Timestamp Round-Trip
+; =================================================================
+; SPL can PARSE (moment "2024-01-01T00:00:00Z") but OUTPUTS numeric
+; milliseconds. Fix TimePoint Display/to_spl to emit RFC3339 when
+; the value originated from an RFC3339 parse, preserving readability.
+; -----------------------------------------------------------------
+(given task-rfc3339-roundtrip)
+(given no-deps-rfc3339)
+(meta task-rfc3339-roundtrip
+  (description "Make RFC3339 timestamps survive parse-reason-format cycle. (1) In temporal.rs, add a `from_rfc3339: bool` flag or use a threshold heuristic (values > 86400000 likely timestamps) to decide format. (2) Update TimePoint Display impl to call to_rfc3339() for timestamp-range values. (3) Update to_spl() rendering in literal.rs to emit (moment \"ISO\") syntax for timestamp-range TimePoints. (4) Add round-trip test: parse SPL with RFC3339 moment, format back, verify identical string.")
+  (file "crates/spindle-core/src/temporal.rs, crates/spindle-core/src/literal.rs"))
+
+(normally r-ready-rfc3339
+  (and task-rfc3339-roundtrip no-deps-rfc3339)
+  ready-rfc3339)
+
+; =================================================================
+; Phase 2: Temporal Conclusions in SPL Output
+; =================================================================
+; When reasoning produces conclusions with temporal bounds, the
+; output should render them as (during conclusion start end) in SPL.
+; Currently conclusions lose temporal info in formatting.
+; -----------------------------------------------------------------
+(given task-temporal-conclusions)
+(given dep-conclusions-on-rfc3339)
+(meta task-temporal-conclusions
+  (description "Ensure temporal bounds on conclusions are rendered in SPL output. (1) Check Conclusion type in conclusion.rs — verify it carries Temporal from the source literal. (2) In CLI reason/status output (commands/reason.rs), format concluded literals with their temporal bounds using (during lit start end) syntax. (3) In query output (commands/query.rs), include temporal bounds in what_if/why_not/explain results. (4) Add integration test: theory with temporal facts -> reason -> verify output contains (during ...) syntax.")
+  (file "crates/spindle-core/src/conclusion.rs, crates/spindle-cli/src/cli/commands/reason.rs"))
+
+(normally r-ready-temporal-conclusions
+  (and task-temporal-conclusions dep-conclusions-on-rfc3339 completed-rfc3339-roundtrip)
+  ready-temporal-conclusions)
+
+; =================================================================
+; Phase 3: State Query Predicates in SPL
+; =================================================================
+; The core has active_at(), past_at(), future_at() on Temporal but
+; no SPL syntax to use them. Add temporal state predicates that can
+; appear in rule bodies for point-in-time queries.
+; -----------------------------------------------------------------
+(given task-state-query-predicates)
+(given dep-predicates-on-conclusions)
+(meta task-state-query-predicates
+  (description "Add temporal state query predicates to SPL syntax. (1) New SPL body forms: (active-at literal timepoint), (past-at literal timepoint), (future-at literal timepoint). (2) In spl/literals.rs, parse these as a new TemporalQuery variant on Literal or as a body constraint similar to Allen constraints. (3) In grounding.rs, evaluate state queries against bound temporal intervals using existing active_at/past_at/future_at functions. (4) Add tests: fact with temporal bounds [100,200], rule with (active-at fact 150) fires, (active-at fact 300) does not.")
+  (file "crates/spindle-parser/src/spl/literals.rs, crates/spindle-core/src/grounding.rs"))
+
+(normally r-ready-state-predicates
+  (and task-state-query-predicates dep-predicates-on-conclusions completed-temporal-conclusions)
+  ready-state-predicates)
+
+; =================================================================
+; Phase 4: Rule-Level Temporal Bounds in SPL
+; =================================================================
+; Rule struct has a `temporal: Temporal` field used by the pipeline
+; but SPL cannot set it. Allow rules to carry temporal validity.
+; -----------------------------------------------------------------
+(given task-rule-temporal-bounds)
+(given dep-rule-temporal-on-predicates)
+(meta task-rule-temporal-bounds
+  (description "Allow SPL to specify temporal validity on rules. (1) New syntax: (during (normally label body head) start end) — wrapping a rule form in during. (2) In spl/rules.rs, detect when a rule expression is wrapped in (during ...) and set Rule.temporal accordingly. (3) Pipeline temporal filter already uses Rule.temporal for as-of filtering — verify this works end-to-end. (4) to_spl() for Rule should emit the (during ...) wrapper when Rule.temporal is not the default [-inf, +inf]. (5) Test: rule valid [2024,2025], query --at 2024-06-15 sees it, --at 2026-01-01 does not.")
+  (file "crates/spindle-parser/src/spl/rules.rs, crates/spindle-core/src/rule.rs"))
+
+(normally r-ready-rule-temporal
+  (and task-rule-temporal-bounds dep-rule-temporal-on-predicates completed-state-query-predicates)
+  ready-rule-temporal)
+
+; =================================================================
+; Phase 5: Allen Constraint Visibility in Output
+; =================================================================
+; Allen constraints parse and evaluate during grounding but are
+; invisible in reasoning output. Show which constraints were
+; satisfied and include them in explain/why-not traces.
+; -----------------------------------------------------------------
+(given task-allen-output)
+(given dep-allen-on-rule-temporal)
+(meta task-allen-output
+  (description "Make Allen constraints visible in reasoning output. (1) In conclusion.rs or a parallel structure, carry forward the Rule's Allen constraints that were satisfied when deriving the conclusion. (2) In explain() output, show the Allen constraints that held for each derivation step — e.g. 'before [0,10] [20,30] ✓'. (3) In to_spl() for rules, include Allen constraints in the body rendering. (4) Test: rule with (before ?T ?S) constraint, explain output shows the constraint and the intervals that satisfied it.")
+  (file "crates/spindle-core/src/conclusion.rs, crates/spindle-core/src/query.rs"))
+
+(normally r-ready-allen-output
+  (and task-allen-output dep-allen-on-rule-temporal completed-rule-temporal-bounds)
+  ready-allen-output)
+
+; =================================================================
+; Phase 6: Integration Tests & Documentation
+; =================================================================
+; End-to-end tests exercising all new temporal SPL features together
+; and inline documentation of temporal syntax.
+; -----------------------------------------------------------------
+(given task-temporal-integration)
+(given dep-integration-on-allen)
+(meta task-temporal-integration
+  (description "Create comprehensive integration tests and document temporal SPL syntax. (1) New test file: crates/spindle-core/tests/temporal_spl_roundtrip.rs — tests that parse SPL with temporal features, reason, format back to SPL, and verify round-trip fidelity. (2) Test scenarios: RFC3339 timestamps, temporal conclusions, state queries, rule-level temporal bounds, Allen constraints in output. (3) Test the --at CLI flag with rule-level temporal bounds. (4) Add temporal syntax examples to the SPL module doc comments in spl/mod.rs.")
+  (file "crates/spindle-core/tests/temporal_spl_roundtrip.rs, crates/spindle-parser/src/spl/mod.rs"))
+
+(normally r-ready-integration
+  (and task-temporal-integration dep-integration-on-allen completed-allen-output)
+  ready-integration)
+
+; =================================================================
+; Phase 7: Quality Checks
+; =================================================================
+(given task-quality)
+(given dep-quality-on-integration)
+(meta task-quality
+  (description "Run cargo fmt --all, cargo clippy --workspace -- -D warnings, cargo test --workspace. Fix any issues. Verify no regressions in existing temporal tests (temporal_asof_tests.rs, temporal_propagation_tests.rs, allen_constraint_tests.rs).")
+  (file "workspace root"))
+
+(normally r-ready-quality
+  (and task-quality dep-quality-on-integration completed-temporal-integration)
+  ready-quality)
+
+; -----------------------------------------------------------------
+; Assignment rules
+; -----------------------------------------------------------------
+(normally r-assign-rfc3339
+  (and ready-rfc3339 agent-claude-available)
+  assignTo-rfc3339-claude)
+
+(normally r-assign-conclusions
+  (and ready-temporal-conclusions agent-claude-available)
+  assignTo-conclusions-claude)
+
+(normally r-assign-predicates
+  (and ready-state-predicates agent-claude-available)
+  assignTo-predicates-claude)
+
+(normally r-assign-rule-temporal
+  (and ready-rule-temporal agent-claude-available)
+  assignTo-rule-temporal-claude)
+
+(normally r-assign-allen-output
+  (and ready-allen-output agent-claude-available)
+  assignTo-allen-output-claude)
+
+(normally r-assign-integration
+  (and ready-integration agent-claude-available)
+  assignTo-integration-claude)
+
+(normally r-assign-quality
+  (and ready-quality agent-claude-available)
+  assignTo-quality-claude)
+
+; -----------------------------------------------------------------
+; Completion gate
+; -----------------------------------------------------------------
+(normally r-feature-complete
+  (and completed-quality completed-temporal-integration)
+  feature-complete)
+
+; -----------------------------------------------------------------
+; Risks / defeaters
+; -----------------------------------------------------------------
+
+; RFC3339 heuristic could misclassify large numeric values as timestamps
+(except d-rfc3339-heuristic
+  (and task-rfc3339-roundtrip completed-rfc3339-roundtrip)
+  (not rfc3339-heuristic-safe))
+
+; State query predicates add grounding complexity — may slow large theories
+(except d-state-query-perf
+  (and task-state-query-predicates completed-state-query-predicates)
+  (not state-query-perf-ok))
+
+; Rule-level temporal wrapping could conflict with existing (during ...) on literals
+(except d-during-ambiguity
+  (and task-rule-temporal-bounds completed-rule-temporal-bounds)
+  (not during-syntax-unambiguous))
+
+; Existing temporal tests must not regress
+(except d-temporal-regression
+  (and task-quality completed-quality)
+  (not temporal-tests-pass))
+
+(claims agent:system
+  :at "2026-20-13T19:36:14Z"
+  (given claimed-rfc3339-roundtrip))
+
+(claims agent:claude
+  :at "2026-20-13T19:40:21Z"
+  (given completed-rfc3339-roundtrip))
+
+(claims agent:claude
+  :at "2026-20-13T19:41:48Z"
+  (given claimed-temporal-conclusions))
+
+(claims agent:claude
+  :at "2026-20-13T19:43:50Z"
+  (given completed-temporal-conclusions))
+
+(claims agent:claude
+  :at "2026-20-13T19:43:18Z"
+  (given claimed-state-query-predicates))
+
+(claims agent:claude
+  :at "2026-20-13T19:48:27Z"
+  (given completed-state-query-predicates))
+
+(claims agent:claude
+  :at "2026-20-13T19:48:32Z"
+  (given claimed-rule-temporal-bounds))
+
+(claims agent:claude
+  :at "2026-20-13T19:51:21Z"
+  (given completed-rule-temporal-bounds))
+
+(claims agent:claude
+  :at "2026-20-13T19:51:27Z"
+  (given claimed-allen-output))
+
+(claims agent:claude
+  :at "2026-20-13T19:53:43Z"
+  (given completed-allen-output))
+
+(claims agent:claude
+  :at "2026-20-13T19:53:50Z"
+  (given claimed-temporal-integration))
+
+(claims agent:claude
+  :at "2026-20-13T19:55:22Z"
+  (given completed-temporal-integration))
+
+(claims agent:claude
+  :at "2026-20-13T19:55:28Z"
+  (given claimed-quality))
+
+(claims agent:claude
+  :at "2026-20-13T19:57:20Z"
+  (given completed-quality))

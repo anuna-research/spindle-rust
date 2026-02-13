@@ -33,7 +33,9 @@ use crate::intern::intern;
 use crate::literal::Literal;
 use crate::mode::Mode;
 use crate::rule::{Rule, RuleLabel, RuleType};
-use crate::temporal::{AllenConstraint, Temporal, TemporalExpr, TimeExpr, TimePoint};
+use crate::temporal::{
+    AllenConstraint, Temporal, TemporalExpr, TemporalStateQuery, TimeExpr, TimePoint,
+};
 use crate::theory::Theory;
 
 /// Variable substitution for grounding.
@@ -65,12 +67,13 @@ pub fn literal_has_variables(lit: &Literal) -> bool {
 
 /// Check if a rule contains any variables.
 ///
-/// Allen constraints are treated as variable-bearing because they reference
-/// interval variables that must be validated during grounding.
+/// Allen constraints and state queries are treated as variable-bearing because
+/// they reference interval variables that must be validated during grounding.
 pub fn has_variables(rule: &Rule) -> bool {
     rule.body.iter().any(literal_has_variables)
         || rule.head.iter().any(literal_has_variables)
         || !rule.constraints.is_empty()
+        || !rule.state_queries.is_empty()
 }
 
 /// Try to match a pattern literal against a ground literal.
@@ -509,6 +512,30 @@ fn evaluate_constraints(constraints: &[AllenConstraint], subst: &Substitution) -
     })
 }
 
+/// Evaluate all temporal state queries against bound interval variables.
+///
+/// Returns `true` if all queries are satisfied. Returns `false` if any
+/// query's interval variable is unbound or the state predicate doesn't hold.
+fn evaluate_state_queries(queries: &[TemporalStateQuery], subst: &Substitution) -> bool {
+    queries.iter().all(|q| {
+        let interval = match subst.intervals.get(&q.interval) {
+            Some(t) => t,
+            None => return false,
+        };
+        let time = match &q.time {
+            TimeExpr::Const(tp) => *tp,
+            TimeExpr::Var(id) => {
+                // Try to resolve from temporal endpoint bindings
+                match subst.temporal.get(id) {
+                    Some(tp) => *tp,
+                    None => return false,
+                }
+            }
+        };
+        q.holds(interval, time)
+    })
+}
+
 /// Ground a theory by instantiating rules with variables
 pub fn ground_theory(theory: &Theory) -> Theory {
     ground_theory_with_limit(theory, 100, usize::MAX).0
@@ -602,6 +629,13 @@ pub fn ground_theory_with_limit(
 
                 // Evaluate Allen constraints — reject substitutions that fail
                 if !rule.constraints.is_empty() && !evaluate_constraints(&rule.constraints, &subst)
+                {
+                    continue;
+                }
+
+                // Evaluate temporal state queries — reject substitutions that fail
+                if !rule.state_queries.is_empty()
+                    && !evaluate_state_queries(&rule.state_queries, &subst)
                 {
                     continue;
                 }

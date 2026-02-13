@@ -437,11 +437,20 @@ impl Literal {
         if let Some(var_id) = self.interval_var {
             expr = format!("(during {expr} {})", crate::intern::resolve(var_id));
         } else if let Some(ref texpr) = self.temporal_expr {
-            expr = format!("(during {expr} {} {})", texpr.start, texpr.end);
+            let start_spl = match &texpr.start {
+                crate::temporal::TimeExpr::Const(tp) => tp.to_spl(),
+                crate::temporal::TimeExpr::Var(id) => crate::intern::resolve(*id).to_string(),
+            };
+            let end_spl = match &texpr.end {
+                crate::temporal::TimeExpr::Const(tp) => tp.to_spl(),
+                crate::temporal::TimeExpr::Var(id) => crate::intern::resolve(*id).to_string(),
+            };
+            expr = format!("(during {expr} {start_spl} {end_spl})");
         } else if !self.temporal.is_empty() {
             expr = format!(
                 "(during {expr} {} {})",
-                self.temporal.start, self.temporal.end
+                self.temporal.start.to_spl(),
+                self.temporal.end.to_spl()
             );
         }
 

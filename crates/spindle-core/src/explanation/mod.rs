@@ -114,7 +114,7 @@ fn explain_inner(
         let mut step = ProofStep::new(
             rule.label.clone(),
             rule.rule_type,
-            rule.to_string(), // Rule struct doesn't have source text, approximation
+            rule.to_spl(), // SPL format includes temporal, Allen constraints, state queries
         );
 
         // Determine substitution by matching rule head against conclusion literal
