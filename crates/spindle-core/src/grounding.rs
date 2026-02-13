@@ -181,6 +181,17 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
         }
     }
 
+    // Compare concrete temporal bounds — after temporal substitution, a pattern
+    // may carry concrete temporal values (no interval_var / temporal_expr).
+    // Reject the match when those concrete bounds differ from the ground fact.
+    if pattern.interval_var.is_none()
+        && pattern.temporal_expr.is_none()
+        && !pattern.temporal.is_empty()
+        && pattern.temporal != ground.temporal
+    {
+        return None;
+    }
+
     Some(subst)
 }
 
