@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::{IndexedTheory, LitId};
@@ -360,9 +360,10 @@ fn try_prove_defeasible(
     worklist: &mut VecDeque<(LitId, bool)>,
     conclusions: &mut Vec<Conclusion>,
 ) {
-    if defeasible_proven.contains(q) || defeasible_disproven.contains(q) {
+    if defeasible_disproven.contains(q) {
         return; // already decided
     }
+    let already_proven = defeasible_proven.contains(q);
 
     let nq = q.complement();
 
@@ -456,10 +457,22 @@ fn try_prove_defeasible(
     // Emit one +d conclusion per distinct grounded supporter head literal
     // (e.g., distinct temporal windows). Use deterministic ordering so output
     // does not depend on supporter discovery order.
-    defeasible_proven.insert(q);
+    //
+    // If q is already +d, keep emitting any newly-applicable temporal windows.
+    let mut existing_positive_q: FxHashSet<String> = conclusions
+        .iter()
+        .filter(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && indexed.get_lit_id(&c.literal) == Some(q)
+        })
+        .map(|c| c.literal.to_spl())
+        .collect();
+
     if applicable_supporters.is_empty() {
         let lit = indexed.resolve_literal(q);
-        conclusions.push(Conclusion::defeasibly_provable(lit));
+        if existing_positive_q.insert(lit.to_spl()) {
+            conclusions.push(Conclusion::defeasibly_provable(lit));
+        }
     } else {
         // For duplicate supporters with the same grounded head literal, keep the
         // lexicographically-smallest label for deterministic attribution.
@@ -478,10 +491,16 @@ fn try_prove_defeasible(
 
         for supporter in supporters_by_literal.values() {
             let lit = supporter.head_literal().clone();
-            conclusions.push(Conclusion::defeasibly_provable(lit).with_rule(&supporter.label));
+            if existing_positive_q.insert(lit.to_spl()) {
+                conclusions.push(Conclusion::defeasibly_provable(lit).with_rule(&supporter.label));
+            }
         }
     }
-    worklist.push_back((q, true));
+
+    if !already_proven {
+        defeasible_proven.insert(q);
+        worklist.push_back((q, true));
+    }
 }
 
 /// Try to disprove `q` (prove `-d q`). Implements the dual/mirror of `+d`.
@@ -835,6 +854,60 @@ mod tests {
             q_windows,
             vec![Temporal::from_bounds(0, 10), Temporal::from_bounds(20, 30)],
             "all distinct grounded supporter windows should be emitted deterministically"
+        );
+    }
+
+    #[test]
+    fn test_temporal_supporters_emit_late_windows_after_initial_proof() {
+        use crate::literal::Literal;
+        use crate::rule::Rule;
+        use crate::temporal::Temporal;
+
+        let mut theory = Theory::new();
+        theory.add_fact("p");
+        theory.add_rule(Rule::new(
+            "r_q_early",
+            RuleType::Defeasible,
+            vec![Literal::simple("p")],
+            vec![Literal::new(
+                "q",
+                false,
+                Default::default(),
+                Temporal::from_bounds(0, 10),
+                vec![],
+            )],
+        ));
+        theory.add_defeasible_rule(&["p"], "s");
+        theory.add_rule(Rule::new(
+            "r_q_late",
+            RuleType::Defeasible,
+            vec![Literal::simple("s")],
+            vec![Literal::new(
+                "q",
+                false,
+                Default::default(),
+                Temporal::from_bounds(20, 30),
+                vec![],
+            )],
+        ));
+
+        let (state, _) = run_all_phases(&theory);
+
+        let q_windows: Vec<_> = state
+            .conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            })
+            .map(|c| c.literal.temporal.clone())
+            .collect();
+
+        assert_eq!(
+            q_windows,
+            vec![Temporal::from_bounds(0, 10), Temporal::from_bounds(20, 30)],
+            "late supporters should still contribute additional +d temporal windows"
         );
     }
 }

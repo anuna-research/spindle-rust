@@ -409,6 +409,10 @@ fn match_body_with_delta(
     all_facts: &[Literal],
     delta_facts: &[Literal],
 ) -> Vec<Substitution> {
+    if body.is_empty() {
+        return vec![Substitution::default()];
+    }
+
     let mut results = Vec::new();
     let mut seen: FxHashSet<SubstitutionKey> = FxHashSet::default();
 
@@ -1524,6 +1528,59 @@ mod tests {
             .filter(|r| r.head.iter().any(|h| h.name() == "visited"))
             .count();
         assert!(visited_rules >= 2);
+    }
+
+    #[test]
+    fn test_match_body_with_delta_empty_body_returns_identity_substitution() {
+        let fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
+            FxHashMap::default();
+        let delta_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
+            FxHashMap::default();
+
+        let substitutions = match_body_with_delta(&[], &fact_index, &delta_index, &[], &[]);
+        assert_eq!(
+            substitutions.len(),
+            1,
+            "empty-body matching should yield exactly one identity substitution"
+        );
+        assert!(
+            substitutions[0].terms.is_empty()
+                && substitutions[0].temporal.is_empty()
+                && substitutions[0].intervals.is_empty(),
+            "identity substitution should contain no bindings"
+        );
+    }
+
+    #[test]
+    fn test_ground_theory_keeps_empty_body_temporal_variable_fact() {
+        // Variable-bearing empty-body facts must survive grounding so
+        // TemporalVarValidation can report unresolved temporal variables.
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact(
+            "f_var",
+            Literal::new_with_temporal_expr(
+                "p",
+                false,
+                Mode::empty(),
+                TemporalExpr::new(TimeExpr::var("?t1"), TimeExpr::var("?t2")),
+                vec!["a".to_string()],
+            ),
+        ));
+
+        let grounded = ground_theory(&theory);
+        let has_grounded_var_fact = grounded.rules().any(|r| {
+            r.label.starts_with("f_var_")
+                && r.rule_type == RuleType::Fact
+                && r.body.is_empty()
+                && r.head.iter().any(|h| {
+                    h.name() == "p" && h.predicates() == vec!["a"] && h.temporal_expr.is_some()
+                })
+        });
+
+        assert!(
+            has_grounded_var_fact,
+            "grounding should preserve empty-body temporal-variable facts"
+        );
     }
 
     // =========================================================================
