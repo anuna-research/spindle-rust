@@ -80,7 +80,7 @@ pub mod prelude {
     };
     pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
-    pub use crate::temporal::{Temporal, TimePoint};
+    pub use crate::temporal::{Temporal, TemporalExpr, TimeExpr, TimePoint};
     pub use crate::theory::{Meta, MetaValue, Theory};
 }
 

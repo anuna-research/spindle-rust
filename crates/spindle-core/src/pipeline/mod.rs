@@ -28,7 +28,7 @@ pub mod temporal;
 pub mod validate;
 pub mod wildcard;
 pub use ground::Ground;
-pub use temporal::TemporalFilter;
+pub use temporal::{TemporalFilter, TemporalVarValidation};
 pub use validate::Validate;
 pub use wildcard::WildcardRewrite;
 
@@ -319,6 +319,15 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
             max_iterations: opts.grounding.max_iterations,
             max_instances: opts.grounding.max_instances,
         });
+    }
+
+    // 5. Temporal variable validation (rejects unresolved temporal vars after grounding)
+    builder = builder.stage(TemporalVarValidation::default());
+
+    // 6. Post-grounding temporal re-filter (grounding may have resolved temporal vars
+    //    to concrete intervals that are now filterable by reference_time)
+    if let Some(t) = opts.reference_time {
+        builder = builder.stage(TemporalFilter { reference_time: t });
     }
 
     let pipeline = builder.build();

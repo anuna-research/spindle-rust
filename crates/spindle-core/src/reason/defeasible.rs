@@ -47,20 +47,23 @@ pub(crate) fn resolve_defeasible(
             if !state.definite_proven.contains(comp_id) {
                 // Normal case: +D q and -D ~q → +d q
                 state.defeasible_proven.insert(lit_id);
-                let lit = indexed.resolve_literal(lit_id);
-                // Carry the +D conclusion's rule label onto the +d conclusion
-                let definite_label = state.conclusions.iter().find_map(|c| {
-                    if c.conclusion_type == ConclusionType::DefinitelyProvable
-                        && indexed.get_lit_id(&c.literal) == Some(lit_id)
-                    {
-                        c.rule_label.as_deref()
-                    } else {
-                        None
-                    }
-                });
+                // Reuse the +D conclusion's literal (preserves temporal) and rule label
+                let (lit, definite_label) = state
+                    .conclusions
+                    .iter()
+                    .find_map(|c| {
+                        if c.conclusion_type == ConclusionType::DefinitelyProvable
+                            && indexed.get_lit_id(&c.literal) == Some(lit_id)
+                        {
+                            Some((c.literal.clone(), c.rule_label.as_deref().map(String::from)))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| (indexed.resolve_literal(lit_id), None));
                 let mut conclusion = Conclusion::defeasibly_provable(lit);
                 if let Some(label) = definite_label {
-                    conclusion = conclusion.with_rule(label);
+                    conclusion = conclusion.with_rule(&label);
                 }
                 state.conclusions.push(conclusion);
                 worklist.push_back((lit_id, true));
@@ -448,12 +451,14 @@ fn try_prove_defeasible(
         }
     }
 
-    // All conditions met — pick the first applicable supporter as the deriving rule
+    // All conditions met — pick the first applicable supporter as the deriving rule.
+    // Use the supporter's head literal to preserve temporal bounds from grounding.
     defeasible_proven.insert(q);
-    let lit = indexed.resolve_literal(q);
     let conclusion = if let Some(supporter) = applicable_supporters.first() {
+        let lit = supporter.head_literal().clone();
         Conclusion::defeasibly_provable(lit).with_rule(&supporter.label)
     } else {
+        let lit = indexed.resolve_literal(q);
         Conclusion::defeasibly_provable(lit)
     };
     conclusions.push(conclusion);

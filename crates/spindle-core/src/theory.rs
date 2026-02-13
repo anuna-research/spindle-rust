@@ -221,6 +221,16 @@ impl Theory {
         self.rules.len()
     }
 
+    /// Check if any rule in the theory has non-empty temporal bounds on its literals.
+    pub fn has_temporal_literals(&self) -> bool {
+        self.rules.values().any(|r| {
+            r.body
+                .iter()
+                .chain(r.head.iter())
+                .any(|lit| lit.is_temporal() || lit.has_temporal_variables())
+        })
+    }
+
     /// Perform defeasible reasoning on this theory and return conclusions.
     ///
     /// This is a convenience method that forwards to [`crate::reason::reason()`].

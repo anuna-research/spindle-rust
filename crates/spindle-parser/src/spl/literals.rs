@@ -6,7 +6,7 @@
 use chrono::DateTime;
 use spindle_core::Literal;
 use spindle_core::mode::Mode;
-use spindle_core::temporal::{Temporal, TimePoint};
+use spindle_core::temporal::{Temporal, TemporalExpr, TimeExpr, TimePoint};
 
 use crate::ParseError;
 use crate::error::ParserFormat;
@@ -144,9 +144,19 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
-                    let start = parse_timepoint_with_line(&items[2], line)?;
-                    let end = parse_timepoint_with_line(&items[3], line)?;
-                    lit.temporal = Temporal::new(start, end);
+                    let start = parse_timeexpr_with_line(&items[2], line)?;
+                    let end = parse_timeexpr_with_line(&items[3], line)?;
+
+                    // If both endpoints are concrete, use concrete temporal directly.
+                    // Otherwise, store as temporal_expr for grounding to resolve.
+                    match (&start, &end) {
+                        (TimeExpr::Const(s), TimeExpr::Const(e)) => {
+                            lit.temporal = Temporal::new(*s, *e);
+                        }
+                        _ => {
+                            lit.temporal_expr = Some(TemporalExpr::new(start, end));
+                        }
+                    }
                     Ok(lit)
                 }
                 _ => {
@@ -175,6 +185,21 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
             }
         }
     }
+}
+
+/// Parse a time expression that may be a concrete timepoint or a temporal variable.
+///
+/// Temporal variables start with `?` (e.g., `?t1`, `?start`).
+/// Concrete values are parsed by [`parse_timepoint_with_line`].
+pub(crate) fn parse_timeexpr_with_line(expr: &SExpr, line: usize) -> Result<TimeExpr, ParseError> {
+    // Check for temporal variable first
+    if let SExpr::Atom { value: s, .. } = expr
+        && s.starts_with('?')
+    {
+        return Ok(TimeExpr::var(s));
+    }
+    // Fall back to concrete timepoint parsing
+    parse_timepoint_with_line(expr, line).map(TimeExpr::Const)
 }
 
 /// Parse a timepoint expression with line number tracking

@@ -1,0 +1,272 @@
+; =================================================================
+; SPL Temporal Variable Propagation - Reimplementation Plan
+; =================================================================
+; Port temporal variable propagation from codex/spl-temporal-variable-propagation
+; onto the rearchitected main branch (composable pipeline, split modules).
+;
+; Old branch was against pre-rearchitecture code. Main now has:
+;   - Composable PipelineStage trait (not monolithic prepare())
+;   - Reasoning split: reason/{mod,facts,definite,defeasible,state}.rs
+;   - SPL parser split: spl/{mod,lexer,literals,rules,expressions,metadata}.rs
+;   - IndexedTheory strips temporal from atom identity (correct)
+;
+; Reference: origin/codex/spl-temporal-variable-propagation (7 commits)
+; =================================================================
+
+; -----------------------------------------------------------------
+; Agent definitions
+; -----------------------------------------------------------------
+(given agent-claude-available)
+
+; -----------------------------------------------------------------
+; Phase 1: Core Type Extensions (temporal.rs, literal.rs)
+; -----------------------------------------------------------------
+(given task-time-expr)
+(given no-deps-time-expr)
+(meta task-time-expr
+  (description "Add TimeExpr enum (Const(TimePoint) | Var(SymbolId)) and TemporalExpr struct to temporal.rs. Add interval set helpers: normalize_intervals, intersection_interval_sets, subtract_interval_sets. Add TimePoint::successor/predecessor for closed-interval subtraction edges.")
+  (file "crates/spindle-core/src/temporal.rs"))
+
+(given task-literal-temporal-expr)
+(given dep-literal-on-time-expr)
+(meta task-literal-temporal-expr
+  (description "Add optional temporal_expr: Option<TemporalExpr> field to Literal struct. Add constructor new_with_temporal_expr(). Update complement(), clone, Display, to_spl() to propagate temporal_expr. Equality/hash must remain temporal-agnostic (index compatibility).")
+  (file "crates/spindle-core/src/literal.rs"))
+
+; Phase 1 readiness and sequencing
+(normally r-ready-time-expr
+  (and task-time-expr no-deps-time-expr)
+  ready-time-expr)
+
+(normally r-ready-literal-temporal-expr
+  (and task-literal-temporal-expr dep-literal-on-time-expr completed-time-expr)
+  ready-literal-temporal-expr)
+
+; -----------------------------------------------------------------
+; Phase 2: SPL Parser Support (spl/literals.rs)
+; -----------------------------------------------------------------
+(given task-spl-parser-temporal-vars)
+(given dep-parser-on-literal)
+(meta task-spl-parser-temporal-vars
+  (description "Extend parse_timepoint_with_line in spl/literals.rs to recognize ?-prefixed atoms as TimeExpr::Var. When a during endpoint is a variable, produce temporal_expr on the Literal instead of concrete temporal. Mixed concrete/variable endpoints are valid. Add parser error tests for invalid time expressions.")
+  (file "crates/spindle-parser/src/spl/literals.rs"))
+
+(normally r-ready-spl-parser
+  (and task-spl-parser-temporal-vars dep-parser-on-literal completed-literal-temporal-expr)
+  ready-spl-parser)
+
+; -----------------------------------------------------------------
+; Phase 3: Grounding Temporal Substitution (grounding.rs)
+; -----------------------------------------------------------------
+(given task-grounding-temporal-sub)
+(given dep-grounding-on-parser)
+(meta task-grounding-temporal-sub
+  (description "Extend Substitution in grounding.rs to include temporal_bindings: HashMap<SymbolId, TimePoint>. During match/unify, bind temporal vars from body literal temporal_expr against concrete fact intervals. Apply substitution to resolve temporal_expr into concrete Temporal. Conflicting temporal bindings for same var reject the substitution. Unresolvable vars left symbolic for pipeline validation to reject.")
+  (file "crates/spindle-core/src/grounding.rs"))
+
+(normally r-ready-grounding
+  (and task-grounding-temporal-sub dep-grounding-on-parser completed-spl-parser)
+  ready-grounding)
+
+; -----------------------------------------------------------------
+; Phase 4: Pipeline Post-Grounding Validation (pipeline/)
+; -----------------------------------------------------------------
+(given task-pipeline-temporal-validation)
+(given dep-pipeline-on-grounding)
+(meta task-pipeline-temporal-validation
+  (description "Add a TemporalVarValidation pipeline stage that rejects theories with unresolved temporal_expr after grounding. Add post-grounding temporal re-filtering: after Ground stage, if reference_time is set, re-apply TemporalFilter to catch newly-grounded temporal literals. Clamp active temporal windows to [t,t] for as-of query consistency. Wire into prepare() between Ground and final output.")
+  (file "crates/spindle-core/src/pipeline/mod.rs"))
+
+(normally r-ready-pipeline
+  (and task-pipeline-temporal-validation dep-pipeline-on-grounding completed-grounding)
+  ready-pipeline)
+
+; -----------------------------------------------------------------
+; Phase 5: Temporal Reasoning Path (reason/)
+; -----------------------------------------------------------------
+(given task-temporal-reasoning)
+(given dep-reasoning-on-pipeline)
+(meta task-temporal-reasoning
+  (description "Add temporal dispatch in reason/mod.rs: detect if theory has temporal literals, if so use interval-support fixpoint path. Temporal path computes: definite/defeasible support intervals per literal. Rule-derived support = intersection of rule temporal, head temporal, all body support intervals. Blocking is overlap-aware: complements block only on overlapping windows. Superiority applies only on overlapping windows. Emit one positive conclusion per normalized support interval. Emit negative conclusions only when support is empty. Non-temporal theories use existing fast bitset path unchanged.")
+  (file "crates/spindle-core/src/reason/"))
+
+(normally r-ready-reasoning
+  (and task-temporal-reasoning dep-reasoning-on-pipeline completed-pipeline)
+  ready-reasoning)
+
+; -----------------------------------------------------------------
+; Phase 6: Integration Tests
+; -----------------------------------------------------------------
+(given task-integration-tests)
+(given dep-tests-on-reasoning)
+(meta task-integration-tests
+  (description "Port temporal_propagation_tests.rs from old branch: non-overlapping body intervals block rule, overlapping body intervals derive intersection, chain propagation, three-way overlap, disjoint complements non-conflict, overlap-only superiority/defeater blocking, query with reference_time over intervalized support. Add SPL parser tests for temporal variable endpoints. Add grounding tests for temporal var propagation and conflicting bindings.")
+  (file "crates/spindle-core/tests/temporal_propagation_tests.rs"))
+
+(normally r-ready-tests
+  (and task-integration-tests dep-tests-on-reasoning completed-reasoning)
+  ready-tests)
+
+; -----------------------------------------------------------------
+; Phase 7: CLI Integration
+; -----------------------------------------------------------------
+(given task-cli-integration)
+(given dep-cli-on-tests)
+(meta task-cli-integration
+  (description "Ensure JSON reason output includes intervalized temporal conclusions for same base literal. Update CLI integration test to verify temporal JSON output structure.")
+  (file "crates/spindle-cli/tests/integration.rs"))
+
+(normally r-ready-cli
+  (and task-cli-integration dep-cli-on-tests completed-tests)
+  ready-cli)
+
+; -----------------------------------------------------------------
+; Phase 8: Cargo check + Wildcard rewrite propagation
+; -----------------------------------------------------------------
+(given task-cargo-check)
+(given dep-check-on-cli)
+(meta task-cargo-check
+  (description "Run make check (fmt + clippy -D warnings) and make test. Fix any issues. Ensure wildcard rewrite in pipeline/wildcard.rs propagates temporal_expr on rewritten literals (like old branch did in rewrite_literal_wildcards).")
+  (file "Makefile"))
+
+(normally r-ready-check
+  (and task-cargo-check dep-check-on-cli completed-cli)
+  ready-check)
+
+; -----------------------------------------------------------------
+; Assignment rules
+; -----------------------------------------------------------------
+(normally r-assign-time-expr
+  (and ready-time-expr agent-claude-available)
+  assignTo-time-expr-claude)
+
+(normally r-assign-literal
+  (and ready-literal-temporal-expr agent-claude-available)
+  assignTo-literal-temporal-expr-claude)
+
+(normally r-assign-parser
+  (and ready-spl-parser agent-claude-available)
+  assignTo-spl-parser-claude)
+
+(normally r-assign-grounding
+  (and ready-grounding agent-claude-available)
+  assignTo-grounding-claude)
+
+(normally r-assign-pipeline
+  (and ready-pipeline agent-claude-available)
+  assignTo-pipeline-claude)
+
+(normally r-assign-reasoning
+  (and ready-reasoning agent-claude-available)
+  assignTo-reasoning-claude)
+
+(normally r-assign-tests
+  (and ready-tests agent-claude-available)
+  assignTo-tests-claude)
+
+(normally r-assign-cli
+  (and ready-cli agent-claude-available)
+  assignTo-cli-claude)
+
+(normally r-assign-check
+  (and ready-check agent-claude-available)
+  assignTo-check-claude)
+
+; -----------------------------------------------------------------
+; Completion gate: all phases must be done
+; -----------------------------------------------------------------
+(normally r-feature-complete
+  (and completed-check completed-tests completed-cli)
+  feature-complete)
+
+; -----------------------------------------------------------------
+; Known risks / defeaters from bug hunt
+; -----------------------------------------------------------------
+
+; The existing fast bitset path must not regress for non-temporal theories
+(except d-perf-regression
+  (and task-temporal-reasoning completed-reasoning)
+  (not non-temporal-fast-path-preserved))
+
+; Grounding dead iteration guard (known bug) could interact with temporal vars
+(except d-grounding-guard
+  (and task-grounding-temporal-sub completed-grounding)
+  (not grounding-iteration-guard-safe))
+
+; IndexedTheory strips temporal from atom identity - temporal reasoning
+; must work around this by using rule-level temporal, not atom-level
+(except d-index-temporal-strip
+  (and task-temporal-reasoning completed-reasoning)
+  (not index-temporal-compatibility))
+
+(claims agent:system
+  :at "2026-20-13T13:30:49Z"
+  (given claimed-time-expr))
+
+(claims agent:claude
+  :at "2026-20-13T13:33:13Z"
+  (given completed-time-expr))
+
+(claims agent:system
+  :at "2026-20-13T13:33:23Z"
+  (given claimed-literal-temporal-expr))
+
+(claims agent:claude
+  :at "2026-20-13T13:37:58Z"
+  (given completed-literal-temporal-expr))
+
+(claims agent:system
+  :at "2026-20-13T13:38:21Z"
+  (given claimed-spl-parser-temporal-vars))
+
+(claims agent:system
+  :at "2026-20-13T13:38:21Z"
+  (given claimed-grounding-temporal-sub))
+
+(claims agent:system
+  :at "2026-20-13T13:38:21Z"
+  (given claimed-pipeline-temporal-validation))
+
+(claims agent:system
+  :at "2026-20-13T13:38:22Z"
+  (given claimed-temporal-reasoning))
+
+(claims agent:system
+  :at "2026-20-13T13:38:22Z"
+  (given claimed-integration-tests))
+
+(claims agent:system
+  :at "2026-20-13T13:38:22Z"
+  (given claimed-cli-integration))
+
+(claims agent:system
+  :at "2026-20-13T13:38:22Z"
+  (given claimed-cargo-check))
+
+(claims agent:claude
+  :at "2026-20-13T13:39:11Z"
+  (given completed-spl-parser-temporal-vars))
+
+(claims agent:claude
+  :at "2026-20-13T13:47:15Z"
+  (given completed-grounding-temporal-sub))
+
+(claims agent:claude
+  :at "2026-20-13T13:49:57Z"
+  (given completed-pipeline-temporal-validation))
+
+(claims agent:claude
+  :at "2026-20-13T13:53:10Z"
+  (given completed-temporal-reasoning))
+
+(claims agent:claude
+  :at "2026-20-13T14:20:57Z"
+  (given completed-integration-tests))
+
+(claims agent:claude
+  :at "2026-20-13T14:20:57Z"
+  (given completed-cli-integration))
+
+(claims agent:claude
+  :at "2026-20-13T14:20:58Z"
+  (given completed-cargo-check))
