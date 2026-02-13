@@ -903,7 +903,7 @@ mod tests {
         let err = parse_spl("(given (during p))").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("during takes exactly three arguments"),
+            msg.contains("during takes either"),
             "Expected during arity error, got: {msg}"
         );
     }

@@ -19,6 +19,8 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use crate::intern::SymbolId;
+
 /// Represents a time point (can be a moment or infinity)
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default)]
@@ -109,6 +111,42 @@ impl fmt::Display for TimePoint {
 }
 
 impl TimePoint {
+    /// Return the next representable time point (for closed-interval subtraction).
+    ///
+    /// - `NegInf` → `NegInf` (no successor for negative infinity)
+    /// - `PosInf` → `PosInf`
+    /// - `Moment(v)` → `Moment(v + 1)` (saturating at `i64::MAX` → `PosInf`)
+    pub fn successor(self) -> Self {
+        match self {
+            TimePoint::Moment(v) => {
+                if v == i64::MAX {
+                    TimePoint::PosInf
+                } else {
+                    TimePoint::Moment(v + 1)
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// Return the previous representable time point (for closed-interval subtraction).
+    ///
+    /// - `PosInf` → `PosInf`
+    /// - `NegInf` → `NegInf`
+    /// - `Moment(v)` → `Moment(v - 1)` (saturating at `i64::MIN` → `NegInf`)
+    pub fn predecessor(self) -> Self {
+        match self {
+            TimePoint::Moment(v) => {
+                if v == i64::MIN {
+                    TimePoint::NegInf
+                } else {
+                    TimePoint::Moment(v - 1)
+                }
+            }
+            other => other,
+        }
+    }
+
     /// Convert a TimePoint to RFC3339 format string.
     ///
     /// Returns `None` for infinite time points.
@@ -459,6 +497,75 @@ pub enum AllenRelation {
 }
 
 impl AllenRelation {
+    /// Parse an Allen relation from its SPL keyword.
+    ///
+    /// Note: `"within"` maps to `During` (avoids ambiguity with the `during`
+    /// temporal annotation in SPL).
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        match keyword {
+            "before" => Some(AllenRelation::Before),
+            "after" => Some(AllenRelation::After),
+            "meets" => Some(AllenRelation::Meets),
+            "met-by" => Some(AllenRelation::MetBy),
+            "overlaps" => Some(AllenRelation::Overlaps),
+            "overlapped-by" => Some(AllenRelation::OverlappedBy),
+            "starts" => Some(AllenRelation::Starts),
+            "started-by" => Some(AllenRelation::StartedBy),
+            "within" => Some(AllenRelation::During),
+            "contains" => Some(AllenRelation::Contains),
+            "finishes" => Some(AllenRelation::Finishes),
+            "finished-by" => Some(AllenRelation::FinishedBy),
+            "equals" => Some(AllenRelation::Equals),
+            _ => None,
+        }
+    }
+
+    /// Check if a keyword string is a known Allen relation.
+    pub fn is_allen_keyword(keyword: &str) -> bool {
+        Self::from_keyword(keyword).is_some()
+    }
+
+    /// Render as an SPL keyword.
+    ///
+    /// Uses `"within"` for `During` to avoid ambiguity with temporal
+    /// annotation syntax `(during literal start end)`.
+    pub fn spl_keyword(&self) -> &'static str {
+        match self {
+            AllenRelation::Before => "before",
+            AllenRelation::After => "after",
+            AllenRelation::Meets => "meets",
+            AllenRelation::MetBy => "met-by",
+            AllenRelation::Overlaps => "overlaps",
+            AllenRelation::OverlappedBy => "overlapped-by",
+            AllenRelation::Contains => "contains",
+            AllenRelation::During => "within",
+            AllenRelation::Starts => "starts",
+            AllenRelation::StartedBy => "started-by",
+            AllenRelation::Finishes => "finishes",
+            AllenRelation::FinishedBy => "finished-by",
+            AllenRelation::Equals => "equals",
+        }
+    }
+
+    /// Check whether this relation holds between two concrete intervals.
+    pub fn holds(&self, t1: &Temporal, t2: &Temporal) -> bool {
+        match self {
+            AllenRelation::Before => t1.before(t2),
+            AllenRelation::After => t1.after(t2),
+            AllenRelation::Meets => t1.meets(t2),
+            AllenRelation::MetBy => t1.met_by(t2),
+            AllenRelation::Overlaps => t1.overlaps(t2),
+            AllenRelation::OverlappedBy => t1.overlapped_by(t2),
+            AllenRelation::Starts => t1.starts(t2),
+            AllenRelation::StartedBy => t1.started_by(t2),
+            AllenRelation::During => t1.during(t2),
+            AllenRelation::Contains => t1.contains(t2),
+            AllenRelation::Finishes => t1.finishes(t2),
+            AllenRelation::FinishedBy => t1.finished_by(t2),
+            AllenRelation::Equals => t1.equals(t2),
+        }
+    }
+
     /// Get the inverse relation
     pub fn inverse(&self) -> Self {
         match self {
@@ -498,6 +605,280 @@ impl fmt::Display for AllenRelation {
         };
         write!(f, "{s}")
     }
+}
+
+/// A constraint between two interval variables based on an Allen relation.
+///
+/// Allen constraints appear in rule bodies and restrict which groundings are
+/// valid. During grounding, both interval variables must be bound (via
+/// single-variable `(during ...)` forms), and the relation must hold between
+/// the bound intervals for the substitution to be accepted.
+///
+/// # Example (SPL)
+///
+/// ```text
+/// (normally r1
+///   (and (during (p ?x) ?T) (during (q ?y) ?S) (before ?T ?S))
+///   (result ?x ?y))
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AllenConstraint {
+    /// The Allen relation that must hold.
+    pub relation: AllenRelation,
+    /// First interval variable (e.g., `?T`).
+    pub interval1: SymbolId,
+    /// Second interval variable (e.g., `?S`).
+    pub interval2: SymbolId,
+}
+
+impl AllenConstraint {
+    /// Create a new Allen constraint.
+    pub fn new(relation: AllenRelation, interval1: SymbolId, interval2: SymbolId) -> Self {
+        Self {
+            relation,
+            interval1,
+            interval2,
+        }
+    }
+
+    /// Check if the constraint holds between two concrete intervals.
+    pub fn holds(&self, t1: &Temporal, t2: &Temporal) -> bool {
+        self.relation.holds(t1, t2)
+    }
+
+    /// Render this constraint in SPL syntax.
+    pub fn to_spl(&self) -> String {
+        format!(
+            "({} {} {})",
+            self.relation.spl_keyword(),
+            crate::intern::resolve(self.interval1),
+            crate::intern::resolve(self.interval2)
+        )
+    }
+}
+
+impl fmt::Display for AllenConstraint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "({} {} {})",
+            self.relation,
+            crate::intern::resolve(self.interval1),
+            crate::intern::resolve(self.interval2)
+        )
+    }
+}
+
+// =========================================================================
+// TEMPORAL EXPRESSIONS (PRE-GROUNDING SYMBOLIC FORM)
+// =========================================================================
+
+/// A time expression that may be concrete or a variable (pre-grounding).
+///
+/// During parsing, `(during lit ?t1 ?t2)` produces `TimeExpr::Var` endpoints.
+/// After grounding, all variables are resolved to `TimeExpr::Const`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TimeExpr {
+    /// A concrete time point.
+    Const(TimePoint),
+    /// A temporal variable (bound during grounding).
+    Var(SymbolId),
+}
+
+impl TimeExpr {
+    /// Create a concrete time expression.
+    pub fn constant(tp: TimePoint) -> Self {
+        TimeExpr::Const(tp)
+    }
+
+    /// Create a variable time expression from a `SymbolId`.
+    pub fn var(name: &str) -> Self {
+        TimeExpr::Var(crate::intern::intern(name))
+    }
+
+    /// Create a variable time expression from an existing `SymbolId`.
+    pub fn var_id(id: SymbolId) -> Self {
+        TimeExpr::Var(id)
+    }
+
+    /// Check if this expression is a variable.
+    pub fn is_var(&self) -> bool {
+        matches!(self, TimeExpr::Var(_))
+    }
+
+    /// Check if this expression is concrete.
+    pub fn is_const(&self) -> bool {
+        matches!(self, TimeExpr::Const(_))
+    }
+
+    /// Try to extract the concrete time point.
+    pub fn as_const(&self) -> Option<TimePoint> {
+        match self {
+            TimeExpr::Const(tp) => Some(*tp),
+            TimeExpr::Var(_) => None,
+        }
+    }
+
+    /// Try to extract the variable symbol ID.
+    pub fn as_var(&self) -> Option<SymbolId> {
+        match self {
+            TimeExpr::Var(id) => Some(*id),
+            TimeExpr::Const(_) => None,
+        }
+    }
+}
+
+impl fmt::Display for TimeExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TimeExpr::Const(tp) => write!(f, "{tp}"),
+            TimeExpr::Var(id) => write!(f, "{}", crate::intern::resolve(*id)),
+        }
+    }
+}
+
+/// A temporal expression with start and end that may contain variables.
+///
+/// This is the pre-grounding form of a `Temporal`. After grounding resolves
+/// all variables, it is converted to a concrete `Temporal`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TemporalExpr {
+    /// Start time expression.
+    pub start: TimeExpr,
+    /// End time expression.
+    pub end: TimeExpr,
+}
+
+impl TemporalExpr {
+    /// Create a new temporal expression.
+    pub fn new(start: TimeExpr, end: TimeExpr) -> Self {
+        Self { start, end }
+    }
+
+    /// Check if this expression has any variables.
+    pub fn has_variables(&self) -> bool {
+        self.start.is_var() || self.end.is_var()
+    }
+
+    /// Check if both endpoints are concrete.
+    pub fn is_fully_concrete(&self) -> bool {
+        self.start.is_const() && self.end.is_const()
+    }
+
+    /// Try to convert to a concrete `Temporal` (returns `None` if variables remain).
+    pub fn to_concrete(&self) -> Option<Temporal> {
+        match (&self.start, &self.end) {
+            (TimeExpr::Const(s), TimeExpr::Const(e)) => Some(Temporal::new(*s, *e)),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for TemporalExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{},{}]", self.start, self.end)
+    }
+}
+
+// =========================================================================
+// INTERVAL SET HELPERS
+// =========================================================================
+
+/// Normalize a set of intervals: sort by start, merge overlapping/adjacent.
+pub fn normalize_intervals(intervals: &[Temporal]) -> Vec<Temporal> {
+    if intervals.is_empty() {
+        return Vec::new();
+    }
+
+    let mut sorted: Vec<_> = intervals.to_vec();
+    sorted.sort_by(|a, b| match a.start.cmp(&b.start) {
+        Ordering::Equal => a.end.cmp(&b.end),
+        other => other,
+    });
+
+    let mut result = vec![sorted[0].clone()];
+    for interval in &sorted[1..] {
+        let last = result.last_mut().unwrap();
+        // Merge if overlapping or adjacent (end >= start - 1)
+        if last.end >= interval.start || last.end.successor() == interval.start {
+            if interval.end > last.end {
+                last.end = interval.end;
+            }
+        } else {
+            result.push(interval.clone());
+        }
+    }
+    result
+}
+
+/// Compute the intersection of two interval sets.
+///
+/// Returns a normalized set of intervals where both sets are active.
+pub fn intersection_interval_sets(a: &[Temporal], b: &[Temporal]) -> Vec<Temporal> {
+    let mut result = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+
+    while i < a.len() && j < b.len() {
+        if let Some(inter) = a[i].intersection(&b[j]) {
+            result.push(inter);
+        }
+        // Advance the interval that ends first
+        if a[i].end <= b[j].end {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+
+    normalize_intervals(&result)
+}
+
+/// Subtract interval set `b` from interval set `a`.
+///
+/// Returns a normalized set of intervals where `a` is active but `b` is not.
+/// Uses closed-interval arithmetic: if `b = [10, 20]`, the result of
+/// `[0, 30] - [10, 20]` is `[0, 9], [21, 30]` (using successor/predecessor).
+pub fn subtract_interval_sets(a: &[Temporal], b: &[Temporal]) -> Vec<Temporal> {
+    let mut result: Vec<Temporal> = a.to_vec();
+
+    for blocker in b {
+        let mut new_result = Vec::new();
+        for interval in &result {
+            // No overlap: keep interval as-is
+            if !interval.intersects(blocker) {
+                new_result.push(interval.clone());
+                continue;
+            }
+
+            // Left remainder: [interval.start, blocker.start - 1]
+            if interval.start < blocker.start {
+                let left_end = blocker.start.predecessor();
+                if interval.start <= left_end {
+                    new_result.push(Temporal {
+                        start: interval.start,
+                        end: left_end,
+                    });
+                }
+            }
+
+            // Right remainder: [blocker.end + 1, interval.end]
+            if interval.end > blocker.end {
+                let right_start = blocker.end.successor();
+                if right_start <= interval.end {
+                    new_result.push(Temporal {
+                        start: right_start,
+                        end: interval.end,
+                    });
+                }
+            }
+        }
+        result = new_result;
+    }
+
+    normalize_intervals(&result)
 }
 
 #[cfg(test)]
@@ -1333,5 +1714,145 @@ mod tests {
         assert!(TimePoint::NegInf < moment);
         assert!(moment < TimePoint::PosInf);
         assert!(TimePoint::NegInf < TimePoint::PosInf);
+    }
+
+    // =========================================================================
+    // SUCCESSOR / PREDECESSOR TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_successor() {
+        assert_eq!(TimePoint::Moment(5).successor(), TimePoint::Moment(6));
+        assert_eq!(TimePoint::Moment(i64::MAX).successor(), TimePoint::PosInf);
+        assert_eq!(TimePoint::PosInf.successor(), TimePoint::PosInf);
+        assert_eq!(TimePoint::NegInf.successor(), TimePoint::NegInf);
+    }
+
+    #[test]
+    fn test_predecessor() {
+        assert_eq!(TimePoint::Moment(5).predecessor(), TimePoint::Moment(4));
+        assert_eq!(TimePoint::Moment(i64::MIN).predecessor(), TimePoint::NegInf);
+        assert_eq!(TimePoint::NegInf.predecessor(), TimePoint::NegInf);
+        assert_eq!(TimePoint::PosInf.predecessor(), TimePoint::PosInf);
+    }
+
+    // =========================================================================
+    // TIME EXPRESSION TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_time_expr_const() {
+        let expr = TimeExpr::constant(TimePoint::Moment(42));
+        assert!(expr.is_const());
+        assert!(!expr.is_var());
+        assert_eq!(expr.as_const(), Some(TimePoint::Moment(42)));
+        assert_eq!(expr.as_var(), None);
+    }
+
+    #[test]
+    fn test_time_expr_var() {
+        let expr = TimeExpr::var("?t1");
+        assert!(expr.is_var());
+        assert!(!expr.is_const());
+        assert_eq!(expr.as_const(), None);
+        assert!(expr.as_var().is_some());
+    }
+
+    #[test]
+    fn test_temporal_expr_concrete() {
+        let texpr = TemporalExpr::new(
+            TimeExpr::constant(TimePoint::Moment(0)),
+            TimeExpr::constant(TimePoint::Moment(10)),
+        );
+        assert!(texpr.is_fully_concrete());
+        assert!(!texpr.has_variables());
+        let concrete = texpr.to_concrete().unwrap();
+        assert_eq!(concrete, Temporal::from_bounds(0, 10));
+    }
+
+    #[test]
+    fn test_temporal_expr_with_var() {
+        let texpr = TemporalExpr::new(
+            TimeExpr::var("?t1"),
+            TimeExpr::constant(TimePoint::Moment(10)),
+        );
+        assert!(texpr.has_variables());
+        assert!(!texpr.is_fully_concrete());
+        assert!(texpr.to_concrete().is_none());
+    }
+
+    // =========================================================================
+    // INTERVAL SET HELPER TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_normalize_intervals_basic() {
+        let intervals = vec![
+            Temporal::from_bounds(0, 10),
+            Temporal::from_bounds(5, 15),
+            Temporal::from_bounds(20, 30),
+        ];
+        let normalized = normalize_intervals(&intervals);
+        assert_eq!(normalized.len(), 2);
+        assert_eq!(normalized[0], Temporal::from_bounds(0, 15));
+        assert_eq!(normalized[1], Temporal::from_bounds(20, 30));
+    }
+
+    #[test]
+    fn test_normalize_intervals_adjacent() {
+        let intervals = vec![Temporal::from_bounds(0, 10), Temporal::from_bounds(11, 20)];
+        let normalized = normalize_intervals(&intervals);
+        assert_eq!(normalized.len(), 1);
+        assert_eq!(normalized[0], Temporal::from_bounds(0, 20));
+    }
+
+    #[test]
+    fn test_normalize_intervals_empty() {
+        let normalized = normalize_intervals(&[]);
+        assert!(normalized.is_empty());
+    }
+
+    #[test]
+    fn test_intersection_interval_sets() {
+        let a = vec![Temporal::from_bounds(0, 20)];
+        let b = vec![Temporal::from_bounds(10, 30)];
+        let result = intersection_interval_sets(&a, &b);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], Temporal::from_bounds(10, 20));
+    }
+
+    #[test]
+    fn test_intersection_interval_sets_disjoint() {
+        let a = vec![Temporal::from_bounds(0, 10)];
+        let b = vec![Temporal::from_bounds(20, 30)];
+        let result = intersection_interval_sets(&a, &b);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_subtract_interval_sets_basic() {
+        let a = vec![Temporal::from_bounds(0, 30)];
+        let b = vec![Temporal::from_bounds(10, 20)];
+        let result = subtract_interval_sets(&a, &b);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], Temporal::from_bounds(0, 9));
+        assert_eq!(result[1], Temporal::from_bounds(21, 30));
+    }
+
+    #[test]
+    fn test_subtract_interval_sets_no_overlap() {
+        let a = vec![Temporal::from_bounds(0, 10)];
+        let b = vec![Temporal::from_bounds(20, 30)];
+        let result = subtract_interval_sets(&a, &b);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], Temporal::from_bounds(0, 10));
+    }
+
+    #[test]
+    fn test_subtract_interval_sets_complete_removal() {
+        let a = vec![Temporal::from_bounds(5, 15)];
+        let b = vec![Temporal::from_bounds(0, 20)];
+        let result = subtract_interval_sets(&a, &b);
+        assert!(result.is_empty());
     }
 }

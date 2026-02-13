@@ -1,10 +1,14 @@
-//! Temporal filtering pipeline stage.
+//! Temporal pipeline stages.
 //!
-//! Provides the [`TemporalFilter`] stage which removes rules and facts that
-//! are not active at a given reference [`TimePoint`] ("as-of" semantics).
+//! Provides:
+//! - [`TemporalFilter`] — removes rules/facts not active at a reference [`TimePoint`]
+//!   ("as-of" semantics).
+//! - [`TemporalVarValidation`] — rejects theories with unresolved temporal variables
+//!   after grounding.
 
 use super::{Diagnostic, MetadataVal, PipelineContext, PipelineStage, Severity};
 use crate::error::Result;
+use crate::error::SpindleError;
 use crate::temporal::TimePoint;
 use crate::theory::Theory;
 
@@ -44,27 +48,15 @@ pub(crate) fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
 
     // Filter rules
     for rule in theory.rules() {
-        // A rule is active if ALL its body literals and its head literals are active
-        // Wait, spec says:
-        // - Rule firing at time t requires all body literals be active at t.
-        // - A rule can only derive a head literal that is active at t.
-        // So we filter the RULES themselves based on their literals.
-        // Actually, we should probably keep the rule if it COULD be active,
-        // but strict filtering removes it if ANY literal is definitely inactive (disjoint).
-        // Since we don't have interval sets yet, we just check if the literal's temporal
-        // includes t.
-
-        // Check head
-        let head_active = rule
-            .head
-            .iter()
-            .all(|lit| lit.temporal.is_empty() || lit.temporal.active_at(t));
+        // Check head — skip literals with unresolved temporal_expr (can't filter those)
+        let head_active = rule.head.iter().all(|lit| {
+            lit.temporal_expr.is_some() || lit.temporal.is_empty() || lit.temporal.active_at(t)
+        });
 
         // Check body
-        let body_active = rule
-            .body
-            .iter()
-            .all(|lit| lit.temporal.is_empty() || lit.temporal.active_at(t));
+        let body_active = rule.body.iter().all(|lit| {
+            lit.temporal_expr.is_some() || lit.temporal.is_empty() || lit.temporal.active_at(t)
+        });
 
         let rule_active = rule.temporal.is_empty() || rule.temporal.active_at(t);
 
@@ -87,4 +79,70 @@ pub(crate) fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
     *new_theory.trust_policy_mut() = theory.trust_policy().clone();
 
     new_theory
+}
+
+// ---------------------------------------------------------------------------
+// TemporalVarValidation stage
+// ---------------------------------------------------------------------------
+
+/// Rejects theories that still contain unresolved temporal variables after grounding.
+///
+/// This stage should be placed **after** the [`Ground`](super::Ground) stage.
+/// If any rule body or head literal still has a `temporal_expr` (meaning its
+/// temporal variables were not fully bound during grounding), the stage emits
+/// an error diagnostic. By default it returns the theory with a warning; set
+/// `strict` to true to return `Err`.
+#[derive(Debug, Clone)]
+pub struct TemporalVarValidation {
+    /// If true, unresolved temporal variables cause a hard error.
+    /// If false (default), they produce a warning diagnostic.
+    pub strict: bool,
+}
+
+impl Default for TemporalVarValidation {
+    fn default() -> Self {
+        Self { strict: true }
+    }
+}
+
+impl PipelineStage for TemporalVarValidation {
+    fn name(&self) -> &'static str {
+        "temporal_var_validation"
+    }
+
+    fn apply(&self, theory: Theory, ctx: &mut PipelineContext) -> Result<Theory> {
+        let mut unresolved = Vec::new();
+
+        for rule in theory.rules() {
+            for lit in rule.body.iter().chain(rule.head.iter()) {
+                if lit.has_temporal_variables() {
+                    unresolved.push(format!(
+                        "rule '{}': literal '{}' has unresolved temporal variables",
+                        rule.label,
+                        lit.to_spl(),
+                    ));
+                }
+            }
+        }
+
+        if !unresolved.is_empty() {
+            let message = format!(
+                "{} unresolved temporal variable(s) after grounding:\n  {}",
+                unresolved.len(),
+                unresolved.join("\n  ")
+            );
+
+            if self.strict {
+                return Err(SpindleError::Validation { message });
+            }
+
+            ctx.diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                stage: self.name(),
+                message,
+            });
+        }
+
+        Ok(theory)
+    }
 }

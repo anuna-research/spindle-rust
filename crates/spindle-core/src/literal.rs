@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::intern::{LiteralId, SymbolId, intern, resolve};
 use crate::mode::Mode;
-use crate::temporal::Temporal;
+use crate::temporal::{Temporal, TemporalExpr};
 
 /// A newtype wrapping `SymbolId` for internal literal-name storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
@@ -137,9 +137,21 @@ pub struct Literal {
     pub mode: Mode,
     /// Temporal bounds (if any)
     pub temporal: Temporal,
+    /// Pre-grounding temporal expression with possible variables.
+    ///
+    /// When `Some`, this literal was parsed with temporal variable endpoints
+    /// (e.g., `(during lit ?t1 ?t2)`). After grounding resolves the variables,
+    /// this is converted to a concrete `temporal` and set back to `None`.
+    pub temporal_expr: Option<TemporalExpr>,
     /// Predicate arguments (e.g., for parent(alice, bob))
     /// Stored as interned SymbolIds for efficiency
     predicate_ids: Vec<SymbolId>,
+    /// Interval variable for single-variable `(during ...)` binding.
+    ///
+    /// When set, this literal was parsed with `(during (lit) ?T)` and the
+    /// interval variable `?T` will be bound to the matched fact's full
+    /// `Temporal` during grounding. Mutually exclusive with `temporal_expr`.
+    pub interval_var: Option<SymbolId>,
 }
 
 /// Stable, semantic literal representation for JSON outputs
@@ -166,7 +178,9 @@ impl Literal {
             negation: false,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
+            temporal_expr: None,
             predicate_ids: Vec::new(),
+            interval_var: None,
         }
     }
 
@@ -177,7 +191,9 @@ impl Literal {
             negation: true,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
+            temporal_expr: None,
             predicate_ids: Vec::new(),
+            interval_var: None,
         }
     }
 
@@ -194,7 +210,37 @@ impl Literal {
             negation,
             mode,
             temporal,
+            temporal_expr: None,
             predicate_ids: predicates.iter().map(|s| intern(s)).collect(),
+            interval_var: None,
+        }
+    }
+
+    /// Create a literal with a temporal expression (pre-grounding form).
+    ///
+    /// The concrete `temporal` field is left empty; it will be resolved
+    /// during grounding when variable bindings become available.
+    pub fn new_with_temporal_expr(
+        name: impl AsRef<str>,
+        negation: bool,
+        mode: Mode,
+        temporal_expr: TemporalExpr,
+        predicates: Vec<String>,
+    ) -> Self {
+        // If the expression is fully concrete, resolve it immediately
+        let (temporal, expr) = if let Some(concrete) = temporal_expr.to_concrete() {
+            (concrete, None)
+        } else {
+            (Temporal::empty(), Some(temporal_expr))
+        };
+        Self {
+            name_id: InternedLiteralName::intern(name.as_ref()),
+            negation,
+            mode,
+            temporal,
+            temporal_expr: expr,
+            predicate_ids: predicates.iter().map(|s| intern(s)).collect(),
+            interval_var: None,
         }
     }
 
@@ -218,7 +264,9 @@ impl Literal {
             negation,
             mode,
             temporal,
+            temporal_expr: None,
             predicate_ids,
+            interval_var: None,
         }
     }
 
@@ -232,7 +280,9 @@ impl Literal {
             negation: !self.negation,
             mode: self.mode.clone(),
             temporal: self.temporal.clone(),
+            temporal_expr: self.temporal_expr.clone(),
             predicate_ids: self.predicate_ids.clone(),
+            interval_var: self.interval_var,
         }
     }
 
@@ -303,6 +353,12 @@ impl Literal {
     #[inline]
     pub fn is_predicate(&self) -> bool {
         !self.predicate_ids.is_empty()
+    }
+
+    /// Check if this literal has unresolved temporal variables.
+    #[inline]
+    pub fn has_temporal_variables(&self) -> bool {
+        self.temporal_expr.is_some() || self.interval_var.is_some()
     }
 
     /// Get the LiteralId for this literal (name + negation combined).
@@ -378,7 +434,11 @@ impl Literal {
             }
         }
 
-        if !self.temporal.is_empty() {
+        if let Some(var_id) = self.interval_var {
+            expr = format!("(during {expr} {})", crate::intern::resolve(var_id));
+        } else if let Some(ref texpr) = self.temporal_expr {
+            expr = format!("(during {expr} {} {})", texpr.start, texpr.end);
+        } else if !self.temporal.is_empty() {
             expr = format!(
                 "(during {expr} {} {})",
                 self.temporal.start, self.temporal.end
