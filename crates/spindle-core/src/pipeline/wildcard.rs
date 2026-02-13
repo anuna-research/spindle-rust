@@ -88,5 +88,7 @@ fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
     );
     // Propagate pre-grounding temporal expression (temporal variables)
     result.temporal_expr = lit.temporal_expr.clone();
+    // Preserve single-variable interval binding from `(during ... ?T)`.
+    result.interval_var = lit.interval_var;
     result
 }

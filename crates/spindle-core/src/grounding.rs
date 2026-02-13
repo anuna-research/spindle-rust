@@ -63,9 +63,14 @@ pub fn literal_has_variables(lit: &Literal) -> bool {
         || lit.has_temporal_variables()
 }
 
-/// Check if a rule contains any variables
+/// Check if a rule contains any variables.
+///
+/// Allen constraints are treated as variable-bearing because they reference
+/// interval variables that must be validated during grounding.
 pub fn has_variables(rule: &Rule) -> bool {
-    rule.body.iter().any(literal_has_variables) || rule.head.iter().any(literal_has_variables)
+    rule.body.iter().any(literal_has_variables)
+        || rule.head.iter().any(literal_has_variables)
+        || !rule.constraints.is_empty()
 }
 
 /// Try to match a pattern literal against a ground literal.
@@ -1188,6 +1193,46 @@ mod tests {
             ),
         );
         assert!(has_variables(&rule));
+    }
+
+    #[test]
+    fn test_has_variables_with_allen_constraints() {
+        let mut rule = Rule::defeasible("r1", vec![Literal::simple("p")], Literal::simple("q"));
+        rule.constraints.push(AllenConstraint::new(
+            crate::temporal::AllenRelation::Before,
+            intern("?T"),
+            intern("?S"),
+        ));
+
+        assert!(has_variables(&rule));
+    }
+
+    #[test]
+    fn test_unbound_allen_constraints_do_not_produce_ground_rules() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("p")));
+
+        let mut constrained =
+            Rule::defeasible("r1", vec![Literal::simple("p")], Literal::simple("result"));
+        constrained.constraints.push(AllenConstraint::new(
+            crate::temporal::AllenRelation::Before,
+            intern("?T"),
+            intern("?S"),
+        ));
+        theory.add_rule(constrained);
+
+        let grounded = ground_theory(&theory);
+
+        assert!(
+            grounded.get_rule("r1").is_none(),
+            "Constrained template rule should not survive as unconditional"
+        );
+        assert!(
+            !grounded
+                .rules()
+                .any(|r| r.head.iter().any(|h| h.name() == "result")),
+            "No grounded instance should be produced with unbound intervals"
+        );
     }
 
     #[test]

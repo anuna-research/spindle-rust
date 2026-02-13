@@ -178,10 +178,11 @@ impl Rule {
         if self.is_fact() {
             format!("({keyword} {})", self.head[0].to_spl())
         } else {
-            let body_spl = if self.body.len() == 1 {
+            let body_spl = if self.constraints.is_empty() && self.body.len() == 1 {
                 self.body[0].to_spl()
             } else {
-                let parts: Vec<String> = self.body.iter().map(|l| l.to_spl()).collect();
+                let mut parts: Vec<String> = self.body.iter().map(|l| l.to_spl()).collect();
+                parts.extend(self.constraints.iter().map(AllenConstraint::to_spl));
                 format!("(and {})", parts.join(" "))
             };
             format!(
@@ -356,6 +357,52 @@ mod tests {
         assert_eq!(
             rule.to_spl(),
             "(normally r1 (and (bird) (healthy)) (flies))"
+        );
+    }
+
+    #[test]
+    fn test_to_spl_includes_allen_constraints() {
+        let t = crate::intern::intern("?T");
+        let s = crate::intern::intern("?S");
+
+        let mut p = Literal::simple("p");
+        p.interval_var = Some(t);
+        let mut q = Literal::simple("q");
+        q.interval_var = Some(s);
+
+        let mut rule = Rule::defeasible("r1", vec![p, q], Literal::simple("result"));
+        rule.constraints.push(AllenConstraint::new(
+            crate::temporal::AllenRelation::Before,
+            t,
+            s,
+        ));
+
+        assert_eq!(
+            rule.to_spl(),
+            "(normally r1 (and (during (p) ?T) (during (q) ?S) (before ?T ?S)) (result))"
+        );
+    }
+
+    #[test]
+    fn test_to_spl_uses_within_for_during_constraint() {
+        let t = crate::intern::intern("?T");
+        let s = crate::intern::intern("?S");
+
+        let mut p = Literal::simple("p");
+        p.interval_var = Some(t);
+        let mut q = Literal::simple("q");
+        q.interval_var = Some(s);
+
+        let mut rule = Rule::defeasible("r1", vec![p, q], Literal::simple("result"));
+        rule.constraints.push(AllenConstraint::new(
+            crate::temporal::AllenRelation::During,
+            t,
+            s,
+        ));
+
+        assert!(
+            rule.to_spl().contains("(within ?T ?S)"),
+            "during relation must serialize as within for SPL round-trip"
         );
     }
 

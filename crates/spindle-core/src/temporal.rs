@@ -525,6 +525,28 @@ impl AllenRelation {
         Self::from_keyword(keyword).is_some()
     }
 
+    /// Render as an SPL keyword.
+    ///
+    /// Uses `"within"` for `During` to avoid ambiguity with temporal
+    /// annotation syntax `(during literal start end)`.
+    pub fn spl_keyword(&self) -> &'static str {
+        match self {
+            AllenRelation::Before => "before",
+            AllenRelation::After => "after",
+            AllenRelation::Meets => "meets",
+            AllenRelation::MetBy => "met-by",
+            AllenRelation::Overlaps => "overlaps",
+            AllenRelation::OverlappedBy => "overlapped-by",
+            AllenRelation::Contains => "contains",
+            AllenRelation::During => "within",
+            AllenRelation::Starts => "starts",
+            AllenRelation::StartedBy => "started-by",
+            AllenRelation::Finishes => "finishes",
+            AllenRelation::FinishedBy => "finished-by",
+            AllenRelation::Equals => "equals",
+        }
+    }
+
     /// Check whether this relation holds between two concrete intervals.
     pub fn holds(&self, t1: &Temporal, t2: &Temporal) -> bool {
         match self {
@@ -622,6 +644,16 @@ impl AllenConstraint {
     /// Check if the constraint holds between two concrete intervals.
     pub fn holds(&self, t1: &Temporal, t2: &Temporal) -> bool {
         self.relation.holds(t1, t2)
+    }
+
+    /// Render this constraint in SPL syntax.
+    pub fn to_spl(&self) -> String {
+        format!(
+            "({} {} {})",
+            self.relation.spl_keyword(),
+            crate::intern::resolve(self.interval1),
+            crate::intern::resolve(self.interval2)
+        )
     }
 }
 

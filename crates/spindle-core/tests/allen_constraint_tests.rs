@@ -9,6 +9,7 @@
 //! - Multiple constraints
 
 use spindle_core::grounding::ground_theory;
+use spindle_core::reason::reason;
 use spindle_core::temporal::{AllenRelation, Temporal, TimePoint};
 use spindle_parser::parse_spl;
 
@@ -160,6 +161,31 @@ fn test_single_var_during_propagates_temporal() {
     assert!(
         has_q_temporal,
         "Grounding should propagate interval to q(a)[100, 200]"
+    );
+}
+
+#[test]
+fn test_reason_pipeline_keeps_interval_bindings_after_wildcard_rewrite() {
+    let theory = parse_spl(
+        r#"
+        (given (during (p a) 0 10))
+        (given (during (q b) 20 30))
+        (normally r1
+          (and (during (p ?x) ?T) (during (q ?y) ?S) (before ?T ?S))
+          (result ?x ?y))
+        "#,
+    )
+    .unwrap();
+
+    let conclusions = reason(&theory).unwrap();
+
+    assert!(
+        conclusions.iter().any(|c| {
+            c.is_positive()
+                && c.literal.name() == "result"
+                && c.literal.predicates() == vec!["a", "b"]
+        }),
+        "reason() should derive result(a,b) when Allen constraints are satisfiable"
     );
 }
 
@@ -594,6 +620,26 @@ fn test_during_single_var_non_variable_error() {
     assert!(err.is_err(), "Non-variable single during arg should error");
 }
 
+#[test]
+fn test_constraint_only_body_is_not_unconditional() {
+    let theory = parse_spl(
+        r#"
+        (normally r1
+          (and (before ?T ?S))
+          (result))
+        "#,
+    )
+    .unwrap();
+
+    let conclusions = reason(&theory).unwrap();
+    assert!(
+        !conclusions
+            .iter()
+            .any(|c| c.is_positive() && c.literal.name() == "result"),
+        "Unbound constraints must not allow rule to fire"
+    );
+}
+
 // =========================================================================
 // TO_SPL ROUNDTRIP
 // =========================================================================
@@ -618,6 +664,30 @@ fn test_interval_var_to_spl() {
         body_spl.starts_with("(during"),
         "to_spl should wrap in during: {body_spl}"
     );
+}
+
+#[test]
+fn test_rule_to_spl_roundtrip_preserves_allen_constraint() {
+    let theory = parse_spl(
+        r#"
+        (normally r1
+          (and (during (p) ?T) (during (q) ?S) (within ?T ?S))
+          (result))
+        "#,
+    )
+    .unwrap();
+
+    let rule = theory.rules().find(|r| r.label == "r1").unwrap();
+    let rendered = rule.to_spl();
+    assert!(
+        rendered.contains("(within ?T ?S)"),
+        "Rendered SPL must keep Allen constraint: {rendered}"
+    );
+
+    let reparsed = parse_spl(&rendered).unwrap();
+    let reparsed_rule = reparsed.rules().find(|r| r.label == "r1").unwrap();
+    assert_eq!(reparsed_rule.constraints.len(), 1);
+    assert_eq!(reparsed_rule.constraints[0].relation, AllenRelation::During);
 }
 
 // =========================================================================
