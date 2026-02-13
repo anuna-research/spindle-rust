@@ -17,7 +17,7 @@
 //!    updating body counters, trying to prove/disprove heads and complements.
 //! 5. **Emit negatives**: `-D` and `-d` for all remaining unproven literals.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 use rustc_hash::FxHashMap;
 
@@ -451,17 +451,36 @@ fn try_prove_defeasible(
         }
     }
 
-    // All conditions met — pick the first applicable supporter as the deriving rule.
-    // Use the supporter's head literal to preserve temporal bounds from grounding.
+    // All conditions met.
+    //
+    // Emit one +d conclusion per distinct grounded supporter head literal
+    // (e.g., distinct temporal windows). Use deterministic ordering so output
+    // does not depend on supporter discovery order.
     defeasible_proven.insert(q);
-    let conclusion = if let Some(supporter) = applicable_supporters.first() {
-        let lit = supporter.head_literal().clone();
-        Conclusion::defeasibly_provable(lit).with_rule(&supporter.label)
-    } else {
+    if applicable_supporters.is_empty() {
         let lit = indexed.resolve_literal(q);
-        Conclusion::defeasibly_provable(lit)
-    };
-    conclusions.push(conclusion);
+        conclusions.push(Conclusion::defeasibly_provable(lit));
+    } else {
+        // For duplicate supporters with the same grounded head literal, keep the
+        // lexicographically-smallest label for deterministic attribution.
+        let mut supporters_by_literal: BTreeMap<String, &crate::rule::Rule> = BTreeMap::new();
+        for supporter in applicable_supporters {
+            let literal_key = supporter.head_literal().to_spl();
+            supporters_by_literal
+                .entry(literal_key)
+                .and_modify(|selected| {
+                    if supporter.label.as_str() < selected.label.as_str() {
+                        *selected = supporter;
+                    }
+                })
+                .or_insert(supporter);
+        }
+
+        for supporter in supporters_by_literal.values() {
+            let lit = supporter.head_literal().clone();
+            conclusions.push(Conclusion::defeasibly_provable(lit).with_rule(&supporter.label));
+        }
+    }
     worklist.push_back((q, true));
 }
 
@@ -765,5 +784,57 @@ mod tests {
         });
 
         assert!(has_q, "q should be +d (r1 > r2 resolves ambiguity)");
+    }
+
+    #[test]
+    fn test_temporal_supporters_emit_all_distinct_positive_windows() {
+        use crate::literal::Literal;
+        use crate::rule::Rule;
+        use crate::temporal::Temporal;
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::new(
+            "r_late",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::new(
+                "q",
+                false,
+                Default::default(),
+                Temporal::from_bounds(20, 30),
+                vec![],
+            )],
+        ));
+        theory.add_rule(Rule::new(
+            "r_early",
+            RuleType::Defeasible,
+            vec![],
+            vec![Literal::new(
+                "q",
+                false,
+                Default::default(),
+                Temporal::from_bounds(0, 10),
+                vec![],
+            )],
+        ));
+
+        let (state, _) = run_all_phases(&theory);
+
+        let q_windows: Vec<_> = state
+            .conclusions
+            .iter()
+            .filter(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            })
+            .map(|c| c.literal.temporal.clone())
+            .collect();
+
+        assert_eq!(
+            q_windows,
+            vec![Temporal::from_bounds(0, 10), Temporal::from_bounds(20, 30)],
+            "all distinct grounded supporter windows should be emitted deterministically"
+        );
     }
 }
