@@ -17,7 +17,7 @@ use smallvec::SmallVec;
 
 use crate::literal::{Literal, render_spl_atom};
 use crate::mode::Mode;
-use crate::temporal::Temporal;
+use crate::temporal::{AllenConstraint, Temporal};
 
 /// Type alias for rule body - most rules have 1-4 body literals
 pub type RuleBody = SmallVec<[Literal; 4]>;
@@ -94,6 +94,9 @@ pub struct Rule {
     /// Head literals (consequents/conclusions)
     /// Uses SmallVec to avoid heap allocation for typical single head
     pub head: RuleHead,
+    /// Allen interval constraints between interval variables in the body.
+    /// Evaluated during grounding to filter valid substitutions.
+    pub constraints: Vec<AllenConstraint>,
 }
 
 impl Rule {
@@ -112,6 +115,7 @@ impl Rule {
             temporal: Temporal::empty(),
             body: body.into(),
             head: head.into(),
+            constraints: Vec::new(),
         }
     }
 

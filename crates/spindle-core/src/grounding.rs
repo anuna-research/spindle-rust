@@ -33,7 +33,7 @@ use crate::intern::intern;
 use crate::literal::Literal;
 use crate::mode::Mode;
 use crate::rule::{Rule, RuleLabel, RuleType};
-use crate::temporal::{Temporal, TemporalExpr, TimeExpr, TimePoint};
+use crate::temporal::{AllenConstraint, Temporal, TemporalExpr, TimeExpr, TimePoint};
 use crate::theory::Theory;
 
 /// Variable substitution for grounding.
@@ -47,6 +47,8 @@ pub struct Substitution {
     pub terms: FxHashMap<SymbolId, SymbolId>,
     /// Temporal variable bindings (e.g., ?t1 -> TimePoint::Moment(100))
     pub temporal: FxHashMap<SymbolId, TimePoint>,
+    /// Interval variable bindings (e.g., ?T -> Temporal[0, 10])
+    pub intervals: FxHashMap<SymbolId, Temporal>,
 }
 
 /// Check if a term is a variable (starts with ?)
@@ -54,9 +56,11 @@ pub fn is_variable(term: &str) -> bool {
     term.starts_with('?')
 }
 
-/// Check if a literal contains any variables
+/// Check if a literal contains any variables (term, temporal, or interval)
 pub fn literal_has_variables(lit: &Literal) -> bool {
-    is_variable(lit.name()) || lit.predicates().iter().any(|p| is_variable(p))
+    is_variable(lit.name())
+        || lit.predicates().iter().any(|p| is_variable(p))
+        || lit.has_temporal_variables()
 }
 
 /// Check if a rule contains any variables
@@ -113,6 +117,20 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
             }
         } else if parg_id != garg_id {
             return None;
+        }
+    }
+
+    // Match interval variable (whole-interval binding)
+    if let Some(var_id) = pattern.interval_var {
+        if ground.temporal.is_empty() {
+            return None; // Can't bind interval from non-temporal fact
+        }
+        if let Some(existing) = subst.intervals.get(&var_id) {
+            if *existing != ground.temporal {
+                return None;
+            }
+        } else {
+            subst.intervals.insert(var_id, ground.temporal.clone());
         }
     }
 
@@ -190,23 +208,33 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
         })
         .collect();
 
-    // Resolve temporal_expr if present
-    let (new_temporal, new_temporal_expr) = if let Some(ref texpr) = lit.temporal_expr {
+    // Resolve interval_var (whole-interval binding)
+    let (new_temporal, new_temporal_expr, new_interval_var) = if let Some(var_id) = lit.interval_var
+    {
+        if let Some(interval) = subst.intervals.get(&var_id) {
+            // Fully resolved — set concrete temporal, clear interval_var
+            (interval.clone(), None, None)
+        } else {
+            // Still unresolved
+            (Temporal::empty(), None, Some(var_id))
+        }
+    } else if let Some(ref texpr) = lit.temporal_expr {
+        // Resolve temporal_expr (endpoint variables)
         let resolved_start = resolve_time_expr(&texpr.start, &subst.temporal);
         let resolved_end = resolve_time_expr(&texpr.end, &subst.temporal);
 
         match (resolved_start, resolved_end) {
             (TimeExpr::Const(s), TimeExpr::Const(e)) => {
                 // Fully resolved — convert to concrete temporal
-                (Temporal::new(s, e), None)
+                (Temporal::new(s, e), None, None)
             }
             (start, end) => {
                 // Partially resolved — keep as temporal_expr
-                (Temporal::empty(), Some(TemporalExpr::new(start, end)))
+                (Temporal::empty(), Some(TemporalExpr::new(start, end)), None)
             }
         }
     } else {
-        (lit.temporal.clone(), None)
+        (lit.temporal.clone(), None, None)
     };
 
     let mut result = Literal::from_ids(
@@ -217,6 +245,7 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
         new_pred_ids,
     );
     result.temporal_expr = new_temporal_expr;
+    result.interval_var = new_interval_var;
     result
 }
 
@@ -280,6 +309,17 @@ fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitut
             }
         } else {
             merged.temporal.insert(*k, *v);
+        }
+    }
+
+    // Merge interval bindings
+    for (k, v) in &s2.intervals {
+        if let Some(existing) = merged.intervals.get(k) {
+            if *existing != *v {
+                return None;
+            }
+        } else {
+            merged.intervals.insert(*k, v.clone());
         }
     }
 
@@ -408,8 +448,12 @@ fn match_body_with_delta(
     results
 }
 
-/// A hashable key representing a substitution (both term and temporal bindings).
-type SubstitutionKey = (Vec<(SymbolId, SymbolId)>, Vec<(SymbolId, TimePoint)>);
+/// A hashable key representing a substitution (term, temporal, and interval bindings).
+type SubstitutionKey = (
+    Vec<(SymbolId, SymbolId)>,
+    Vec<(SymbolId, TimePoint)>,
+    Vec<(SymbolId, Temporal)>,
+);
 
 /// Build a hashable key from a substitution for deduplication.
 fn substitution_key(subst: &Substitution) -> SubstitutionKey {
@@ -419,7 +463,30 @@ fn substitution_key(subst: &Substitution) -> SubstitutionKey {
     let mut temporal_pairs: Vec<_> = subst.temporal.iter().map(|(k, v)| (*k, *v)).collect();
     temporal_pairs.sort_by_key(|(k, _)| k.as_raw());
 
-    (term_pairs, temporal_pairs)
+    let mut interval_pairs: Vec<_> = subst
+        .intervals
+        .iter()
+        .map(|(k, v)| (*k, v.clone()))
+        .collect();
+    interval_pairs.sort_by_key(|(k, _)| k.as_raw());
+
+    (term_pairs, temporal_pairs, interval_pairs)
+}
+
+/// Evaluate all Allen constraints against bound interval variables.
+///
+/// Returns `true` if all constraints are satisfied. Returns `false` if any
+/// constraint's interval variable is unbound or the relation doesn't hold.
+fn evaluate_constraints(constraints: &[AllenConstraint], subst: &Substitution) -> bool {
+    constraints.iter().all(|c| {
+        match (
+            subst.intervals.get(&c.interval1),
+            subst.intervals.get(&c.interval2),
+        ) {
+            (Some(t1), Some(t2)) => c.holds(t1, t2),
+            _ => false, // unbound interval → constraint fails
+        }
+    })
 }
 
 /// Ground a theory by instantiating rules with variables
@@ -511,6 +578,12 @@ pub fn ground_theory_with_limit(
                 if instance_counter >= max_instances {
                     limit_hit = true;
                     break;
+                }
+
+                // Evaluate Allen constraints — reject substitutions that fail
+                if !rule.constraints.is_empty() && !evaluate_constraints(&rule.constraints, &subst)
+                {
+                    continue;
                 }
 
                 let sig = (rule.label.clone(), substitution_key(&subst));

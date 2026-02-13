@@ -497,6 +497,53 @@ pub enum AllenRelation {
 }
 
 impl AllenRelation {
+    /// Parse an Allen relation from its SPL keyword.
+    ///
+    /// Note: `"within"` maps to `During` (avoids ambiguity with the `during`
+    /// temporal annotation in SPL).
+    pub fn from_keyword(keyword: &str) -> Option<Self> {
+        match keyword {
+            "before" => Some(AllenRelation::Before),
+            "after" => Some(AllenRelation::After),
+            "meets" => Some(AllenRelation::Meets),
+            "met-by" => Some(AllenRelation::MetBy),
+            "overlaps" => Some(AllenRelation::Overlaps),
+            "overlapped-by" => Some(AllenRelation::OverlappedBy),
+            "starts" => Some(AllenRelation::Starts),
+            "started-by" => Some(AllenRelation::StartedBy),
+            "within" => Some(AllenRelation::During),
+            "contains" => Some(AllenRelation::Contains),
+            "finishes" => Some(AllenRelation::Finishes),
+            "finished-by" => Some(AllenRelation::FinishedBy),
+            "equals" => Some(AllenRelation::Equals),
+            _ => None,
+        }
+    }
+
+    /// Check if a keyword string is a known Allen relation.
+    pub fn is_allen_keyword(keyword: &str) -> bool {
+        Self::from_keyword(keyword).is_some()
+    }
+
+    /// Check whether this relation holds between two concrete intervals.
+    pub fn holds(&self, t1: &Temporal, t2: &Temporal) -> bool {
+        match self {
+            AllenRelation::Before => t1.before(t2),
+            AllenRelation::After => t1.after(t2),
+            AllenRelation::Meets => t1.meets(t2),
+            AllenRelation::MetBy => t1.met_by(t2),
+            AllenRelation::Overlaps => t1.overlaps(t2),
+            AllenRelation::OverlappedBy => t1.overlapped_by(t2),
+            AllenRelation::Starts => t1.starts(t2),
+            AllenRelation::StartedBy => t1.started_by(t2),
+            AllenRelation::During => t1.during(t2),
+            AllenRelation::Contains => t1.contains(t2),
+            AllenRelation::Finishes => t1.finishes(t2),
+            AllenRelation::FinishedBy => t1.finished_by(t2),
+            AllenRelation::Equals => t1.equals(t2),
+        }
+    }
+
     /// Get the inverse relation
     pub fn inverse(&self) -> Self {
         match self {
@@ -535,6 +582,58 @@ impl fmt::Display for AllenRelation {
             AllenRelation::Equals => "equals",
         };
         write!(f, "{s}")
+    }
+}
+
+/// A constraint between two interval variables based on an Allen relation.
+///
+/// Allen constraints appear in rule bodies and restrict which groundings are
+/// valid. During grounding, both interval variables must be bound (via
+/// single-variable `(during ...)` forms), and the relation must hold between
+/// the bound intervals for the substitution to be accepted.
+///
+/// # Example (SPL)
+///
+/// ```text
+/// (normally r1
+///   (and (during (p ?x) ?T) (during (q ?y) ?S) (before ?T ?S))
+///   (result ?x ?y))
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AllenConstraint {
+    /// The Allen relation that must hold.
+    pub relation: AllenRelation,
+    /// First interval variable (e.g., `?T`).
+    pub interval1: SymbolId,
+    /// Second interval variable (e.g., `?S`).
+    pub interval2: SymbolId,
+}
+
+impl AllenConstraint {
+    /// Create a new Allen constraint.
+    pub fn new(relation: AllenRelation, interval1: SymbolId, interval2: SymbolId) -> Self {
+        Self {
+            relation,
+            interval1,
+            interval2,
+        }
+    }
+
+    /// Check if the constraint holds between two concrete intervals.
+    pub fn holds(&self, t1: &Temporal, t2: &Temporal) -> bool {
+        self.relation.holds(t1, t2)
+    }
+}
+
+impl fmt::Display for AllenConstraint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "({} {} {})",
+            self.relation,
+            crate::intern::resolve(self.interval1),
+            crate::intern::resolve(self.interval2)
+        )
     }
 }
 

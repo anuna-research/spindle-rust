@@ -42,7 +42,7 @@ pub(crate) fn process_rule_with_line(
         (None, &args[0], &args[1])
     };
 
-    let body = parse_body_with_line(body_expr, line)?;
+    let (body, constraints) = parse_body_with_line(body_expr, line)?;
     let head = parse_literal_with_line(head_expr, line)?;
 
     let prefix = match rule_type {
@@ -63,7 +63,8 @@ pub(crate) fn process_rule_with_line(
         });
     }
 
-    let rule = Rule::new(final_label, rule_type, body, vec![head]);
+    let mut rule = Rule::new(final_label, rule_type, body, vec![head]);
+    rule.constraints = constraints;
     theory.add_rule(rule);
     Ok(())
 }

@@ -5,35 +5,114 @@
 
 use chrono::DateTime;
 use spindle_core::Literal;
+use spindle_core::intern::intern;
 use spindle_core::mode::Mode;
-use spindle_core::temporal::{Temporal, TemporalExpr, TimeExpr, TimePoint};
+use spindle_core::temporal::{
+    AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,
+};
 
 use crate::ParseError;
 use crate::error::ParserFormat;
 
 use super::lexer::SExpr;
 
-/// Parse a body expression with line number
-pub(crate) fn parse_body_with_line(expr: &SExpr, line: usize) -> Result<Vec<Literal>, ParseError> {
+/// Parse a body expression with line number.
+///
+/// Returns `(literals, allen_constraints)`. Allen constraints are only
+/// recognized inside `(and ...)` conjunctions, where expressions like
+/// `(before ?T ?S)` are parsed as interval constraints rather than literals.
+pub(crate) fn parse_body_with_line(
+    expr: &SExpr,
+    line: usize,
+) -> Result<(Vec<Literal>, Vec<AllenConstraint>), ParseError> {
     match expr {
-        SExpr::Atom { .. } => Ok(vec![parse_literal_with_line(expr, line)?]),
+        SExpr::Atom { .. } => Ok((vec![parse_literal_with_line(expr, line)?], vec![])),
         SExpr::List { items, .. } => {
             if items.is_empty() {
-                return Ok(vec![]);
+                return Ok((vec![], vec![]));
             }
 
             // Check for (and ...)
             if let Some("and") = items[0].as_atom() {
-                items[1..]
-                    .iter()
-                    .map(|item| parse_literal_with_line(item, line))
-                    .collect()
+                let mut literals = Vec::new();
+                let mut constraints = Vec::new();
+
+                for item in &items[1..] {
+                    if let Some(constraint) = try_parse_allen_constraint(item, line)? {
+                        constraints.push(constraint);
+                    } else {
+                        literals.push(parse_literal_with_line(item, line)?);
+                    }
+                }
+
+                Ok((literals, constraints))
             } else {
                 // Single complex literal
-                Ok(vec![parse_literal_with_line(expr, line)?])
+                Ok((vec![parse_literal_with_line(expr, line)?], vec![]))
             }
         }
     }
+}
+
+/// Try to parse an s-expression as an Allen interval constraint.
+///
+/// An Allen constraint has the form `(relation ?T ?S)` where:
+/// - `relation` is one of the 13 Allen relation keywords
+/// - `?T` and `?S` are interval variables (atoms starting with `?`)
+///
+/// Returns `Ok(Some(constraint))` if this is an Allen constraint,
+/// `Ok(None)` if it's not (should be parsed as a literal instead),
+/// or `Err` for malformed Allen constraints.
+fn try_parse_allen_constraint(
+    expr: &SExpr,
+    line: usize,
+) -> Result<Option<AllenConstraint>, ParseError> {
+    let items = match expr {
+        SExpr::List { items, .. } if items.len() == 3 => items,
+        _ => return Ok(None),
+    };
+
+    let keyword = match items[0].as_atom() {
+        Some(kw) => kw,
+        None => return Ok(None),
+    };
+
+    let relation = match AllenRelation::from_keyword(keyword) {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    // Both arguments must be ?-prefixed interval variables
+    let var1 = items[1].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: format!("Allen relation '{keyword}' requires interval variable arguments"),
+        format: ParserFormat::Spl,
+        source_line: None,
+    })?;
+
+    let var2 = items[2].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: format!("Allen relation '{keyword}' requires interval variable arguments"),
+        format: ParserFormat::Spl,
+        source_line: None,
+    })?;
+
+    if !var1.starts_with('?') || !var2.starts_with('?') {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!(
+                "Allen relation '{keyword}' arguments must be interval variables (starting with ?), got '{var1}' and '{var2}'"
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+
+    Ok(Some(AllenConstraint::new(
+        relation,
+        intern(var1),
+        intern(var2),
+    )))
 }
 
 /// Parse a literal expression with line number tracking
@@ -133,12 +212,29 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                     Ok(lit)
                 }
                 "during" => {
-                    // (during literal start end)
+                    // Two forms:
+                    //   (during literal start end)  — two-endpoint form
+                    //   (during literal ?T)         — single interval variable form
+                    if items.len() == 3 {
+                        // Check for single interval variable form: (during literal ?T)
+                        if let Some(var_name) = items[2].as_atom()
+                            && var_name.starts_with('?')
+                        {
+                            let mut lit = parse_literal_with_line(&items[1], line)?;
+                            lit.interval_var = Some(intern(var_name));
+                            return Ok(lit);
+                        }
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "during takes either (during literal start end) or (during literal ?var)".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     if items.len() != 4 {
                         return Err(ParseError::ParserError {
                             line,
-                            message: "during takes exactly three arguments: literal, start, end"
-                                .to_string(),
+                            message: "during takes either (during literal start end) or (during literal ?var)".to_string(),
                             format: ParserFormat::Spl,
                             source_line: None,
                         });
