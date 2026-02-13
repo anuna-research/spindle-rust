@@ -297,3 +297,32 @@ fn test_full_temporal_roundtrip() {
         "Expected sequential conclusion from Allen constraint, got: {conclusions:?}"
     );
 }
+
+// =========================================================================
+// Regression: grounded rules must preserve rule-level temporal bounds
+// =========================================================================
+
+#[test]
+fn test_grounded_rule_preserves_temporal_bounds() {
+    // A variable rule with rule-level temporal bounds: valid only [100, 500].
+    // After grounding, the derived instances must still carry [100, 500]
+    // so that --at filtering outside that window correctly excludes them.
+    let input = r#"
+        (given (employed alice acme))
+        (during (normally r1 (employed ?x ?y) (active ?x ?y)) 100 500)
+    "#;
+
+    // At time 250 (inside window), the grounded rule should fire.
+    let at_250 = reason_spl_at(input, TimePoint::from_millis(250));
+    assert!(
+        at_250.iter().any(|c| c.contains("active")),
+        "Grounded rule should fire at t=250, got: {at_250:?}"
+    );
+
+    // At time 600 (outside window), the grounded rule must NOT fire.
+    let at_600 = reason_spl_at(input, TimePoint::from_millis(600));
+    assert!(
+        !at_600.iter().any(|c| c.contains("active")),
+        "Grounded rule should NOT fire at t=600 (temporal bounds lost on grounding?), got: {at_600:?}"
+    );
+}

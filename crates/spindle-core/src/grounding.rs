@@ -302,6 +302,9 @@ fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: u
     let mut new_rule = Rule::new(new_label, rule.rule_type, new_body, new_head);
     // Preserve the original rule's label as the template label for superiority
     new_rule.template_label = Some(rule.label.clone());
+    // Carry forward rule-level properties that must survive grounding
+    new_rule.temporal = rule.temporal.clone();
+    new_rule.mode = rule.mode.clone();
     new_rule
 }
 
