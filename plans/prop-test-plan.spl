@@ -1,0 +1,211 @@
+; ============================================================================
+; Property-Based Testing Plan for spindle-rust
+; ============================================================================
+; Goal: Add robust property-based testing across core reasoning invariants,
+;       data structure properties, temporal logic, grounding, and parsing.
+;
+; Existing state: proptest_query.rs has 7 query-operator property tests
+;                 with a basic arb_theory() generator (facts + simple rules).
+;
+; This plan expands coverage to reasoning invariants, structural properties,
+; temporal logic, grounding correctness, and parser round-trips.
+; ============================================================================
+
+; Agent availability
+(given agent-coder-available)
+
+; ============================================================================
+; Phase 1: Enhanced Generators
+; ============================================================================
+
+(given task-generators)
+(given no-deps-generators)
+
+(meta task-generators
+  (description "Create rich proptest Arbitrary generators for all core types")
+  (detail "Build generators for: Literal (with negation, predicates, mode, temporal),
+           Rule (all 4 types with bodies/heads), Theory (with superiority, conflicts),
+           Temporal/TimePoint, AllenConstraint. Place in a shared proptest helpers
+           module within spindle-core tests so all test files can reuse them."))
+
+(normally r-ready-generators
+  (and task-generators no-deps-generators)
+  ready-generators)
+
+(normally r-assign-generators
+  (and ready-generators agent-coder-available)
+  assign-to-generators-coder)
+
+; ============================================================================
+; Phase 2: Core Reasoning Invariants (depends on generators)
+; ============================================================================
+
+(given task-reasoning-invariants)
+
+(meta task-reasoning-invariants
+  (description "Property tests for fundamental defeasible-logic reasoning invariants")
+  (detail "Properties to test:
+    1. Idempotence: reason(theory) produces same conclusions when run twice
+    2. Monotonic facts: adding a fact never removes existing +D conclusions
+    3. Mutual exclusion: cannot have both +D L and +D ~L for any literal
+    4. Definite implies defeasible: every +D literal is also +d
+    5. Facts always provable: every fact in the theory is +D
+    6. Superior always wins: if r1 > r2 and both fire, r1 conclusion prevails
+    7. Ambiguity blocks: conflicting rules with no superiority block both
+    8. Defeaters only block: defeaters yield -d target, never +d target"))
+
+(normally r-ready-reasoning-invariants
+  (and task-reasoning-invariants completed-generators)
+  ready-reasoning-invariants)
+
+(normally r-assign-reasoning-invariants
+  (and ready-reasoning-invariants agent-coder-available)
+  assign-to-reasoning-invariants-coder)
+
+; ============================================================================
+; Phase 3: Structural / Data-Type Properties (depends on generators)
+; ============================================================================
+
+(given task-structural-props)
+
+(meta task-structural-props
+  (description "Property tests for core data structure invariants")
+  (detail "Properties to test:
+    1. Literal complement involution: complement(complement(L)) == L
+    2. Literal equality ignores temporal: L1 == L2 iff name+neg+mode+args match
+    3. Rule label uniqueness: theory.add_rule returns unique labels
+    4. Theory add/get round-trip: get_rule after add_rule returns equivalent
+    5. Superiority asymmetry: is_superior(a,b) implies not is_superior(b,a)
+    6. Superiority index consistency: inferiors_of and superiors_of are inverse
+    7. Metadata transparency: adding metadata does not change conclusions"))
+
+(normally r-ready-structural-props
+  (and task-structural-props completed-generators)
+  ready-structural-props)
+
+(normally r-assign-structural-props
+  (and ready-structural-props agent-coder-available)
+  assign-to-structural-props-coder)
+
+; ============================================================================
+; Phase 4: Grounding Properties (depends on generators)
+; ============================================================================
+
+(given task-grounding-props)
+
+(meta task-grounding-props
+  (description "Property tests for variable grounding correctness")
+  (detail "Properties to test:
+    1. Ground rules have no variables: after grounding, no ?vars remain
+    2. Grounding preserves rule type: template and instance share RuleType
+    3. Pipeline idempotence: ground(ground(theory)) == ground(theory)
+    4. Fact count preserved: grounding does not lose or duplicate facts"))
+
+(normally r-ready-grounding-props
+  (and task-grounding-props completed-generators)
+  ready-grounding-props)
+
+(normally r-assign-grounding-props
+  (and ready-grounding-props agent-coder-available)
+  assign-to-grounding-props-coder)
+
+; ============================================================================
+; Phase 5: Temporal Properties (depends on generators)
+; ============================================================================
+
+(given task-temporal-props)
+
+(meta task-temporal-props
+  (description "Property tests for temporal reasoning and Allen interval algebra")
+  (detail "Properties to test:
+    1. TimePoint total order: for any a,b exactly one of a<b, a==b, a>b holds
+    2. Allen relation inverses: before(a,b) iff after(b,a) and so on
+    3. Temporal filter preserves non-temporal: rules without bounds unaffected"))
+
+(normally r-ready-temporal-props
+  (and task-temporal-props completed-generators)
+  ready-temporal-props)
+
+(normally r-assign-temporal-props
+  (and ready-temporal-props agent-coder-available)
+  assign-to-temporal-props-coder)
+
+; ============================================================================
+; Phase 6: Parser Round-Trip Properties (depends on generators)
+; ============================================================================
+
+(given task-parser-roundtrip)
+
+(meta task-parser-roundtrip
+  (description "Property tests for SPL parser round-trip correctness")
+  (detail "Properties to test:
+    1. Literal display-parse round-trip: parse(display(L)) recovers same literal
+    2. Rule display-parse round-trip: same for rules
+    3. Parser never panics on arbitrary byte strings (fuzz-like)
+    4. Valid generated SPL always parses successfully"))
+
+(normally r-ready-parser-roundtrip
+  (and task-parser-roundtrip completed-generators)
+  ready-parser-roundtrip)
+
+(normally r-assign-parser-roundtrip
+  (and ready-parser-roundtrip agent-coder-available)
+  assign-to-parser-roundtrip-coder)
+
+; ============================================================================
+; Phase 7: Integration Validation (depends on all property test phases)
+; ============================================================================
+
+(given task-validate-all)
+
+(meta task-validate-all
+  (description "Run full test suite and verify all property tests pass")
+  (detail "Run cargo test --workspace with all new property tests.
+    Fix any failures. Ensure proptest regressions directory is tracked."))
+
+(normally r-ready-validate-all
+  (and task-validate-all
+       completed-reasoning-invariants
+       completed-structural-props
+       completed-grounding-props
+       completed-temporal-props
+       completed-parser-roundtrip)
+  ready-validate-all)
+
+(normally r-assign-validate-all
+  (and ready-validate-all agent-coder-available)
+  assign-to-validate-all-coder)
+
+(claims agent:system
+  :at "2026-02-15T10:08:03Z"
+  (given claim-v1-generators)
+  (normally r-state-v1-generators claim-v1-generators state-claimed-v1-generators)
+  (normally r-chain-v1-generators state-claimed-v1-generators claimed-generators))
+
+(claims agent:system
+  :at "2026-02-15T10:15:13Z"
+  (given completed-generators))
+
+(claims agent:system
+  :at "2026-02-15T10:15:13Z"
+  (given completed-reasoning-invariants))
+
+(claims agent:system
+  :at "2026-02-15T10:15:14Z"
+  (given completed-structural-props))
+
+(claims agent:system
+  :at "2026-02-15T10:15:14Z"
+  (given completed-grounding-props))
+
+(claims agent:system
+  :at "2026-02-15T10:15:14Z"
+  (given completed-temporal-props))
+
+(claims agent:system
+  :at "2026-02-15T10:15:14Z"
+  (given completed-parser-roundtrip))
+
+(claims agent:system
+  :at "2026-02-15T10:15:18Z"
+  (given completed-validate-all))
