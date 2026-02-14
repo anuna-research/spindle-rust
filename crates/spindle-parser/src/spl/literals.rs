@@ -8,7 +8,8 @@ use spindle_core::Literal;
 use spindle_core::intern::intern;
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{
-    AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,
+    AllenConstraint, AllenRelation, StateQueryKind, Temporal, TemporalExpr, TemporalStateQuery,
+    TimeExpr, TimePoint,
 };
 
 use crate::ParseError;
@@ -16,39 +17,45 @@ use crate::error::ParserFormat;
 
 use super::lexer::SExpr;
 
+/// Parsed body components: (literals, Allen constraints, state queries).
+type BodyParseResult = (Vec<Literal>, Vec<AllenConstraint>, Vec<TemporalStateQuery>);
+
 /// Parse a body expression with line number.
 ///
-/// Returns `(literals, allen_constraints)`. Allen constraints are only
+/// Returns `(literals, allen_constraints, state_queries)`. Constraints are only
 /// recognized inside `(and ...)` conjunctions, where expressions like
 /// `(before ?T ?S)` are parsed as interval constraints rather than literals.
 pub(crate) fn parse_body_with_line(
     expr: &SExpr,
     line: usize,
-) -> Result<(Vec<Literal>, Vec<AllenConstraint>), ParseError> {
+) -> Result<BodyParseResult, ParseError> {
     match expr {
-        SExpr::Atom { .. } => Ok((vec![parse_literal_with_line(expr, line)?], vec![])),
+        SExpr::Atom { .. } => Ok((vec![parse_literal_with_line(expr, line)?], vec![], vec![])),
         SExpr::List { items, .. } => {
             if items.is_empty() {
-                return Ok((vec![], vec![]));
+                return Ok((vec![], vec![], vec![]));
             }
 
             // Check for (and ...)
             if let Some("and") = items[0].as_atom() {
                 let mut literals = Vec::new();
                 let mut constraints = Vec::new();
+                let mut state_queries = Vec::new();
 
                 for item in &items[1..] {
                     if let Some(constraint) = try_parse_allen_constraint(item, line)? {
                         constraints.push(constraint);
+                    } else if let Some(sq) = try_parse_state_query(item, line)? {
+                        state_queries.push(sq);
                     } else {
                         literals.push(parse_literal_with_line(item, line)?);
                     }
                 }
 
-                Ok((literals, constraints))
+                Ok((literals, constraints, state_queries))
             } else {
                 // Single complex literal
-                Ok((vec![parse_literal_with_line(expr, line)?], vec![]))
+                Ok((vec![parse_literal_with_line(expr, line)?], vec![], vec![]))
             }
         }
     }
@@ -113,6 +120,62 @@ fn try_parse_allen_constraint(
         intern(var1),
         intern(var2),
     )))
+}
+
+/// Try to parse an s-expression as a temporal state query.
+///
+/// A state query has the form `(kind ?T timepoint)` where:
+/// - `kind` is one of `active-at`, `past-at`, `future-at`
+/// - `?T` is an interval variable (atom starting with `?`)
+/// - `timepoint` is a concrete timepoint or temporal variable
+///
+/// Returns `Ok(Some(query))` if this is a state query,
+/// `Ok(None)` if it's not (should be parsed as a literal instead),
+/// or `Err` for malformed state queries.
+fn try_parse_state_query(
+    expr: &SExpr,
+    line: usize,
+) -> Result<Option<TemporalStateQuery>, ParseError> {
+    let items = match expr {
+        SExpr::List { items, .. } if items.len() == 3 => items,
+        _ => return Ok(None),
+    };
+
+    let keyword = match items[0].as_atom() {
+        Some(kw) => kw,
+        None => return Ok(None),
+    };
+
+    let kind = match keyword {
+        "active-at" => StateQueryKind::ActiveAt,
+        "past-at" => StateQueryKind::PastAt,
+        "future-at" => StateQueryKind::FutureAt,
+        _ => return Ok(None),
+    };
+
+    // First argument must be a ?-prefixed interval variable
+    let var = items[1].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: format!("State query '{keyword}' requires an interval variable as first argument"),
+        format: ParserFormat::Spl,
+        source_line: None,
+    })?;
+
+    if !var.starts_with('?') {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!(
+                "State query '{keyword}' first argument must be an interval variable (starting with ?), got '{var}'"
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+
+    // Second argument is a time expression (concrete timepoint or variable)
+    let time = parse_timeexpr_with_line(&items[2], line)?;
+
+    Ok(Some(TemporalStateQuery::new(kind, intern(var), time)))
 }
 
 /// Parse a literal expression with line number tracking

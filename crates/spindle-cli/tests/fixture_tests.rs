@@ -196,3 +196,8 @@ fn fixture_19_defeater_superiority() {
 fn fixture_20_conflicting_facts() {
     run_fixture("20_conflicting_facts.spl");
 }
+
+#[test]
+fn fixture_21_allen_intervals() {
+    run_fixture("21_allen_intervals.spl");
+}

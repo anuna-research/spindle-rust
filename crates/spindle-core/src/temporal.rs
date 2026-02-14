@@ -174,6 +174,30 @@ impl TimePoint {
             TimePoint::NegInf | TimePoint::PosInf => None,
         }
     }
+
+    /// Render this time point in SPL-compatible form.
+    ///
+    /// - `NegInf` → `"-inf"`
+    /// - `PosInf` → `"inf"`
+    /// - `Moment(v)` where |v| >= 1_000_000_000 → `(moment "RFC3339")`
+    /// - `Moment(v)` otherwise → bare number string
+    ///
+    /// The threshold (10^9 ms ≈ 11.6 days from epoch) distinguishes
+    /// real-world timestamps from small test values.
+    pub fn to_spl(&self) -> String {
+        match self {
+            TimePoint::NegInf => "-inf".to_string(),
+            TimePoint::PosInf => "inf".to_string(),
+            TimePoint::Moment(v) => {
+                if v.unsigned_abs() >= 1_000_000_000
+                    && let Some(rfc) = self.to_rfc3339()
+                {
+                    return format!("(moment \"{rfc}\")");
+                }
+                v.to_string()
+            }
+        }
+    }
 }
 
 /// Temporal interval with start and end time points
@@ -666,6 +690,96 @@ impl fmt::Display for AllenConstraint {
             crate::intern::resolve(self.interval1),
             crate::intern::resolve(self.interval2)
         )
+    }
+}
+
+/// The kind of temporal state query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StateQueryKind {
+    /// Is the interval active at the given time? (start <= time <= end)
+    ActiveAt,
+    /// Is the interval entirely in the past? (end < time)
+    PastAt,
+    /// Is the interval entirely in the future? (start > time)
+    FutureAt,
+}
+
+impl StateQueryKind {
+    /// SPL keyword for this query kind.
+    pub fn spl_keyword(&self) -> &'static str {
+        match self {
+            StateQueryKind::ActiveAt => "active-at",
+            StateQueryKind::PastAt => "past-at",
+            StateQueryKind::FutureAt => "future-at",
+        }
+    }
+}
+
+impl fmt::Display for StateQueryKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.spl_keyword())
+    }
+}
+
+/// A temporal state query constraint in a rule body.
+///
+/// Checks whether an interval variable satisfies a state predicate relative
+/// to a concrete time point. Evaluated during grounding.
+///
+/// # Example (SPL)
+///
+/// ```text
+/// (normally r1
+///   (and (during (contract ?x) ?T) (active-at ?T 150))
+///   (valid-contract ?x))
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TemporalStateQuery {
+    /// The kind of state query.
+    pub kind: StateQueryKind,
+    /// The interval variable to query.
+    pub interval: SymbolId,
+    /// The time point to check against.
+    pub time: TimeExpr,
+}
+
+impl TemporalStateQuery {
+    /// Create a new temporal state query.
+    pub fn new(kind: StateQueryKind, interval: SymbolId, time: TimeExpr) -> Self {
+        Self {
+            kind,
+            interval,
+            time,
+        }
+    }
+
+    /// Check if the query holds for a concrete interval and time point.
+    pub fn holds(&self, interval: &Temporal, time: TimePoint) -> bool {
+        match self.kind {
+            StateQueryKind::ActiveAt => interval.active_at(time),
+            StateQueryKind::PastAt => interval.past_at(time),
+            StateQueryKind::FutureAt => interval.future_at(time),
+        }
+    }
+
+    /// Render this query in SPL syntax.
+    pub fn to_spl(&self) -> String {
+        let time_spl = match &self.time {
+            TimeExpr::Const(tp) => tp.to_spl(),
+            TimeExpr::Var(id) => crate::intern::resolve(*id).to_string(),
+        };
+        format!(
+            "({} {} {})",
+            self.kind.spl_keyword(),
+            crate::intern::resolve(self.interval),
+            time_spl
+        )
+    }
+}
+
+impl fmt::Display for TemporalStateQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_spl())
     }
 }
 

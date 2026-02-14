@@ -17,7 +17,7 @@ use smallvec::SmallVec;
 
 use crate::literal::{Literal, render_spl_atom};
 use crate::mode::Mode;
-use crate::temporal::{AllenConstraint, Temporal};
+use crate::temporal::{AllenConstraint, Temporal, TemporalStateQuery};
 
 /// Type alias for rule body - most rules have 1-4 body literals
 pub type RuleBody = SmallVec<[Literal; 4]>;
@@ -97,6 +97,9 @@ pub struct Rule {
     /// Allen interval constraints between interval variables in the body.
     /// Evaluated during grounding to filter valid substitutions.
     pub constraints: Vec<AllenConstraint>,
+    /// Temporal state queries (active-at, past-at, future-at) in the body.
+    /// Evaluated during grounding against bound interval variables.
+    pub state_queries: Vec<TemporalStateQuery>,
 }
 
 impl Rule {
@@ -116,6 +119,7 @@ impl Rule {
             body: body.into(),
             head: head.into(),
             constraints: Vec::new(),
+            state_queries: Vec::new(),
         }
     }
 
@@ -175,14 +179,18 @@ impl Rule {
             RuleType::Defeasible => "normally",
             RuleType::Defeater => "except",
         };
-        if self.is_fact() {
+        let inner = if self.is_fact() {
             format!("({keyword} {})", self.head[0].to_spl())
         } else {
-            let body_spl = if self.constraints.is_empty() && self.body.len() == 1 {
+            let body_spl = if self.constraints.is_empty()
+                && self.state_queries.is_empty()
+                && self.body.len() == 1
+            {
                 self.body[0].to_spl()
             } else {
                 let mut parts: Vec<String> = self.body.iter().map(|l| l.to_spl()).collect();
                 parts.extend(self.constraints.iter().map(AllenConstraint::to_spl));
+                parts.extend(self.state_queries.iter().map(TemporalStateQuery::to_spl));
                 format!("(and {})", parts.join(" "))
             };
             format!(
@@ -190,6 +198,18 @@ impl Rule {
                 render_spl_atom(&self.label),
                 self.head[0].to_spl()
             )
+        };
+
+        // Wrap with (during ...) if the rule has non-default temporal bounds
+        if !self.temporal.is_empty() {
+            format!(
+                "(during {} {} {})",
+                inner,
+                self.temporal.start.to_spl(),
+                self.temporal.end.to_spl()
+            )
+        } else {
+            inner
         }
     }
 }
