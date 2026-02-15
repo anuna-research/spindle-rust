@@ -59,8 +59,7 @@ pub fn arb_temporal() -> impl Strategy<Value = Temporal> {
 
 /// Generate a non-empty `Temporal` interval with finite bounds.
 pub fn arb_finite_temporal() -> impl Strategy<Value = Temporal> {
-    (arb_finite_timepoint(), arb_finite_timepoint())
-        .prop_map(|(a, b)| Temporal::new(a, b))
+    (arb_finite_timepoint(), arb_finite_timepoint()).prop_map(|(a, b)| Temporal::new(a, b))
 }
 
 // =============================================================================
@@ -109,17 +108,13 @@ pub fn arb_mode() -> impl Strategy<Value = Mode> {
 
 /// Generate a simple `Literal` (name + optional negation).
 pub fn arb_simple_literal() -> impl Strategy<Value = Literal> {
-    (
-        proptest::sample::select(ATOMS),
-        proptest::bool::ANY,
-    )
-        .prop_map(|(name, negated)| {
-            if negated {
-                Literal::negated(name)
-            } else {
-                Literal::simple(name)
-            }
-        })
+    (proptest::sample::select(ATOMS), proptest::bool::ANY).prop_map(|(name, negated)| {
+        if negated {
+            Literal::negated(name)
+        } else {
+            Literal::simple(name)
+        }
+    })
 }
 
 /// Generate a `Literal` with optional mode and predicates (but no temporal).

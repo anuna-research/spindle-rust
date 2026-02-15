@@ -21,7 +21,7 @@ use spindle_core::reason::reason;
 use spindle_core::rule::{Rule, RuleType};
 use spindle_core::theory::Theory;
 
-use proptest_helpers::{conclusion_set, ATOMS};
+use proptest_helpers::{ATOMS, conclusion_set};
 
 // =============================================================================
 // Helper: check that no literal has both +d and +d for its complement
@@ -441,10 +441,7 @@ proptest! {
 /// Generate a complex theory with multiple conflicts and check invariants.
 fn arb_adversarial_theory() -> impl Strategy<Value = Theory> {
     (
-        proptest::collection::vec(
-            proptest::sample::select(ATOMS),
-            2..=6,
-        ),
+        proptest::collection::vec(proptest::sample::select(ATOMS), 2..=6),
         proptest::collection::vec(
             (
                 proptest::sample::select(&["a", "b", "c", "d"]),
@@ -1079,9 +1076,18 @@ fn cascading_ambiguity_blocks_entire_chain() {
 
     assert!(!defeasible.contains("b"), "b should be ambiguous");
     assert!(!defeasible.contains("~b"), "~b should be ambiguous");
-    assert!(!defeasible.contains("c"), "c should be blocked (depends on ambiguous b)");
-    assert!(!defeasible.contains("d"), "d should be blocked (depends on blocked c)");
-    assert!(!defeasible.contains("e"), "e should be blocked (depends on blocked d)");
+    assert!(
+        !defeasible.contains("c"),
+        "c should be blocked (depends on ambiguous b)"
+    );
+    assert!(
+        !defeasible.contains("d"),
+        "d should be blocked (depends on blocked c)"
+    );
+    assert!(
+        !defeasible.contains("e"),
+        "e should be blocked (depends on blocked d)"
+    );
 }
 
 /// Ambiguity is localized: independent conclusions unaffected.
@@ -1096,10 +1102,25 @@ fn cascading_ambiguity_blocks_entire_chain() {
 fn ambiguity_localized_independent_unaffected() {
     let mut theory = Theory::new();
     theory.add_fact("a");
-    theory.add_rule(Rule::new("r1", RuleType::Defeasible, vec![], vec![Literal::simple("p")]));
-    theory.add_rule(Rule::new("r2", RuleType::Defeasible, vec![], vec![Literal::negated("p")]));
+    theory.add_rule(Rule::new(
+        "r1",
+        RuleType::Defeasible,
+        vec![],
+        vec![Literal::simple("p")],
+    ));
+    theory.add_rule(Rule::new(
+        "r2",
+        RuleType::Defeasible,
+        vec![],
+        vec![Literal::negated("p")],
+    ));
     // Use manual label to avoid collision with auto-generated "r2"
-    theory.add_rule(Rule::new("r3", RuleType::Defeasible, vec![Literal::simple("a")], vec![Literal::simple("q")]));
+    theory.add_rule(Rule::new(
+        "r3",
+        RuleType::Defeasible,
+        vec![Literal::simple("a")],
+        vec![Literal::simple("q")],
+    ));
 
     let conclusions = reason(&theory).unwrap();
     let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
@@ -1122,8 +1143,18 @@ fn ambiguity_localized_independent_unaffected() {
 #[test]
 fn empty_body_defeater_blocks() {
     let mut theory = Theory::new();
-    theory.add_rule(Rule::new("r1", RuleType::Defeasible, vec![], vec![Literal::simple("q")]));
-    theory.add_rule(Rule::new("d1", RuleType::Defeater, vec![], vec![Literal::negated("q")]));
+    theory.add_rule(Rule::new(
+        "r1",
+        RuleType::Defeasible,
+        vec![],
+        vec![Literal::simple("q")],
+    ));
+    theory.add_rule(Rule::new(
+        "d1",
+        RuleType::Defeater,
+        vec![],
+        vec![Literal::negated("q")],
+    ));
 
     let conclusions = reason(&theory).unwrap();
     let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
@@ -1147,14 +1178,30 @@ fn empty_body_defeater_blocks() {
 #[test]
 fn mutual_defeaters_prove_nothing() {
     let mut theory = Theory::new();
-    theory.add_rule(Rule::new("d1", RuleType::Defeater, vec![], vec![Literal::negated("q")]));
-    theory.add_rule(Rule::new("d2", RuleType::Defeater, vec![], vec![Literal::simple("q")]));
+    theory.add_rule(Rule::new(
+        "d1",
+        RuleType::Defeater,
+        vec![],
+        vec![Literal::negated("q")],
+    ));
+    theory.add_rule(Rule::new(
+        "d2",
+        RuleType::Defeater,
+        vec![],
+        vec![Literal::simple("q")],
+    ));
 
     let conclusions = reason(&theory).unwrap();
     let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
 
-    assert!(!defeasible.contains("q"), "q should not be +d (only defeaters)");
-    assert!(!defeasible.contains("~q"), "~q should not be +d (only defeaters)");
+    assert!(
+        !defeasible.contains("q"),
+        "q should not be +d (only defeaters)"
+    );
+    assert!(
+        !defeasible.contains("~q"),
+        "~q should not be +d (only defeaters)"
+    );
 }
 
 /// Multi-hop strict chain must complete fully before defeasible phase.
@@ -1225,7 +1272,11 @@ fn duplicate_facts_no_spurious_rule_firing() {
 fn triple_duplicate_body_fires() {
     let mut theory = Theory::new();
     theory.add_fact("p");
-    let body = vec![Literal::simple("p"), Literal::simple("p"), Literal::simple("p")];
+    let body = vec![
+        Literal::simple("p"),
+        Literal::simple("p"),
+        Literal::simple("p"),
+    ];
     theory.add_rule(Rule::defeasible("r1", body, Literal::simple("q")));
 
     let conclusions = reason(&theory).unwrap();
@@ -1262,14 +1313,8 @@ fn conflicting_strict_chains() {
     assert!(definite.contains("~q"), "+D ~q expected from strict rule");
 
     // Neither should be +d (condition 2 fails when complement is +D)
-    assert!(
-        !defeasible.contains("q"),
-        "q should NOT be +d when +D ~q"
-    );
-    assert!(
-        !defeasible.contains("~q"),
-        "~q should NOT be +d when +D q"
-    );
+    assert!(!defeasible.contains("q"), "q should NOT be +d when +D ~q");
+    assert!(!defeasible.contains("~q"), "~q should NOT be +d when +D q");
 }
 
 /// Rule with body literal equal to head (self-loop) should not cause infinite loop
@@ -1293,7 +1338,10 @@ fn self_loop_with_conflict() {
     let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
 
     assert!(!defeasible.contains("q"), "q should be blocked (ambiguity)");
-    assert!(!defeasible.contains("~q"), "~q should be blocked (ambiguity)");
+    assert!(
+        !defeasible.contains("~q"),
+        "~q should be blocked (ambiguity)"
+    );
 }
 
 /// Superiority between rules with different body predicates, one body unsatisfied.

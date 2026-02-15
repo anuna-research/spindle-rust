@@ -19,9 +19,7 @@ use std::collections::HashSet;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::reason::reason;
 
-use proptest_helpers::{
-    arb_conflicting_theory, arb_theory, conclusion_set, ATOMS,
-};
+use proptest_helpers::{ATOMS, arb_conflicting_theory, arb_theory, conclusion_set};
 
 // =============================================================================
 // Reasoning idempotence: reason(t) == reason(t) (deterministic)

@@ -13,7 +13,9 @@ use proptest::prelude::*;
 
 use spindle_core::temporal::{AllenRelation, Temporal};
 
-use proptest_helpers::{arb_allen_relation, arb_finite_temporal, arb_finite_timepoint, arb_timepoint};
+use proptest_helpers::{
+    arb_allen_relation, arb_finite_temporal, arb_finite_timepoint, arb_timepoint,
+};
 
 // =============================================================================
 // TimePoint total order: exactly one of a < b, a == b, a > b

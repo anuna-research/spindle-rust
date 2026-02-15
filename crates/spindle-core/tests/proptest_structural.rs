@@ -20,9 +20,7 @@ use spindle_core::reason::reason;
 use spindle_core::superiority::{Superiority, SuperiorityIndex};
 use spindle_core::temporal::Temporal;
 
-use proptest_helpers::{
-    arb_literal, arb_mode, arb_temporal, arb_theory, ATOMS,
-};
+use proptest_helpers::{ATOMS, arb_literal, arb_mode, arb_temporal, arb_theory};
 
 // =============================================================================
 // Complement involution: complement(complement(L)) == L
