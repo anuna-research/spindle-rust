@@ -17,6 +17,7 @@ use std::collections::HashSet;
 
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::literal::Literal;
+use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::reason::reason;
 use spindle_core::rule::{Rule, RuleType};
 use spindle_core::theory::Theory;
@@ -503,10 +504,13 @@ proptest! {
         );
     }
 
-    /// Every +d conclusion should have at least one applicable supporting rule.
+    /// Every +d conclusion should have at least one applicable supporting rule
+    /// whose body is fully satisfied by the proven conclusions.
     #[test]
     fn defeasible_conclusion_has_support(theory in arb_adversarial_theory()) {
-        let conclusions = reason(&theory).unwrap();
+        let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+        let conclusions = spindle_core::reason::reason_prepared(&prepared.theory).unwrap();
+
         let defeasible: HashSet<_> = conclusions
             .iter()
             .filter(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable)
@@ -519,24 +523,28 @@ proptest! {
             .map(|c| c.literal.canonical_name())
             .collect();
 
+        // All proven literals (+d or +D) — a body literal is satisfied if proven
+        let proven: HashSet<_> = defeasible.union(&definite).cloned().collect();
+
         // Every +d literal must either:
         // 1. Be +D (subsumption), OR
-        // 2. Have at least one defeasible/strict rule with head=literal whose body is satisfied
+        // 2. Have at least one non-defeater rule with head=literal whose
+        //    body is fully satisfied (every body literal is proven)
         for lit_name in &defeasible {
             if definite.contains(lit_name) {
                 continue; // subsumption covers it
             }
 
-            // Check that there's at least one rule supporting this literal
-            let has_support = theory.rules().any(|r| {
+            let has_applicable_support = prepared.theory.rules().any(|r| {
                 matches!(r.rule_type, RuleType::Strict | RuleType::Defeasible | RuleType::Fact)
                     && !r.head.is_empty()
                     && r.head_literal().canonical_name() == *lit_name
+                    && r.body.iter().all(|body_lit| proven.contains(&body_lit.canonical_name()))
             });
 
             prop_assert!(
-                has_support,
-                "+d {} has no supporting rule in theory",
+                has_applicable_support,
+                "+d {} has no applicable supporting rule (head match + body satisfied) in prepared theory",
                 lit_name
             );
         }
