@@ -179,6 +179,12 @@ pub fn arb_theory() -> impl Strategy<Value = Theory> {
 /// Generate a theory that always contains at least one conflict
 /// (two defeasible rules producing opposite conclusions from satisfied bodies).
 pub fn arb_conflicting_theory() -> impl Strategy<Value = Theory> {
+    arb_conflicting_theory_with_head().prop_map(|(theory, _)| theory)
+}
+
+/// Like `arb_conflicting_theory`, but also returns the head atom name
+/// so tests can directly assert on the conflicting literals.
+pub fn arb_conflicting_theory_with_head() -> impl Strategy<Value = (Theory, String)> {
     (
         proptest::sample::select(ATOMS).prop_map(String::from),
         proptest::sample::select(ATOMS).prop_map(String::from),
@@ -188,7 +194,7 @@ pub fn arb_conflicting_theory() -> impl Strategy<Value = Theory> {
             theory.add_fact(&fact_atom);
             theory.add_defeasible_rule(&[fact_atom.as_str()], &head_atom);
             theory.add_defeasible_rule(&[fact_atom.as_str()], &format!("~{head_atom}"));
-            theory
+            (theory, head_atom)
         })
 }
 

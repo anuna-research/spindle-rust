@@ -18,7 +18,7 @@ use std::collections::HashSet;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::reason::reason;
 
-use proptest_helpers::{ATOMS, arb_conflicting_theory, arb_theory, conclusion_set};
+use proptest_helpers::{ATOMS, arb_conflicting_theory_with_head, arb_theory, conclusion_set};
 
 // =============================================================================
 // Reasoning idempotence: reason(t) == reason(t) (deterministic)
@@ -188,27 +188,30 @@ proptest! {
     /// superiority relation resolves the conflict, neither conclusion
     /// should be defeasibly provable (unless backed by a definite proof).
     #[test]
-    fn ambiguity_blocks_both(theory in arb_conflicting_theory()) {
+    fn ambiguity_blocks_both(
+        (theory, head_atom) in arb_conflicting_theory_with_head()
+    ) {
         let conclusions = reason(&theory).unwrap();
 
         let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
         let definite = conclusion_set(&conclusions, ConclusionType::DefinitelyProvable);
 
-        for lit_name in &defeasible {
-            let complement = if lit_name.starts_with('~') {
-                lit_name.trim_start_matches('~').to_string()
-            } else {
-                format!("~{lit_name}")
-            };
+        let neg_head = format!("~{head_atom}");
 
-            // Both sides being +d is impossible unless one has definite support
-            if defeasible.contains(&complement) {
-                prop_assert!(
-                    definite.contains(lit_name) || definite.contains(&complement),
-                    "Both +d {} and +d {} without definite support",
-                    lit_name, complement
-                );
-            }
+        // Neither side should be +d unless it has definite (+D) backing
+        if !definite.contains(&head_atom) {
+            prop_assert!(
+                !defeasible.contains(&head_atom),
+                "Ambiguity should block +d {}, but it was provable (no definite backing)",
+                head_atom
+            );
+        }
+        if !definite.contains(&neg_head) {
+            prop_assert!(
+                !defeasible.contains(&neg_head),
+                "Ambiguity should block +d ~{}, but it was provable (no definite backing)",
+                head_atom
+            );
         }
     }
 }
