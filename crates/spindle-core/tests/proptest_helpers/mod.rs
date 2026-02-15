@@ -11,6 +11,9 @@
 //! use proptest_helpers::*;
 //! ```
 
+// Each test binary uses a different subset of helpers; suppress per-binary dead-code warnings.
+#![allow(dead_code, unused_imports)]
+
 use proptest::prelude::*;
 
 use spindle_core::conclusion::ConclusionType;

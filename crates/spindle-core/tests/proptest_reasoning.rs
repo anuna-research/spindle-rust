@@ -10,7 +10,6 @@
 //! - Defeaters only block, never prove
 //! - Conclusion type coverage (every literal gets exactly one D and one d verdict)
 
-mod fixtures;
 mod proptest_helpers;
 
 use proptest::prelude::*;
@@ -113,26 +112,64 @@ proptest! {
     fn conclusion_coverage(theory in arb_theory()) {
         let conclusions = reason(&theory).unwrap();
 
-        // Group by canonical name
-        let mut definite_verdicts: HashSet<String> = HashSet::new();
-        let mut defeasible_verdicts: HashSet<String> = HashSet::new();
+        // Count verdicts per literal per level
+        let mut definite_pos: HashSet<String> = HashSet::new();
+        let mut definite_neg: HashSet<String> = HashSet::new();
+        let mut defeasible_pos: HashSet<String> = HashSet::new();
+        let mut defeasible_neg: HashSet<String> = HashSet::new();
 
         for c in &conclusions {
             let name = c.literal.canonical_name();
             match c.conclusion_type {
-                ConclusionType::DefinitelyProvable | ConclusionType::DefinitelyNotProvable => {
-                    definite_verdicts.insert(name);
-                }
-                ConclusionType::DefeasiblyProvable | ConclusionType::DefeasiblyNotProvable => {
-                    defeasible_verdicts.insert(name);
-                }
+                ConclusionType::DefinitelyProvable => { definite_pos.insert(name); }
+                ConclusionType::DefinitelyNotProvable => { definite_neg.insert(name); }
+                ConclusionType::DefeasiblyProvable => { defeasible_pos.insert(name); }
+                ConclusionType::DefeasiblyNotProvable => { defeasible_neg.insert(name); }
             }
         }
 
-        // Every literal with a definite verdict should also have a defeasible verdict
-        for name in &definite_verdicts {
+        // Collect all literal names that appear in any verdict
+        let all_literals: HashSet<_> = definite_pos.iter()
+            .chain(definite_neg.iter())
+            .chain(defeasible_pos.iter())
+            .chain(defeasible_neg.iter())
+            .cloned()
+            .collect();
+
+        for name in &all_literals {
+            // Exactly one definite verdict: +D xor -D
+            let has_def_pos = definite_pos.contains(name);
+            let has_def_neg = definite_neg.contains(name);
             prop_assert!(
-                defeasible_verdicts.contains(name),
+                has_def_pos || has_def_neg,
+                "Literal '{}' has no definite verdict (+D or -D)",
+                name
+            );
+            prop_assert!(
+                !(has_def_pos && has_def_neg),
+                "Literal '{}' has both +D and -D (contradictory definite verdicts)",
+                name
+            );
+
+            // Exactly one defeasible verdict: +d xor -d
+            let has_dfs_pos = defeasible_pos.contains(name);
+            let has_dfs_neg = defeasible_neg.contains(name);
+            prop_assert!(
+                has_dfs_pos || has_dfs_neg,
+                "Literal '{}' has no defeasible verdict (+d or -d)",
+                name
+            );
+            prop_assert!(
+                !(has_dfs_pos && has_dfs_neg),
+                "Literal '{}' has both +d and -d (contradictory defeasible verdicts)",
+                name
+            );
+        }
+
+        // Every literal with a definite verdict should also have a defeasible verdict
+        for name in definite_pos.iter().chain(definite_neg.iter()) {
+            prop_assert!(
+                defeasible_pos.contains(name) || defeasible_neg.contains(name),
                 "Literal '{}' has definite verdict but no defeasible verdict",
                 name
             );

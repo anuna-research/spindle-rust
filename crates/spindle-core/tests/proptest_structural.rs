@@ -9,7 +9,6 @@
 //! - SuperiorityIndex consistency
 //! - Metadata transparency
 
-mod fixtures;
 mod proptest_helpers;
 
 use proptest::prelude::*;

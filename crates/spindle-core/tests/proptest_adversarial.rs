@@ -9,7 +9,6 @@
 //! - Self-referential and circular rules
 //! - Cascading ambiguity blocking
 
-mod fixtures;
 mod proptest_helpers;
 
 use proptest::prelude::*;
@@ -901,10 +900,15 @@ proptest! {
         let conclusions = reason(&theory).unwrap();
         let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
 
-        // Both sides should be blocked (ambiguity)
+        // Both sides should be blocked (ambiguity): neither +d head nor +d ~head
         prop_assert!(
-            !defeasible.contains(&head) || !defeasible.contains(&format!("~{head}")),
-            "Should not have both +d {} and +d ~{0} without definite backing",
+            !defeasible.contains(&head),
+            "Ambiguity should block +d {}, but it was provable",
+            head
+        );
+        prop_assert!(
+            !defeasible.contains(&format!("~{head}")),
+            "Ambiguity should block +d ~{}, but it was provable",
             head
         );
     }
