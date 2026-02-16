@@ -7,8 +7,6 @@
 //! - TEST-003: `abduce` solutions, when injected as facts, make the goal provable
 //! - TEST-004: `requires` result is a subset of what `abduce` returns
 
-mod fixtures;
-
 use proptest::prelude::*;
 use std::collections::HashSet;
 
