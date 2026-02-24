@@ -1,9 +1,9 @@
-# Arithmetic Module for Spindle
+# Arithmetic for Spindle
 
 | Field | Value |
 |---|---|
 | Document ID | SPEC-017 |
-| Title | Arithmetic Module: Numeric Terms and Constraints in Polish Notation |
+| Title | Arithmetic: Numeric Terms and Constraints in Polish Notation |
 | Version | 1.0.0 |
 | Status | Draft |
 | Created | 2026-02-24 |
@@ -18,7 +18,7 @@
 
 Spindle currently treats all terms as opaque interned symbols. There is no numeric type, no arithmetic evaluation, and no way to express constraints such as "cost exceeds threshold" or "total equals sum of parts" within a theory. This limits applicability to purely qualitative reasoning.
 
-This specification defines an **arithmetic module** that adds numeric terms, arithmetic expressions in Polish (prefix) notation, and built-in arithmetic predicates to SPL. The module is opt-in via a `(use arithmetic)` declaration, preserving backward compatibility in two ways: (1) the directive must be explicitly included; and (2) bare numeric-looking tokens (digit sequences such as `42` or `3.14`) that serve as symbolic identifiers in existing theories remain valid atom tokens when the directive is absent — only operator expression forms `(+ ...)`, the `is` predicate, and comparison predicates require the directive. All arithmetic expressions use S-expression prefix notation consistent with SPL's existing syntax — no new notation forms are introduced.
+This specification adds **built-in arithmetic** to SPL: numeric terms, arithmetic expressions in Polish (prefix) notation, and built-in arithmetic predicates (`is`, comparisons). Arithmetic operators (`+`, `-`, `*`, `/`, `<`, `>`, `=`, etc.) and `is` are **reserved keywords**, consistent with every major logic programming language (Prolog, Datalog, ASP). No opt-in directive is required. All arithmetic expressions use S-expression prefix notation consistent with SPL's existing syntax — no new notation forms are introduced.
 
 ### Scope
 
@@ -29,7 +29,6 @@ This specification defines an **arithmetic module** that adds numeric terms, ari
 | Numeric comparison predicates | String operations |
 | Arithmetic in rule bodies (constraints + bindings) | Arithmetic in rule heads (computed conclusions) |
 | Arithmetic during grounding | Arithmetic during tabling / abduction |
-| Module system (use directive) | General module imports beyond built-ins |
 
 ---
 
@@ -64,9 +63,18 @@ Spindle's semantics are grounded in defeasible logic (DL(d)). Several constraint
 
 ## 3. Functional Requirements
 
-### REQ-001: Use Directive
+### REQ-001: Numeric Literal Terms
 
-The system SHALL accept a `(use arithmetic)` declaration that appears **before any rule or fact declaration** in an SPL theory file, enabling arithmetic syntax and semantics for that theory within the same parsing pass as other directives. Placing the directive at the very top of the file (before any declarations) is RECOMMENDED but not required. It is a parse error to place `(use arithmetic)` after any rule or fact declaration, or after any arithmetic term has been encountered.
+The system SHALL accept numeric literals as predicate arguments in any position where a symbol term is currently accepted. Numeric literals include:
+
+- **Integer literals**: decimal digit sequences optionally prefixed with `-` (e.g., `0`, `42`, `-7`, `1000000`)
+- **Float literals**: IEEE 754 double-precision, expressed as decimal with a `.` separator (e.g., `3.14`, `-0.5`, `1.0e6`)
+
+```lisp
+(given (cost item-a 100))        ; integer term 100
+(given (price widget 9.99))      ; float term 9.99
+(given (balance account -250))   ; negative integer
+```
 
 Trace:
 - TEST-001
@@ -74,34 +82,11 @@ Trace:
 
 ---
 
-### REQ-002: Numeric Literal Terms
+### REQ-002: Arithmetic Expression Terms
 
-The system SHALL accept numeric literals as predicate arguments in any position where a symbol term is currently accepted, when the arithmetic module is active. Numeric literals include:
-
-- **Integer literals**: decimal digit sequences optionally prefixed with `-` (e.g., `0`, `42`, `-7`, `1000000`)
-- **Float literals**: IEEE 754 double-precision, expressed as decimal with a `.` separator (e.g., `3.14`, `-0.5`, `1.0e6`)
+The system SHALL accept arithmetic expressions as terms in predicate argument positions. Arithmetic expressions are S-expressions using the prefix operators defined in CON-003. Variables within expressions follow the existing `?name` convention.
 
 ```lisp
-(use arithmetic)
-
-(given (cost item-a 100))        ; integer term 100
-(given (price widget 9.99))      ; float term 9.99
-(given (balance account -250))   ; negative integer
-```
-
-Trace:
-- TEST-002
-- CON-002
-
----
-
-### REQ-003: Arithmetic Expression Terms
-
-The system SHALL accept arithmetic expressions as terms in predicate argument positions, when the arithmetic module is active. Arithmetic expressions are S-expressions using the prefix operators defined in CON-003. Variables within expressions follow the existing `?name` convention.
-
-```lisp
-(use arithmetic)
-
 ; (+ ?x ?y) is an arithmetic expression term
 (normally r1
   (and (price ?item ?p) (tax-rate ?r) (is ?tax (* ?p ?r)))
@@ -111,17 +96,17 @@ The system SHALL accept arithmetic expressions as terms in predicate argument po
 An arithmetic expression may:
 - Nest arbitrarily: `(+ (* ?a ?b) (- ?c ?d))`
 - Mix variables and numeric literals: `(+ ?x 10)`
-- Appear as any argument to any user-defined predicate or arithmetic predicate **in a rule body position** (see REQ-010 for the prohibition on arithmetic expressions in rule heads)
+- Appear as any argument to any user-defined predicate or arithmetic predicate **in a rule body position** (see REQ-009 for the prohibition on arithmetic expressions in rule heads)
 
 Trace:
-- TEST-003
-- CON-003
+- TEST-002
+- CON-002
 
 ---
 
-### REQ-004: `is` Binding Predicate
+### REQ-003: `is` Binding Predicate
 
-The system SHALL provide a built-in `is` predicate of the form `(is ?var <expr>)` that binds the variable `?var` to the result of evaluating `<expr>` under the current substitution, when the arithmetic module is active.
+The system SHALL provide a built-in `is` predicate of the form `(is ?var <expr>)` that binds the variable `?var` to the result of evaluating `<expr>` under the current substitution.
 
 - `?var` MUST be an unbound variable in the current substitution context.
 - If `<expr>` contains an unbound variable other than `?var`, the `is` literal fails to unify (the rule body does not fire).
@@ -129,8 +114,6 @@ The system SHALL provide a built-in `is` predicate of the form `(is ?var <expr>)
 - On arithmetic error (division by zero, overflow), the `is` literal fails silently (the rule body does not fire for that grounding).
 
 ```lisp
-(use arithmetic)
-
 (given (price widget 80))
 (given (quantity order-1 5))
 
@@ -142,14 +125,14 @@ The system SHALL provide a built-in `is` predicate of the form `(is ?var <expr>)
 ```
 
 Trace:
-- TEST-004
-- CON-004
+- TEST-003
+- CON-003
 
 ---
 
-### REQ-005: Comparison Predicates
+### REQ-004: Comparison Predicates
 
-The system SHALL provide six built-in comparison predicates — `=`, `!=`, `<`, `>`, `<=`, `>=` — each of the form `(<op> <expr1> <expr2>)`, when the arithmetic module is active.
+The system SHALL provide six built-in comparison predicates — `=`, `!=`, `<`, `>`, `<=`, `>=` — each of the form `(<op> <expr1> <expr2>)`.
 
 - A comparison predicate evaluates both expressions under the current substitution and checks the relation.
 - If either expression contains an unbound variable, the comparison fails silently.
@@ -158,8 +141,6 @@ The system SHALL provide six built-in comparison predicates — `=`, `!=`, `<`, 
 - These predicates produce no conclusions of their own — they act as guards.
 
 ```lisp
-(use arithmetic)
-
 (given (salary alice 120000))
 (given (salary bob 85000))
 
@@ -172,12 +153,12 @@ The system SHALL provide six built-in comparison predicates — `=`, `!=`, `<`, 
 ```
 
 Trace:
-- TEST-005
-- CON-005
+- TEST-004
+- CON-004
 
 ---
 
-### REQ-006: Mixed Integer and Float Semantics
+### REQ-005: Mixed Integer and Float Semantics
 
 The system SHALL support arithmetic between integer and float operands with the following promotion rules:
 
@@ -193,18 +174,16 @@ The `div` operator performs **floor division** (rounds toward negative infinity)
 The `rem` operator returns the **floor remainder** matching `div`, defined as `a - (a div b) * b`. Both operands must be integers; if either is a float, the literal fails silently. Examples: `(rem 10 3)` → `1`; `(rem -7 2)` → `1`; `(rem 7 -2)` → `-1`.
 
 Trace:
-- TEST-006
-- CON-003
+- TEST-005
+- CON-002
 
 ---
 
-### REQ-007: Arithmetic in Temporal Rules
+### REQ-006: Arithmetic in Temporal Rules
 
-The system SHALL permit arithmetic predicates and expressions to appear in the bodies of rules that also contain temporal literals, when both the arithmetic module and temporal reasoning are active. Arithmetic expressions MUST NOT reference interval variables (`?T`, `?S`); temporal variables are not numeric.
+The system SHALL permit arithmetic predicates and expressions to appear in the bodies of rules that also contain temporal literals. Arithmetic expressions MUST NOT reference interval variables (`?T`, `?S`); temporal variables are not numeric.
 
 ```lisp
-(use arithmetic)
-
 (given (during (salary alice 120000) 0 100))
 (given (during (salary alice 95000) 100 200))
 
@@ -214,37 +193,29 @@ The system SHALL permit arithmetic predicates and expressions to appear in the b
 ```
 
 Trace:
-- TEST-007
+- TEST-006
 
 ---
 
-### REQ-008: Parse Error for Arithmetic without `use`
-
-The system SHALL emit a parse error with source location if arithmetic operator expressions (e.g. `(+ ...)`, `(* ...)`, `(div ...)`, `(** ...)`, etc.), the `is` binding predicate, or comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) appear in an SPL file that does not contain `(use arithmetic)`.
-
-Bare numeric tokens (sequences of digits, optionally with a leading `-` or a `.`) do **not** trigger this error when the directive is absent; they remain valid symbolic atoms in all contexts. The `(use arithmetic)` directive is what causes the parser to interpret such tokens as `Term::Integer` or `Term::Float` rather than `Term::Symbol`.
-
-```
-Error at line 3, col 12:
-  arithmetic expression '(+ ...)' requires `(use arithmetic)` at the top of the file.
-```
-
-Trace:
-- TEST-008
-- CON-001
-
----
-
-### REQ-009: Arithmetic Predicates are Bodyless — No Rule Labels
+### REQ-007: Arithmetic Predicates are Bodyless — No Rule Labels
 
 The system SHALL ensure that arithmetic predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) generate no `RuleLabel`, do not participate in superiority declarations, and do not appear in the conclusions set. It is a parse error to reference an arithmetic predicate in a `(prefer ...)` declaration.
 
 Trace:
-- TEST-009
+- TEST-007
 
 ---
 
-### REQ-010: No Arithmetic in Rule Heads
+### REQ-008: Reserved Arithmetic Keywords
+
+The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `is` binding predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names. This matches the convention of Prolog, Datalog, and ASP, where arithmetic is part of the core language.
+
+Trace:
+- TEST-008
+
+---
+
+### REQ-009: No Arithmetic in Rule Heads
 
 The system SHALL emit a parse error if an arithmetic predicate or an arithmetic expression appears in the head position of any rule (fact, strict, defeasible, or defeater). Rule heads must remain ground-symbol predicates. Arithmetic belongs exclusively to the constraint layer (body evaluation).
 
@@ -263,7 +234,7 @@ The system SHALL emit a parse error if an arithmetic predicate or an arithmetic 
 ```
 
 Trace:
-- TEST-010
+- TEST-009
 
 ---
 
@@ -371,7 +342,7 @@ Arithmetic expressions (`ArithExpr`) appear only transiently during grounding �
 
 **Context**: SPL already uses S-expression syntax (parenthesised prefix lists). Arithmetic expressions must be distinguishable from predicate applications.
 
-**Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`) are **reserved keywords** when the arithmetic module is active. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
+**Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`) and built-in predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are **always reserved keywords**. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
 
 This means:
 - `(+ ?x ?y)` in argument position → `ArithExpr::BinOp(Add, Var(?x), Var(?y))`
@@ -380,44 +351,17 @@ This means:
 The lexer requires targeted additions. The current `parse_atom` in `lexer.rs` accepts `+` but not `*`, `/`, `<`, `>`, `=`, or `!`. These characters must be added to the atom character set so that operator tokens such as `*`, `/`, `<=`, `>=`, `!=`, and `**` are lexed. Adding them to `parse_atom` is sufficient; no dedicated token types are required. The expression dispatcher then gains awareness of which atom values are reserved arithmetic operator keywords and dispatches accordingly. The `+` operator already lexes correctly.
 
 **Trade-offs**:
-- Theories that use `+`, `-`, etc. as predicate names (currently allowed as opaque atoms) will conflict with arithmetic keywords when the arithmetic module is active. Since arithmetic is opt-in (`use arithmetic`), existing theories are unaffected. New theories using `+` as a predicate name and also wanting arithmetic would have a conflict — this is considered acceptable and documented.
+- Theories that previously used `+`, `-`, `*`, `/`, `<`, `>`, `=`, or `is` as standalone predicate names will break. These names are now reserved, consistent with Prolog and other logic languages. This is considered acceptable — using operator characters as predicate names is rare and confusing. Multi-character atoms containing these characters (e.g., `high-earner`, `c++test`) are unaffected, since reservation applies only to standalone atoms at list head position.
 
 ---
-
-### ADR-004: Module System as Opt-In Parser Feature Flag
-
-**Context**: A general module/import system is a large feature. This spec needs a minimal mechanism to gate arithmetic syntax.
-
-**Decision**: Implement a minimal **use-directive** mechanism. The parser tracks a set of `ActiveModules`. A `(use <name>)` directive (parsed at theory load time) adds `<name>` to the active set. Arithmetic syntax and semantics are gated on `ActiveModules::contains("arithmetic")`.
-
-The `(use arithmetic)` directive MUST appear before any rule or fact declaration. Placement at the very top of the file is RECOMMENDED. Placement after any rule, fact, or arithmetic term is a parse error. This aligns with CON-001 and REQ-001.
-
-This minimal module system is intentionally not a general import system. Future specs may extend it.
 
 ---
 
 ## 6. Contracts
 
-### CON-001: `(use arithmetic)` Directive
+### CON-001: Numeric Literal Term Grammar
 
-```
-Directive form:  (use arithmetic)
-Position:        Must appear before any rule or fact declarations
-Effect:          Activates arithmetic syntax in the parser for this theory
-Parser state:    Adds `Arithmetic` to `ActiveModules` set
-Errors:
-  - If `arithmetic` is already active: warning (idempotent, no error)
-  - If placed after arithmetic terms: parse error at directive position
-```
-
-Implements: REQ-001, REQ-008
-Verified by: TEST-001, TEST-008
-
----
-
-### CON-002: Numeric Literal Term Grammar
-
-When arithmetic is active, the literal parser accepts numeric terms in all argument positions.
+The literal parser accepts numeric terms in all argument positions.
 
 ```
 numeric-term   ::= integer-literal | float-literal
@@ -427,12 +371,12 @@ float-literal  ::= '-'? [0-9]+ '.' [0-9]+ (('e' | 'E') '-'? [0-9]+)?
 
 Parsing produces `Term::Integer(i64)` or `Term::Float(f64)`. Parse errors for out-of-range values use the existing `ParseError` type with source offset.
 
-Implements: REQ-002
-Verified by: TEST-002
+Implements: REQ-001
+Verified by: TEST-001
 
 ---
 
-### CON-003: Arithmetic Expression AST and Operators
+### CON-002: Arithmetic Expression AST and Operators
 
 ```rust
 pub enum ArithExpr {
@@ -465,7 +409,7 @@ pub enum UnaryArithOp {
 }
 ```
 
-**S-expression grammar for arithmetic expressions** (when arithmetic module active):
+**S-expression grammar for arithmetic expressions**:
 
 ```
 arith-expr     ::= numeric-literal
@@ -487,12 +431,12 @@ Examples:
 (** ?base ?exp)            ; exponentiation
 ```
 
-Implements: REQ-003, REQ-006
-Verified by: TEST-003, TEST-006
+Implements: REQ-002, REQ-005
+Verified by: TEST-002, TEST-005
 
 ---
 
-### CON-004: `is` Predicate Interface
+### CON-003: `is` Predicate Interface
 
 ```
 Syntax:        (is <variable> <arith-expr>)
@@ -514,12 +458,12 @@ Errors (parse time):
   - `(is ...)` in a rule head position: parse error
 ```
 
-Implements: REQ-004
-Verified by: TEST-004
+Implements: REQ-003
+Verified by: TEST-003
 
 ---
 
-### CON-005: Comparison Predicate Interface
+### CON-004: Comparison Predicate Interface
 
 ```
 Operators: = != < > <= >=
@@ -542,8 +486,8 @@ Errors (parse time):
   - Non-expression argument: parse error
 ```
 
-Implements: REQ-005
-Verified by: TEST-005
+Implements: REQ-004
+Verified by: TEST-004
 
 ---
 
@@ -573,7 +517,7 @@ pub enum Term {
 }
 ```
 
-`Term::Symbol` is the default; existing code paths that destructure `predicate_ids` must be updated to pattern-match on `Term`. Since arithmetic is module-gated, non-arithmetic theories will never produce `Term::Integer` or `Term::Float`.
+`Term::Symbol` is the default; existing code paths that destructure `predicate_ids` must be updated to pattern-match on `Term`. Theories without numeric literals will only produce `Term::Symbol`.
 
 ### 7.2 Grounding Substitution
 
@@ -627,7 +571,7 @@ pub enum CmpOp { Eq, Ne, Lt, Gt, Le, Ge }
 
 ## 8. SPL Syntax Summary
 
-When `(use arithmetic)` is active, the following new forms are valid in rule bodies:
+The following arithmetic forms are valid in rule bodies:
 
 | Form | Meaning | Example |
 |---|---|---|
@@ -658,8 +602,6 @@ When `(use arithmetic)` is active, the following new forms are valid in rule bod
 ### 9.1 Order Total with Tax
 
 ```lisp
-(use arithmetic)
-
 ; Facts
 (given (unit-price widget 25))
 (given (quantity order-001 4))
@@ -693,8 +635,6 @@ Expected conclusions (after grounding and reasoning):
 ### 9.2 Defeasible Classification with Override
 
 ```lisp
-(use arithmetic)
-
 (given (score alice 72))
 (given (score bob 45))
 (given (bonus alice 15))   ; alice gets a bonus
@@ -726,8 +666,6 @@ Expected:
 ### 9.3 Temporal Arithmetic (Salary Bands Over Time)
 
 ```lisp
-(use arithmetic)
-
 (given (during (salary alice 95000) 0 100))
 (given (during (salary alice 110000) 100 200))
 (given (threshold senior 100000))
@@ -748,24 +686,7 @@ Expected:
 
 ## 10. Test Specifications
 
-### TEST-001: `use arithmetic` Directive Parsing
-
-**Preconditions**: Valid SPL file with `(use arithmetic)` as the first declaration.
-
-**Scenarios**:
-1. File with `(use arithmetic)` and numeric facts — parses without error.
-2. File without `(use arithmetic)` and numeric literal `(given (cost x 5))` — parse error at numeric literal, citing missing `use arithmetic`.
-3. File with duplicate `(use arithmetic)` — parses without error (idempotent).
-4. File with `(use arithmetic)` after a fact declaration containing numeric literal — parse error at the directive position.
-5. `(use unknown-module)` — parse error (unknown module name).
-
-Verifies: REQ-001, REQ-008, CON-001
-
----
-
-### TEST-002: Numeric Literal Terms
-
-**Preconditions**: `(use arithmetic)` active.
+### TEST-001: Numeric Literal Terms
 
 **Scenarios**:
 1. Integer literal as predicate argument: `(given (count x 42))` → `+D count(x, 42)`
@@ -775,13 +696,11 @@ Verifies: REQ-001, REQ-008, CON-001
 5. Integer and symbol as separate arguments: `(given (indexed item-a 1))` — parses correctly.
 6. Integer that overflows i64 — parse error with source position.
 
-Verifies: REQ-002, CON-002
+Verifies: REQ-001, CON-001
 
 ---
 
-### TEST-003: Arithmetic Expression Parsing
-
-**Preconditions**: `(use arithmetic)` active.
+### TEST-002: Arithmetic Expression Parsing
 
 **Scenarios**:
 1. `(+ 3 4)` in argument position → `ArithExpr::BinOp(Add, Lit(3), Lit(4))`
@@ -790,13 +709,11 @@ Verifies: REQ-002, CON-002
 4. Unary operators parse: `(neg ?x)`, `(abs (- ?a ?b))`
 5. Arithmetic operator at predicate (non-argument) position → parse error
 
-Verifies: REQ-003, CON-003
+Verifies: REQ-002, CON-002
 
 ---
 
-### TEST-004: `is` Predicate Binding
-
-**Preconditions**: `(use arithmetic)` active.
+### TEST-003: `is` Predicate Binding
 
 **Scenarios**:
 1. `(is ?z (+ ?x ?y))` with `?x=3, ?y=4` bound → `?z` binds to `7`
@@ -807,13 +724,13 @@ Verifies: REQ-003, CON-003
 6. `is` in rule head position → parse error
 7. `is` with non-variable first argument `(is 5 (+ 2 3))` → parse error
 
-Verifies: REQ-004, CON-004
+Verifies: REQ-003, CON-003
 
 ---
 
-### TEST-005: Comparison Predicates
+### TEST-004: Comparison Predicates
 
-**Preconditions**: `(use arithmetic)` active, theory has `(given (val x 10))`, `(given (val y 20))`.
+**Preconditions**: Theory has `(given (val x 10))`, `(given (val y 20))`.
 
 **Scenarios**:
 1. `(> ?a ?b)` with `?a=20, ?b=10` → grounding retained
@@ -825,13 +742,11 @@ Verifies: REQ-004, CON-004
 7. Comparison in rule head position → parse error
 8. Unbound variable in comparison → grounding discarded
 
-Verifies: REQ-005, CON-005
+Verifies: REQ-004, CON-004
 
 ---
 
-### TEST-006: Integer/Float Promotion Rules
-
-**Preconditions**: `(use arithmetic)` active.
+### TEST-005: Integer/Float Promotion Rules
 
 **Scenarios**:
 1. `(+ 3 4)` → `Integer(7)`
@@ -845,50 +760,49 @@ Verifies: REQ-005, CON-005
 9. `(div 10 3.0)` → evaluation fails (div requires integer operands)
 10. `(rem 10 3.0)` → evaluation fails
 
-Verifies: REQ-006, CON-003
+Verifies: REQ-005, CON-002
 
 ---
 
-### TEST-007: Arithmetic in Temporal Rules
+### TEST-006: Arithmetic in Temporal Rules
 
-**Preconditions**: `(use arithmetic)` active, temporal reasoning active.
+**Preconditions**: Temporal reasoning active.
 
 **Scenarios**:
 1. Rule with `during` literal and `>` comparison — fires for intervals where comparison holds, does not fire for others (see worked example §9.3).
 2. Rule body referencing an interval variable `?T` in arithmetic expression `(+ ?T 1)` → parse error (interval variables not numeric).
 
+Verifies: REQ-006
+
+---
+
+### TEST-007: Arithmetic Predicates Cannot Appear in Superiority
+
+**Scenario**: `(prefer is r1)` → parse error ("arithmetic predicates cannot appear in prefer declarations").
+
 Verifies: REQ-007
 
 ---
 
-### TEST-008: Parse Error without `use arithmetic`
+### TEST-008: Reserved Keyword Enforcement
 
-**Scenario**: SPL file without `(use arithmetic)` containing:
-- Bare numeric token such as `(given (count x 5))` → **parses successfully** as a symbolic atom (no error); the `5` is interned as the symbol `"5"`
-- Arithmetic operator expression `(+ ?x 1)` in argument position → parse error citing missing `use arithmetic`
-- `(is ?x ...)` → parse error citing missing `use arithmetic`
-- `(> ?x ?y)` (as arithmetic comparison) → parse error citing missing `use arithmetic`
+**Scenarios**:
+1. `(normally r1 (+ ?x ?y) result)` where `+` is used as a predicate name → parse error ("'+' is a reserved arithmetic operator")
+2. `(normally r1 body (is ?x 5))` where `is` is in head position → parse error
+3. `(given (cost (+ 3 4)))` where arithmetic expression appears in fact argument → parse error (arithmetic expression in head/fact position)
 
 Verifies: REQ-008
 
 ---
 
-### TEST-009: Arithmetic Predicates Cannot Appear in Superiority
-
-**Scenario**: `(prefer is r1)` → parse error ("arithmetic predicates cannot appear in prefer declarations").
-
-Verifies: REQ-009
-
----
-
-### TEST-010: No Arithmetic in Rule Heads
+### TEST-009: No Arithmetic in Rule Heads
 
 **Scenarios**:
 1. `(normally r1 body (is ?x 5))` → parse error
 2. `(normally r1 body (> ?x 0))` → parse error
 3. `(normally r1 body (cost item (+ 1 2)))` → parse error (arithmetic expression in head argument)
 
-Verifies: REQ-010
+Verifies: REQ-009
 
 ---
 
@@ -928,12 +842,11 @@ Verifies: NFR-002
 
 ### Phase 2 — Parser Extension (spindle-parser)
 
-1. Add `ActiveModules` state to the parser context in `spl/mod.rs`.
-2. Parse `(use arithmetic)` directive in `spl/expressions.rs`; set flag.
-3. Extend `spl/literals.rs` to parse numeric literals as `Term::Integer`/`Term::Float` when arithmetic active.
-4. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
-5. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
-6. Add parse-time guards for arithmetic in head position and arithmetic without `use`.
+1. Extend `spl/lexer.rs` `parse_atom` to accept `*`, `/`, `<`, `>`, `=`, `!` as atom characters, so operator tokens lex correctly.
+2. Extend `spl/literals.rs` to parse numeric literals as `Term::Integer`/`Term::Float`.
+3. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
+4. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
+5. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names → parse error.
 
 ### Phase 3 — Grounding Integration (spindle-core)
 
@@ -943,7 +856,7 @@ Verifies: NFR-002
 
 ### Phase 4 — Tests
 
-Write tests in the order of TEST-001 through TEST-010, then NFR tests. Add property-based tests using `proptest` for arithmetic expression evaluation correctness (compare `ArithExpr::eval` against Rust's own arithmetic).
+Write tests in the order of TEST-001 through TEST-009, then NFR tests. Add property-based tests using `proptest` for arithmetic expression evaluation correctness (compare `ArithExpr::eval` against Rust's own arithmetic).
 
 ---
 
@@ -951,15 +864,14 @@ Write tests in the order of TEST-001 through TEST-010, then NFR tests. Add prope
 
 | # | Question | Impact | Proposed Resolution |
 |---|---|---|---|
-| OQ-1 | Should numeric-looking atoms remain valid symbolic atoms when arithmetic is disabled? | High | **Resolved**: Yes. Bare numeric tokens are valid symbolic atoms when `(use arithmetic)` is absent (backward compatible). The directive causes the parser to reinterpret them as `Term::Integer`/`Term::Float`. See REQ-008 and Executive Summary. |
-| OQ-2 | Should arithmetic constraints in a body be evaluated strictly in source order to support dependent bindings? | High | **Resolved**: Yes. Arithmetic constraints are evaluated left-to-right in source order. Each constraint sees the substitution as extended by all preceding constraints. See ADR-001b. |
-| OQ-3 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Numeric predicate arguments (`Term::Integer`, `Term::Float`) are serialized as JSON numbers (not strings) in any structured output. String-based serialization of numeric values is deprecated when the arithmetic module is active. |
-| OQ-4 | Should `=` be overloaded for both numeric equality and symbol identity? | High | Keep symbol identity via pattern matching in substitution; `=` is numeric-only when arithmetic module active |
-| OQ-5 | Should arithmetic predicates produce `+D` conclusions (strict) or `+d` (defeasible)? | High | Neither — they are grounding-phase guards; they produce no conclusions |
-| OQ-6 | Should abduction support arithmetic? E.g. "what value of ?x makes `(> ?x 100)` hold?" | Medium | Out of scope for this spec; deferred |
-| OQ-7 | Should `why_not` explain arithmetic failures? | Medium | Desirable; deferred — requires arithmetic constraint explanation |
-| OQ-8 | Should overflow produce a warning or strict error rather than silent failure? | Low | Silent failure preferred (consistent with Prolog's arithmetic); observable via `why_not` if implemented |
-| OQ-9 | Rational numbers (exact fractions)? | Low | Deferred; `f64` covers most use cases; rational would require a dependency |
+| OQ-1 | Should arithmetic constraints in a body be evaluated strictly in source order to support dependent bindings? | High | **Resolved**: Yes. Arithmetic constraints are evaluated left-to-right in source order. Each constraint sees the substitution as extended by all preceding constraints. See ADR-001b. |
+| OQ-2 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Numeric predicate arguments (`Term::Integer`, `Term::Float`) are serialized as JSON numbers (not strings) in any structured output. |
+| OQ-3 | Should `=` be overloaded for both numeric equality and symbol identity? | High | Keep symbol identity via pattern matching in substitution; `=` is numeric-only (reserved keyword) |
+| OQ-4 | Should arithmetic predicates produce `+D` conclusions (strict) or `+d` (defeasible)? | High | Neither — they are grounding-phase guards; they produce no conclusions |
+| OQ-5 | Should abduction support arithmetic? E.g. "what value of ?x makes `(> ?x 100)` hold?" | Medium | Out of scope for this spec; deferred |
+| OQ-6 | Should `why_not` explain arithmetic failures? | Medium | Desirable; deferred — requires arithmetic constraint explanation |
+| OQ-7 | Should overflow produce a warning or strict error rather than silent failure? | Low | Silent failure preferred (consistent with Prolog's arithmetic); observable via `why_not` if implemented |
+| OQ-8 | Rational numbers (exact fractions)? | Low | Deferred; `f64` covers most use cases; rational would require a dependency |
 
 ---
 
@@ -967,16 +879,15 @@ Write tests in the order of TEST-001 through TEST-010, then NFR tests. Add prope
 
 | REQ | NFR | ADR | CON | TEST |
 |---|---|---|---|---|
-| REQ-001 | — | ADR-004 | CON-001 | TEST-001 |
-| REQ-002 | — | ADR-002 | CON-002 | TEST-002 |
-| REQ-003 | — | ADR-003 | CON-003 | TEST-003 |
+| REQ-001 | — | ADR-002 | CON-001 | TEST-001 |
+| REQ-002 | — | ADR-003 | CON-002 | TEST-002 |
+| REQ-003 | — | ADR-001, ADR-001b | CON-003 | TEST-003 |
 | REQ-004 | — | ADR-001, ADR-001b | CON-004 | TEST-004 |
-| REQ-005 | — | ADR-001, ADR-001b | CON-005 | TEST-005 |
-| REQ-006 | — | ADR-002 | CON-003 | TEST-006 |
+| REQ-005 | — | ADR-002 | CON-002 | TEST-005 |
+| REQ-006 | — | ADR-001 | — | TEST-006 |
 | REQ-007 | — | ADR-001 | — | TEST-007 |
-| REQ-008 | — | ADR-004 | CON-001 | TEST-008 |
-| REQ-009 | — | ADR-001 | — | TEST-009 |
-| REQ-010 | — | ADR-003 | — | TEST-010 |
+| REQ-008 | — | ADR-003 | — | TEST-008 |
+| REQ-009 | — | ADR-003 | — | TEST-009 |
 | — | NFR-001 | — | — | TEST-NFR-001 |
 | — | NFR-002 | — | — | TEST-NFR-002 |
 | — | NFR-003 | — | — | (static analysis) |
