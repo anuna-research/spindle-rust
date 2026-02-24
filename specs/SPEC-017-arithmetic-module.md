@@ -84,7 +84,7 @@ Trace:
 
 ### REQ-002: Arithmetic Expression Terms
 
-The system SHALL accept arithmetic expressions as terms in predicate argument positions. Arithmetic expressions are S-expressions using the prefix operators defined in CON-003. Variables within expressions follow the existing `?name` convention.
+The system SHALL accept arithmetic expressions as terms in predicate argument positions. Arithmetic expressions are S-expressions using the prefix operators defined in CON-002. Variables within expressions follow the existing `?name` convention.
 
 ```lisp
 ; (+ ?x ?y) is an arithmetic expression term
@@ -443,7 +443,7 @@ Syntax:        (is <variable> <arith-expr>)
 Position:      Rule body only (parse error in head position)
 Pre-conditions:
   - <variable> must be a ?-prefixed variable identifier
-  - <arith-expr> must be a valid arithmetic expression (CON-003)
+  - <arith-expr> must be a valid arithmetic expression (CON-002)
   - <variable> must not already appear as a bound symbol term in the current literal
 Post-conditions:
   - If all variables in <arith-expr> are bound in the current substitution:
