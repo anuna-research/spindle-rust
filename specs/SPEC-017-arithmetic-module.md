@@ -101,6 +101,7 @@ An arithmetic expression may:
 - Nest arbitrarily: `(+ (* ?a ?b) (- ?c ?d))`
 - Mix variables and numeric literals: `(+ ?x 10)`
 - Appear as any argument to any user-defined predicate or arithmetic predicate **in a rule body position** (see REQ-009 for the prohibition on arithmetic expressions in rule heads)
+- In user-defined body literals, expression arguments are evaluated during grounding using the current substitution before literal matching. If evaluation fails (unbound variable, arithmetic error), that substitution path is discarded.
 
 Trace:
 - TEST-002
@@ -113,7 +114,7 @@ Trace:
 The system SHALL provide a built-in `is` predicate of the form `(is ?var <expr>)` that binds the variable `?var` to the result of evaluating `<expr>` under the current substitution.
 
 - `?var` MUST be an unbound variable in the current substitution context.
-- If `<expr>` contains an unbound variable other than `?var`, the `is` literal fails to unify (the rule body does not fire).
+- `<expr>` may reference only variables already bound by preceding body literals/constraints; otherwise the `is` literal fails (the rule body does not fire).
 - `is` MUST appear in rule bodies only; it is a parse error to use `is` as a rule head.
 - On arithmetic error (division by zero, overflow), the `is` literal fails silently (the rule body does not fire for that grounding).
 
@@ -288,7 +289,7 @@ The arithmetic module implementation SHALL contain no `unsafe` blocks.
 
 **Context**: Arithmetic predicates could be evaluated at parse time, grounding time, or reasoning time.
 
-**Decision**: Arithmetic predicates are evaluated during the **grounding phase**, immediately after term substitution. An `is` or comparison literal in a rule body is resolved to `true` or `false` after all other body literals have been matched to ground facts. If arithmetic fails, the grounding instance is discarded.
+**Decision**: Arithmetic predicates are evaluated during the **grounding phase**, immediately after term substitution for each candidate substitution path. `is`/comparison literals and arithmetic expression arguments are resolved while processing the rule body in source order (ADR-001b). If arithmetic evaluation fails, that substitution path is discarded.
 
 **Rationale**:
 - The grounding phase already performs substitution lookups; arithmetic evaluation is a natural extension.
@@ -306,15 +307,21 @@ The arithmetic module implementation SHALL contain no `unsafe` blocks.
 
 ---
 
-### ADR-001b: Arithmetic Constraint Evaluation Order
+### ADR-001b: Rule Body Evaluation Order (Logic + Arithmetic)
 
-**Context**: A rule body may contain multiple arithmetic literals (e.g. `(is ?x ...) (> ?x 5)`). The evaluation order determines whether a binding produced by one literal is visible to a later one.
+**Context**: A rule body may interleave user-defined literals and arithmetic constraints, and user-defined body literals may themselves contain arithmetic expression arguments (e.g. `(line-total ?o (* ?p ?q))`). Evaluation order determines visibility of bindings and whether expression arguments are evaluable at match time.
 
-**Decision**: Arithmetic constraints in a rule body are evaluated **strictly in source order** (left to right). After all `BodyLiteral::Logic` literals have been matched against ground facts, the `BodyLiteral::Arithmetic` literals are processed in the order they appear in the source. Each constraint sees the substitution as extended by all preceding constraints in the same body.
+**Decision**: Rule bodies are evaluated **strictly in source order** (left to right) over a stream of substitutions.
 
-**Rationale**: Source-order evaluation is predictable and matches Prolog's `is/2` convention. Users naturally write `(is ?x ...)` before `(> ?x 5)`, expecting the binding to be visible. An unordered or fixpoint model would silently discard such groundings and produce confusing failures.
+For each body element in order:
+- `BodyLiteral::Logic`: evaluate any `BodyArg::Arith` arguments under the current substitution, then match the resulting literal pattern against candidate facts to extend/filter substitutions.
+- `BodyLiteral::Arithmetic`: evaluate `is`/comparison under the current substitution to extend/filter substitutions.
 
-**Consequence**: The grounding implementation MUST process `BodyLiteral::Arithmetic` items in vector order, threading the substitution forward. This is tested by TEST-004 scenario 1 (chained `is` + comparison).
+Each step sees bindings produced by all preceding steps in the same body.
+
+**Rationale**: Source-order evaluation is predictable and matches Prolog's `is/2` convention. Users naturally write binding-producing literals before dependent constraints, expecting left-to-right visibility. A model that batches all logic before arithmetic would break valid dependent forms and produce confusing failures.
+
+**Consequence**: The grounding implementation MUST preserve source order of all body elements and thread substitutions through each step. This is tested by TEST-004 scenarios 9 and 10 (chained `is` + comparison in both valid and invalid orders).
 
 **Rejected alternative**: *Dependency-graph ordering* — infer order from variable dependencies. More powerful but significantly more complex to implement and reason about.
 
@@ -338,6 +345,7 @@ pub enum Term {
 `Decimal` is the default for non-integer numeric literals (e.g. `0.08`). `Float` is opt-in via scientific notation (e.g. `1.5e3`). This ensures exact arithmetic by default for policy and financial reasoning, with IEEE 754 available as an escape hatch.
 
 Arithmetic expressions (`ArithExpr`) are evaluated to `Term::Integer`, `Term::Decimal`, or `Term::Float` before being stored in ground literals.
+In parsed rule bodies, arithmetic expressions may appear in `BodyLiteral::Arithmetic` and in user-defined body literal argument slots (`BodyArg::Arith`), but never in rule heads.
 
 **Rationale**:
 - Encoding numerics as strings would corrupt the string interner with sentinel values and would make comparison O(string parse) rather than O(1).
@@ -431,7 +439,7 @@ pub enum BinArithOp {
 }
 
 pub enum UnaryArithOp {
-    Neg,  // neg or unary -
+    Neg,  // neg
     Abs,  // abs
 }
 ```
@@ -475,11 +483,11 @@ Position:      Rule body only (parse error in head position)
 Pre-conditions:
   - <variable> must be a ?-prefixed variable identifier
   - <arith-expr> must be a valid arithmetic expression (CON-002)
-  - <variable> must not already appear as a bound symbol term in the current literal
+  - <variable> must not already be bound in the current substitution
 Post-conditions:
-  - If all variables in <arith-expr> are bound in the current substitution:
+  - If all variables referenced in <arith-expr> are bound in the current substitution:
       <variable> is bound to the evaluated numeric result
-  - If any variable in <arith-expr> is unbound: grounding instance is discarded
+  - If any variable referenced in <arith-expr> is unbound: grounding instance is discarded
   - If arithmetic error occurs (division by zero, overflow, type mismatch for div/rem):
       grounding instance is discarded (silent failure)
   - The `is` literal itself does not appear in the conclusions set
@@ -581,19 +589,37 @@ pub struct Substitution {
 
 `ArithExpr` appears in two distinct phases with different storage lifetimes:
 
-1. **Parsed rule representation**: `ArithExpr` IS stored in `BodyLiteral::Arithmetic(ArithConstraint)` as part of a parsed `Rule`, which lives in the `Theory`. This is necessary because the same rule is grounded repeatedly for different substitutions, so the expression tree must be retained.
+1. **Parsed rule representation**: `ArithExpr` IS stored in parsed rules as part of:
+   - `BodyLiteral::Arithmetic(ArithConstraint)`, and
+   - `BodyArg::Arith(ArithExpr)` within `BodyLiteral::Logic`.
+   This is necessary because the same rule is grounded repeatedly for different substitutions, so expression trees must be retained.
 
 2. **Ground literals**: `ArithExpr` is **never stored** in ground `Literal` instances or the conclusions set. After grounding evaluates an `is` predicate or arithmetic guard, the resulting `Term::Integer`, `Term::Decimal`, or `Term::Float` is stored in the substitution map, and only ground `Term` values appear in ground literals.
 
-In summary: `ArithExpr` is stored at the rule/theory level (in `BodyLiteral`), but never at the ground literal level. `ArithExpr` does not flow into `Literal::predicate_args` or the reasoning engine's conclusions.
+In summary: `ArithExpr` is stored at the rule/theory level (in `BodyLiteral`/`BodyArg`), but never at the ground literal level. `ArithExpr` does not flow into ground `Literal::predicate_args` or the reasoning engine's conclusions.
 
 ### 7.4 Arithmetic Literal Representation in the Theory
 
 Built-in arithmetic predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are represented in parsed rule bodies as a new variant of a `BodyLiteral` enum (or equivalent type). This separates them from user-defined literals at the type level and makes their special treatment in grounding explicit, without coupling them to the core `Literal` type.
 
 ```rust
+pub enum BodyArg {
+    Term(Term),            // Symbol or numeric literal
+    Arith(ArithExpr),      // Arithmetic expression in body argument position
+}
+
+pub struct BodyLogicLiteral {
+    pub name: SymbolId,
+    pub negation: bool,
+    pub mode: Mode,
+    pub temporal: Temporal,
+    pub temporal_expr: Option<TemporalExpr>,
+    pub interval_var: Option<SymbolId>,
+    pub predicate_args: Vec<BodyArg>,
+}
+
 pub enum BodyLiteral {
-    Logic(Literal),                     // Existing literal (look up in theory)
+    Logic(BodyLogicLiteral),            // Match against theory facts
     Arithmetic(ArithConstraint),        // Evaluate numerically; no theory lookup
 }
 
@@ -604,6 +630,8 @@ pub enum ArithConstraint {
 
 pub enum CmpOp { Eq, Ne, Lt, Gt, Le, Ge }
 ```
+
+`BodyArg::Arith` is allowed only in rule-body logic literals. Rule heads and ground literals continue to store only concrete `Term` arguments.
 
 ---
 
@@ -749,6 +777,7 @@ Verifies: REQ-001, CON-001
 3. All binary operators parse: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `min`, `max`
 4. Unary operators parse: `(neg ?x)`, `(abs (- ?a ?b))`
 5. Arithmetic operator at predicate (non-argument) position → parse error
+6. Arithmetic expression inside a user-defined body literal argument parses as `BodyArg::Arith`, e.g. `(normally r1 (and (price ?i ?p) (line-total ?i (* ?p 2))) (ok ?i))`
 
 Verifies: REQ-002, CON-002
 
@@ -782,6 +811,8 @@ Verifies: REQ-003, CON-003
 6. Mixed types: `(> 10 9.5)` → integer promoted to decimal; retained
 7. Comparison in rule head position → parse error
 8. Unbound variable in comparison → grounding discarded
+9. Chained order-dependent constraints: `(and (is ?x (+ 2 3)) (> ?x 4))` → retained
+10. Reversed dependent order: `(and (> ?x 4) (is ?x (+ 2 3)))` → discarded (`?x` unbound at comparison time)
 
 Verifies: REQ-004, CON-004
 
@@ -825,7 +856,9 @@ Verifies: REQ-006
 
 ### TEST-007: Arithmetic Predicates Cannot Appear in Superiority
 
-**Scenario**: `(prefer is r1)` → parse error ("'is' is a reserved arithmetic keyword and cannot be used as a rule label").
+**Scenarios**:
+1. `(prefer is r1)` → parse error ("'is' is a reserved arithmetic keyword and cannot be used as a rule label").
+2. Arithmetic guard literals do not produce conclusions (e.g., from `(normally r1 (and (p) (> 1 0)) (q))`, conclusions include `q` but never include a literal named `>` or `is`).
 
 Verifies: REQ-007
 
@@ -876,6 +909,35 @@ Verifies: NFR-002
 
 ---
 
+### TEST-PBT-001: Property-Based Arithmetic Semantics
+
+Use `proptest` to generate arithmetic expressions, substitutions, and rule-body fragments under bounded depth/size.
+
+**Generator constraints**:
+1. Expression depth bounded (for example, max depth 4) to avoid pathological recursion.
+2. Numeric domains include `Integer`, `Decimal`, and finite `Float` values.
+3. Separate suites for division/remainder enforce non-zero divisors when testing algebraic identities.
+4. Float generators exclude non-finite inputs (`NaN`, `+inf`, `-inf`) unless explicitly testing failure behavior.
+
+**Properties**:
+1. **Determinism**: `ArithExpr::eval(expr, subst)` returns the same result/failure on repeated evaluation.
+2. **Panic safety**: evaluating generated expressions and arithmetic constraints never panics.
+3. **Promotion correctness**: result type matches REQ-005 promotion rules for all generated binary operations.
+4. **`div`/`rem` identity** (integer operands, divisor ≠ 0): `a = b * div(a,b) + rem(a,b)`.
+5. **Floor remainder sign rule**: `rem(a,b)` has the same sign as `b` (or is zero), matching floor-division semantics.
+6. **Comparison reflexivity/coherence** (finite values): `x = x`, `x <= x`, `x >= x`, and `x != x` is false.
+7. **Float safety**: any operation that yields non-finite float fails rather than producing a stored value.
+8. **Source-order dependency**: for generated dependent pairs, `(and (is ?x E) (> ?x K))` may succeed, while the reversed order fails when `?x` is unbound at comparison time.
+9. **Body-arg expression equivalence**: matching behavior of a body literal with `BodyArg::Arith` is equivalent to an explicit pre-binding form using `is` and a symbol/numeric literal argument.
+10. **Parser round-trip stability (normalized)**: arithmetic forms parse to AST and re-parse from canonical SPL to an equivalent AST.
+
+**Implementation note**:
+When cross-checking arithmetic results against host Rust behavior, use checked integer operations and `rust_decimal` APIs for decimal semantics; treat Rust float non-finite outcomes as expected arithmetic failures in Spindle.
+
+Verifies: REQ-002, REQ-003, REQ-004, REQ-005, NFR-002
+
+---
+
 ## 11. Implementation Guidance
 
 ### Phase 1 — Core Term Type (spindle-core)
@@ -896,24 +958,29 @@ Verifies: NFR-002
 1. Extend `spl/lexer.rs` `parse_atom` to accept `*`, `/`, `<`, `>`, `=`, `!` as atom characters, so operator tokens lex correctly.
 2. Extend `spl/literals.rs` to parse numeric literals: integers → `Term::Integer`, decimal-point literals → `Term::Decimal`, scientific notation → `Term::Float`.
 3. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
-4. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
-5. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names and rule labels (`normally`/`always`/`except` labels, `prefer` labels) → parse error.
+4. Parse arithmetic expressions in user-defined body literal argument positions; produce `BodyArg::Arith`.
+5. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
+6. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names and rule labels (`normally`/`always`/`except` labels, `prefer` labels) → parse error.
 
 ### Phase 3 — Grounding Integration (spindle-core)
 
 1. Extend `grounding.rs` `match_literal` to handle `Term::Integer`/`Term::Decimal`/`Term::Float` in substitution matching (exact numeric equality).
-2. Add arithmetic evaluation in the grounding fixpoint: after matching all `BodyLiteral::Logic` literals, evaluate each `BodyLiteral::Arithmetic` under the current substitution. Discard the grounding instance on failure.
+2. Evaluate rule bodies in source order, threading substitutions through each `BodyLiteral`:
+   - For `BodyLiteral::Logic`, evaluate any `BodyArg::Arith` arguments first, then match facts.
+   - For `BodyLiteral::Arithmetic`, evaluate `is`/comparison directly.
+   Discard substitution paths on failure at any step.
 3. Propagate bound `Term::Integer`/`Term::Decimal`/`Term::Float` values through `Substitution::apply`.
 
 ### Phase 4 — Tests
 
-Write tests in the order of TEST-001 through TEST-009, then NFR tests. Add property-based tests using `proptest` for arithmetic expression evaluation correctness (compare `ArithExpr::eval` against Rust's own arithmetic).
+Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST-PBT-001. Implement TEST-PBT-001 with `proptest` using bounded generators and explicit finite-float handling.
 
 ### Phase 5 — Contract and CLI Output
 
-1. Update `spindle-contract` literal transport (`args`) to support typed numeric JSON values instead of string-only args.
-2. Update CLI/WASM serialization call sites and golden tests to reflect numeric JSON output for `Integer`, `Decimal`, and `Float`.
-3. Add regression tests for mixed argument lists (`symbol + integer + decimal + float`) in JSON output.
+1. Keep `spindle.*.v1` schemas and DTOs unchanged for backward compatibility.
+2. Add a new schema family (`spindle.reason.v2`, `spindle.query.v2`, `spindle.requires.v2`, `spindle.explain.v2`, `spindle.why_not.v2`) with typed literal args (`string | number`) to represent `Symbol`, `Integer`, `Decimal`, and `Float`.
+3. Update CLI/WASM serialization to emit v2 payloads when requested (or when v2 is negotiated via capabilities), while preserving v1 behavior.
+4. Add regression tests for mixed argument lists (`symbol + integer + decimal + float`) in v2 JSON output and compatibility tests proving v1 payloads are unchanged.
 
 ---
 
@@ -921,8 +988,8 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests. Add prope
 
 | # | Question | Impact | Proposed Resolution |
 |---|---|---|---|
-| OQ-1 | Should arithmetic constraints in a body be evaluated strictly in source order to support dependent bindings? | High | **Resolved**: Yes. Arithmetic constraints are evaluated left-to-right in source order. Each constraint sees the substitution as extended by all preceding constraints. See ADR-001b. |
-| OQ-2 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Numeric predicate arguments (`Term::Integer`, `Term::Decimal`, `Term::Float`) are serialized as JSON numbers (not strings) in any structured output. |
+| OQ-1 | Should rule-body evaluation be strictly source-ordered to support dependent bindings across logic and arithmetic forms? | High | **Resolved**: Yes. Rule bodies are evaluated left-to-right in source order, and each element sees substitutions extended by preceding elements. See ADR-001b. |
+| OQ-2 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Introduce typed numeric args in a new `spindle.*.v2` schema family; keep `spindle.*.v1` string args unchanged for compatibility. |
 | OQ-3 | Should `=` be overloaded for both numeric equality and symbol identity? | High | Keep symbol identity via pattern matching in substitution; `=` is numeric-only (reserved keyword) |
 | OQ-4 | Should arithmetic predicates produce `+D` conclusions (strict) or `+d` (defeasible)? | High | Neither — they are grounding-phase guards; they produce no conclusions |
 | OQ-5 | Should abduction support arithmetic? E.g. "what value of ?x makes `(> ?x 100)` hold?" | Medium | Out of scope for this spec; deferred |
@@ -948,3 +1015,4 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests. Add prope
 | — | NFR-001 | — | — | TEST-NFR-001 |
 | — | NFR-002 | — | — | TEST-NFR-002 |
 | — | NFR-003 | — | — | (static analysis) |
+| REQ-002, REQ-003, REQ-004, REQ-005 | NFR-002 | ADR-001, ADR-001b, ADR-002 | CON-002, CON-003, CON-004 | TEST-PBT-001 |
