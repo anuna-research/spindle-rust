@@ -177,6 +177,10 @@ The system SHALL support arithmetic between `Integer`, `Decimal`, and `Float` op
 
 The `/` operator returns `Decimal` for Integer/Integer and Decimal operands (e.g. `(/ 10 3)` → `Decimal(3.3333...)`), and `Float` if either operand is `Float`.
 
+For Decimal division, evaluation follows `rust_decimal` semantics: results are represented with up to 28 fractional digits, using round-half-even when an exact representation exceeds available precision.
+
+Float values are restricted to finite IEEE 754 values. Any arithmetic operation that yields `NaN`, `+inf`, or `-inf` is treated as an arithmetic error and fails silently.
+
 The `div` operator performs **floor division** (rounds toward negative infinity). Both operands must be integers; if either is a Decimal or Float, the `div` literal fails silently. Examples: `(div 10 3)` → `3`; `(div -7 2)` → `-4`.
 
 The `rem` operator returns the **floor remainder** matching `div`, defined as `a - (a div b) * b`. Both operands must be integers; if either is a Decimal or Float, the literal fails silently. Examples: `(rem 10 3)` → `1`; `(rem -7 2)` → `1`; `(rem 7 -2)` → `-1`.
@@ -191,7 +195,7 @@ Trace:
 
 ### REQ-006: Arithmetic in Temporal Rules
 
-The system SHALL permit arithmetic predicates and expressions to appear in the bodies of rules that also contain temporal literals. Arithmetic expressions MUST NOT reference interval variables (`?T`, `?S`); temporal variables are not numeric.
+The system SHALL permit arithmetic predicates and expressions to appear in the bodies of rules that also contain temporal literals. Variables bound as temporal endpoints or interval variables are not numeric and MUST NOT be used as arithmetic operands. If such a variable is encountered during arithmetic evaluation, the literal fails silently.
 
 ```lisp
 (given (during (salary alice 120000) 0 100))
@@ -207,9 +211,9 @@ Trace:
 
 ---
 
-### REQ-007: Arithmetic Predicates are Bodyless — No Rule Labels
+### REQ-007: Arithmetic Predicates are Body-only Guards
 
-The system SHALL ensure that arithmetic predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) generate no `RuleLabel`, do not participate in superiority declarations, and do not appear in the conclusions set. It is a parse error to reference an arithmetic predicate in a `(prefer ...)` declaration.
+The system SHALL ensure that arithmetic predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are body-only guards: they generate no `RuleLabel`, do not participate in superiority declarations, and do not appear in the conclusions set.
 
 Trace:
 - TEST-007
@@ -218,7 +222,7 @@ Trace:
 
 ### REQ-008: Reserved Arithmetic Keywords
 
-The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `is` binding predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names. This matches the convention of Prolog, Datalog, and ASP, where arithmetic is part of the core language.
+The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `is` binding predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names, rule labels, or labels in `(prefer ...)` declarations. This matches the convention of Prolog, Datalog, and ASP, where arithmetic is part of the core language.
 
 Trace:
 - TEST-008
@@ -227,7 +231,7 @@ Trace:
 
 ### REQ-009: No Arithmetic in Rule Heads
 
-The system SHALL emit a parse error if an arithmetic predicate or an arithmetic expression appears in the head position of any rule (fact, strict, defeasible, or defeater). Rule heads must remain ground-symbol predicates. Arithmetic belongs exclusively to the constraint layer (body evaluation).
+The system SHALL emit a parse error if an arithmetic predicate or an arithmetic expression appears in the head position of any rule (fact, strict, defeasible, or defeater). Rule heads remain regular predicate literals (variables are still allowed for grounding), but arithmetic forms are prohibited there. Arithmetic belongs exclusively to the constraint layer (body evaluation).
 
 ```lisp
 ; ILLEGAL — arithmetic predicate in rule head position
@@ -239,7 +243,7 @@ The system SHALL emit a parse error if an arithmetic predicate or an arithmetic 
 ; ILLEGAL — arithmetic expression as argument in rule head
 (given (cost (+ 3 4)))
 
-; LEGAL — is in body position (correct per REQ-004)
+; LEGAL — is in body position (correct per REQ-003)
 (normally r1 (is ?x (+ 1 2)) result)
 ```
 
@@ -366,7 +370,7 @@ This means:
 The lexer requires targeted additions. The current `parse_atom` in `lexer.rs` accepts `+` but not `*`, `/`, `<`, `>`, `=`, or `!`. These characters must be added to the atom character set so that operator tokens such as `*`, `/`, `<=`, `>=`, `!=`, and `**` are lexed. Adding them to `parse_atom` is sufficient; no dedicated token types are required. The expression dispatcher then gains awareness of which atom values are reserved arithmetic operator keywords and dispatches accordingly. The `+` operator already lexes correctly.
 
 **Trade-offs**:
-- Theories that previously used `+`, `-`, `*`, `/`, `<`, `>`, `=`, or `is` as standalone predicate names will break. These names are now reserved, consistent with Prolog and other logic languages. This is considered acceptable — using operator characters as predicate names is rare and confusing. Multi-character atoms containing these characters (e.g., `high-earner`, `c++test`) are unaffected, since reservation applies only to standalone atoms at list head position.
+- Theories that previously used `+`, `-`, `*`, `/`, `<`, `>`, `=`, or `is` as standalone predicate names or as rule labels will break. These names are now reserved, consistent with Prolog and other logic languages. This is considered acceptable — using operator characters as predicate names/labels is rare and confusing. Multi-character atoms containing these characters (e.g., `high-earner`, `c++test`) are unaffected, since reservation applies only to standalone reserved tokens.
 
 ---
 
@@ -454,6 +458,10 @@ Examples:
 (** ?base ?exp)            ; exponentiation
 ```
 
+Float safety and identity:
+- Arithmetic producing non-finite float values (`NaN`, `+inf`, `-inf`) is treated as arithmetic failure.
+- Stored float terms MUST use a total-equality representation suitable for hashing/indexing (e.g., canonicalized bit representation with `-0.0` normalized to `0.0`, or an equivalent finite-float wrapper type).
+
 Implements: REQ-002, REQ-005
 Verified by: TEST-002, TEST-005
 
@@ -505,7 +513,8 @@ Numeric comparison:
   - Integer compared to Decimal: integer is promoted to Decimal
   - Integer compared to Float: integer is promoted to Float
   - Decimal compared to Float: decimal is promoted to Float (precision loss)
-  - Float compared to Float: IEEE 754 semantics (NaN comparisons always fail)
+  - Float compared to Float: IEEE 754 semantics for finite values
+  - Non-finite float values are treated as arithmetic errors (comparison fails)
   - Decimal compared to Decimal: exact comparison
 Errors (parse time):
   - Comparison operator in rule head position: parse error
@@ -545,6 +554,8 @@ pub enum Term {
 ```
 
 `Term::Symbol` is the default; existing code paths that destructure `predicate_ids` must be updated to pattern-match on `Term`. Theories without numeric literals will only produce `Term::Symbol`.
+
+`Term` values participate in equality/hash paths (indexing, deduplication, substitution keys). Therefore `Term::Float` MUST have stable total equality/hash semantics (no NaN payload ambiguity; `-0.0` and `0.0` canonicalized) via an explicit wrapper or canonicalization strategy.
 
 ### 7.2 Grounding Substitution
 
@@ -783,7 +794,7 @@ Verifies: REQ-004, CON-004
 2. `(+ 3 4.0)` → `Decimal(7.0)` (decimal literal, not float)
 3. `(+ 3 4.0e0)` → `Float(7.0)` (scientific notation → float, contagious)
 4. `(+ 0.1 0.2)` → `Decimal(0.3)` — exact (would be `0.30000000000000004` as float)
-5. `(/ 10 3)` → `Decimal(3.333...)` (integer/integer → decimal, not float)
+5. `(/ 10 3)` → `Decimal(3.3333333333333333333333333333)` (integer/integer → decimal, up to 28 fractional digits)
 6. `(/ 10 3.0e0)` → `Float(3.333...)` (float operand → float result)
 7. `(* 100 0.08)` → `Decimal(8.00)` (integer × decimal → decimal, exact)
 
@@ -806,7 +817,7 @@ Verifies: REQ-005, CON-002
 
 **Scenarios**:
 1. Rule with `during` literal and `>` comparison — fires for intervals where comparison holds, does not fire for others (see worked example §9.3).
-2. Rule body referencing an interval variable `?T` in arithmetic expression `(+ ?T 1)` → parse error (interval variables not numeric).
+2. Rule body referencing an interval variable `?T` in arithmetic expression `(+ ?T 1)` → arithmetic literal evaluation fails (temporal/interval variables are not numeric).
 
 Verifies: REQ-006
 
@@ -814,7 +825,7 @@ Verifies: REQ-006
 
 ### TEST-007: Arithmetic Predicates Cannot Appear in Superiority
 
-**Scenario**: `(prefer is r1)` → parse error ("arithmetic predicates cannot appear in prefer declarations").
+**Scenario**: `(prefer is r1)` → parse error ("'is' is a reserved arithmetic keyword and cannot be used as a rule label").
 
 Verifies: REQ-007
 
@@ -826,6 +837,8 @@ Verifies: REQ-007
 1. `(normally r1 (+ ?x ?y) result)` where `+` is used as a predicate name → parse error ("'+' is a reserved arithmetic operator")
 2. `(normally r1 body (is ?x 5))` where `is` is in head position → parse error
 3. `(given (cost (+ 3 4)))` where arithmetic expression appears in fact argument → parse error (arithmetic expression in head/fact position)
+4. `(normally is body result)` where `is` is used as a rule label → parse error ("'is' is reserved")
+5. `(prefer r1 +)` where `+` is used as a rule label in superiority → parse error ("'+' is reserved")
 
 Verifies: REQ-008
 
@@ -871,11 +884,12 @@ Verifies: NFR-002
 2. Add `Term` enum (with `Symbol`, `Integer`, `Decimal`, `Float` variants) to `crates/spindle-core/src/term.rs` (new file).
 3. Add `ArithExpr`, `ArithConstraint`, `BinArithOp`, `UnaryArithOp` to `crates/spindle-core/src/arith.rs` (new file).
 4. Add `CmpOp` enum and `ArithConstraint::eval(subst)` method with promotion rules from REQ-005.
-5. Update `Literal::predicate_args` from `Vec<SymbolId>` to `Vec<Term>`.
-6. Update `Substitution::terms` from `FxHashMap<SymbolId, SymbolId>` to `FxHashMap<SymbolId, Term>`.
-7. Add `BodyLiteral` enum to `rule.rs` (or a new `body.rs`), replacing raw `Literal` in `RuleBody`.
+5. Implement stable float term identity for hashing/equality (canonicalized finite-float wrapper or equivalent; reject non-finite runtime results).
+6. Update `Literal::predicate_args` from `Vec<SymbolId>` to `Vec<Term>`.
+7. Update `Substitution::terms` from `FxHashMap<SymbolId, SymbolId>` to `FxHashMap<SymbolId, Term>`.
+8. Add `BodyLiteral` enum to `rule.rs` (or a new `body.rs`), replacing raw `Literal` in `RuleBody`.
 
-> **Risk**: Step 4 and 5 are breaking changes. All match arms on `predicate_ids` and `Substitution::terms` must be audited. The grounding module (`grounding.rs`) is the most impacted.
+> **Risk**: Step 6 and 7 are breaking changes. All match arms on `predicate_ids` and `Substitution::terms` must be audited. The grounding module (`grounding.rs`) is the most impacted.
 
 ### Phase 2 — Parser Extension (spindle-parser)
 
@@ -883,7 +897,7 @@ Verifies: NFR-002
 2. Extend `spl/literals.rs` to parse numeric literals: integers → `Term::Integer`, decimal-point literals → `Term::Decimal`, scientific notation → `Term::Float`.
 3. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
 4. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
-5. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names → parse error.
+5. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names and rule labels (`normally`/`always`/`except` labels, `prefer` labels) → parse error.
 
 ### Phase 3 — Grounding Integration (spindle-core)
 
@@ -894,6 +908,12 @@ Verifies: NFR-002
 ### Phase 4 — Tests
 
 Write tests in the order of TEST-001 through TEST-009, then NFR tests. Add property-based tests using `proptest` for arithmetic expression evaluation correctness (compare `ArithExpr::eval` against Rust's own arithmetic).
+
+### Phase 5 — Contract and CLI Output
+
+1. Update `spindle-contract` literal transport (`args`) to support typed numeric JSON values instead of string-only args.
+2. Update CLI/WASM serialization call sites and golden tests to reflect numeric JSON output for `Integer`, `Decimal`, and `Float`.
+3. Add regression tests for mixed argument lists (`symbol + integer + decimal + float`) in JSON output.
 
 ---
 
