@@ -25,10 +25,11 @@ This specification adds **built-in arithmetic** to SPL: numeric terms, arithmeti
 | In Scope | Out of Scope |
 |---|---|
 | Integer arithmetic (i64) | Symbolic/algebraic solving |
-| Floating-point arithmetic (f64) | Constraint logic programming (CLP(R)) |
-| Numeric comparison predicates | String operations |
-| Arithmetic in rule bodies (constraints + bindings) | Arithmetic in rule heads (computed conclusions) |
-| Arithmetic during grounding | Arithmetic during tabling / abduction |
+| Exact decimal arithmetic (128-bit, via `rust_decimal`) | Constraint logic programming (CLP(R)) |
+| IEEE 754 floating-point arithmetic (f64) | String operations |
+| Numeric comparison predicates | Arithmetic in rule heads (computed conclusions) |
+| Arithmetic in rule bodies (constraints + bindings) | Arithmetic during tabling / abduction |
+| Arithmetic during grounding | |
 
 ---
 
@@ -67,13 +68,16 @@ Spindle's semantics are grounded in defeasible logic (DL(d)). Several constraint
 
 The system SHALL accept numeric literals as predicate arguments in any position where a symbol term is currently accepted. Numeric literals include:
 
-- **Integer literals**: decimal digit sequences optionally prefixed with `-` (e.g., `0`, `42`, `-7`, `1000000`)
-- **Float literals**: IEEE 754 double-precision, expressed as decimal with a `.` separator (e.g., `3.14`, `-0.5`, `1.0e6`)
+- **Integer literals**: decimal digit sequences optionally prefixed with `-` (e.g., `0`, `42`, `-7`, `1000000`). Parsed as `Term::Integer(i64)`.
+- **Decimal literals**: digit sequences with a `.` separator (e.g., `3.14`, `-0.5`, `0.08`). Parsed as `Term::Decimal`. Decimal is the **default** for non-integer numeric literals — this ensures exact representation for financial and policy arithmetic.
+- **Float literals**: scientific notation with an `e`/`E` exponent (e.g., `1.5e3`, `-2.0e-4`, `1e6`). Parsed as `Term::Float(f64)`. Float is the **explicit opt-in** for IEEE 754 approximate arithmetic.
 
 ```lisp
-(given (cost item-a 100))        ; integer term 100
-(given (price widget 9.99))      ; float term 9.99
-(given (balance account -250))   ; negative integer
+(given (cost item-a 100))        ; Integer(100)
+(given (price widget 9.99))      ; Decimal(9.99) — exact
+(given (tax-rate standard 0.08)) ; Decimal(0.08) — exact, not 0.07999...
+(given (mass particle 1.5e-27))  ; Float(1.5e-27) — scientific notation → float
+(given (balance account -250))   ; Integer(-250)
 ```
 
 Trace:
@@ -158,20 +162,26 @@ Trace:
 
 ---
 
-### REQ-005: Mixed Integer and Float Semantics
+### REQ-005: Numeric Type Promotion
 
-The system SHALL support arithmetic between integer and float operands with the following promotion rules:
+The system SHALL support arithmetic between `Integer`, `Decimal`, and `Float` operands. Promotion follows a **precision-loss hierarchy**: operations stay at the most precise type possible, and only widen toward `Float` when explicitly introduced.
 
-- Integer OP Integer → Integer (except `/`, which always produces Float)
-- Integer OP Float → Float
-- Float OP Integer → Float
-- Float OP Float → Float
+**Promotion rules** (for binary operators `+`, `-`, `*`, `/`, `min`, `max`, `**`):
 
-The `/` operator always performs IEEE 754 double-precision division and always returns a `Float`, even for two integer operands (e.g. `(/ 10 3)` → `Float(3.333...)`).
+- Integer OP Integer → Integer (except `/`, which produces Decimal)
+- Integer OP Decimal → Decimal
+- Decimal OP Integer → Decimal
+- Decimal OP Decimal → Decimal
+- Float OP any → Float (float is "contagious" — once approximate, stays approximate)
+- any OP Float → Float
 
-The `div` operator performs **floor division** (rounds toward negative infinity). Both operands must be integers; if either is a float, the `div` literal fails silently. Examples: `(div 10 3)` → `3`; `(div -7 2)` → `-4`.
+The `/` operator returns `Decimal` for Integer/Integer and Decimal operands (e.g. `(/ 10 3)` → `Decimal(3.3333...)`), and `Float` if either operand is `Float`.
 
-The `rem` operator returns the **floor remainder** matching `div`, defined as `a - (a div b) * b`. Both operands must be integers; if either is a float, the literal fails silently. Examples: `(rem 10 3)` → `1`; `(rem -7 2)` → `1`; `(rem 7 -2)` → `-1`.
+The `div` operator performs **floor division** (rounds toward negative infinity). Both operands must be integers; if either is a Decimal or Float, the `div` literal fails silently. Examples: `(div 10 3)` → `3`; `(div -7 2)` → `-4`.
+
+The `rem` operator returns the **floor remainder** matching `div`, defined as `a - (a div b) * b`. Both operands must be integers; if either is a Decimal or Float, the literal fails silently. Examples: `(rem 10 3)` → `1`; `(rem -7 2)` → `1`; `(rem 7 -2)` → `-1`.
+
+**Runtime type enforcement**: If an operator or predicate expects a specific numeric type (e.g. `div`/`rem` require integers), passing a value of the wrong type causes the literal to fail silently — consistent with the general arithmetic failure model. No static type system is required; type mismatches are caught at grounding time.
 
 Trace:
 - TEST-005
@@ -310,27 +320,32 @@ The arithmetic module implementation SHALL contain no `unsafe` blocks.
 
 **Context**: Currently all predicate arguments are `SymbolId` (a 4-byte interned string identifier). Numeric values could be encoded as special strings (e.g., `"__num_42"`) or as a new `Term` enum.
 
-**Decision**: Introduce a `Term` enum that wraps either a `SymbolId` or a `NumericValue`:
+**Decision**: Introduce a `Term` enum with four variants — `Symbol`, `Integer`, `Decimal`, and `Float`:
 
 ```rust
 pub enum Term {
     Symbol(SymbolId),
     Integer(i64),
+    Decimal(rust_decimal::Decimal),  // 128-bit exact decimal
     Float(f64),
 }
 ```
 
-Arithmetic expressions (`ArithExpr`) appear only transiently during grounding — they are evaluated to a `Term::Integer` or `Term::Float` before being stored in ground literals.
+`Decimal` is the default for non-integer numeric literals (e.g. `0.08`). `Float` is opt-in via scientific notation (e.g. `1.5e3`). This ensures exact arithmetic by default for policy and financial reasoning, with IEEE 754 available as an escape hatch.
+
+Arithmetic expressions (`ArithExpr`) are evaluated to `Term::Integer`, `Term::Decimal`, or `Term::Float` before being stored in ground literals.
 
 **Rationale**:
 - Encoding numerics as strings would corrupt the string interner with sentinel values and would make comparison O(string parse) rather than O(1).
 - A `Term` enum keeps numeric values typed and avoids implicit conversions.
-- Ground literals (after grounding) contain only `Term::Symbol` or `Term::Integer`/`Term::Float`. No `ArithExpr` persists past grounding.
+- `Decimal` as default prevents silent precision loss in the primary use case (policy/contract/financial reasoning). `0.1 + 0.2 == 0.3` holds for `Decimal` but not `Float`.
+- Ground literals (after grounding) contain only `Term` values. No `ArithExpr` persists past grounding.
 
 **Trade-offs**:
 - All code paths that handle `SymbolId` arguments must be updated to handle `Term`. This is a breaking change to `Literal`'s internal representation.
 - `Literal` currently stores `predicate_ids: Vec<SymbolId>` — this becomes `predicate_args: Vec<Term>`. The `SymbolId` variant keeps existing literal behaviour unchanged.
-- `SmallVec` optimization for predicate args may need re-evaluation; `Term` is 16 bytes vs. 4 bytes for `SymbolId`.
+- `Term` is now 24 bytes (128-bit Decimal + tag) vs. 4 bytes for `SymbolId`. `SmallVec` optimization may need re-evaluation.
+- Adds `rust_decimal` as a dependency to `spindle-core`. This crate is mature (>50M downloads), no-std compatible, and provides banker's rounding (round-half-even) out of the box.
 
 **Rejected alternatives**:
 - *String-encoded numerics*: Corrupts the interner; O(string) comparisons; breaks sorted/canonical forms.
@@ -364,12 +379,19 @@ The lexer requires targeted additions. The current `parse_atom` in `lexer.rs` ac
 The literal parser accepts numeric terms in all argument positions.
 
 ```
-numeric-term   ::= integer-literal | float-literal
+numeric-term    ::= integer-literal | decimal-literal | float-literal
 integer-literal ::= '-'? [0-9]+
-float-literal  ::= '-'? [0-9]+ '.' [0-9]+ (('e' | 'E') '-'? [0-9]+)?
+decimal-literal ::= '-'? [0-9]+ '.' [0-9]+
+float-literal   ::= '-'? [0-9]+ ('.' [0-9]+)? ('e' | 'E') '-'? [0-9]+
 ```
 
-Parsing produces `Term::Integer(i64)` or `Term::Float(f64)`. Parse errors for out-of-range values use the existing `ParseError` type with source offset.
+The presence of an `e`/`E` exponent distinguishes `Float` from `Decimal`:
+- `3.14` → `Term::Decimal` (exact)
+- `3.14e0` → `Term::Float` (IEEE 754)
+- `1e6` → `Term::Float`
+- `42` → `Term::Integer`
+
+Parsing produces `Term::Integer(i64)`, `Term::Decimal(rust_decimal::Decimal)`, or `Term::Float(f64)`. Parse errors for out-of-range values use the existing `ParseError` type with source offset.
 
 Implements: REQ-001
 Verified by: TEST-001
@@ -388,6 +410,7 @@ pub enum ArithExpr {
 
 pub enum NumericValue {
     Integer(i64),
+    Decimal(rust_decimal::Decimal),
     Float(f64),
 }
 
@@ -395,7 +418,7 @@ pub enum BinArithOp {
     Add,      // +
     Sub,      // -
     Mul,      // *
-    Div,      // /   (float division; integer/integer → float)
+    Div,      // /   (exact division; integer/integer → decimal; any float operand → float)
     IDiv,     // div (integer floor division, rounds toward −∞; non-integer operands → fail)
     Rem,      // rem (floor remainder: a − (a div b)×b; non-integer operands → fail)
     Min,      // min
@@ -425,7 +448,7 @@ Examples:
 ```lisp
 (+ ?x ?y)                  ; add
 (* 2 ?radius)              ; multiply by constant
-(/ (- ?a ?b) 2)            ; (a - b) / 2, result is float
+(/ (- ?a ?b) 2)            ; (a - b) / 2, result is decimal
 (div ?n 3)                 ; floor division
 (abs (- ?x ?y))            ; absolute difference
 (** ?base ?exp)            ; exponentiation
@@ -479,8 +502,11 @@ Post-conditions:
       grounding instance is discarded (silent failure)
   - Comparison predicates appear nowhere in the conclusions set
 Numeric comparison:
-  - Integer compared to Float: integer is promoted to Float before comparison
+  - Integer compared to Decimal: integer is promoted to Decimal
+  - Integer compared to Float: integer is promoted to Float
+  - Decimal compared to Float: decimal is promoted to Float (precision loss)
   - Float compared to Float: IEEE 754 semantics (NaN comparisons always fail)
+  - Decimal compared to Decimal: exact comparison
 Errors (parse time):
   - Comparison operator in rule head position: parse error
   - Non-expression argument: parse error
@@ -513,6 +539,7 @@ pub struct Literal {
 pub enum Term {
     Symbol(SymbolId),
     Integer(i64),
+    Decimal(rust_decimal::Decimal),
     Float(f64),
 }
 ```
@@ -545,7 +572,7 @@ pub struct Substitution {
 
 1. **Parsed rule representation**: `ArithExpr` IS stored in `BodyLiteral::Arithmetic(ArithConstraint)` as part of a parsed `Rule`, which lives in the `Theory`. This is necessary because the same rule is grounded repeatedly for different substitutions, so the expression tree must be retained.
 
-2. **Ground literals**: `ArithExpr` is **never stored** in ground `Literal` instances or the conclusions set. After grounding evaluates an `is` predicate or arithmetic guard, the resulting `Term::Integer` or `Term::Float` is stored in the substitution map, and only ground `Term` values appear in ground literals.
+2. **Ground literals**: `ArithExpr` is **never stored** in ground `Literal` instances or the conclusions set. After grounding evaluates an `is` predicate or arithmetic guard, the resulting `Term::Integer`, `Term::Decimal`, or `Term::Float` is stored in the substitution map, and only ground `Term` values appear in ground literals.
 
 In summary: `ArithExpr` is stored at the rule/theory level (in `BodyLiteral`), but never at the ground literal level. `ArithExpr` does not flow into `Literal::predicate_args` or the reasoning engine's conclusions.
 
@@ -575,7 +602,7 @@ The following arithmetic forms are valid in rule bodies:
 
 | Form | Meaning | Example |
 |---|---|---|
-| Numeric literal term | Integer or float constant | `(given (cost item 42))` |
+| Numeric literal term | Integer, decimal, or float constant | `(given (cost item 42))` |
 | `(is ?v <expr>)` | Bind `?v` to evaluated `<expr>` | `(is ?tax (* ?price 0.1))` |
 | `(= <e1> <e2>)` | Numeric equality guard | `(= ?x 0)` |
 | `(!= <e1> <e2>)` | Numeric inequality guard | `(!= ?a ?b)` |
@@ -586,7 +613,7 @@ The following arithmetic forms are valid in rule bodies:
 | `(+ e1 e2)` | Addition expression | `(+ ?base ?bonus)` |
 | `(- e1 e2)` | Subtraction expression | `(- ?total ?discount)` |
 | `(* e1 e2)` | Multiplication expression | `(* ?qty ?price)` |
-| `(/ e1 e2)` | Float division expression | `(/ ?revenue ?days)` |
+| `(/ e1 e2)` | Division (decimal by default, float if either operand is float) | `(/ ?revenue ?days)` |
 | `(div e1 e2)` | Integer floor division | `(div ?total 3)` |
 | `(rem e1 e2)` | Integer floor remainder | `(rem ?n 2)` |
 | `(** e1 e2)` | Exponentiation | `(** ?base 2)` |
@@ -626,10 +653,10 @@ Expected conclusions (after grounding and reasoning):
 ```
 +D unit-price(widget, 25)
 +D quantity(order-001, 4)
-+D tax-rate(standard, 0.08)
-+d subtotal(order-001, 100)
-+d tax(order-001, 8.0)
-+d total(order-001, 108.0)
++D tax-rate(standard, 0.08)       ; Decimal — exact
++d subtotal(order-001, 100)        ; Integer (25 * 4)
++d tax(order-001, 8.00)            ; Decimal (100 * 0.08 — exact, no float drift)
++d total(order-001, 108.00)        ; Decimal (100 + 8.00)
 ```
 
 ### 9.2 Defeasible Classification with Override
@@ -689,12 +716,15 @@ Expected:
 ### TEST-001: Numeric Literal Terms
 
 **Scenarios**:
-1. Integer literal as predicate argument: `(given (count x 42))` → `+D count(x, 42)`
-2. Negative integer: `(given (balance x -100))` → `+D balance(x, -100)`
-3. Float literal: `(given (rate x 0.15))` → `+D rate(x, 0.15)`
-4. Float in scientific notation: `(given (mass x 1.5e3))` → `+D mass(x, 1500.0)`
-5. Integer and symbol as separate arguments: `(given (indexed item-a 1))` — parses correctly.
-6. Integer that overflows i64 — parse error with source position.
+1. Integer literal: `(given (count x 42))` → `Term::Integer(42)`
+2. Negative integer: `(given (balance x -100))` → `Term::Integer(-100)`
+3. Decimal literal: `(given (rate x 0.15))` → `Term::Decimal(0.15)` — exact
+4. Decimal with leading zero: `(given (tax x 0.08))` → `Term::Decimal(0.08)` — exact, not `0.07999...`
+5. Float via scientific notation: `(given (mass x 1.5e3))` → `Term::Float(1500.0)`
+6. Float without decimal: `(given (big x 1e6))` → `Term::Float(1000000.0)`
+7. Integer and symbol as separate arguments: `(given (indexed item-a 1))` — parses correctly.
+8. Integer that overflows i64 — parse error with source position.
+9. Decimal that exceeds `rust_decimal` precision — parse error with source position.
 
 Verifies: REQ-001, CON-001
 
@@ -738,7 +768,7 @@ Verifies: REQ-003, CON-003
 3. `(= ?a ?b)` with `?a=10, ?b=10` → retained; `?a=10, ?b=11` → discarded
 4. `(!= ?a ?b)` with `?a=10, ?b=10` → discarded; `?a=10, ?b=11` → retained
 5. `(<= ?a ?b)` with `?a=10, ?b=10` → retained
-6. Mixed types: `(> 10 9.5)` → integer promoted to float; retained
+6. Mixed types: `(> 10 9.5)` → integer promoted to decimal; retained
 7. Comparison in rule head position → parse error
 8. Unbound variable in comparison → grounding discarded
 
@@ -746,19 +776,25 @@ Verifies: REQ-004, CON-004
 
 ---
 
-### TEST-005: Integer/Float Promotion Rules
+### TEST-005: Numeric Type Promotion Rules
 
-**Scenarios**:
+**Scenarios** (Integer/Decimal/Float promotion):
 1. `(+ 3 4)` → `Integer(7)`
-2. `(+ 3 4.0)` → `Float(7.0)`
-3. `(/ 10 3)` → `Float(3.3333...)` (integer/integer → float)
-4. `(div 10 3)` → `Integer(3)` (floor: ⌊10/3⌋ = 3)
-5. `(div -7 2)` → `Integer(-4)` (floor: ⌊-7/2⌋ = -4, not -3)
-6. `(rem 10 3)` → `Integer(1)` (floor remainder: 10 − (3×3) = 1)
-7. `(rem -7 2)` → `Integer(1)` (floor remainder: -7 − (-4×2) = 1)
-8. `(rem 7 -2)` → `Integer(-1)` (floor remainder: 7 − (-4×-2) = -1)
-9. `(div 10 3.0)` → evaluation fails (div requires integer operands)
-10. `(rem 10 3.0)` → evaluation fails
+2. `(+ 3 4.0)` → `Decimal(7.0)` (decimal literal, not float)
+3. `(+ 3 4.0e0)` → `Float(7.0)` (scientific notation → float, contagious)
+4. `(+ 0.1 0.2)` → `Decimal(0.3)` — exact (would be `0.30000000000000004` as float)
+5. `(/ 10 3)` → `Decimal(3.333...)` (integer/integer → decimal, not float)
+6. `(/ 10 3.0e0)` → `Float(3.333...)` (float operand → float result)
+7. `(* 100 0.08)` → `Decimal(8.00)` (integer × decimal → decimal, exact)
+
+**Scenarios** (div/rem — integer-only):
+8. `(div 10 3)` → `Integer(3)` (floor: ⌊10/3⌋ = 3)
+9. `(div -7 2)` → `Integer(-4)` (floor: ⌊-7/2⌋ = -4, not -3)
+10. `(rem 10 3)` → `Integer(1)` (floor remainder: 10 − (3×3) = 1)
+11. `(rem -7 2)` → `Integer(1)` (floor remainder: -7 − (-4×2) = 1)
+12. `(rem 7 -2)` → `Integer(-1)` (floor remainder: 7 − (-4×-2) = -1)
+13. `(div 10 3.0)` → evaluation fails (div requires integer operands)
+14. `(rem 10 3.0)` → evaluation fails
 
 Verifies: REQ-005, CON-002
 
@@ -831,28 +867,29 @@ Verifies: NFR-002
 
 ### Phase 1 — Core Term Type (spindle-core)
 
-1. Add `Term` enum to `crates/spindle-core/src/term.rs` (new file).
-2. Add `ArithExpr`, `ArithConstraint`, `BinArithOp`, `UnaryArithOp` to `crates/spindle-core/src/arith.rs` (new file).
-3. Add `CmpOp` enum and `ArithConstraint::eval(subst)` method.
-4. Update `Literal::predicate_args` from `Vec<SymbolId>` to `Vec<Term>`.
-5. Update `Substitution::terms` from `FxHashMap<SymbolId, SymbolId>` to `FxHashMap<SymbolId, Term>`.
-6. Add `BodyLiteral` enum to `rule.rs` (or a new `body.rs`), replacing raw `Literal` in `RuleBody`.
+1. Add `rust_decimal` dependency to `spindle-core/Cargo.toml`.
+2. Add `Term` enum (with `Symbol`, `Integer`, `Decimal`, `Float` variants) to `crates/spindle-core/src/term.rs` (new file).
+3. Add `ArithExpr`, `ArithConstraint`, `BinArithOp`, `UnaryArithOp` to `crates/spindle-core/src/arith.rs` (new file).
+4. Add `CmpOp` enum and `ArithConstraint::eval(subst)` method with promotion rules from REQ-005.
+5. Update `Literal::predicate_args` from `Vec<SymbolId>` to `Vec<Term>`.
+6. Update `Substitution::terms` from `FxHashMap<SymbolId, SymbolId>` to `FxHashMap<SymbolId, Term>`.
+7. Add `BodyLiteral` enum to `rule.rs` (or a new `body.rs`), replacing raw `Literal` in `RuleBody`.
 
 > **Risk**: Step 4 and 5 are breaking changes. All match arms on `predicate_ids` and `Substitution::terms` must be audited. The grounding module (`grounding.rs`) is the most impacted.
 
 ### Phase 2 — Parser Extension (spindle-parser)
 
 1. Extend `spl/lexer.rs` `parse_atom` to accept `*`, `/`, `<`, `>`, `=`, `!` as atom characters, so operator tokens lex correctly.
-2. Extend `spl/literals.rs` to parse numeric literals as `Term::Integer`/`Term::Float`.
+2. Extend `spl/literals.rs` to parse numeric literals: integers → `Term::Integer`, decimal-point literals → `Term::Decimal`, scientific notation → `Term::Float`.
 3. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
 4. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
 5. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names → parse error.
 
 ### Phase 3 — Grounding Integration (spindle-core)
 
-1. Extend `grounding.rs` `match_literal` to handle `Term::Integer`/`Term::Float` in substitution matching (exact numeric equality).
+1. Extend `grounding.rs` `match_literal` to handle `Term::Integer`/`Term::Decimal`/`Term::Float` in substitution matching (exact numeric equality).
 2. Add arithmetic evaluation in the grounding fixpoint: after matching all `BodyLiteral::Logic` literals, evaluate each `BodyLiteral::Arithmetic` under the current substitution. Discard the grounding instance on failure.
-3. Propagate bound `Term::Integer`/`Term::Float` values through `Substitution::apply`.
+3. Propagate bound `Term::Integer`/`Term::Decimal`/`Term::Float` values through `Substitution::apply`.
 
 ### Phase 4 — Tests
 
@@ -865,13 +902,13 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests. Add prope
 | # | Question | Impact | Proposed Resolution |
 |---|---|---|---|
 | OQ-1 | Should arithmetic constraints in a body be evaluated strictly in source order to support dependent bindings? | High | **Resolved**: Yes. Arithmetic constraints are evaluated left-to-right in source order. Each constraint sees the substitution as extended by all preceding constraints. See ADR-001b. |
-| OQ-2 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Numeric predicate arguments (`Term::Integer`, `Term::Float`) are serialized as JSON numbers (not strings) in any structured output. |
+| OQ-2 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Numeric predicate arguments (`Term::Integer`, `Term::Decimal`, `Term::Float`) are serialized as JSON numbers (not strings) in any structured output. |
 | OQ-3 | Should `=` be overloaded for both numeric equality and symbol identity? | High | Keep symbol identity via pattern matching in substitution; `=` is numeric-only (reserved keyword) |
 | OQ-4 | Should arithmetic predicates produce `+D` conclusions (strict) or `+d` (defeasible)? | High | Neither — they are grounding-phase guards; they produce no conclusions |
 | OQ-5 | Should abduction support arithmetic? E.g. "what value of ?x makes `(> ?x 100)` hold?" | Medium | Out of scope for this spec; deferred |
 | OQ-6 | Should `why_not` explain arithmetic failures? | Medium | Desirable; deferred — requires arithmetic constraint explanation |
 | OQ-7 | Should overflow produce a warning or strict error rather than silent failure? | Low | Silent failure preferred (consistent with Prolog's arithmetic); observable via `why_not` if implemented |
-| OQ-8 | Rational numbers (exact fractions)? | Low | Deferred; `f64` covers most use cases; rational would require a dependency |
+| OQ-8 | Rational numbers (exact fractions)? | Low | Partially addressed by `Decimal`; full rationals (arbitrary numerator/denominator) deferred |
 
 ---
 
