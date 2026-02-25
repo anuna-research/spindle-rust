@@ -578,6 +578,31 @@ Float safety and identity:
 - Arithmetic producing non-finite float values (`NaN`, `+inf`, `-inf`) is treated as arithmetic failure.
 - Stored float terms MUST use a total-equality representation suitable for hashing/indexing (e.g., canonicalized bit representation with `-0.0` normalized to `0.0`, or an equivalent finite-float wrapper type).
 
+**Arithmetic error type**:
+
+All arithmetic failures are represented internally using a typed error enum. The external behavior is always silent failure (grounding instance discarded), but the error type is retained for diagnostic purposes (e.g., future `why_not` explanations per OQ-6).
+
+```rust
+pub enum ArithError {
+    /// Division by zero: `(/ x 0)`, `(div x 0)`, `(rem x 0)`
+    DivisionByZero,
+    /// Integer overflow: `(+ i64::MAX 1)`, `(* i64::MAX 2)`
+    IntegerOverflow,
+    /// Decimal overflow: result exceeds 29 significant digits / 128-bit range
+    DecimalOverflow,
+    /// Variable not bound in current substitution
+    UnboundVariable { name: SymbolId },
+    /// Operator requires a specific numeric type (e.g., div/rem require integers)
+    TypeMismatch { op: &'static str, expected: &'static str, got: &'static str },
+    /// Operation produced NaN, +inf, or -inf
+    NonFiniteFloat,
+    /// Unary reciprocal `(/ 0)` or `(/ 0.0)` — reciprocal of zero
+    ReciprocalOfZero,
+}
+```
+
+**Contract**: `ArithExpr::eval()` and `ArithConstraint::eval()` return `Result<NumericValue, ArithError>`. Callers in the grounding phase discard the substitution path on `Err`, but MAY log or collect the error for diagnostic output. The `ArithError` variant SHALL carry enough context to produce a human-readable explanation (variable name, operator, operand types).
+
 Implements: REQ-002, REQ-005
 Verified by: TEST-002, TEST-005
 
@@ -595,9 +620,10 @@ Pre-conditions:
 Post-conditions:
   - If all variables referenced in <arith-expr> are bound in the current substitution:
       <variable> is bound to the evaluated numeric result
-  - If any variable referenced in <arith-expr> is unbound: grounding instance is discarded
+  - If any variable referenced in <arith-expr> is unbound:
+      grounding instance is discarded (ArithError::UnboundVariable)
   - If arithmetic error occurs (division by zero, overflow, type mismatch for div/rem):
-      grounding instance is discarded (silent failure)
+      grounding instance is discarded (ArithError variant per CON-002)
   - The `bind` literal itself does not appear in the conclusions set
 Errors (parse time):
   - `(bind ...)` with non-variable first argument: parse error
@@ -623,7 +649,7 @@ Post-conditions:
   - If both expressions evaluate to numeric values under current substitution:
       grounding instance is retained iff the comparison holds
   - If either expression is unbound or contains an arithmetic error:
-      grounding instance is discarded (silent failure)
+      grounding instance is discarded (ArithError variant per CON-002)
   - Comparison predicates appear nowhere in the conclusions set
 Numeric comparison:
   - Integer compared to Decimal: integer is promoted to Decimal
