@@ -3022,4 +3022,551 @@ mod tests {
             &[Term::Symbol(intern("widget"))]
         );
     }
+
+    // =====================================================================
+    // Term propagation tests — Integer, Decimal, Float through heads
+    // =====================================================================
+
+    #[test]
+    fn apply_subst_propagates_integer_to_head() {
+        let lit = Literal::from_ids(
+            intern("result"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("widget")));
+        subst.terms.insert(intern("?n"), Term::Integer(42));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[Term::Symbol(intern("widget")), Term::Integer(42)]
+        );
+    }
+
+    #[test]
+    fn apply_subst_propagates_decimal_to_head() {
+        use rust_decimal::Decimal;
+
+        let lit = Literal::from_ids(
+            intern("price"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?item")), Term::Symbol(intern("?p"))],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?item"), Term::Symbol(intern("coffee")));
+        subst
+            .terms
+            .insert(intern("?p"), Term::Decimal(Decimal::new(399, 2)));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Symbol(intern("coffee")),
+                Term::Decimal(Decimal::new(399, 2))
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_subst_propagates_float_to_head() {
+        use crate::term::FiniteFloat;
+
+        let lit = Literal::from_ids(
+            intern("measurement"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?sensor")), Term::Symbol(intern("?v"))],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?sensor"), Term::Symbol(intern("temp1")));
+        subst
+            .terms
+            .insert(intern("?v"), Term::Float(FiniteFloat::new(98.6).unwrap()));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Symbol(intern("temp1")),
+                Term::Float(FiniteFloat::new(98.6).unwrap())
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_subst_preserves_concrete_numeric_args() {
+        // Non-variable numeric args in the literal should pass through unchanged.
+        use rust_decimal::Decimal;
+
+        let lit = Literal::from_ids(
+            intern("fixed"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Integer(100),
+                Term::Decimal(Decimal::new(50, 1)),
+                Term::Symbol(intern("?x")),
+            ],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("val")));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Integer(100),
+                Term::Decimal(Decimal::new(50, 1)),
+                Term::Symbol(intern("val")),
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_subst_to_rule_propagates_numeric_to_head() {
+        // Rule: data(?x, ?n) => result(?x, ?n)
+        // Substitution: ?x = "sensor", ?n = Integer(42)
+        // Head should get result(sensor, 42)
+        use crate::body::BodyLogicLiteral;
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "data",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?x"))),
+                BodyArg::Term(Term::Symbol(intern("?n"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("result"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
+        );
+        let rule = Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        );
+
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("sensor")));
+        subst.terms.insert(intern("?n"), Term::Integer(42));
+
+        let ground = apply_substitution_to_rule(&rule, &subst, 1);
+        assert_eq!(
+            ground.head[0].predicate_args(),
+            &[Term::Symbol(intern("sensor")), Term::Integer(42)]
+        );
+    }
+
+    #[test]
+    fn grounding_propagates_integer_to_derived_fact() {
+        // Fact: sensor(temp, 42) with Integer(42)
+        // Rule: sensor(?name, ?val) => reading(?name, ?val)
+        // After grounding: reading(temp, 42) should have Term::Integer(42)
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("sensor"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("temp")), Term::Integer(42)],
+            ),
+        ));
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "sensor",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?name"))),
+                BodyArg::Term(Term::Symbol(intern("?val"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("reading"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Symbol(intern("?name")),
+                Term::Symbol(intern("?val")),
+            ],
+        );
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        let reading_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "reading"))
+            .collect();
+        assert_eq!(reading_rules.len(), 1);
+        assert_eq!(
+            reading_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("temp")), Term::Integer(42)],
+            "Integer(42) must propagate through head"
+        );
+    }
+
+    #[test]
+    fn grounding_propagates_decimal_to_derived_fact() {
+        use rust_decimal::Decimal;
+
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("price"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    Term::Symbol(intern("coffee")),
+                    Term::Decimal(Decimal::new(399, 2)),
+                ],
+            ),
+        ));
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "price",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?item"))),
+                BodyArg::Term(Term::Symbol(intern("?p"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("listed"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Symbol(intern("?item")),
+                Term::Symbol(intern("?p")),
+            ],
+        );
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        let listed_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "listed"))
+            .collect();
+        assert_eq!(listed_rules.len(), 1);
+        assert_eq!(
+            listed_rules[0].head[0].predicate_args(),
+            &[
+                Term::Symbol(intern("coffee")),
+                Term::Decimal(Decimal::new(399, 2))
+            ],
+            "Decimal(3.99) must propagate through head"
+        );
+    }
+
+    #[test]
+    fn grounding_propagates_float_to_derived_fact() {
+        use crate::term::FiniteFloat;
+
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("measure"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    Term::Symbol(intern("weight")),
+                    Term::Float(FiniteFloat::new(72.5).unwrap()),
+                ],
+            ),
+        ));
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "measure",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?kind"))),
+                BodyArg::Term(Term::Symbol(intern("?v"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("recorded"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Symbol(intern("?kind")),
+                Term::Symbol(intern("?v")),
+            ],
+        );
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        let recorded_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "recorded"))
+            .collect();
+        assert_eq!(recorded_rules.len(), 1);
+        assert_eq!(
+            recorded_rules[0].head[0].predicate_args(),
+            &[
+                Term::Symbol(intern("weight")),
+                Term::Float(FiniteFloat::new(72.5).unwrap())
+            ],
+            "Float(72.5) must propagate through head"
+        );
+    }
+
+    #[test]
+    fn grounding_numeric_derived_fact_chains_to_next_rule() {
+        // Fact: data(a, 10)
+        // Rule r1: data(?x, ?n) => processed(?x, ?n)
+        // Rule r2: processed(?x, ?n) => final(?x, ?n)
+        // After grounding: final(a, 10) with Term::Integer(10)
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("data"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("a")), Term::Integer(10)],
+            ),
+        ));
+
+        // r1: data(?x, ?n) => processed(?x, ?n)
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![BodyLiteral::Logic(BodyLogicLiteral::new(
+                "data",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(intern("?x"))),
+                    BodyArg::Term(Term::Symbol(intern("?n"))),
+                ],
+            ))],
+            vec![Literal::from_ids(
+                intern("processed"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    Term::Symbol(intern("?x")),
+                    Term::Symbol(intern("?n")),
+                ],
+            )],
+        ));
+
+        // r2: processed(?x, ?n) => final(?x, ?n)
+        theory.add_rule(Rule::new(
+            "r2",
+            RuleType::Defeasible,
+            smallvec::smallvec![BodyLiteral::Logic(BodyLogicLiteral::new(
+                "processed",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(intern("?x"))),
+                    BodyArg::Term(Term::Symbol(intern("?n"))),
+                ],
+            ))],
+            vec![Literal::from_ids(
+                intern("final"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    Term::Symbol(intern("?x")),
+                    Term::Symbol(intern("?n")),
+                ],
+            )],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        // The derived fact final(a, 10) must have Term::Integer(10)
+        let final_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "final"))
+            .collect();
+        assert_eq!(final_rules.len(), 1);
+        assert_eq!(
+            final_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("a")), Term::Integer(10)],
+            "Integer(10) must chain through processed to final"
+        );
+    }
+
+    #[test]
+    fn grounding_arith_bind_result_propagates_to_head() {
+        // Fact: base(item, 10)
+        // Rule: base(?x, ?n), (bind ?total (+ ?n 5)) => total(?x, ?total)
+        // After grounding: total(item, 15) with Term::Integer(15)
+        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let n_id = intern("?n");
+        let total_id = intern("?total");
+
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("base"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("item")), Term::Integer(10)],
+            ),
+        ));
+
+        let body: RuleBody = smallvec::smallvec![
+            BodyLiteral::Logic(BodyLogicLiteral::new(
+                "base",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(x_id)),
+                    BodyArg::Term(Term::Symbol(n_id)),
+                ],
+            )),
+            BodyLiteral::Arithmetic(ArithConstraint::Bind {
+                var: total_id,
+                expr: ArithExpr::NaryOp {
+                    op: NaryArithOp::Add,
+                    args: vec![
+                        ArithExpr::Var(n_id),
+                        ArithExpr::Lit(NumericValue::Integer(5)),
+                    ],
+                },
+            }),
+        ];
+
+        let head = vec![Literal::from_ids(
+            intern("total"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(x_id), Term::Symbol(total_id)],
+        )];
+
+        theory.add_rule(Rule::new("r1", RuleType::Defeasible, body, head));
+
+        let grounded = ground_theory(&theory);
+
+        let total_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "total"))
+            .collect();
+        assert_eq!(total_rules.len(), 1);
+        assert_eq!(
+            total_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("item")), Term::Integer(15)],
+            "Arithmetic result Integer(15) must propagate to head"
+        );
+    }
+
+    #[test]
+    fn grounding_mixed_numeric_types_in_head() {
+        // Verify that a head can contain a mix of Symbol, Integer, Decimal, Float
+        use crate::term::FiniteFloat;
+        use rust_decimal::Decimal;
+
+        let lit = Literal::from_ids(
+            intern("multi"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Symbol(intern("?a")),
+                Term::Symbol(intern("?b")),
+                Term::Symbol(intern("?c")),
+                Term::Symbol(intern("?d")),
+            ],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?a"), Term::Symbol(intern("name")));
+        subst.terms.insert(intern("?b"), Term::Integer(42));
+        subst
+            .terms
+            .insert(intern("?c"), Term::Decimal(Decimal::new(314, 2)));
+        subst
+            .terms
+            .insert(intern("?d"), Term::Float(FiniteFloat::new(2.718).unwrap()));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Symbol(intern("name")),
+                Term::Integer(42),
+                Term::Decimal(Decimal::new(314, 2)),
+                Term::Float(FiniteFloat::new(2.718).unwrap()),
+            ]
+        );
+    }
 }
