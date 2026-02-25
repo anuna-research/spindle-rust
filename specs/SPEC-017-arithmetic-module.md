@@ -186,6 +186,17 @@ The `div` operator performs **floor division** (rounds toward negative infinity)
 
 The `rem` operator returns the **floor remainder** matching `div`, defined as `a - (a div b) * b`. Both operands must be integers; if either is a Decimal or Float, the literal fails silently. Examples: `(rem 10 3)` → `1`; `(rem -7 2)` → `1`; `(rem 7 -2)` → `-1`.
 
+**Exponentiation (`**`) semantics**:
+
+The `**` operator is binary only: `(** base exponent)`.
+
+- **Integer base, non-negative integer exponent**: result is `Integer`. Uses checked multiplication; overflows fail silently (`ArithError::IntegerOverflow`).
+- **Integer base, negative integer exponent**: result is `Decimal` (computes `1 / base^|exponent|`). Division by zero (base = 0) fails silently.
+- **Decimal base or exponent**: result is `Decimal`. Uses `rust_decimal`'s `checked_powd` (or equivalent). Overflow/underflow beyond decimal range fails silently (`ArithError::DecimalOverflow`).
+- **Float base or exponent** (float contagion applies): result is `Float`. Uses `f64::powf`. Non-finite result fails silently (`ArithError::NonFiniteFloat`).
+- **`0 ** 0`**: returns `Integer(1)`, consistent with the mathematical convention used by Rust, Python, and Haskell (`0i64.pow(0) == 1`).
+- **Non-integer float/decimal exponent with negative base**: may produce non-finite or complex results; fails silently (`ArithError::NonFiniteFloat`).
+
 **Runtime type enforcement**: If an operator or predicate expects a specific numeric type (e.g. `div`/`rem` require integers), passing a value of the wrong type causes the literal to fail silently — consistent with the general arithmetic failure model. No static type system is required; type mismatches are caught at grounding time.
 
 Trace:
@@ -331,9 +342,9 @@ Trace:
 
 ### NFR-001: Grounding Performance
 
-Arithmetic evaluation SHALL add negligible overhead to theory grounding time. Specifically: for a theory with fewer than 10,000 ground rule instances, the grounding phase with arithmetic predicates SHALL complete within the same order of magnitude as an equivalent non-arithmetic theory with identical predicate structure.
+Arithmetic evaluation SHOULD add negligible overhead to theory grounding time. Specifically: for a theory with fewer than 10,000 ground rule instances, the grounding phase with arithmetic predicates SHOULD complete within 10% of the time of an equivalent non-arithmetic theory with identical predicate structure.
 
-**Verification method**: A benchmark test (TEST-NFR-001) compares grounding time for a theory with arithmetic constraints against a structurally equivalent theory without arithmetic. The test measures **relative overhead** (arithmetic_time / baseline_time) across multiple runs, using statistical methods (e.g., median of N runs, discarding outliers) to account for system variance. The overhead ratio SHOULD be below 1.10 (10%) on the CI environment. This is a performance regression guard, not an absolute performance guarantee.
+**Verification method**: A benchmark test (TEST-NFR-001) compares grounding time for a theory with arithmetic constraints against a structurally equivalent theory without arithmetic. The test measures **relative overhead** (arithmetic_time / baseline_time) across multiple runs, using statistical methods (e.g., median of N runs, discarding outliers) to account for system variance. The overhead ratio SHOULD be below 1.10 (10%) on the CI environment. If the ratio exceeds 1.10, the test emits a warning (not a hard failure) to flag potential performance regressions for investigation. This is a performance regression guard, not an absolute performance guarantee; the SHOULD-level requirement reflects that exact ratios are environment-dependent and cannot be guaranteed across all hardware.
 
 Rationale: Arithmetic evaluation is O(expression depth) per substitution. Since expression trees are shallow in practice and numeric evaluation is constant-time, overhead is expected to be negligible. The benchmark provides a regression signal without being tied to specific hardware.
 
@@ -448,7 +459,7 @@ In parsed rule bodies, arithmetic expressions may appear in `BodyLiteral::Arithm
 **Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `min`, `max`, `**`) and built-in predicates (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are **always reserved keywords**. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
 
 This means:
-- `(+ ?x ?y)` in argument position → `ArithExpr::BinOp(Add, Var(?x), Var(?y))`
+- `(+ ?x ?y)` in argument position → `ArithExpr::NaryOp { op: Add, args: [Var(?x), Var(?y)] }`
 - `(+ ?x ?y)` in predicate position (as head or rule keyword position) → parse error
 
 The lexer requires targeted additions. The current `parse_atom` in `lexer.rs` accepts `+` but not `*`, `/`, `<`, `>`, `=`, or `!`. These characters must be added to the atom character set so that operator tokens such as `*`, `/`, `<=`, `>=`, `!=`, and `**` are lexed. Adding them to `parse_atom` is sufficient; no dedicated token types are required. The expression dispatcher then gains awareness of which atom values are reserved arithmetic operator keywords and dispatches accordingly. The `+` operator already lexes correctly.
@@ -550,11 +561,13 @@ Unary `(- x)` replaces the former `neg` keyword. `neg` is no longer a reserved k
 ```
 arith-expr     ::= numeric-literal
                  | variable
-                 | '(' nary-op arith-expr* ')'
+                 | '(' nary-0-op arith-expr* ')'
+                 | '(' nary-1-op arith-expr+ ')'
                  | '(' bin-op arith-expr arith-expr ')'
                  | '(' 'abs' arith-expr ')'
 
-nary-op        ::= '+' | '-' | '*' | '/' | 'min' | 'max'
+nary-0-op      ::= '+' | '*'                              ; 0+ args allowed (identity: 0 / 1)
+nary-1-op      ::= '-' | '/' | 'min' | 'max'              ; 1+ args required (0 args → parse error)
 bin-op         ::= 'div' | 'rem' | '**'
 ```
 
@@ -598,10 +611,19 @@ pub enum ArithError {
     NonFiniteFloat,
     /// Unary reciprocal `(/ 0)` or `(/ 0.0)` — reciprocal of zero
     ReciprocalOfZero,
+    /// Comparison predicate did not hold (returned by ArithConstraint::eval for Compare)
+    ComparisonFailed,
 }
 ```
 
-**Contract**: `ArithExpr::eval()` and `ArithConstraint::eval()` return `Result<NumericValue, ArithError>`. Callers in the grounding phase discard the substitution path on `Err`, but MAY log or collect the error for diagnostic output. The `ArithError` variant SHALL carry enough context to produce a human-readable explanation (variable name, operator, operand types).
+**Contract**:
+
+- `ArithExpr::eval(subst) → Result<NumericValue, ArithError>` — evaluates an arithmetic expression to a numeric value under the given substitution. Used by `bind` (to produce a binding value) and by comparisons (to evaluate each operand before comparing).
+- `ArithConstraint::eval(subst) → Result<(), ArithError>` — evaluates an arithmetic constraint (bind or comparison) for its side effect or guard behavior:
+  - `Bind { var, expr }`: evaluates `expr`, binds `var` in `subst`, returns `Ok(())` on success.
+  - `Compare { op, lhs, rhs }`: evaluates both operands, checks the comparison, returns `Ok(())` if it holds, `Err(ArithError::ComparisonFailed)` if it does not.
+
+Callers in the grounding phase discard the substitution path on `Err`, but MAY log or collect the error for diagnostic output. The `ArithError` variant SHALL carry enough context to produce a human-readable explanation (variable name, operator, operand types).
 
 Implements: REQ-002, REQ-005
 Verified by: TEST-002, TEST-005
@@ -686,6 +708,16 @@ Behavior:
   - If not equal: match fails (substitution path discarded)
   - Symbol terms are never promoted; Symbol matches only by exact SymbolId identity
   - A numeric Term never matches a Symbol Term (and vice versa)
+Decimal↔Float precision caveat:
+  - When a Decimal is promoted to Float for matching, precision loss may cause
+    distinct Decimal values to compare as equal (e.g., two decimals differing
+    only in the 16th+ significant digit may map to the same f64). This is
+    inherent to Float contagion: once a Float value enters a computation,
+    all downstream comparisons are approximate. Theory authors should avoid
+    mixing Float and Decimal in the same matching chain where exact
+    discrimination is required. This is consistent with the general principle
+    that Float is opt-in (via scientific notation) and carries an explicit
+    precision-loss trade-off.
 Non-finite float:
   - A Float value that is non-finite cannot be stored (per CON-002),
     so non-finite matching is not reachable at runtime
@@ -1066,6 +1098,16 @@ Verifies: REQ-004, CON-004
 13. `(div 10 3.0)` → evaluation fails (div requires integer operands)
 14. `(rem 10 3.0)` → evaluation fails
 
+**Scenarios** (exponentiation `**`):
+15. `(** 2 10)` → `Integer(1024)` (integer base, non-negative integer exponent)
+16. `(** 0 0)` → `Integer(1)` (convention: 0^0 = 1)
+17. `(** 2 -1)` → `Decimal(0.5)` (integer base, negative integer exponent → decimal reciprocal)
+18. `(** 0 -1)` → evaluation fails (reciprocal of zero)
+19. `(** 2.0 3)` → `Decimal(8.0)` (decimal base → decimal result)
+20. `(** 2.0e0 3)` → `Float(8.0)` (float contagion)
+21. `(** -1 0.5)` → evaluation fails (negative base with non-integer exponent → non-finite/complex)
+22. `(** 2 63)` → evaluation fails (integer overflow)
+
 Verifies: REQ-005, CON-002
 
 ---
@@ -1261,7 +1303,7 @@ Verifies: REQ-002, REQ-003, REQ-004, REQ-005, NFR-002
 
 ### Phase 4 — Tests
 
-Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST-PBT-001. Implement TEST-PBT-001 with `proptest` using bounded generators and explicit finite-float handling.
+Write tests in the order of TEST-001 through TEST-012, then NFR tests, then TEST-PBT-001. Implement TEST-PBT-001 with `proptest` using bounded generators and explicit finite-float handling.
 
 ### Phase 5 — Contract and CLI Output (REQ-012)
 
