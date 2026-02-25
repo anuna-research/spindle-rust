@@ -3,24 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 1,
-    "insertions": 712,
-    "deletions": 75,
+    "files_changed": 2,
+    "insertions": 552,
+    "deletions": 5,
     "file_list": [
+      ".hence/context-manifest.json",
       "crates/spindle-core/src/grounding.rs"
     ],
-    "dirty_files": 1
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-body-eval-order-changes",
-      "content": "Modified 1 files (+712, -75): crates/spindle-core/src/grounding.rs",
+      "key": "task-propagate-terms-changes",
+      "content": "Modified 2 files (+552, -5): .hence/context-manifest.json, crates/spindle-core/src/grounding.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/body-eval-order-v1",
-  "evaluated_at": "2026-02-25T05:00:44Z",
+  "branch_name": "hence/propagate-terms-v1",
+  "evaluated_at": "2026-02-25T05:07:10Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
