@@ -6,18 +6,19 @@
 use chrono::DateTime;
 use spindle_core::Literal;
 use spindle_core::arith::ArithConstraint;
-use spindle_core::body::BodyLiteral;
+use spindle_core::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
 use spindle_core::intern::intern;
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{
     AllenConstraint, AllenRelation, StateQueryKind, Temporal, TemporalExpr, TemporalStateQuery,
     TimeExpr, TimePoint,
 };
+use spindle_core::term::Term;
 
 use crate::ParseError;
 use crate::error::ParserFormat;
 
-use super::arith::{is_cmp_op, parse_arith_expr, parse_cmp_op};
+use super::arith::{is_arith_op, is_cmp_op, parse_arith_expr, parse_cmp_op};
 use super::lexer::SExpr;
 
 /// Parsed body components: (body literals, Allen constraints, state queries).
@@ -37,7 +38,7 @@ pub(crate) fn parse_body_with_line(
 ) -> Result<BodyParseResult, ParseError> {
     match expr {
         SExpr::Atom { .. } => Ok((
-            vec![BodyLiteral::Logic(parse_literal_with_line(expr, line)?.into())],
+            vec![BodyLiteral::Logic(parse_body_logic_literal_with_line(expr, line)?)],
             vec![],
             vec![],
         )),
@@ -60,8 +61,9 @@ pub(crate) fn parse_body_with_line(
                     } else if let Some(arith) = try_parse_arith_constraint(item, line)? {
                         body_literals.push(BodyLiteral::Arithmetic(arith));
                     } else {
-                        body_literals
-                            .push(BodyLiteral::Logic(parse_literal_with_line(item, line)?.into()));
+                        body_literals.push(BodyLiteral::Logic(
+                            parse_body_logic_literal_with_line(item, line)?,
+                        ));
                     }
                 }
 
@@ -72,7 +74,9 @@ pub(crate) fn parse_body_with_line(
                     Ok((vec![BodyLiteral::Arithmetic(arith)], vec![], vec![]))
                 } else {
                     Ok((
-                        vec![BodyLiteral::Logic(parse_literal_with_line(expr, line)?.into())],
+                        vec![BodyLiteral::Logic(
+                            parse_body_logic_literal_with_line(expr, line)?,
+                        )],
                         vec![],
                         vec![],
                     ))
@@ -466,6 +470,187 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                     ))
                 }
             }
+        }
+    }
+}
+
+/// Parse a body logic literal expression with line number tracking.
+///
+/// Like [`parse_literal_with_line`] but returns a [`BodyLogicLiteral`] directly,
+/// recognising arithmetic expressions in predicate argument positions.
+/// An argument like `(* ?p 2)` becomes `BodyArg::Arith(ArithExpr)` instead of
+/// requiring it to be an atom.
+fn parse_body_logic_literal_with_line(
+    expr: &SExpr,
+    line: usize,
+) -> Result<BodyLogicLiteral, ParseError> {
+    match expr {
+        SExpr::Atom { value: s, .. } => {
+            if let Some(name) = s.strip_prefix("~~") {
+                if name.is_empty() {
+                    return Err(ParseError::ParserError {
+                        line,
+                        message: "Double negation with empty name".to_string(),
+                        format: ParserFormat::Spl,
+                        source_line: None,
+                    });
+                }
+                Ok(BodyLogicLiteral::simple(name))
+            } else if let Some(name) = s.strip_prefix('~') {
+                Ok(BodyLogicLiteral::negated(name))
+            } else {
+                Ok(BodyLogicLiteral::simple(s))
+            }
+        }
+        SExpr::List { items, .. } => {
+            if items.is_empty() {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: "Empty list is not a valid literal".to_string(),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
+
+            let first = items[0].as_atom().ok_or_else(|| ParseError::ParserError {
+                line,
+                message: "Expected atom in literal".to_string(),
+                format: ParserFormat::Spl,
+                source_line: None,
+            })?;
+
+            match first {
+                "not" => {
+                    if items.len() != 2 {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "not takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
+                    let mut inner = parse_body_logic_literal_with_line(&items[1], line)?;
+                    inner.negation = !inner.negation;
+                    Ok(inner)
+                }
+                "must" => {
+                    if items.len() != 2 {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "must takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
+                    let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    lit.mode = Mode::obligation();
+                    Ok(lit)
+                }
+                "may" => {
+                    if items.len() != 2 {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "may takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
+                    let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    lit.mode = Mode::permission();
+                    Ok(lit)
+                }
+                "forbidden" => {
+                    if items.len() != 2 {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "forbidden takes exactly one argument".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
+                    let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    lit.mode = Mode::forbidden();
+                    Ok(lit)
+                }
+                "during" => {
+                    if items.len() == 3 {
+                        if let Some(var_name) = items[2].as_atom()
+                            && var_name.starts_with('?')
+                        {
+                            let mut lit =
+                                parse_body_logic_literal_with_line(&items[1], line)?;
+                            lit.interval_var = Some(intern(var_name));
+                            return Ok(lit);
+                        }
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "during takes either (during literal start end) or (during literal ?var)".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
+                    if items.len() != 4 {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "during takes either (during literal start end) or (during literal ?var)".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
+                    let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    let start = parse_timeexpr_with_line(&items[2], line)?;
+                    let end = parse_timeexpr_with_line(&items[3], line)?;
+
+                    match (&start, &end) {
+                        (TimeExpr::Const(s), TimeExpr::Const(e)) => {
+                            lit.temporal = Temporal::new(*s, *e);
+                        }
+                        _ => {
+                            lit.temporal_expr = Some(TemporalExpr::new(start, end));
+                        }
+                    }
+                    Ok(lit)
+                }
+                _ => {
+                    // Predicate: (name arg1 arg2 ...)
+                    // Each argument can be an atom (→ BodyArg::Term) or
+                    // a list starting with an arith operator (→ BodyArg::Arith).
+                    let args: Result<Vec<BodyArg>, _> =
+                        items[1..].iter().map(|a| parse_body_arg(a, line)).collect();
+                    Ok(BodyLogicLiteral::new(
+                        first,
+                        false,
+                        Mode::empty(),
+                        Temporal::empty(),
+                        args?,
+                    ))
+                }
+            }
+        }
+    }
+}
+
+/// Parse a single predicate argument as a [`BodyArg`].
+///
+/// - Atom → `BodyArg::Term(Term::Symbol(...))`
+/// - List starting with arithmetic operator → `BodyArg::Arith(ArithExpr)`
+/// - Other list → error
+fn parse_body_arg(expr: &SExpr, line: usize) -> Result<BodyArg, ParseError> {
+    match expr {
+        SExpr::Atom { value, .. } => Ok(BodyArg::Term(Term::Symbol(intern(value)))),
+        SExpr::List { items, .. } => {
+            if let Some(head) = items.first().and_then(|i| i.as_atom()) {
+                if is_arith_op(head) {
+                    let arith = parse_arith_expr(expr, line)?;
+                    return Ok(BodyArg::Arith(arith));
+                }
+            }
+            Err(ParseError::ParserError {
+                line,
+                message: "Expected atom argument or arithmetic expression".to_string(),
+                format: ParserFormat::Spl,
+                source_line: None,
+            })
         }
     }
 }
@@ -868,5 +1053,208 @@ mod tests {
             &body[2],
             BodyLiteral::Arithmetic(ArithConstraint::Compare { op: CmpOp::Gt, .. })
         ));
+    }
+
+    // =====================================================================
+    // Body arith args — arithmetic expressions in predicate arguments
+    // =====================================================================
+
+    #[test]
+    fn test_body_arith_arg_mul() {
+        // (line-total ?i (* ?p 2))
+        let mul = list(vec![atom("*"), atom("?p"), atom("2")]);
+        let expr = list(vec![atom("line-total"), atom("?i"), mul]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        assert_eq!(body.len(), 1);
+        let lit = body[0].as_logic().expect("expected Logic variant");
+        assert_eq!(lit.name(), "line-total");
+        assert_eq!(lit.predicate_args().len(), 2);
+
+        assert_eq!(
+            lit.predicate_args()[0],
+            BodyArg::Term(Term::Symbol(intern("?i")))
+        );
+        match &lit.predicate_args()[1] {
+            BodyArg::Arith(ArithExpr::NaryOp { op, args }) => {
+                assert_eq!(*op, NaryArithOp::Mul);
+                assert_eq!(args.len(), 2);
+                assert_eq!(args[0], ArithExpr::Var(intern("?p")));
+                assert_eq!(args[1], ArithExpr::Lit(NumericValue::Integer(2)));
+            }
+            other => panic!("Expected BodyArg::Arith(NaryOp::Mul), got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_body_arith_arg_add() {
+        // (cost ?item (+ ?base ?tax))
+        let add = list(vec![atom("+"), atom("?base"), atom("?tax")]);
+        let expr = list(vec![atom("cost"), atom("?item"), add]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        assert_eq!(body.len(), 1);
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(lit.name(), "cost");
+        assert!(lit.has_arith_args());
+        assert!(matches!(
+            &lit.predicate_args()[1],
+            BodyArg::Arith(ArithExpr::NaryOp {
+                op: NaryArithOp::Add,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_body_arith_arg_nested() {
+        // (result ?x (+ (* ?a ?b) ?c))
+        let mul = list(vec![atom("*"), atom("?a"), atom("?b")]);
+        let add = list(vec![atom("+"), mul, atom("?c")]);
+        let expr = list(vec![atom("result"), atom("?x"), add]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(lit.name(), "result");
+        match &lit.predicate_args()[1] {
+            BodyArg::Arith(ArithExpr::NaryOp {
+                op: NaryArithOp::Add,
+                args,
+            }) => {
+                assert!(matches!(
+                    &args[0],
+                    ArithExpr::NaryOp {
+                        op: NaryArithOp::Mul,
+                        ..
+                    }
+                ));
+                assert_eq!(args[1], ArithExpr::Var(intern("?c")));
+            }
+            other => panic!("Expected nested arith, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_body_arith_arg_multiple() {
+        // (tri ?a (+ ?b 1) (- ?c 2))
+        let add = list(vec![atom("+"), atom("?b"), atom("1")]);
+        let sub = list(vec![atom("-"), atom("?c"), atom("2")]);
+        let expr = list(vec![atom("tri"), atom("?a"), add, sub]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(lit.predicate_args().len(), 3);
+        assert!(matches!(&lit.predicate_args()[0], BodyArg::Term(_)));
+        assert!(matches!(
+            &lit.predicate_args()[1],
+            BodyArg::Arith(ArithExpr::NaryOp {
+                op: NaryArithOp::Add,
+                ..
+            })
+        ));
+        assert!(matches!(
+            &lit.predicate_args()[2],
+            BodyArg::Arith(ArithExpr::NaryOp {
+                op: NaryArithOp::Sub,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_body_arith_arg_in_conjunction() {
+        // (and (price ?item ?p) (line-total ?item (* ?p ?qty)))
+        let price = list(vec![atom("price"), atom("?item"), atom("?p")]);
+        let mul = list(vec![atom("*"), atom("?p"), atom("?qty")]);
+        let total = list(vec![atom("line-total"), atom("?item"), mul]);
+        let expr = list(vec![atom("and"), price, total]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        assert_eq!(body.len(), 2);
+
+        let price_lit = body[0].as_logic().unwrap();
+        assert_eq!(price_lit.name(), "price");
+        assert!(!price_lit.has_arith_args());
+
+        let total_lit = body[1].as_logic().unwrap();
+        assert_eq!(total_lit.name(), "line-total");
+        assert!(total_lit.has_arith_args());
+    }
+
+    #[test]
+    fn test_body_arith_arg_negated() {
+        // (not (cost ?item (* ?p 2)))
+        let mul = list(vec![atom("*"), atom("?p"), atom("2")]);
+        let cost = list(vec![atom("cost"), atom("?item"), mul]);
+        let expr = list(vec![atom("not"), cost]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        let lit = body[0].as_logic().unwrap();
+        assert!(lit.is_negated());
+        assert_eq!(lit.name(), "cost");
+        assert!(lit.has_arith_args());
+    }
+
+    #[test]
+    fn test_body_arith_arg_all_operators() {
+        // Test /, div, rem, **, abs in arg positions
+        for (op_str, expected_check) in [
+            ("/", "NaryOp"),
+            ("div", "BinOp"),
+            ("rem", "BinOp"),
+            ("**", "BinOp"),
+        ] {
+            let arith = list(vec![atom(op_str), atom("?x"), atom("2")]);
+            let expr = list(vec![atom("f"), arith]);
+            let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+            let lit = body[0].as_logic().unwrap();
+            match &lit.predicate_args()[0] {
+                BodyArg::Arith(_) => {} // expected
+                other => panic!(
+                    "Expected BodyArg::Arith for '{op_str}' ({expected_check}), got: {other:?}"
+                ),
+            }
+        }
+
+        // abs is unary
+        let abs = list(vec![atom("abs"), atom("?x")]);
+        let expr = list(vec![atom("f"), abs]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+        assert!(matches!(
+            &body[0].as_logic().unwrap().predicate_args()[0],
+            BodyArg::Arith(_)
+        ));
+    }
+
+    #[test]
+    fn test_body_arith_arg_non_arith_list_error() {
+        // (pred (unknown ?x)) — "unknown" is not an arith op
+        let bad = list(vec![atom("unknown"), atom("?x")]);
+        let expr = list(vec![atom("pred"), bad]);
+        let err = parse_body_with_line(&expr, 1).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("atom argument or arithmetic expression"),
+            "got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_body_no_arith_args_unchanged() {
+        // (parent alice bob) — plain atom args, no arith
+        let expr = list(vec![atom("parent"), atom("alice"), atom("bob")]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(lit.name(), "parent");
+        assert!(!lit.has_arith_args());
+        assert_eq!(
+            lit.predicate_args()[0],
+            BodyArg::Term(Term::Symbol(intern("alice")))
+        );
+        assert_eq!(
+            lit.predicate_args()[1],
+            BodyArg::Term(Term::Symbol(intern("bob")))
+        );
     }
 }
