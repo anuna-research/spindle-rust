@@ -40,6 +40,7 @@ use crate::intern::{resolve, SymbolId};
 /// These invariants guarantee that `==` is reflexive and `Hash` is consistent
 /// with `Eq`, making `FiniteFloat` safe for use as a hash-map key.
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FiniteFloat(f64);
 
 impl FiniteFloat {
@@ -120,6 +121,7 @@ impl fmt::Display for FiniteFloat {
 /// expressions. The four variants cover the value space needed by the
 /// defeasible-logic language.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Term {
     /// An interned symbolic name.
     Symbol(SymbolId),

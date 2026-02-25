@@ -105,25 +105,36 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
         return None;
     }
 
-    // Match predicates/arguments (using interned symbols)
-    let pattern_pred_ids = pattern.predicate_ids();
-    let ground_pred_ids = ground.predicate_ids();
-    if pattern_pred_ids.len() != ground_pred_ids.len() {
+    // Match predicates/arguments (using Term values)
+    let pattern_args = pattern.predicate_args();
+    let ground_args = ground.predicate_args();
+    if pattern_args.len() != ground_args.len() {
         return None;
     }
 
-    for (parg_id, garg_id) in pattern_pred_ids.iter().zip(ground_pred_ids.iter()) {
-        let parg = resolve(*parg_id);
-        if is_variable(parg) {
-            // Check for conflicting bindings
-            if let Some(existing) = subst.terms.get(parg_id) {
-                if *existing != *garg_id {
+    for (parg, garg) in pattern_args.iter().zip(ground_args.iter()) {
+        // Variables are always Term::Symbol(id) where resolve(id) starts with '?'
+        if let crate::term::Term::Symbol(parg_id) = parg {
+            let parg_str = resolve(*parg_id);
+            if is_variable(parg_str) {
+                // Ground side must be a symbol for variable binding
+                if let crate::term::Term::Symbol(garg_id) = garg {
+                    if let Some(existing) = subst.terms.get(parg_id) {
+                        if *existing != *garg_id {
+                            return None;
+                        }
+                    } else {
+                        subst.terms.insert(*parg_id, *garg_id);
+                    }
+                } else {
+                    // Variable can't bind to non-symbol term (yet)
                     return None;
                 }
-            } else {
-                subst.terms.insert(*parg_id, *garg_id);
+                continue;
             }
-        } else if parg_id != garg_id {
+        }
+        // Non-variable: compare terms directly
+        if parg != garg {
             return None;
         }
     }
@@ -213,17 +224,19 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
         name_id
     };
 
-    // Apply substitution to predicates
-    let new_pred_ids: Vec<SymbolId> = lit
-        .predicate_ids()
+    // Apply substitution to predicate arguments
+    let new_pred_args: Vec<crate::term::Term> = lit
+        .predicate_args()
         .iter()
-        .map(|pid| {
-            let p = resolve(*pid);
-            if is_variable(p) {
-                subst.terms.get(pid).copied().unwrap_or(*pid)
-            } else {
-                *pid
+        .map(|term| {
+            if let crate::term::Term::Symbol(pid) = term {
+                let p = resolve(*pid);
+                if is_variable(p) {
+                    let bound_id = subst.terms.get(pid).copied().unwrap_or(*pid);
+                    return crate::term::Term::Symbol(bound_id);
+                }
             }
+            term.clone()
         })
         .collect();
 
@@ -261,7 +274,7 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
         lit.negation,
         lit.mode.clone(),
         new_temporal,
-        new_pred_ids,
+        new_pred_args,
     );
     result.temporal_expr = new_temporal_expr;
     result.interval_var = new_interval_var;
@@ -354,20 +367,20 @@ fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
     (
         lit.name_id(),
         lit.negation,
-        lit.predicate_ids().len(),
+        lit.predicate_args().len(),
         lit.mode.clone(),
     )
 }
 
-/// Create a key for deduplicating literals (using interned IDs, minimal allocation)
+/// Create a key for deduplicating literals (using Term args, minimal allocation)
 ///
 /// Includes temporal so that `p[1,2]` and `p[3,4]` are treated as distinct facts.
 #[inline]
-fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<SymbolId>, Mode, Temporal) {
+fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<crate::term::Term>, Mode, Temporal) {
     (
         lit.name_id(),
         lit.negation,
-        lit.predicate_ids().to_vec(),
+        lit.predicate_args().to_vec(),
         lit.mode.clone(),
         lit.temporal.clone(),
     )
@@ -560,8 +573,8 @@ pub fn ground_theory_with_limit(
         return (theory.clone(), false);
     }
 
-    // Track facts using interned types (minimal allocation)
-    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<SymbolId>, Mode, Temporal)> =
+    // Track facts using Term-based keys (minimal allocation)
+    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<crate::term::Term>, Mode, Temporal)> =
         FxHashSet::default();
     let mut facts_list: Vec<Literal> = Vec::new();
     let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
