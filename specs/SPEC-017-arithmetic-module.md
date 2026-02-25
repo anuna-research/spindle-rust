@@ -309,13 +309,33 @@ Trace:
 
 ---
 
+### REQ-012: Typed Numeric JSON Serialization (v2 Contracts)
+
+The system SHALL provide a v2 JSON contract schema family that preserves the type identity and scale of numeric predicate arguments. Each predicate argument in v2 JSON output SHALL be represented as a tagged object rather than a bare JSON `number`, to avoid lossy representation.
+
+**Rationale**: JSON's `number` type is IEEE 754 double-precision, which cannot losslessly represent:
+- The distinction between `Integer(8)`, `Decimal(8.00)`, and `Float(8.0)`
+- Decimal scale/trailing zeros (`8.00` vs `8` — significant for financial reasoning)
+- Integers larger than 2^53 (JSON number loses precision)
+- Exact decimal values (JSON number is binary floating-point)
+
+The v1 contract schema SHALL remain unchanged for backward compatibility.
+
+Trace:
+- TEST-012
+- CON-006
+
+---
+
 ## 4. Non-Functional Requirements
 
 ### NFR-001: Grounding Performance
 
-Arithmetic evaluation SHALL add no more than 5% overhead to theory grounding time for theories with fewer than 10,000 ground rule instances, measured on a reference machine (4-core, 3 GHz, 8 GB RAM) with no I/O.
+Arithmetic evaluation SHALL add negligible overhead to theory grounding time. Specifically: for a theory with fewer than 10,000 ground rule instances, the grounding phase with arithmetic predicates SHALL complete within the same order of magnitude as an equivalent non-arithmetic theory with identical predicate structure.
 
-Rationale: Arithmetic evaluation is O(expression depth) per substitution. Since expression trees are shallow in practice and numeric evaluation is constant-time, overhead is expected to be negligible. The 5% bound provides slack for interning and memory allocation of `NumericValue` variants.
+**Verification method**: A benchmark test (TEST-NFR-001) compares grounding time for a theory with arithmetic constraints against a structurally equivalent theory without arithmetic. The test measures **relative overhead** (arithmetic_time / baseline_time) across multiple runs, using statistical methods (e.g., median of N runs, discarding outliers) to account for system variance. The overhead ratio SHOULD be below 1.10 (10%) on the CI environment. This is a performance regression guard, not an absolute performance guarantee.
+
+Rationale: Arithmetic evaluation is O(expression depth) per substitution. Since expression trees are shallow in practice and numeric evaluation is constant-time, overhead is expected to be negligible. The benchmark provides a regression signal without being tied to specific hardware.
 
 Trace:
 - TEST-NFR-001
@@ -650,6 +670,39 @@ Verified by: TEST-010
 
 ---
 
+### CON-006: v2 JSON Typed Argument Representation
+
+Predicate arguments in v2 JSON contracts SHALL use a tagged object format:
+
+```json
+{
+  "args": [
+    { "type": "symbol", "value": "alice" },
+    { "type": "integer", "value": 120000 },
+    { "type": "decimal", "value": "8.00" },
+    { "type": "float", "value": 1.5e3 }
+  ]
+}
+```
+
+**Type mapping**:
+- `Term::Symbol` → `{ "type": "symbol", "value": "<string>" }`
+- `Term::Integer` → `{ "type": "integer", "value": <json-number> }` (safe for values within ±2^53; values exceeding ±2^53 use string: `{ "type": "integer", "value": "9223372036854775807" }`)
+- `Term::Decimal` → `{ "type": "decimal", "value": "<string>" }` (always string to preserve exact representation and scale, e.g., `"8.00"`, `"0.08"`, `"3.3333333333333333333333333333"`)
+- `Term::Float` → `{ "type": "float", "value": <json-number> }` (IEEE 754 double; finite values only)
+
+**Design rationale**:
+- Decimal values MUST be serialized as strings because JSON numbers are IEEE 754 and cannot preserve exact decimal representation or trailing zeros.
+- Integer values exceeding ±2^53 MUST be serialized as strings because JSON numbers lose precision beyond this range.
+- The `type` tag enables lossless round-trip deserialization back to the correct `Term` variant.
+
+**v1 compatibility**: v1 schemas continue to serialize all arguments as strings. v1 behavior is unchanged.
+
+Implements: REQ-012
+Verified by: TEST-012
+
+---
+
 ## 7. Data Model Changes
 
 ### 7.1 Literal Predicate Arguments
@@ -737,6 +790,10 @@ pub struct BodyLogicLiteral {
 pub enum BodyLiteral {
     Logic(BodyLogicLiteral),            // Match against theory facts
     Arithmetic(ArithConstraint),        // Evaluate numerically; no theory lookup
+    // NOTE: Arithmetic has no negation flag. Negating an arithmetic
+    // predicate (e.g., `(not (> ?x 100))`) is a parse error per REQ-011.
+    // BodyLogicLiteral carries `negation: bool` for classical negation;
+    // ArithConstraint intentionally does not.
 }
 
 pub enum ArithConstraint {
@@ -877,9 +934,9 @@ Expected:
 
 ; Division with rounding
 (given (shares total 10))
-(given (parties count 3))
+(given (parties num 3))
 (normally r2
-  (and (shares total ?n) (parties count ?d) (bind ?each (/ ?n ?d)))
+  (and (shares total ?n) (parties num ?d) (bind ?each (/ ?n ?d)))
   (share-per-party ?each))
 
 ; Derived: +d share-per-party(3.3333333333333333333333333333)
@@ -893,7 +950,7 @@ Expected:
 ### TEST-001: Numeric Literal Terms
 
 **Scenarios**:
-1. Integer literal: `(given (count x 42))` → `Term::Integer(42)`
+1. Integer literal: `(given (quantity x 42))` → `Term::Integer(42)`
 2. Negative integer: `(given (balance x -100))` → `Term::Integer(-100)`
 3. Decimal literal: `(given (rate x 0.15))` → `Term::Decimal(0.15)` — exact
 4. Decimal with leading zero: `(given (tax x 0.08))` → `Term::Decimal(0.08)` — exact, not `0.07999...`
@@ -1075,11 +1132,29 @@ Verifies: REQ-011
 
 ---
 
-### TEST-NFR-001: Grounding Performance Baseline
+### TEST-012: v2 JSON Typed Argument Serialization
 
-**Setup**: Generate a theory with 500 facts, 200 defeasible rules with 3-literal bodies including arithmetic `bind` and comparison predicates.
+**Scenarios**:
+1. `Term::Symbol("alice")` → `{ "type": "symbol", "value": "alice" }`
+2. `Term::Integer(120000)` → `{ "type": "integer", "value": 120000 }`
+3. `Term::Integer(9223372036854775807)` (> 2^53) → `{ "type": "integer", "value": "9223372036854775807" }` (string to preserve precision)
+4. `Term::Decimal(8.00)` → `{ "type": "decimal", "value": "8.00" }` (string; trailing zeros preserved)
+5. `Term::Decimal(0.08)` → `{ "type": "decimal", "value": "0.08" }` (string; exact)
+6. `Term::Float(1.5e3)` → `{ "type": "float", "value": 1500.0 }`
+7. Mixed argument list `[Symbol("widget"), Integer(25), Decimal(0.08)]` round-trips losslessly through v2 JSON serialization and deserialization.
+8. v1 JSON output for the same theory is unchanged (all arguments serialized as strings).
 
-**Assertion**: The **grounding phase only** (fact indexing + substitution + arithmetic constraint evaluation, excluding the defeasible reasoning loop) completes in ≤ baseline_grounding_time × 1.05, where baseline_grounding_time is the grounding time for an equivalent non-arithmetic theory with identical predicate structure but without arithmetic predicates. Reasoning phase time is excluded from this measurement, consistent with NFR-001.
+Verifies: REQ-012, CON-006
+
+---
+
+### TEST-NFR-001: Grounding Performance Regression
+
+**Setup**: Generate two theories: (a) 500 facts, 200 defeasible rules with 3-literal bodies including arithmetic `bind` and comparison predicates; (b) structurally equivalent theory with the same predicate shapes but no arithmetic predicates (arithmetic literals replaced with additional fact-matching literals).
+
+**Method**: Run grounding phase only (excluding defeasible reasoning) for both theories. Take the median of at least 10 runs each, discarding the fastest and slowest run. Compute overhead ratio = median(a) / median(b).
+
+**Assertion**: The overhead ratio SHOULD be below 1.10 (10%). If the ratio exceeds 1.10, the test emits a warning (not a hard failure) to flag potential performance regressions for investigation.
 
 Verifies: NFR-001
 
@@ -1162,10 +1237,10 @@ Verifies: REQ-002, REQ-003, REQ-004, REQ-005, NFR-002
 
 Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST-PBT-001. Implement TEST-PBT-001 with `proptest` using bounded generators and explicit finite-float handling.
 
-### Phase 5 — Contract and CLI Output
+### Phase 5 — Contract and CLI Output (REQ-012)
 
 1. Keep `spindle.*.v1` schemas and DTOs unchanged for backward compatibility.
-2. Add a new schema family (`spindle.reason.v2`, `spindle.query.v2`, `spindle.requires.v2`, `spindle.explain.v2`, `spindle.why_not.v2`) with typed literal args (`string | number`) to represent `Symbol`, `Integer`, `Decimal`, and `Float`.
+2. Add a new schema family (`spindle.reason.v2`, `spindle.query.v2`, `spindle.requires.v2`, `spindle.explain.v2`, `spindle.why_not.v2`) with typed literal args using the tagged representation from CON-006. Each predicate argument is a JSON object with `type` and `value` fields to preserve type identity and decimal scale.
 3. Update CLI/WASM serialization to emit v2 payloads when requested (or when v2 is negotiated via capabilities), while preserving v1 behavior.
 4. Add regression tests for mixed argument lists (`symbol + integer + decimal + float`) in v2 JSON output and compatibility tests proving v1 payloads are unchanged.
 
@@ -1186,7 +1261,7 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST
 | OQ-9 | Cross-type fact matching: if a fact stores `Integer(100)` and `bind` produces `Decimal(100.00)`, does matching `(cost ?item ?x)` against the fact succeed? `Integer(100) ≠ Decimal(100.00)` at the `Term` level, which could silently discard valid groundings. | High | **Resolved**: Yes — numeric promotion during matching. When both values are numeric, promote to a common type per REQ-005 and compare for equality. See REQ-010, CON-005, TEST-010. |
 | OQ-10 | Cross-type comparison vs unification: `(= 1 1.0)` is true under comparison promotion rules, but should `Integer(1)` and `Decimal(1.0)` unify during pattern matching? If not, users will encounter subtle mismatches where a comparison succeeds but a fact lookup fails for the same values. | High | **Resolved**: Yes — matching uses the same promotion rules as comparison predicates. `Integer(1)` matches `Decimal(1.0)` during fact lookup. See REQ-010. |
 | OQ-11 | Arithmetic in negated body literals: is `(and (not (> ?x 100)) ...)` legal? If so, what are the semantics — does `not` negate the guard (i.e., `<= 100`), or does negation-as-failure apply (the guard is "not provable")? If the variable is unbound inside `not`, should it fail silently or produce a parse error? | High | **Resolved**: Parse error. SPL's `not`/`~` is classical negation (matches explicit negated ground facts). Arithmetic predicates produce no ground facts, so negating them is meaningless. Users write the complementary comparison directly. See REQ-011, TEST-011. |
-| OQ-12 | Decimal display formatting: `100 * 0.08` yields `Decimal(8.00)` because `rust_decimal` preserves scale. Should output display `8.00`, `8.0`, or `8`? For financial/policy use cases trailing zeros carry meaning; for general use they may confuse. | Medium | Needs resolution — affects CLI output, JSON serialization, and `why_not` explanations |
+| OQ-12 | Decimal display formatting: `100 * 0.08` yields `Decimal(8.00)` because `rust_decimal` preserves scale. Should output display `8.00`, `8.0`, or `8`? For financial/policy use cases trailing zeros carry meaning; for general use they may confuse. | Medium | **Resolved**: Preserve scale. v2 JSON serializes decimals as strings (e.g., `"8.00"`) to retain exact representation (CON-006). CLI text output uses `rust_decimal`'s default display, which preserves trailing zeros. |
 | OQ-13 | Multi-arity arithmetic operators: should `(+ 1 2 3)` be valid (variadic, as in Lisp)? | Medium | **Resolved**: Yes. `+`, `-`, `*`, `/`, `min`, `max` follow Racket/Common Lisp variadic conventions. `div`, `rem`, `**` remain binary-only. See CON-002. |
 | OQ-14 | Arithmetic in queries: can the query interface accept arithmetic guards, e.g., `(query (and (salary ?emp ?amt) (> ?amt 100000)))`? The spec covers rules but not the query system. | Medium | Likely yes — queries evaluate rule bodies, so arithmetic guards should work; needs explicit confirmation |
 | OQ-15 | Arithmetic in `except` (defeater) rules: defeater bodies should support arithmetic guards (e.g., `(except r1 (and (hardship ?emp) (< ?income 30000)) (high-earner ?emp))`). The spec says "body-only" but does not explicitly mention defeaters. | Medium | Likely yes — defeaters have bodies; needs explicit confirmation |
@@ -1210,6 +1285,7 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST
 | REQ-009 | — | ADR-003 | — | TEST-009 |
 | REQ-010 | — | — | CON-005 | TEST-010 |
 | REQ-011 | — | — | — | TEST-011 |
+| REQ-012 | — | — | CON-006 | TEST-012 |
 | — | NFR-001 | — | — | TEST-NFR-001 |
 | — | NFR-002 | — | — | TEST-NFR-002 |
 | — | NFR-003 | — | — | (static analysis) |
