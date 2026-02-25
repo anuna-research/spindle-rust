@@ -225,6 +225,8 @@ Trace:
 
 The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `bind` predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names, rule labels, or labels in `(prefer ...)` declarations.
 
+The following keywords are also **reserved for future use**: `sum`, `count`, `avg`, `round`, `floor`, `ceil`. These are anticipated for aggregate operations and numeric rounding functions in a future specification. Reserving them now prevents user-defined predicates from colliding with future built-ins, avoiding breaking changes. Using any of these as a predicate name, rule label, or superiority label SHALL produce a parse error.
+
 Trace:
 - TEST-008
 
@@ -901,6 +903,9 @@ Verifies: REQ-007
 3. `(given (cost (+ 3 4)))` where arithmetic expression appears in fact argument → parse error (arithmetic expression in head/fact position)
 4. `(normally bind body result)` where `bind` is used as a rule label → parse error ("'bind' is reserved")
 5. `(prefer r1 +)` where `+` is used as a rule label in superiority → parse error ("'+' is reserved")
+6. `(given (sum report 100))` where `sum` is used as a predicate name → parse error ("'sum' is reserved for future use")
+7. `(normally count body result)` where `count` is used as a rule label → parse error ("'count' is reserved for future use")
+8. Future-reserved keywords `avg`, `round`, `floor`, `ceil` as predicate names → parse error
 
 Verifies: REQ-008
 
