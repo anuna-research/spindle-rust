@@ -30,6 +30,7 @@
 //! (normally r3 (and bird healthy) flies)
 //! ```
 
+pub(crate) mod arith;
 mod expressions;
 pub(crate) mod lexer;
 pub(crate) mod literals;
