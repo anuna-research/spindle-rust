@@ -75,7 +75,7 @@ impl Serialize for TermDto {
             }
             TermDto::Integer(n) => {
                 map.serialize_entry("type", "integer")?;
-                if n.abs() > MAX_SAFE_INTEGER {
+                if n.unsigned_abs() > MAX_SAFE_INTEGER as u64 {
                     // Serialize as string to avoid JSON number precision loss
                     map.serialize_entry("value", &n.to_string())?;
                 } else {
