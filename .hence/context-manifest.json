@@ -1,12 +1,12 @@
 {
-  "task_id": "parse-numeric-literals",
+  "task_id": "parse-guards",
   "token_budget": 8000,
-  "tokens_used": 440,
+  "tokens_used": 489,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Extend spl/literals.rs to detect and parse numeric literals in predicate argument positions. When an atom matches integer pattern (-?[0-9]+), parse as Term::Integer(i64). When it matches decimal pattern (-?[0-9]+.[0-9]+), parse as Term::Decimal. When it matches float pattern (-?[0-9]+(.[0-9]+)?[eE]-?[0-9]+), parse as Term::Float(f64). Out-of-range values produce ParseError with source offset. Order of detection: float (has e/E) > decimal (has .) > integer.",
-      "token_cost": 115,
+      "content": "Add parse-time error checks: (1) Arithmetic predicates (bind, =, !=, <, >, <=, >=) in rule head position -> ParseError per REQ-009. (2) Arithmetic expressions as arguments in rule heads or facts -> ParseError per REQ-009. (3) Negation of arithmetic predicates (not (> ...) or ~(> ...)) -> ParseError per REQ-011. (4) Reserved keywords (+, -, *, /, div, rem, abs, min, max, **, bind, =, !=, <, >, <=, >=) as predicate names or rule labels -> ParseError per REQ-008. (5) Future-reserved keywords (sum, count, avg, round, floor, ceil) as predicate names or rule labels -> ParseError per REQ-008. (6) Reserved keywords in (prefer ...) declarations -> ParseError.",
+      "token_cost": 164,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T05:26:18Z"
+  "constructed_at": "2026-02-25T05:32:31Z"
 }

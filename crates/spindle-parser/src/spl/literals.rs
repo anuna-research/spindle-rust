@@ -19,7 +19,10 @@ use spindle_core::term::{FiniteFloat, Term};
 use crate::ParseError;
 use crate::error::ParserFormat;
 
-use super::arith::{is_arith_op, is_cmp_op, parse_arith_expr, parse_cmp_op};
+use super::arith::{
+    is_arith_op, is_arith_predicate, is_cmp_op, is_future_reserved_keyword, is_reserved_keyword,
+    parse_arith_expr, parse_cmp_op,
+};
 use super::lexer::SExpr;
 
 /// Parsed body components: (body literals, Allen constraints, state queries).
@@ -307,6 +310,34 @@ fn try_parse_state_query(
     Ok(Some(TemporalStateQuery::new(kind, intern(var), time)))
 }
 
+/// Reject a name if it is a reserved or future-reserved keyword (REQ-008).
+///
+/// This is used for both head and body predicate atoms to ensure no reserved
+/// keyword is accidentally used as a predicate name.
+fn reject_reserved_predicate_name(name: &str, line: usize) -> Result<(), ParseError> {
+    if is_reserved_keyword(name) {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!(
+                "Reserved keyword '{name}' cannot be used as a predicate name (REQ-008)"
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+    if is_future_reserved_keyword(name) {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!(
+                "'{name}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+    Ok(())
+}
+
 /// Parse a literal expression with line number tracking
 pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Literal, ParseError> {
     match expr {
@@ -321,12 +352,15 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                         source_line: None,
                     });
                 }
+                reject_reserved_predicate_name(name, line)?;
                 // ~~name = not(not(name)) = name (positive)
                 Ok(Literal::simple(name))
             } else if let Some(name) = s.strip_prefix('~') {
                 // Handle single negation prefix
+                reject_reserved_predicate_name(name, line)?;
                 Ok(Literal::negated(name))
             } else {
+                reject_reserved_predicate_name(s, line)?;
                 Ok(Literal::simple(s))
             }
         }
@@ -346,6 +380,54 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                 format: ParserFormat::Spl,
                 source_line: None,
             })?;
+
+            // REQ-009: Arithmetic predicates cannot appear in head position
+            if is_arith_predicate(first) {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: format!(
+                        "Arithmetic predicate '{first}' cannot appear in rule head or fact position (REQ-009)"
+                    ),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
+
+            // REQ-009: Arithmetic operators cannot appear in head position
+            if is_arith_op(first) {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: format!(
+                        "Arithmetic expression '({first} ...)' cannot appear in rule head or fact position (REQ-009)"
+                    ),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
+
+            // REQ-008: Reserved keywords cannot be used as predicate names
+            if is_reserved_keyword(first) {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: format!(
+                        "Reserved keyword '{first}' cannot be used as a predicate name (REQ-008)"
+                    ),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
+
+            // REQ-008: Future-reserved keywords cannot be used as predicate names
+            if is_future_reserved_keyword(first) {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: format!(
+                        "'{first}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
+                    ),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
 
             match first {
                 "not" => {
@@ -449,9 +531,19 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                 }
                 _ => {
                     // Predicate: (name arg1 arg2 ...)
+                    // REQ-009: Reject arithmetic expressions as arguments in heads/facts
                     let terms: Result<Vec<Term>, _> = items[1..]
                         .iter()
                         .map(|a| {
+                            // Check for list arguments (potential arithmetic expressions)
+                            if a.as_list().is_some() {
+                                return Err(ParseError::ParserError {
+                                    line,
+                                    message: "Arithmetic expressions cannot appear as arguments in rule heads or facts (REQ-009). Arithmetic is only allowed in rule bodies.".to_string(),
+                                    format: ParserFormat::Spl,
+                                    source_line: None,
+                                });
+                            }
                             let s = a.as_atom().ok_or_else(|| ParseError::ParserError {
                                 line,
                                 message: "Expected atom argument".to_string(),
@@ -495,10 +587,13 @@ fn parse_body_logic_literal_with_line(
                         source_line: None,
                     });
                 }
+                reject_reserved_predicate_name(name, line)?;
                 Ok(BodyLogicLiteral::simple(name))
             } else if let Some(name) = s.strip_prefix('~') {
+                reject_reserved_predicate_name(name, line)?;
                 Ok(BodyLogicLiteral::negated(name))
             } else {
+                reject_reserved_predicate_name(s, line)?;
                 Ok(BodyLogicLiteral::simple(s))
             }
         }
@@ -519,6 +614,30 @@ fn parse_body_logic_literal_with_line(
                 source_line: None,
             })?;
 
+            // REQ-008: Reserved keywords cannot be used as predicate names in body
+            if is_reserved_keyword(first) {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: format!(
+                        "Reserved keyword '{first}' cannot be used as a predicate name (REQ-008)"
+                    ),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
+
+            // REQ-008: Future-reserved keywords cannot be used as predicate names in body
+            if is_future_reserved_keyword(first) {
+                return Err(ParseError::ParserError {
+                    line,
+                    message: format!(
+                        "'{first}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
+                    ),
+                    format: ParserFormat::Spl,
+                    source_line: None,
+                });
+            }
+
             match first {
                 "not" => {
                     if items.len() != 2 {
@@ -528,6 +647,22 @@ fn parse_body_logic_literal_with_line(
                             format: ParserFormat::Spl,
                             source_line: None,
                         });
+                    }
+                    // REQ-011: Negation of arithmetic predicates is not allowed
+                    if let Some(inner_items) = items[1].as_list() {
+                        if let Some(inner_head) = inner_items.first().and_then(|i| i.as_atom()) {
+                            if is_arith_predicate(inner_head) {
+                                return Err(ParseError::ParserError {
+                                    line,
+                                    message: format!(
+                                        "Arithmetic predicate '{inner_head}' cannot be negated (REQ-011). \
+                                         Use the positive form in the rule body instead."
+                                    ),
+                                    format: ParserFormat::Spl,
+                                    source_line: None,
+                                });
+                            }
+                        }
                     }
                     let mut inner = parse_body_logic_literal_with_line(&items[1], line)?;
                     inner.negation = !inner.negation;

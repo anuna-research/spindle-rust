@@ -12,6 +12,7 @@ use spindle_core::{Rule, RuleType, Theory};
 use crate::ParseError;
 use crate::error::ParserFormat;
 
+use super::arith::{is_future_reserved_keyword, is_reserved_keyword};
 use super::lexer::SExpr;
 use super::lexer::source_line_text;
 use super::literals::{parse_literal_with_line, parse_timepoint_with_line};
@@ -175,6 +176,30 @@ fn process_prefer_with_line(
         })
         .collect();
     let labels = labels?;
+
+    // REQ-008: Validate that no reserved keywords are used as labels in prefer
+    for label in &labels {
+        if is_reserved_keyword(label) {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "Reserved keyword '{label}' cannot be used as a rule label in prefer declaration (REQ-008)"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+        if is_future_reserved_keyword(label) {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "'{label}' is reserved for future use and cannot be used as a rule label in prefer declaration (REQ-008)"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+    }
 
     // Create chain of superiorities: r1 > r2 > r3 ...
     for window in labels.windows(2) {
