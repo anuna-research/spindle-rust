@@ -26,8 +26,11 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use spindle_contract::error::ProblemDetails;
-use spindle_contract::literal::LiteralStructJson;
-use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
+use spindle_contract::literal::{LiteralStructJson, LiteralStructJsonV2};
+use spindle_contract::reason::{
+    ConclusionEntry, ConclusionEntryV2, GroundingStats, ReasonOutput, ReasonOutputV2, TheoryStats,
+    SCHEMA_V1, SCHEMA_V2,
+};
 use spindle_core::error::SpindleError;
 use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
@@ -218,7 +221,52 @@ impl Spindle {
         });
 
         let output = ReasonOutput {
-            schema_version: "spindle.reason.v1".to_string(),
+            schema_version: SCHEMA_V1.to_string(),
+            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+            grounding: GroundingStats {
+                performed: prepared.grounding_report.performed,
+                had_variables: prepared.grounding_report.had_variables,
+                instances: prepared.grounding_report.instances,
+                limit_hit: prepared.grounding_report.limit_hit,
+            },
+            conclusions: output_conclusions,
+            diagnostics: vec![],
+            stats: Some(TheoryStats {
+                rule_count: prepared.theory.rule_count(),
+                fact_count: prepared.theory.facts().count(),
+            }),
+        };
+
+        Ok(serde_wasm_bindgen::to_value(&output)?)
+    }
+
+    /// Perform reasoning and return v2 structured JSON output with typed term arguments
+    #[wasm_bindgen(js_name = reasonV2)]
+    pub fn reason_v2(&self) -> Result<JsValue, JsError> {
+        let prepared = prepare(&self.theory, PrepareOptions::default())
+            .map_err(|e| JsError::new(&e.to_string()))?;
+
+        let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
+
+        let mut output_conclusions: Vec<ConclusionEntryV2> = conclusions
+            .iter()
+            .map(|c| ConclusionEntryV2 {
+                conclusion_type: c.conclusion_type.symbol().to_string(),
+                literal_spl: c.literal.to_spl(),
+                literal_struct: LiteralStructJsonV2::from(&c.literal),
+                positive: c.conclusion_type.is_positive(),
+                trust_degree: None,
+                trust_sources: None,
+            })
+            .collect();
+        output_conclusions.sort_by(|a, b| {
+            a.literal_spl
+                .cmp(&b.literal_spl)
+                .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
+        });
+
+        let output = ReasonOutputV2 {
+            schema_version: SCHEMA_V2.to_string(),
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
             grounding: GroundingStats {
                 performed: prepared.grounding_report.performed,

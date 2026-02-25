@@ -53,7 +53,10 @@ fn main() {
 
     // Determine schema version and json flag based on the command before we move out of cli.command
     let (schema_version, json_flag) = match &cli.command {
-        Commands::Reason { json, .. } => (Some("spindle.reason.v1"), *json || cli.json),
+        Commands::Reason { json, v2, .. } => {
+            let ver = if *v2 { "spindle.reason.v2" } else { "spindle.reason.v1" };
+            (Some(ver), *json || cli.json)
+        }
         Commands::Query { json, .. } => (Some("spindle.query.v1"), *json || cli.json),
         Commands::Explain { json, .. } => (Some("spindle.explain.v1"), *json || cli.json),
         Commands::WhyNot { json, .. } => (Some("spindle.why_not.v1"), *json || cli.json),
@@ -89,6 +92,7 @@ fn main() {
             positive,
             json: _,
             trust,
+            v2,
         } => reason::run_reason(
             file.as_ref(),
             positive,
@@ -96,6 +100,7 @@ fn main() {
             cli.stdin,
             reference_time,
             trust,
+            v2,
         ),
         Commands::Validate { file, stdin } => {
             validate::run_validate(file.as_ref(), stdin || cli.stdin, json_flag)
