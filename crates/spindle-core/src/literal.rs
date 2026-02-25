@@ -319,19 +319,12 @@ impl Literal {
     ///
     /// Symbol terms are resolved to their interned string; non-symbol terms
     /// (Integer, Decimal, Float) use their `Display` representation.
-    pub fn predicates(&self) -> Vec<&'static str> {
+    pub fn predicates(&self) -> Vec<String> {
         self.predicate_args
             .iter()
             .map(|t| match t {
-                Term::Symbol(id) => resolve(*id),
-                // Leak a short string for non-symbol terms so the return type
-                // stays `&'static str` (same as the symbol branch).  These are
-                // rare in practice; the majority of call sites that care about
-                // efficiency should use `predicate_args()` instead.
-                other => {
-                    let s = other.to_string();
-                    Box::leak(s.into_boxed_str()) as &'static str
-                }
+                Term::Symbol(id) => resolve(*id).to_string(),
+                other => other.to_string(),
             })
             .collect()
     }
@@ -692,7 +685,7 @@ mod tests {
         );
 
         let preds = lit.predicates();
-        assert_eq!(preds, vec!["alice", "bob"]);
+        assert_eq!(preds, vec!["alice".to_string(), "bob".to_string()]);
     }
 
     #[test]

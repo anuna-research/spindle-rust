@@ -51,7 +51,7 @@ impl PipelineStage for Validate {
 fn validate_wildcards(theory: &Theory) -> Result<()> {
     for rule in theory.rules() {
         for head in &rule.head {
-            if head.name() == "_" || head.predicates().contains(&"_") {
+            if head.name() == "_" || head.predicates().iter().any(|p| p == "_") {
                 return Err(SpindleError::Validation {
                     message: format!("Wildcard '_' found in rule head: {}", rule.label),
                 });
@@ -70,8 +70,8 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
                 body_vars.insert(lit.name().to_string());
             }
             for pred in lit.predicates() {
-                if is_variable(pred) {
-                    body_vars.insert(pred.to_string());
+                if is_variable(&pred) {
+                    body_vars.insert(pred);
                 }
             }
             // Variables introduced by bind constraints are also body variables.
@@ -95,7 +95,7 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
                 });
             }
             for pred in lit.predicates() {
-                if is_variable(pred) && !body_vars.contains(pred) {
+                if is_variable(&pred) && !body_vars.contains(&pred) {
                     return Err(SpindleError::Validation {
                         message: format!(
                             "Unsafe rule '{}': variable {} in head but not in body",

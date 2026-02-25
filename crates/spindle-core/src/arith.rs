@@ -700,6 +700,17 @@ fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, Ari
 // ---------------------------------------------------------------------------
 
 impl ArithExpr {
+    /// Returns `true` if the expression tree contains any variable references.
+    pub fn has_variables(&self) -> bool {
+        match self {
+            ArithExpr::Var(_) => true,
+            ArithExpr::Lit(_) => false,
+            ArithExpr::NaryOp { args, .. } => args.iter().any(|a| a.has_variables()),
+            ArithExpr::BinOp { lhs, rhs, .. } => lhs.has_variables() || rhs.has_variables(),
+            ArithExpr::UnaryOp { expr, .. } => expr.has_variables(),
+        }
+    }
+
     /// Evaluate this expression under the given substitution.
     ///
     /// Returns the resulting numeric value, or an error if evaluation fails

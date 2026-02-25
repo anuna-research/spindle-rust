@@ -338,7 +338,7 @@ fn test_trust_preserved_through_grounding() {
         .find(|wc| {
             wc.literal.name() == "q"
                 && wc.conclusion_type == ConclusionType::DefeasiblyProvable
-                && wc.literal.predicates().contains(&"a")
+                && wc.literal.predicates().iter().any(|s| s == "a")
         })
         .expect("+d q(a) should exist");
     assert!(

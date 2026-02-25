@@ -38,7 +38,12 @@ fn has_defeasible_with_args(
     conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == name
-            && c.literal.predicates() == args
+            && c.literal
+                .predicates()
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                == args
     })
 }
 
@@ -408,7 +413,7 @@ fn test_006_1_temporal_arithmetic_salary_bands() {
     let has_senior_earner = conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == "senior-earner"
-            && c.literal.predicates().contains(&"alice")
+            && c.literal.predicates().iter().any(|s| s == "alice")
     });
     assert!(
         has_senior_earner,

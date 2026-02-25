@@ -26,7 +26,12 @@ fn has_defeasible_with_args(
     conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == name
-            && c.literal.predicates() == args
+            && c.literal
+                .predicates()
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                == args
     })
 }
 
@@ -185,7 +190,7 @@ fn section_9_3_temporal_arithmetic_salary_bands() {
 
     let senior = &senior_conclusions[0];
     assert!(
-        senior.literal.predicates().contains(&"alice"),
+        senior.literal.predicates().iter().any(|s| s == "alice"),
         "Expected senior-earner(alice)"
     );
 }

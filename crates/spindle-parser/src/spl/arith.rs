@@ -170,8 +170,13 @@ fn parse_arith_atom(name: &str, line: usize) -> Result<ArithExpr, ParseError> {
         return Ok(ArithExpr::Lit(NumericValue::Decimal(d)));
     }
 
-    // Try float (scientific notation or other float formats)
-    if let Ok(f) = name.parse::<f64>() {
+    // Try float (scientific notation or other float formats).
+    // Only attempt f64 parse if the token syntactically looks like a float
+    // (contains '.', 'e', or 'E'). This prevents oversized bare integers
+    // from silently losing precision via f64 conversion.
+    if (name.contains('.') || name.contains('e') || name.contains('E'))
+        && let Ok(f) = name.parse::<f64>()
+    {
         if f.is_finite() {
             return Ok(ArithExpr::Lit(NumericValue::Float(f)));
         }

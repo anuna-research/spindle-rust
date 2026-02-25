@@ -244,21 +244,15 @@ impl BodyLogicLiteral {
     ///
     /// Term arguments are resolved to their interned string; arithmetic
     /// expressions use their Display representation.
-    pub fn predicates(&self) -> Vec<&'static str> {
+    pub fn predicates(&self) -> Vec<String> {
         self.predicate_args
             .iter()
             .map(|a| match a {
                 BodyArg::Term(t) => match t {
-                    Term::Symbol(id) => crate::intern::resolve(*id),
-                    other => {
-                        let s = other.to_string();
-                        Box::leak(s.into_boxed_str()) as &'static str
-                    }
+                    Term::Symbol(id) => crate::intern::resolve(*id).to_string(),
+                    other => other.to_string(),
                 },
-                BodyArg::Arith(expr) => {
-                    let s = expr.to_string();
-                    Box::leak(s.into_boxed_str()) as &'static str
-                }
+                BodyArg::Arith(expr) => expr.to_string(),
             })
             .collect()
     }
@@ -521,7 +515,7 @@ impl BodyLiteral {
     }
 
     /// Get predicates as strings (logic literals only; returns empty for arithmetic).
-    pub fn predicates(&self) -> Vec<&'static str> {
+    pub fn predicates(&self) -> Vec<String> {
         match self {
             BodyLiteral::Logic(lit) => lit.predicates(),
             BodyLiteral::Arithmetic(_) => Vec::new(),

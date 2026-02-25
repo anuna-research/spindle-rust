@@ -70,8 +70,18 @@ pub fn literal_has_variables(lit: &Literal) -> bool {
 fn body_literal_has_variables(bl: &BodyLiteral) -> bool {
     match bl {
         BodyLiteral::Logic(lit) => {
-            let as_lit = lit.to_literal();
-            literal_has_variables(&as_lit)
+            is_variable(lit.name())
+                || lit.predicate_args().iter().any(|a| match a {
+                    BodyArg::Term(t) => {
+                        if let Term::Symbol(id) = t {
+                            is_variable(resolve(*id))
+                        } else {
+                            false
+                        }
+                    }
+                    BodyArg::Arith(expr) => expr.has_variables(),
+                })
+                || lit.has_temporal_variables()
         }
         BodyLiteral::Arithmetic(_) => true, // arithmetic constraints always contain variables
     }
@@ -645,6 +655,10 @@ fn match_body_with_delta(
     // Build a set of delta fact keys for efficient membership testing
     let delta_keys: FxHashSet<_> = delta_facts.iter().map(literal_key).collect();
 
+    // If body has no logic literals, arithmetic-only bodies are always delta-relevant
+    // (the rule is essentially a ground generator).
+    let has_logic_literals = body.iter().any(|bl| matches!(bl, BodyLiteral::Logic(_)));
+
     let mut results = Vec::new();
     let mut seen: FxHashSet<SubstitutionKey> = FxHashSet::default();
 
@@ -656,7 +670,7 @@ fn match_body_with_delta(
         &Substitution::default(),
         false,
     ) {
-        if used_delta {
+        if used_delta || !has_logic_literals {
             let key = substitution_key(&subst);
             if !seen.contains(&key) {
                 seen.insert(key);
@@ -1020,7 +1034,10 @@ mod tests {
             .insert(intern("?y"), Term::Symbol(intern("bob")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates(), vec!["alice", "bob"]);
+        assert_eq!(
+            result.predicates(),
+            vec!["alice".to_string(), "bob".to_string()]
+        );
     }
 
     #[test]
@@ -1068,9 +1085,10 @@ mod tests {
         // Check that grounded rule exists
         let has_grounded = grounded.rules().any(|r| {
             r.label.starts_with("r1_")
-                && r.head
-                    .iter()
-                    .any(|h| h.name() == "ancestor" && h.predicates() == vec!["alice", "bob"])
+                && r.head.iter().any(|h| {
+                    h.name() == "ancestor"
+                        && h.predicates() == vec!["alice".to_string(), "bob".to_string()]
+                })
         });
         assert!(has_grounded);
     }
@@ -1139,7 +1157,7 @@ mod tests {
             r.label.starts_with("r2_")
                 && r.head
                     .iter()
-                    .any(|h| h.name() == "r" && h.predicates() == vec!["a"])
+                    .any(|h| h.name() == "r" && h.predicates() == vec!["a".to_string()])
         });
         assert!(
             has_r2_grounded,
@@ -1367,7 +1385,7 @@ mod tests {
 
         let result = apply_substitution_to_literal(&lit, &subst);
         assert_eq!(result.name(), "parent");
-        assert_eq!(result.predicates(), vec!["alice"]);
+        assert_eq!(result.predicates(), vec!["alice".to_string()]);
     }
 
     #[test]
@@ -1434,9 +1452,10 @@ mod tests {
 
         // Should have grandparent(alice, carol)
         let has_grandparent = grounded.rules().any(|r| {
-            r.head
-                .iter()
-                .any(|h| h.name() == "grandparent" && h.predicates() == vec!["alice", "carol"])
+            r.head.iter().any(|h| {
+                h.name() == "grandparent"
+                    && h.predicates() == vec!["alice".to_string(), "carol".to_string()]
+            })
         });
         assert!(
             has_grandparent,
@@ -1599,8 +1618,9 @@ mod tests {
         subst.terms.insert(x_id, Term::Symbol(intern("value")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates()[0], "constant");
-        assert_eq!(result.predicates()[1], "value");
+        let preds = result.predicates();
+        assert_eq!(preds[0], "constant");
+        assert_eq!(preds[1], "value");
     }
 
     #[test]
@@ -1875,7 +1895,9 @@ mod tests {
                 && r.rule_type == RuleType::Fact
                 && r.body.is_empty()
                 && r.head.iter().any(|h| {
-                    h.name() == "p" && h.predicates() == vec!["a"] && h.temporal_expr.is_some()
+                    h.name() == "p"
+                        && h.predicates() == vec!["a".to_string()]
+                        && h.temporal_expr.is_some()
                 })
         });
 
@@ -2027,7 +2049,7 @@ mod tests {
             r.label.starts_with("r1_")
                 && r.head
                     .iter()
-                    .any(|h| h.name() == "paid" && h.predicates() == vec!["alice"])
+                    .any(|h| h.name() == "paid" && h.predicates() == vec!["alice".to_string()])
         });
         assert!(
             has_grounded_r1,
@@ -2196,7 +2218,7 @@ mod tests {
         subst.temporal.insert(intern("?t2"), TimePoint::Moment(200));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates(), vec!["alice"]);
+        assert_eq!(result.predicates(), vec!["alice".to_string()]);
         assert!(result.temporal_expr.is_none(), "Should be fully resolved");
         assert_eq!(result.temporal.start, TimePoint::Moment(100));
         assert_eq!(result.temporal.end, TimePoint::Moment(200));
@@ -2297,7 +2319,7 @@ mod tests {
             r.label.starts_with("r1_")
                 && r.head.iter().any(|h| {
                     h.name() == "q"
-                        && h.predicates() == vec!["a"]
+                        && h.predicates() == vec!["a".to_string()]
                         && h.temporal.start == TimePoint::Moment(100)
                         && h.temporal.end == TimePoint::Moment(200)
                         && h.temporal_expr.is_none()

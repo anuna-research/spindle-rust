@@ -28,7 +28,7 @@ fn test_spl_parse_temporal_variable_during() {
 
     let head = facts[0].head_literal();
     assert_eq!(head.name(), "p");
-    assert_eq!(head.predicates(), vec!["a"]);
+    assert_eq!(head.predicates(), vec!["a".to_string()]);
     assert!(
         head.has_temporal_variables(),
         "Parsed temporal variable should produce temporal_expr"
@@ -115,7 +115,7 @@ fn test_grounding_temporal_variable_propagation_simple() {
 
     let grounded_head = grounded_rule.head_literal();
     assert_eq!(grounded_head.name(), "q");
-    assert_eq!(grounded_head.predicates(), vec!["a"]);
+    assert_eq!(grounded_head.predicates(), vec!["a".to_string()]);
     assert!(
         !grounded_head.has_temporal_variables(),
         "Temporal variables should be fully resolved"
@@ -263,7 +263,7 @@ fn test_grounding_chain_temporal_propagation() {
         r.label.starts_with("r2_")
             && r.head.iter().any(|h| {
                 h.name() == "r"
-                    && h.predicates() == vec!["a"]
+                    && h.predicates() == vec!["a".to_string()]
                     && h.temporal.start == TimePoint::Moment(100)
                     && h.temporal.end == TimePoint::Moment(200)
             })
@@ -452,7 +452,7 @@ fn test_spl_end_to_end_temporal_variable_propagation() {
         })
         .expect("Should derive authorized(alice)");
 
-    assert_eq!(authorized.literal.predicates(), vec!["alice"]);
+    assert_eq!(authorized.literal.predicates(), vec!["alice".to_string()]);
     assert_eq!(authorized.literal.temporal.start, TimePoint::Moment(1000));
     assert_eq!(authorized.literal.temporal.end, TimePoint::Moment(2000));
 }
