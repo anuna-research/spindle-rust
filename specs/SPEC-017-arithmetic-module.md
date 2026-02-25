@@ -18,7 +18,7 @@
 
 Spindle currently treats all terms as opaque interned symbols. There is no numeric type, no arithmetic evaluation, and no way to express constraints such as "cost exceeds threshold" or "total equals sum of parts" within a theory. This limits applicability to purely qualitative reasoning.
 
-This specification adds **built-in arithmetic** to SPL: numeric terms, arithmetic expressions in Polish (prefix) notation, and built-in arithmetic predicates (`is`, comparisons). Arithmetic operators (`+`, `-`, `*`, `/`, `<`, `>`, `=`, etc.) and `is` are **reserved keywords**, consistent with every major logic programming language (Prolog, Datalog, ASP). No opt-in directive is required. All arithmetic expressions use S-expression prefix notation consistent with SPL's existing syntax — no new notation forms are introduced.
+This specification adds **built-in arithmetic** to SPL: numeric terms, arithmetic expressions in Polish (prefix) notation, and built-in arithmetic predicates (`bind`, comparisons). Arithmetic operators (`+`, `-`, `*`, `/`, `<`, `>`, `=`, etc.) and `bind` are **reserved keywords**. No opt-in directive is required. All arithmetic expressions use S-expression prefix notation consistent with SPL's existing syntax — no new notation forms are introduced.
 
 ### Scope
 
@@ -93,7 +93,7 @@ The system SHALL accept arithmetic expressions as terms in predicate argument po
 ```lisp
 ; (+ ?x ?y) is an arithmetic expression term
 (normally r1
-  (and (price ?item ?p) (tax-rate ?r) (is ?tax (* ?p ?r)))
+  (and (price ?item ?p) (tax-rate ?r) (bind ?tax (* ?p ?r)))
   (tax ?item ?tax))
 ```
 
@@ -109,21 +109,21 @@ Trace:
 
 ---
 
-### REQ-003: `is` Binding Predicate
+### REQ-003: `bind` Binding Predicate
 
-The system SHALL provide a built-in `is` predicate of the form `(is ?var <expr>)` that binds the variable `?var` to the result of evaluating `<expr>` under the current substitution.
+The system SHALL provide a built-in `bind` predicate of the form `(bind ?var <expr>)` that binds the variable `?var` to the result of evaluating `<expr>` under the current substitution. The keyword `bind` is chosen over Prolog's `is` because it unambiguously communicates single-assignment binding without implying equality testing, and follows the precedent of CLIPS and Jess rule engines which use `(bind ?var ...)` with identical syntax and semantics.
 
 - `?var` MUST be an unbound variable in the current substitution context.
-- `<expr>` may reference only variables already bound by preceding body literals/constraints; otherwise the `is` literal fails (the rule body does not fire).
-- `is` MUST appear in rule bodies only; it is a parse error to use `is` as a rule head.
-- On arithmetic error (division by zero, overflow), the `is` literal fails silently (the rule body does not fire for that grounding).
+- `<expr>` may reference only variables already bound by preceding body literals/constraints; otherwise the `bind` literal fails (the rule body does not fire).
+- `bind` MUST appear in rule bodies only; it is a parse error to use `bind` as a rule head.
+- On arithmetic error (division by zero, overflow), the `bind` literal fails silently (the rule body does not fire for that grounding).
 
 ```lisp
 (given (price widget 80))
 (given (quantity order-1 5))
 
 (normally r1
-  (and (price ?item ?p) (quantity ?order ?q) (is ?total (* ?p ?q)))
+  (and (price ?item ?p) (quantity ?order ?q) (bind ?total (* ?p ?q)))
   (order-total ?order ?total))
 
 ; Derived: +d order-total(order-1, 400)
@@ -214,7 +214,7 @@ Trace:
 
 ### REQ-007: Arithmetic Predicates are Body-only Guards
 
-The system SHALL ensure that arithmetic predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are body-only guards: they generate no `RuleLabel`, do not participate in superiority declarations, and do not appear in the conclusions set.
+The system SHALL ensure that arithmetic predicates (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are body-only guards: they generate no `RuleLabel`, do not participate in superiority declarations, and do not appear in the conclusions set.
 
 Trace:
 - TEST-007
@@ -223,7 +223,7 @@ Trace:
 
 ### REQ-008: Reserved Arithmetic Keywords
 
-The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `is` binding predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names, rule labels, or labels in `(prefer ...)` declarations. This matches the convention of Prolog, Datalog, and ASP, where arithmetic is part of the core language.
+The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `bind` predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names, rule labels, or labels in `(prefer ...)` declarations.
 
 Trace:
 - TEST-008
@@ -236,7 +236,7 @@ The system SHALL emit a parse error if an arithmetic predicate or an arithmetic 
 
 ```lisp
 ; ILLEGAL — arithmetic predicate in rule head position
-(normally r1 some-fact (is ?x 5))
+(normally r1 some-fact (bind ?x 5))
 
 ; ILLEGAL — comparison predicate in rule head position
 (normally r1 some-fact (> ?x 0))
@@ -244,8 +244,8 @@ The system SHALL emit a parse error if an arithmetic predicate or an arithmetic 
 ; ILLEGAL — arithmetic expression as argument in rule head
 (given (cost (+ 3 4)))
 
-; LEGAL — is in body position (correct per REQ-003)
-(normally r1 (is ?x (+ 1 2)) result)
+; LEGAL — bind in body position (correct per REQ-003)
+(normally r1 (bind ?x (+ 1 2)) result)
 ```
 
 Trace:
@@ -268,7 +268,7 @@ Trace:
 
 ### NFR-002: Overflow Safety
 
-Arithmetic operations on integer operands SHALL never panic. On overflow, the operation SHALL fail silently (the `is` predicate fails, comparison predicates fail). Overflow detection SHALL use checked arithmetic (`i64::checked_add`, etc.).
+Arithmetic operations on integer operands SHALL never panic. On overflow, the operation SHALL fail silently (the `bind` predicate fails, comparison predicates fail). Overflow detection SHALL use checked arithmetic (`i64::checked_add`, etc.).
 
 Rationale: Spindle is used in policy and contract reasoning where panics are unacceptable. Arithmetic failures must degrade gracefully.
 
@@ -289,13 +289,13 @@ The arithmetic module implementation SHALL contain no `unsafe` blocks.
 
 **Context**: Arithmetic predicates could be evaluated at parse time, grounding time, or reasoning time.
 
-**Decision**: Arithmetic predicates are evaluated during the **grounding phase**, immediately after term substitution for each candidate substitution path. `is`/comparison literals and arithmetic expression arguments are resolved while processing the rule body in source order (ADR-001b). If arithmetic evaluation fails, that substitution path is discarded.
+**Decision**: Arithmetic predicates are evaluated during the **grounding phase**, immediately after term substitution for each candidate substitution path. `bind`/comparison literals and arithmetic expression arguments are resolved while processing the rule body in source order (ADR-001b). If arithmetic evaluation fails, that substitution path is discarded.
 
 **Rationale**:
 - The grounding phase already performs substitution lookups; arithmetic evaluation is a natural extension.
 - Evaluating at reasoning time would require the reasoning loop to understand types, coupling it to the arithmetic module.
 - Evaluating at parse time is not possible for rules with variables.
-- This matches Prolog's `is/2` and SWI-Prolog constraint semantics.
+- This is analogous to Prolog's `is/2` evaluation model.
 
 **Trade-offs**:
 - Arithmetic is not available during abduction (which works backward from goals). Abduction with arithmetic constraints is deferred to a future spec.
@@ -315,13 +315,13 @@ The arithmetic module implementation SHALL contain no `unsafe` blocks.
 
 For each body element in order:
 - `BodyLiteral::Logic`: evaluate any `BodyArg::Arith` arguments under the current substitution, then match the resulting literal pattern against candidate facts to extend/filter substitutions.
-- `BodyLiteral::Arithmetic`: evaluate `is`/comparison under the current substitution to extend/filter substitutions.
+- `BodyLiteral::Arithmetic`: evaluate `bind`/comparison under the current substitution to extend/filter substitutions.
 
 Each step sees bindings produced by all preceding steps in the same body.
 
-**Rationale**: Source-order evaluation is predictable and matches Prolog's `is/2` convention. Users naturally write binding-producing literals before dependent constraints, expecting left-to-right visibility. A model that batches all logic before arithmetic would break valid dependent forms and produce confusing failures.
+**Rationale**: Source-order evaluation is predictable. Users naturally write binding-producing literals before dependent constraints, expecting left-to-right visibility. A model that batches all logic before arithmetic would break valid dependent forms and produce confusing failures.
 
-**Consequence**: The grounding implementation MUST preserve source order of all body elements and thread substitutions through each step. This is tested by TEST-004 scenarios 9 and 10 (chained `is` + comparison in both valid and invalid orders).
+**Consequence**: The grounding implementation MUST preserve source order of all body elements and thread substitutions through each step. This is tested by TEST-004 scenarios 9 and 10 (chained `bind` + comparison in both valid and invalid orders).
 
 **Rejected alternative**: *Dependency-graph ordering* — infer order from variable dependencies. More powerful but significantly more complex to implement and reason about.
 
@@ -369,7 +369,7 @@ In parsed rule bodies, arithmetic expressions may appear in `BodyLiteral::Arithm
 
 **Context**: SPL already uses S-expression syntax (parenthesised prefix lists). Arithmetic expressions must be distinguishable from predicate applications.
 
-**Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`) and built-in predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are **always reserved keywords**. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
+**Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`) and built-in predicates (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are **always reserved keywords**. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
 
 This means:
 - `(+ ?x ?y)` in argument position → `ArithExpr::BinOp(Add, Var(?x), Var(?y))`
@@ -378,7 +378,7 @@ This means:
 The lexer requires targeted additions. The current `parse_atom` in `lexer.rs` accepts `+` but not `*`, `/`, `<`, `>`, `=`, or `!`. These characters must be added to the atom character set so that operator tokens such as `*`, `/`, `<=`, `>=`, `!=`, and `**` are lexed. Adding them to `parse_atom` is sufficient; no dedicated token types are required. The expression dispatcher then gains awareness of which atom values are reserved arithmetic operator keywords and dispatches accordingly. The `+` operator already lexes correctly.
 
 **Trade-offs**:
-- Theories that previously used `+`, `-`, `*`, `/`, `<`, `>`, `=`, or `is` as standalone predicate names or as rule labels will break. These names are now reserved, consistent with Prolog and other logic languages. This is considered acceptable — using operator characters as predicate names/labels is rare and confusing. Multi-character atoms containing these characters (e.g., `high-earner`, `c++test`) are unaffected, since reservation applies only to standalone reserved tokens.
+- Theories that previously used `+`, `-`, `*`, `/`, `<`, `>`, `=`, or `bind` as standalone predicate names or as rule labels will break. These names are now reserved, consistent with Prolog and other logic languages. This is considered acceptable — using operator characters as predicate names/labels is rare and confusing. Multi-character atoms containing these characters (e.g., `high-earner`, `c++test`) are unaffected, since reservation applies only to standalone reserved tokens.
 
 ---
 
@@ -480,10 +480,10 @@ Verified by: TEST-002, TEST-005
 
 ---
 
-### CON-003: `is` Predicate Interface
+### CON-003: `bind` Predicate Interface
 
 ```
-Syntax:        (is <variable> <arith-expr>)
+Syntax:        (bind <variable> <arith-expr>)
 Position:      Rule body only (parse error in head position)
 Pre-conditions:
   - <variable> must be a ?-prefixed variable identifier
@@ -495,11 +495,11 @@ Post-conditions:
   - If any variable referenced in <arith-expr> is unbound: grounding instance is discarded
   - If arithmetic error occurs (division by zero, overflow, type mismatch for div/rem):
       grounding instance is discarded (silent failure)
-  - The `is` literal itself does not appear in the conclusions set
+  - The `bind` literal itself does not appear in the conclusions set
 Errors (parse time):
-  - `(is ...)` with non-variable first argument: parse error
-  - `(is ...)` with non-expression second argument: parse error
-  - `(is ...)` in a rule head position: parse error
+  - `(bind ...)` with non-variable first argument: parse error
+  - `(bind ...)` with non-expression second argument: parse error
+  - `(bind ...)` in a rule head position: parse error
 ```
 
 Implements: REQ-003
@@ -599,13 +599,13 @@ pub struct Substitution {
    - `BodyArg::Arith(ArithExpr)` within `BodyLiteral::Logic`.
    This is necessary because the same rule is grounded repeatedly for different substitutions, so expression trees must be retained.
 
-2. **Ground literals**: `ArithExpr` is **never stored** in ground `Literal` instances or the conclusions set. After grounding evaluates an `is` predicate or arithmetic guard, the resulting `Term::Integer`, `Term::Decimal`, or `Term::Float` is stored in the substitution map, and only ground `Term` values appear in ground literals.
+2. **Ground literals**: `ArithExpr` is **never stored** in ground `Literal` instances or the conclusions set. After grounding evaluates a `bind` predicate or arithmetic guard, the resulting `Term::Integer`, `Term::Decimal`, or `Term::Float` is stored in the substitution map, and only ground `Term` values appear in ground literals.
 
 In summary: `ArithExpr` is stored at the rule/theory level (in `BodyLiteral`/`BodyArg`), but never at the ground literal level. `ArithExpr` does not flow into ground `Literal::predicate_args` or the reasoning engine's conclusions.
 
 ### 7.4 Arithmetic Literal Representation in the Theory
 
-Built-in arithmetic predicates (`is`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are represented in parsed rule bodies as a new variant of a `BodyLiteral` enum (or equivalent type). This separates them from user-defined literals at the type level and makes their special treatment in grounding explicit, without coupling them to the core `Literal` type.
+Built-in arithmetic predicates (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are represented in parsed rule bodies as a new variant of a `BodyLiteral` enum (or equivalent type). This separates them from user-defined literals at the type level and makes their special treatment in grounding explicit, without coupling them to the core `Literal` type.
 
 ```rust
 pub enum BodyArg {
@@ -629,7 +629,7 @@ pub enum BodyLiteral {
 }
 
 pub enum ArithConstraint {
-    Is { var: SymbolId, expr: ArithExpr },
+    Bind { var: SymbolId, expr: ArithExpr },
     Compare { op: CmpOp, lhs: ArithExpr, rhs: ArithExpr },
 }
 
@@ -647,7 +647,7 @@ The following arithmetic forms are valid in rule bodies:
 | Form | Meaning | Example |
 |---|---|---|
 | Numeric literal term | Integer, decimal, or float constant | `(given (cost item 42))` |
-| `(is ?v <expr>)` | Bind `?v` to evaluated `<expr>` | `(is ?tax (* ?price 0.1))` |
+| `(bind ?v <expr>)` | Bind `?v` to evaluated `<expr>` | `(bind ?tax (* ?price 0.1))` |
 | `(= <e1> <e2>)` | Numeric equality guard | `(= ?x 0)` |
 | `(!= <e1> <e2>)` | Numeric inequality guard | `(!= ?a ?b)` |
 | `(< <e1> <e2>)` | Less-than guard | `(< ?age 18)` |
@@ -680,15 +680,15 @@ The following arithmetic forms are valid in rule bodies:
 
 ; Rules
 (normally r1
-  (and (unit-price ?item ?p) (quantity ?order ?q) (is ?subtotal (* ?p ?q)))
+  (and (unit-price ?item ?p) (quantity ?order ?q) (bind ?subtotal (* ?p ?q)))
   (subtotal ?order ?subtotal))
 
 (normally r2
-  (and (subtotal ?order ?s) (tax-rate standard ?r) (is ?tax (* ?s ?r)))
+  (and (subtotal ?order ?s) (tax-rate standard ?r) (bind ?tax (* ?s ?r)))
   (tax ?order ?tax))
 
 (normally r3
-  (and (subtotal ?order ?s) (tax ?order ?t) (is ?total (+ ?s ?t)))
+  (and (subtotal ?order ?s) (tax ?order ?t) (bind ?total (+ ?s ?t)))
   (total ?order ?total))
 ```
 
@@ -716,7 +716,7 @@ Expected conclusions (after grounding and reasoning):
 
 ; With bonus, adjust effective score
 (normally r-bonus
-  (and (score ?s ?n) (bonus ?s ?b) (is ?adj (+ ?n ?b)))
+  (and (score ?s ?n) (bonus ?s ?b) (bind ?adj (+ ?n ?b)))
   (effective-score ?s ?adj))
 
 ; Override: use effective score if available
@@ -760,7 +760,7 @@ Expected:
 (given (amount x 0.1))
 (given (amount y 0.2))
 (normally r1
-  (and (amount x ?a) (amount y ?b) (is ?sum (+ ?a ?b)))
+  (and (amount x ?a) (amount y ?b) (bind ?sum (+ ?a ?b)))
   (total ?sum))
 
 ; Derived: +d total(0.3)  — exact, not 0.30000000000000004
@@ -769,7 +769,7 @@ Expected:
 (given (shares total 10))
 (given (parties count 3))
 (normally r2
-  (and (shares total ?n) (parties count ?d) (is ?each (/ ?n ?d)))
+  (and (shares total ?n) (parties count ?d) (bind ?each (/ ?n ?d)))
   (share-per-party ?each))
 
 ; Derived: +d share-per-party(3.3333333333333333333333333333)
@@ -792,7 +792,7 @@ Expected:
 7. Integer and symbol as separate arguments: `(given (indexed item-a 1))` — parses correctly.
 8. Integer that overflows i64 — parse error with source position.
 9. Decimal that exceeds 29 significant digits (e.g., `123456789012345678901234567890.0`) — parse error with source position.
-10. Decimal rounding: `(is ?z (/ 10 3))` → `Decimal(3.3333333333333333333333333333)` — 28 fractional digits, round-half-even applied.
+10. Decimal rounding: `(bind ?z (/ 10 3))` → `Decimal(3.3333333333333333333333333333)` — 28 fractional digits, round-half-even applied.
 
 Verifies: REQ-001, CON-001
 
@@ -812,16 +812,16 @@ Verifies: REQ-002, CON-002
 
 ---
 
-### TEST-003: `is` Predicate Binding
+### TEST-003: `bind` Predicate Binding
 
 **Scenarios**:
-1. `(is ?z (+ ?x ?y))` with `?x=3, ?y=4` bound → `?z` binds to `7`
-2. `(is ?z (+ ?x ?y))` with `?y` unbound → grounding discarded (no conclusion)
-3. `(is ?z (/ 10 0))` → division by zero; grounding discarded
-4. `(is ?z (** 2 62))` → `z = 4611686018427387904` (within i64)
-5. `(is ?z (** 2 63))` → overflow; grounding discarded
-6. `is` in rule head position → parse error
-7. `is` with non-variable first argument `(is 5 (+ 2 3))` → parse error
+1. `(bind ?z (+ ?x ?y))` with `?x=3, ?y=4` bound → `?z` binds to `7`
+2. `(bind ?z (+ ?x ?y))` with `?y` unbound → grounding discarded (no conclusion)
+3. `(bind ?z (/ 10 0))` → division by zero; grounding discarded
+4. `(bind ?z (** 2 62))` → `z = 4611686018427387904` (within i64)
+5. `(bind ?z (** 2 63))` → overflow; grounding discarded
+6. `bind` in rule head position → parse error
+7. `bind` with non-variable first argument `(bind 5 (+ 2 3))` → parse error
 
 Verifies: REQ-003, CON-003
 
@@ -840,8 +840,8 @@ Verifies: REQ-003, CON-003
 6. Mixed types: `(> 10 9.5)` → integer promoted to decimal; retained
 7. Comparison in rule head position → parse error
 8. Unbound variable in comparison → grounding discarded
-9. Chained order-dependent constraints: `(and (is ?x (+ 2 3)) (> ?x 4))` → retained
-10. Reversed dependent order: `(and (> ?x 4) (is ?x (+ 2 3)))` → discarded (`?x` unbound at comparison time)
+9. Chained order-dependent constraints: `(and (bind ?x (+ 2 3)) (> ?x 4))` → retained
+10. Reversed dependent order: `(and (> ?x 4) (bind ?x (+ 2 3)))` → discarded (`?x` unbound at comparison time)
 
 Verifies: REQ-004, CON-004
 
@@ -886,8 +886,8 @@ Verifies: REQ-006
 ### TEST-007: Arithmetic Predicates Cannot Appear in Superiority
 
 **Scenarios**:
-1. `(prefer is r1)` → parse error ("'is' is a reserved arithmetic keyword and cannot be used as a rule label").
-2. Arithmetic guard literals do not produce conclusions (e.g., from `(normally r1 (and (p) (> 1 0)) (q))`, conclusions include `q` but never include a literal named `>` or `is`).
+1. `(prefer bind r1)` → parse error ("'bind' is a reserved arithmetic keyword and cannot be used as a rule label").
+2. Arithmetic guard literals do not produce conclusions (e.g., from `(normally r1 (and (p) (> 1 0)) (q))`, conclusions include `q` but never include a literal named `>` or `bind`).
 
 Verifies: REQ-007
 
@@ -897,9 +897,9 @@ Verifies: REQ-007
 
 **Scenarios**:
 1. `(normally r1 (+ ?x ?y) result)` where `+` is used as a predicate name → parse error ("'+' is a reserved arithmetic operator")
-2. `(normally r1 body (is ?x 5))` where `is` is in head position → parse error
+2. `(normally r1 body (bind ?x 5))` where `bind` is in head position → parse error
 3. `(given (cost (+ 3 4)))` where arithmetic expression appears in fact argument → parse error (arithmetic expression in head/fact position)
-4. `(normally is body result)` where `is` is used as a rule label → parse error ("'is' is reserved")
+4. `(normally bind body result)` where `bind` is used as a rule label → parse error ("'bind' is reserved")
 5. `(prefer r1 +)` where `+` is used as a rule label in superiority → parse error ("'+' is reserved")
 
 Verifies: REQ-008
@@ -909,7 +909,7 @@ Verifies: REQ-008
 ### TEST-009: No Arithmetic in Rule Heads
 
 **Scenarios**:
-1. `(normally r1 body (is ?x 5))` → parse error
+1. `(normally r1 body (bind ?x 5))` → parse error
 2. `(normally r1 body (> ?x 0))` → parse error
 3. `(normally r1 body (cost item (+ 1 2)))` → parse error (arithmetic expression in head argument)
 
@@ -919,7 +919,7 @@ Verifies: REQ-009
 
 ### TEST-NFR-001: Grounding Performance Baseline
 
-**Setup**: Generate a theory with 500 facts, 200 defeasible rules with 3-literal bodies including arithmetic `is` and comparison predicates.
+**Setup**: Generate a theory with 500 facts, 200 defeasible rules with 3-literal bodies including arithmetic `bind` and comparison predicates.
 
 **Assertion**: The **grounding phase only** (fact indexing + substitution + arithmetic constraint evaluation, excluding the defeasible reasoning loop) completes in ≤ baseline_grounding_time × 1.05, where baseline_grounding_time is the grounding time for an equivalent non-arithmetic theory with identical predicate structure but without arithmetic predicates. Reasoning phase time is excluded from this measurement, consistent with NFR-001.
 
@@ -930,9 +930,9 @@ Verifies: NFR-001
 ### TEST-NFR-002: Integer Overflow Safety
 
 **Scenarios**:
-1. `(is ?z (+ 9223372036854775807 1))` → silent failure, no panic
-2. `(is ?z (* 9223372036854775807 2))` → silent failure, no panic
-3. `(is ?z (- -9223372036854775808 1))` → silent failure, no panic
+1. `(bind ?z (+ 9223372036854775807 1))` → silent failure, no panic
+2. `(bind ?z (* 9223372036854775807 2))` → silent failure, no panic
+3. `(bind ?z (- -9223372036854775808 1))` → silent failure, no panic
 
 Verifies: NFR-002
 
@@ -956,8 +956,8 @@ Use `proptest` to generate arithmetic expressions, substitutions, and rule-body 
 5. **Floor remainder sign rule**: `rem(a,b)` has the same sign as `b` (or is zero), matching floor-division semantics.
 6. **Comparison reflexivity/coherence** (finite values): `x = x`, `x <= x`, `x >= x`, and `x != x` is false.
 7. **Float safety**: any operation that yields non-finite float fails rather than producing a stored value.
-8. **Source-order dependency**: for generated dependent pairs, `(and (is ?x E) (> ?x K))` may succeed, while the reversed order fails when `?x` is unbound at comparison time.
-9. **Body-arg expression equivalence**: matching behavior of a body literal with `BodyArg::Arith` is equivalent to an explicit pre-binding form using `is` and a symbol/numeric literal argument.
+8. **Source-order dependency**: for generated dependent pairs, `(and (bind ?x E) (> ?x K))` may succeed, while the reversed order fails when `?x` is unbound at comparison time.
+9. **Body-arg expression equivalence**: matching behavior of a body literal with `BodyArg::Arith` is equivalent to an explicit pre-binding form using `bind` and a symbol/numeric literal argument.
 10. **Parser round-trip stability (normalized)**: arithmetic forms parse to AST and re-parse from canonical SPL to an equivalent AST.
 
 **Implementation note**:
@@ -988,7 +988,7 @@ Verifies: REQ-002, REQ-003, REQ-004, REQ-005, NFR-002
 2. Extend `spl/literals.rs` to parse numeric literals: integers → `Term::Integer`, decimal-point literals → `Term::Decimal`, scientific notation → `Term::Float`.
 3. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
 4. Parse arithmetic expressions in user-defined body literal argument positions; produce `BodyArg::Arith`.
-5. Parse `is` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
+5. Parse `bind` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
 6. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names and rule labels (`normally`/`always`/`except` labels, `prefer` labels) → parse error.
 
 ### Phase 3 — Grounding Integration (spindle-core)
@@ -996,7 +996,7 @@ Verifies: REQ-002, REQ-003, REQ-004, REQ-005, NFR-002
 1. Extend `grounding.rs` `match_literal` to handle `Term::Integer`/`Term::Decimal`/`Term::Float` in substitution matching (exact numeric equality).
 2. Evaluate rule bodies in source order, threading substitutions through each `BodyLiteral`:
    - For `BodyLiteral::Logic`, evaluate any `BodyArg::Arith` arguments first, then match facts.
-   - For `BodyLiteral::Arithmetic`, evaluate `is`/comparison directly.
+   - For `BodyLiteral::Arithmetic`, evaluate `bind`/comparison directly.
    Discard substitution paths on failure at any step.
 3. Propagate bound `Term::Integer`/`Term::Decimal`/`Term::Float` values through `Substitution::apply`.
 
