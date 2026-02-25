@@ -1,5 +1,6 @@
 //! Rule parsing for SPL: always, normally, except forms.
 
+use spindle_core::rule::RuleBody;
 use spindle_core::{Rule, RuleType, Theory};
 
 use crate::ParseError;
@@ -63,6 +64,7 @@ pub(crate) fn process_rule_with_line(
         });
     }
 
+    let body: RuleBody = body.into_iter().collect();
     let mut rule = Rule::new(final_label, rule_type, body, vec![head]);
     rule.constraints = constraints;
     rule.state_queries = state_queries;

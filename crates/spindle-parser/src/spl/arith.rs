@@ -16,7 +16,7 @@
 //! | `abs`        | 1        | 1        | `UnaryOp`          |
 
 use rust_decimal::Decimal;
-use spindle_core::arith::{ArithExpr, BinArithOp, NaryArithOp, UnaryArithOp};
+use spindle_core::arith::{ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp};
 use spindle_core::intern::intern;
 use spindle_core::term::NumericValue;
 
@@ -28,9 +28,32 @@ use super::lexer::SExpr;
 /// Reserved arithmetic operator names.
 const ARITH_OPS: &[&str] = &["+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**"];
 
+/// Reserved comparison operator names.
+const CMP_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">="];
+
 /// Returns `true` if `name` is a reserved arithmetic operator.
 pub(crate) fn is_arith_op(name: &str) -> bool {
     ARITH_OPS.contains(&name)
+}
+
+/// Returns `true` if `name` is a reserved comparison operator.
+pub(crate) fn is_cmp_op(name: &str) -> bool {
+    CMP_OPS.contains(&name)
+}
+
+/// Parse a comparison operator name into a [`CmpOp`].
+///
+/// Returns `None` if `name` is not a recognised comparison operator.
+pub(crate) fn parse_cmp_op(name: &str) -> Option<CmpOp> {
+    match name {
+        "=" => Some(CmpOp::Eq),
+        "!=" => Some(CmpOp::Ne),
+        "<" => Some(CmpOp::Lt),
+        ">" => Some(CmpOp::Gt),
+        "<=" => Some(CmpOp::Le),
+        ">=" => Some(CmpOp::Ge),
+        _ => None,
+    }
 }
 
 /// Parse an S-expression as an arithmetic expression.

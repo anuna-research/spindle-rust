@@ -1,12 +1,12 @@
 {
-  "task_id": "parse-arith-expr",
+  "task_id": "parse-bind-compare",
   "token_budget": 8000,
-  "tokens_used": 444,
+  "tokens_used": 428,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Create crates/spindle-parser/src/spl/arith.rs. When the parser encounters an S-expression whose first atom is a reserved arithmetic operator (+, -, *, /, div, rem, abs, min, max, **) in an argument position, parse recursively as ArithExpr. Enforce arity constraints: + and * accept 0+ args, - and / accept 1+ args, min and max accept 1+ args, div/rem/** accept exactly 2, abs accepts exactly 1. Return ArithExpr::NaryOp, BinOp, or UnaryOp accordingly. Wrong arity -> ParseError.",
-      "token_cost": 119,
+      "content": "Extend the body-literal parsing in spl/literals.rs (or spl/arith.rs) to recognize (bind ?var expr) and (<cmp> expr1 expr2) where <cmp> is =, !=, <, >, <=, >= in body position. Produce BodyLiteral::Arithmetic(ArithConstraint::Bind{..}) and BodyLiteral::Arithmetic(ArithConstraint::Compare{..}). bind's first arg must be a ?-variable (else ParseError). bind's second arg must be a valid arith-expr (else ParseError).",
+      "token_cost": 103,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T05:07:16Z"
+  "constructed_at": "2026-02-25T05:12:21Z"
 }
