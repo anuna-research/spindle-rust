@@ -26,7 +26,11 @@ use super::arith::{
 use super::lexer::SExpr;
 
 /// Parsed body components: (body literals, Allen constraints, state queries).
-type BodyParseResult = (Vec<BodyLiteral>, Vec<AllenConstraint>, Vec<TemporalStateQuery>);
+type BodyParseResult = (
+    Vec<BodyLiteral>,
+    Vec<AllenConstraint>,
+    Vec<TemporalStateQuery>,
+);
 
 /// Parse a body expression with line number.
 ///
@@ -42,7 +46,9 @@ pub(crate) fn parse_body_with_line(
 ) -> Result<BodyParseResult, ParseError> {
     match expr {
         SExpr::Atom { .. } => Ok((
-            vec![BodyLiteral::Logic(parse_body_logic_literal_with_line(expr, line)?)],
+            vec![BodyLiteral::Logic(parse_body_logic_literal_with_line(
+                expr, line,
+            )?)],
             vec![],
             vec![],
         )),
@@ -65,9 +71,9 @@ pub(crate) fn parse_body_with_line(
                     } else if let Some(arith) = try_parse_arith_constraint(item, line)? {
                         body_literals.push(BodyLiteral::Arithmetic(arith));
                     } else {
-                        body_literals.push(BodyLiteral::Logic(
-                            parse_body_logic_literal_with_line(item, line)?,
-                        ));
+                        body_literals.push(BodyLiteral::Logic(parse_body_logic_literal_with_line(
+                            item, line,
+                        )?));
                     }
                 }
 
@@ -78,9 +84,9 @@ pub(crate) fn parse_body_with_line(
                     Ok((vec![BodyLiteral::Arithmetic(arith)], vec![], vec![]))
                 } else {
                     Ok((
-                        vec![BodyLiteral::Logic(
-                            parse_body_logic_literal_with_line(expr, line)?,
-                        )],
+                        vec![BodyLiteral::Logic(parse_body_logic_literal_with_line(
+                            expr, line,
+                        )?)],
                         vec![],
                         vec![],
                     ))
@@ -649,20 +655,19 @@ fn parse_body_logic_literal_with_line(
                         });
                     }
                     // REQ-011: Negation of arithmetic predicates is not allowed
-                    if let Some(inner_items) = items[1].as_list() {
-                        if let Some(inner_head) = inner_items.first().and_then(|i| i.as_atom()) {
-                            if is_arith_predicate(inner_head) {
-                                return Err(ParseError::ParserError {
-                                    line,
-                                    message: format!(
-                                        "Arithmetic predicate '{inner_head}' cannot be negated (REQ-011). \
-                                         Use the positive form in the rule body instead."
-                                    ),
-                                    format: ParserFormat::Spl,
-                                    source_line: None,
-                                });
-                            }
-                        }
+                    if let Some(inner_items) = items[1].as_list()
+                        && let Some(inner_head) = inner_items.first().and_then(|i| i.as_atom())
+                        && is_arith_predicate(inner_head)
+                    {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: format!(
+                                "Arithmetic predicate '{inner_head}' cannot be negated (REQ-011). \
+                                 Use the positive form in the rule body instead."
+                            ),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
                     }
                     let mut inner = parse_body_logic_literal_with_line(&items[1], line)?;
                     inner.negation = !inner.negation;
@@ -712,8 +717,7 @@ fn parse_body_logic_literal_with_line(
                         if let Some(var_name) = items[2].as_atom()
                             && var_name.starts_with('?')
                         {
-                            let mut lit =
-                                parse_body_logic_literal_with_line(&items[1], line)?;
+                            let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
                             lit.interval_var = Some(intern(var_name));
                             return Ok(lit);
                         }
@@ -792,7 +796,7 @@ fn is_decimal_literal(s: &str) -> bool {
 
 /// Returns `true` if `s` matches the float pattern: `-?[0-9]+(.[0-9]+)?[eE]-?[0-9]+`.
 fn is_float_literal(s: &str) -> bool {
-    let e_pos = s.find(|c: char| c == 'e' || c == 'E');
+    let e_pos = s.find(['e', 'E']);
     let e_pos = match e_pos {
         Some(pos) => pos,
         None => return false,
@@ -801,8 +805,7 @@ fn is_float_literal(s: &str) -> bool {
     let mantissa = &s[..e_pos];
     let exponent = &s[e_pos + 1..];
 
-    (is_integer_literal(mantissa) || is_decimal_literal(mantissa))
-        && is_integer_literal(exponent)
+    (is_integer_literal(mantissa) || is_decimal_literal(mantissa)) && is_integer_literal(exponent)
 }
 
 /// Try to parse an atom as a numeric [`Term`].
@@ -830,12 +833,14 @@ fn try_parse_numeric_term(value: &str, line: usize) -> Result<Option<Term>, Pars
 
     // Decimal (has .): checked second
     if is_decimal_literal(value) {
-        let d = value.parse::<Decimal>().map_err(|_| ParseError::ParserError {
-            line,
-            message: format!("Decimal out of range: {value}"),
-            format: ParserFormat::Spl,
-            source_line: None,
-        })?;
+        let d = value
+            .parse::<Decimal>()
+            .map_err(|_| ParseError::ParserError {
+                line,
+                message: format!("Decimal out of range: {value}"),
+                format: ParserFormat::Spl,
+                source_line: None,
+            })?;
         return Ok(Some(Term::Decimal(d)));
     }
 
@@ -875,11 +880,11 @@ fn parse_body_arg(expr: &SExpr, line: usize) -> Result<BodyArg, ParseError> {
     match expr {
         SExpr::Atom { value, .. } => Ok(BodyArg::Term(parse_term_from_atom(value, line)?)),
         SExpr::List { items, .. } => {
-            if let Some(head) = items.first().and_then(|i| i.as_atom()) {
-                if is_arith_op(head) {
-                    let arith = parse_arith_expr(expr, line)?;
-                    return Ok(BodyArg::Arith(arith));
-                }
+            if let Some(head) = items.first().and_then(|i| i.as_atom())
+                && is_arith_op(head)
+            {
+                let arith = parse_arith_expr(expr, line)?;
+                return Ok(BodyArg::Arith(arith));
             }
             Err(ParseError::ParserError {
                 line,
@@ -1084,11 +1089,7 @@ mod tests {
 
     #[test]
     fn test_bind_first_arg_is_list() {
-        let expr = list(vec![
-            atom("bind"),
-            list(vec![atom("?x")]),
-            atom("42"),
-        ]);
+        let expr = list(vec![atom("bind"), list(vec![atom("?x")]), atom("42")]);
         let err = parse_body_with_line(&expr, 1).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("variable"), "got: {msg}");
@@ -1655,7 +1656,10 @@ mod tests {
         // (price item 9.99) → predicate "price" with args [Symbol("item"), Decimal(9.99)]
         let expr = list(vec![atom("price"), atom("item"), atom("9.99")]);
         let lit = parse_literal_with_line(&expr, 1).unwrap();
-        assert_eq!(lit.predicate_args()[1], Term::Decimal("9.99".parse::<Decimal>().unwrap()));
+        assert_eq!(
+            lit.predicate_args()[1],
+            Term::Decimal("9.99".parse::<Decimal>().unwrap())
+        );
     }
 
     #[test]
@@ -1691,7 +1695,10 @@ mod tests {
         assert_eq!(lit.predicate_args().len(), 4);
         assert_eq!(lit.predicate_args()[0], Term::Symbol(intern("device")));
         assert_eq!(lit.predicate_args()[1], Term::Integer(42));
-        assert_eq!(lit.predicate_args()[2], Term::Decimal("3.14".parse::<Decimal>().unwrap()));
+        assert_eq!(
+            lit.predicate_args()[2],
+            Term::Decimal("3.14".parse::<Decimal>().unwrap())
+        );
         assert_eq!(
             lit.predicate_args()[3],
             Term::Float(FiniteFloat::new(100.0).unwrap())
@@ -1737,10 +1744,7 @@ mod tests {
         let expr = list(vec![atom("temp"), atom("sensor"), atom("-40")]);
         let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
         let lit = body[0].as_logic().unwrap();
-        assert_eq!(
-            lit.predicate_args()[1],
-            BodyArg::Term(Term::Integer(-40))
-        );
+        assert_eq!(lit.predicate_args()[1], BodyArg::Term(Term::Integer(-40)));
     }
 
     // =====================================================================
@@ -1820,15 +1824,14 @@ mod tests {
     #[test]
     fn test_spl_rule_with_numeric_body_args() {
         use crate::spl::parse_spl;
-        let theory = parse_spl("(normally r1 (and (price ?item 100) (quality ?item high)) (buy ?item))").unwrap();
+        let theory =
+            parse_spl("(normally r1 (and (price ?item 100) (quality ?item high)) (buy ?item))")
+                .unwrap();
         let rule = theory.rules().next().unwrap();
         // Body literal "price" should have Integer(100) as second arg
         let price_body = &rule.body[0];
         let lit = price_body.as_logic().unwrap();
         assert_eq!(lit.name(), "price");
-        assert_eq!(
-            lit.predicate_args()[1],
-            BodyArg::Term(Term::Integer(100))
-        );
+        assert_eq!(lit.predicate_args()[1], BodyArg::Term(Term::Integer(100)));
     }
 }

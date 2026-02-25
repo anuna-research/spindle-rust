@@ -56,9 +56,7 @@ pub(crate) fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
         // Check body (only logic body literals have temporal)
         let body_active = rule.body.iter().all(|bl| match bl.as_logic() {
             Some(lit) => {
-                lit.temporal_expr.is_some()
-                    || lit.temporal.is_empty()
-                    || lit.temporal.active_at(t)
+                lit.temporal_expr.is_some() || lit.temporal.is_empty() || lit.temporal.active_at(t)
             }
             None => true, // arithmetic constraints have no temporal
         });

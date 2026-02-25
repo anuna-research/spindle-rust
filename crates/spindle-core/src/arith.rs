@@ -364,12 +364,14 @@ fn numeric_cmp(
 fn add_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     let (a, b) = promote_pair(a, b);
     match (a, b) {
-        (NumericValue::Integer(x), NumericValue::Integer(y)) => {
-            x.checked_add(y).map(NumericValue::Integer).ok_or(ArithError::IntegerOverflow)
-        }
-        (NumericValue::Decimal(x), NumericValue::Decimal(y)) => {
-            x.checked_add(y).map(NumericValue::Decimal).ok_or(ArithError::DecimalOverflow)
-        }
+        (NumericValue::Integer(x), NumericValue::Integer(y)) => x
+            .checked_add(y)
+            .map(NumericValue::Integer)
+            .ok_or(ArithError::IntegerOverflow),
+        (NumericValue::Decimal(x), NumericValue::Decimal(y)) => x
+            .checked_add(y)
+            .map(NumericValue::Decimal)
+            .ok_or(ArithError::DecimalOverflow),
         (NumericValue::Float(x), NumericValue::Float(y)) => check_finite(x + y),
         _ => unreachable!(),
     }
@@ -378,12 +380,14 @@ fn add_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
 fn sub_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     let (a, b) = promote_pair(a, b);
     match (a, b) {
-        (NumericValue::Integer(x), NumericValue::Integer(y)) => {
-            x.checked_sub(y).map(NumericValue::Integer).ok_or(ArithError::IntegerOverflow)
-        }
-        (NumericValue::Decimal(x), NumericValue::Decimal(y)) => {
-            x.checked_sub(y).map(NumericValue::Decimal).ok_or(ArithError::DecimalOverflow)
-        }
+        (NumericValue::Integer(x), NumericValue::Integer(y)) => x
+            .checked_sub(y)
+            .map(NumericValue::Integer)
+            .ok_or(ArithError::IntegerOverflow),
+        (NumericValue::Decimal(x), NumericValue::Decimal(y)) => x
+            .checked_sub(y)
+            .map(NumericValue::Decimal)
+            .ok_or(ArithError::DecimalOverflow),
         (NumericValue::Float(x), NumericValue::Float(y)) => check_finite(x - y),
         _ => unreachable!(),
     }
@@ -392,12 +396,14 @@ fn sub_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
 fn mul_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     let (a, b) = promote_pair(a, b);
     match (a, b) {
-        (NumericValue::Integer(x), NumericValue::Integer(y)) => {
-            x.checked_mul(y).map(NumericValue::Integer).ok_or(ArithError::IntegerOverflow)
-        }
-        (NumericValue::Decimal(x), NumericValue::Decimal(y)) => {
-            x.checked_mul(y).map(NumericValue::Decimal).ok_or(ArithError::DecimalOverflow)
-        }
+        (NumericValue::Integer(x), NumericValue::Integer(y)) => x
+            .checked_mul(y)
+            .map(NumericValue::Integer)
+            .ok_or(ArithError::IntegerOverflow),
+        (NumericValue::Decimal(x), NumericValue::Decimal(y)) => x
+            .checked_mul(y)
+            .map(NumericValue::Decimal)
+            .ok_or(ArithError::DecimalOverflow),
         (NumericValue::Float(x), NumericValue::Float(y)) => check_finite(x * y),
         _ => unreachable!(),
     }
@@ -412,7 +418,10 @@ fn div_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
         }
         let dx = Decimal::from(*x);
         let dy = Decimal::from(*y);
-        return dx.checked_div(dy).map(NumericValue::Decimal).ok_or(ArithError::DecimalOverflow);
+        return dx
+            .checked_div(dy)
+            .map(NumericValue::Decimal)
+            .ok_or(ArithError::DecimalOverflow);
     }
 
     let (a, b) = promote_pair(a, b);
@@ -421,7 +430,9 @@ fn div_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
             if y.is_zero() {
                 Err(ArithError::DivisionByZero)
             } else {
-                x.checked_div(y).map(NumericValue::Decimal).ok_or(ArithError::DecimalOverflow)
+                x.checked_div(y)
+                    .map(NumericValue::Decimal)
+                    .ok_or(ArithError::DecimalOverflow)
             }
         }
         (NumericValue::Float(x), NumericValue::Float(y)) => {
@@ -437,9 +448,10 @@ fn div_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
 
 fn negate(v: NumericValue) -> Result<NumericValue, ArithError> {
     match v {
-        NumericValue::Integer(n) => {
-            n.checked_neg().map(NumericValue::Integer).ok_or(ArithError::IntegerOverflow)
-        }
+        NumericValue::Integer(n) => n
+            .checked_neg()
+            .map(NumericValue::Integer)
+            .ok_or(ArithError::IntegerOverflow),
         NumericValue::Decimal(d) => Ok(NumericValue::Decimal(-d)),
         NumericValue::Float(f) => Ok(NumericValue::Float(-f)),
     }
@@ -453,7 +465,10 @@ fn reciprocal(v: NumericValue) -> Result<NumericValue, ArithError> {
                 return Err(ArithError::ReciprocalOfZero);
             }
             let d = Decimal::from(n);
-            Decimal::ONE.checked_div(d).map(NumericValue::Decimal).ok_or(ArithError::DecimalOverflow)
+            Decimal::ONE
+                .checked_div(d)
+                .map(NumericValue::Decimal)
+                .ok_or(ArithError::DecimalOverflow)
         }
         NumericValue::Decimal(d) => {
             if d.is_zero() {
@@ -475,9 +490,10 @@ fn reciprocal(v: NumericValue) -> Result<NumericValue, ArithError> {
 
 fn abs_value(v: NumericValue) -> Result<NumericValue, ArithError> {
     match v {
-        NumericValue::Integer(n) => {
-            n.checked_abs().map(NumericValue::Integer).ok_or(ArithError::IntegerOverflow)
-        }
+        NumericValue::Integer(n) => n
+            .checked_abs()
+            .map(NumericValue::Integer)
+            .ok_or(ArithError::IntegerOverflow),
         NumericValue::Decimal(d) => Ok(NumericValue::Decimal(d.abs())),
         NumericValue::Float(f) => Ok(NumericValue::Float(f.abs())),
     }
@@ -493,7 +509,11 @@ fn floor_div_i64(a: i64, b: i64) -> Result<i64, ArithError> {
     let d = a.checked_div(b).ok_or(ArithError::IntegerOverflow)?;
     let r = a % b;
     // Adjust toward negative infinity when signs differ and remainder is nonzero
-    if r != 0 && (a ^ b) < 0 { Ok(d - 1) } else { Ok(d) }
+    if r != 0 && (a ^ b) < 0 {
+        Ok(d - 1)
+    } else {
+        Ok(d)
+    }
 }
 
 /// Floor remainder: a − (a div b) × b, matching floor division.
@@ -501,7 +521,11 @@ fn floor_rem_i64(a: i64, b: i64) -> Result<i64, ArithError> {
     // Check for overflow: i64::MIN % -1 can panic/overflow
     let _d = a.checked_div(b).ok_or(ArithError::IntegerOverflow)?;
     let r = a % b;
-    if r != 0 && (a ^ b) < 0 { Ok(r + b) } else { Ok(r) }
+    if r != 0 && (a ^ b) < 0 {
+        Ok(r + b)
+    } else {
+        Ok(r)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -539,7 +563,9 @@ fn decimal_checked_powi(base: Decimal, exp: i64) -> Result<Decimal, ArithError> 
         if pos.is_zero() {
             return Err(ArithError::DivisionByZero);
         }
-        return Decimal::ONE.checked_div(pos).ok_or(ArithError::DecimalOverflow);
+        return Decimal::ONE
+            .checked_div(pos)
+            .ok_or(ArithError::DecimalOverflow);
     }
     decimal_checked_pow_nonneg(base, exp as u64)
 }
@@ -582,7 +608,10 @@ fn decimal_pow(base: Decimal, exp: Decimal) -> Result<NumericValue, ArithError> 
 /// Full exponentiation dispatch with type promotion.
 fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericValue, ArithError> {
     // Float contagion
-    if matches!((&base, &exp), (NumericValue::Float(_), _) | (_, NumericValue::Float(_))) {
+    if matches!(
+        (&base, &exp),
+        (NumericValue::Float(_), _) | (_, NumericValue::Float(_))
+    ) {
         let fb = to_f64_value(&base);
         let fe = to_f64_value(&exp);
         return check_finite(fb.powf(fe));
@@ -609,9 +638,7 @@ fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericValue, Arith
         (NumericValue::Decimal(b), NumericValue::Integer(e)) => {
             decimal_checked_powi(b, e).map(NumericValue::Decimal)
         }
-        (NumericValue::Integer(b), NumericValue::Decimal(e)) => {
-            decimal_pow(Decimal::from(b), e)
-        }
+        (NumericValue::Integer(b), NumericValue::Decimal(e)) => decimal_pow(Decimal::from(b), e),
         (NumericValue::Decimal(b), NumericValue::Decimal(e)) => decimal_pow(b, e),
         _ => unreachable!("float cases handled above"),
     }
@@ -654,10 +681,10 @@ fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, Ari
             if let Ok(d) = s.parse::<Decimal>() {
                 return Ok(NumericValue::Decimal(d));
             }
-            if let Ok(f) = s.parse::<f64>() {
-                if f.is_finite() {
-                    return Ok(NumericValue::Float(f));
-                }
+            if let Ok(f) = s.parse::<f64>()
+                && f.is_finite()
+            {
+                return Ok(NumericValue::Float(f));
             }
             Err(ArithError::TypeMismatch {
                 op: "var",
@@ -794,48 +821,48 @@ fn eval_nary(
     }
 }
 
-fn eval_bin(op: &BinArithOp, lhs: NumericValue, rhs: NumericValue) -> Result<NumericValue, ArithError> {
+fn eval_bin(
+    op: &BinArithOp,
+    lhs: NumericValue,
+    rhs: NumericValue,
+) -> Result<NumericValue, ArithError> {
     match op {
-        BinArithOp::IDiv => {
-            match (&lhs, &rhs) {
-                (NumericValue::Integer(a), NumericValue::Integer(b)) => {
-                    if *b == 0 {
-                        Err(ArithError::DivisionByZero)
-                    } else {
-                        floor_div_i64(*a, *b).map(NumericValue::Integer)
-                    }
+        BinArithOp::IDiv => match (&lhs, &rhs) {
+            (NumericValue::Integer(a), NumericValue::Integer(b)) => {
+                if *b == 0 {
+                    Err(ArithError::DivisionByZero)
+                } else {
+                    floor_div_i64(*a, *b).map(NumericValue::Integer)
                 }
-                _ => Err(ArithError::TypeMismatch {
-                    op: "div",
-                    expected: "Integer",
-                    got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
-                        &lhs
-                    } else {
-                        &rhs
-                    }),
-                }),
             }
-        }
-        BinArithOp::Rem => {
-            match (&lhs, &rhs) {
-                (NumericValue::Integer(a), NumericValue::Integer(b)) => {
-                    if *b == 0 {
-                        Err(ArithError::DivisionByZero)
-                    } else {
-                        floor_rem_i64(*a, *b).map(NumericValue::Integer)
-                    }
+            _ => Err(ArithError::TypeMismatch {
+                op: "div",
+                expected: "Integer",
+                got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
+                    &lhs
+                } else {
+                    &rhs
+                }),
+            }),
+        },
+        BinArithOp::Rem => match (&lhs, &rhs) {
+            (NumericValue::Integer(a), NumericValue::Integer(b)) => {
+                if *b == 0 {
+                    Err(ArithError::DivisionByZero)
+                } else {
+                    floor_rem_i64(*a, *b).map(NumericValue::Integer)
                 }
-                _ => Err(ArithError::TypeMismatch {
-                    op: "rem",
-                    expected: "Integer",
-                    got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
-                        &lhs
-                    } else {
-                        &rhs
-                    }),
-                }),
             }
-        }
+            _ => Err(ArithError::TypeMismatch {
+                op: "rem",
+                expected: "Integer",
+                got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
+                    &lhs
+                } else {
+                    &rhs
+                }),
+            }),
+        },
         BinArithOp::Pow => eval_pow(lhs, rhs),
     }
 }
@@ -998,11 +1025,16 @@ mod tests {
     fn eval_temporal_endpoint_variable_rejected() {
         use crate::temporal::TimePoint;
         let mut subst = Substitution::default();
-        subst.temporal.insert(intern("?start"), TimePoint::Moment(100));
+        subst
+            .temporal
+            .insert(intern("?start"), TimePoint::Moment(100));
         let err = var("?start").eval(&subst).unwrap_err();
         assert!(matches!(
             err,
-            ArithError::TypeMismatch { got: "temporal", .. }
+            ArithError::TypeMismatch {
+                got: "temporal",
+                ..
+            }
         ));
     }
 
@@ -1020,7 +1052,10 @@ mod tests {
         let err = var("?T").eval(&subst).unwrap_err();
         assert!(matches!(
             err,
-            ArithError::TypeMismatch { got: "temporal", .. }
+            ArithError::TypeMismatch {
+                got: "temporal",
+                ..
+            }
         ));
     }
 
@@ -1038,13 +1073,18 @@ mod tests {
     fn eval_temporal_var_in_expression_rejected() {
         use crate::temporal::TimePoint;
         let mut subst = Substitution::default();
-        subst.temporal.insert(intern("?end"), TimePoint::Moment(200));
+        subst
+            .temporal
+            .insert(intern("?end"), TimePoint::Moment(200));
         // (+ 1 ?end) should fail because ?end is temporal
         let expr = nary(NaryArithOp::Add, vec![lit_int(1), var("?end")]);
         let err = expr.eval(&subst).unwrap_err();
         assert!(matches!(
             err,
-            ArithError::TypeMismatch { got: "temporal", .. }
+            ArithError::TypeMismatch {
+                got: "temporal",
+                ..
+            }
         ));
     }
 
@@ -1099,7 +1139,10 @@ mod tests {
     fn sub_zero_args_error() {
         let subst = Substitution::default();
         let expr = nary(NaryArithOp::Sub, vec![]);
-        assert!(matches!(expr.eval(&subst).unwrap_err(), ArithError::TypeMismatch { .. }));
+        assert!(matches!(
+            expr.eval(&subst).unwrap_err(),
+            ArithError::TypeMismatch { .. }
+        ));
     }
 
     // -- Multiplication ----------------------------------------------------
@@ -1156,10 +1199,7 @@ mod tests {
     fn div_left_fold() {
         let subst = Substitution::default();
         // (/ 100 2 5) = 100/2/5 = 10
-        let expr = nary(
-            NaryArithOp::Div,
-            vec![lit_int(100), lit_int(2), lit_int(5)],
-        );
+        let expr = nary(NaryArithOp::Div, vec![lit_int(100), lit_int(2), lit_int(5)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Decimal(Decimal::from(10)));
     }
@@ -1355,10 +1395,7 @@ mod tests {
     fn promotion_decimal_float() {
         let subst = Substitution::default();
         // Decimal + Float → Float
-        let expr = nary(
-            NaryArithOp::Add,
-            vec![lit_dec(25, 1), lit_float(1.0)],
-        );
+        let expr = nary(NaryArithOp::Add, vec![lit_dec(25, 1), lit_float(1.0)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Float(3.5));
     }
@@ -1483,7 +1520,10 @@ mod tests {
     fn error_display() {
         assert_eq!(ArithError::DivisionByZero.to_string(), "division by zero");
         assert_eq!(ArithError::IntegerOverflow.to_string(), "integer overflow");
-        assert_eq!(ArithError::ComparisonFailed.to_string(), "comparison failed");
+        assert_eq!(
+            ArithError::ComparisonFailed.to_string(),
+            "comparison failed"
+        );
     }
 
     // =====================================================================
@@ -1604,7 +1644,13 @@ mod tests {
         // div, rem, ** are BinOp in the AST — structurally enforce 2 operands.
         // A 3-arg div cannot be represented; the parser rejects it.
         let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
-        assert!(matches!(expr, ArithExpr::BinOp { op: BinArithOp::IDiv, .. }));
+        assert!(matches!(
+            expr,
+            ArithExpr::BinOp {
+                op: BinArithOp::IDiv,
+                ..
+            }
+        ));
     }
 
     // TEST-002 scenarios 11–12 are parse-time checks (operator at predicate
@@ -1662,8 +1708,16 @@ mod tests {
                 let s = d.to_string();
                 assert!(s.starts_with("3."), "expected '3.' prefix, got: {s}");
                 let frac = &s[2..];
-                assert_eq!(frac.len(), 28, "expected 28 fractional digits, got {}", frac.len());
-                assert!(frac.chars().all(|c| c == '3'), "expected all '3's, got: {frac}");
+                assert_eq!(
+                    frac.len(),
+                    28,
+                    "expected 28 fractional digits, got {}",
+                    frac.len()
+                );
+                assert!(
+                    frac.chars().all(|c| c == '3'),
+                    "expected all '3's, got: {frac}"
+                );
             }
             other => panic!("expected Decimal, got: {other:?}"),
         }

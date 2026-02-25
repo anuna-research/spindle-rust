@@ -14,13 +14,7 @@ use spindle_core::term::{FiniteFloat, Term};
 fn make_literal(name: &str, args: Vec<Term>) -> Literal {
     use spindle_core::mode::Mode;
     use spindle_core::temporal::Temporal;
-    Literal::from_ids(
-        intern(name),
-        false,
-        Mode::empty(),
-        Temporal::empty(),
-        args,
-    )
+    Literal::from_ids(intern(name), false, Mode::empty(), Temporal::empty(), args)
 }
 
 // ===========================================================================
@@ -191,11 +185,7 @@ fn test_012_08_term_dto_to_term_round_trip() {
     for (term, expected_dto) in &cases {
         // Term → TermDto
         let dto = TermDto::from(term);
-        assert_eq!(
-            &dto, expected_dto,
-            "Term→TermDto mismatch for {:?}",
-            term
-        );
+        assert_eq!(&dto, expected_dto, "Term→TermDto mismatch for {:?}", term);
 
         // TermDto → Term → TermDto (full round-trip)
         let back_term = dto.to_term().expect("to_term should succeed");
@@ -209,10 +199,6 @@ fn test_012_08_term_dto_to_term_round_trip() {
         // JSON round-trip
         let json = serde_json::to_string(&dto).unwrap();
         let json_back: TermDto = serde_json::from_str(&json).unwrap();
-        assert_eq!(
-            &dto, &json_back,
-            "JSON round-trip mismatch for {:?}",
-            term
-        );
+        assert_eq!(&dto, &json_back, "JSON round-trip mismatch for {:?}", term);
     }
 }

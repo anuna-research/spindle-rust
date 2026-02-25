@@ -35,8 +35,8 @@ const CMP_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">="];
 ///
 /// This includes arithmetic operators, comparison operators, and the `bind` keyword.
 const RESERVED_KEYWORDS: &[&str] = &[
-    "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "bind", "=", "!=", "<", ">",
-    "<=", ">=",
+    "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "bind", "=", "!=", "<", ">", "<=",
+    ">=",
 ];
 
 /// Future-reserved keywords that cannot be used as predicate names or rule labels (REQ-008).
@@ -162,10 +162,12 @@ fn parse_arith_atom(name: &str, line: usize) -> Result<ArithExpr, ParseError> {
     }
 
     // Try decimal (contains '.' but no 'e'/'E' for scientific notation)
-    if name.contains('.') && !name.contains('e') && !name.contains('E') {
-        if let Ok(d) = name.parse::<Decimal>() {
-            return Ok(ArithExpr::Lit(NumericValue::Decimal(d)));
-        }
+    if name.contains('.')
+        && !name.contains('e')
+        && !name.contains('E')
+        && let Ok(d) = name.parse::<Decimal>()
+    {
+        return Ok(ArithExpr::Lit(NumericValue::Decimal(d)));
     }
 
     // Try float (scientific notation or other float formats)
@@ -320,7 +322,10 @@ mod tests {
     #[test]
     fn test_is_arith_op_non_operators() {
         for name in &["bird", "and", "not", "given", "?x", "42", "mod"] {
-            assert!(!is_arith_op(name), "Expected '{name}' to NOT be an arith op");
+            assert!(
+                !is_arith_op(name),
+                "Expected '{name}' to NOT be an arith op"
+            );
         }
     }
 
@@ -398,10 +403,7 @@ mod tests {
     fn test_parse_invalid_atom() {
         let err = parse_arith_expr(&atom("bird"), 1).unwrap_err();
         let msg = format!("{err}");
-        assert!(
-            msg.contains("Invalid arithmetic operand"),
-            "got: {msg}"
-        );
+        assert!(msg.contains("Invalid arithmetic operand"), "got: {msg}");
     }
 
     #[test]
@@ -448,8 +450,7 @@ mod tests {
 
     #[test]
     fn test_add_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("+"), atom("1"), atom("2")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("+"), atom("1"), atom("2")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::NaryOp {
@@ -495,8 +496,7 @@ mod tests {
 
     #[test]
     fn test_mul_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("*"), atom("3"), atom("4")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("*"), atom("3"), atom("4")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::NaryOp {
@@ -527,8 +527,7 @@ mod tests {
 
     #[test]
     fn test_sub_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("-"), atom("10"), atom("3")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("-"), atom("10"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::NaryOp {
@@ -589,11 +588,8 @@ mod tests {
 
     #[test]
     fn test_min_three_args() {
-        let expr = parse_arith_expr(
-            &list(vec![atom("min"), atom("5"), atom("3"), atom("7")]),
-            1,
-        )
-        .unwrap();
+        let expr =
+            parse_arith_expr(&list(vec![atom("min"), atom("5"), atom("3"), atom("7")]), 1).unwrap();
         if let ArithExpr::NaryOp { op, args } = &expr {
             assert_eq!(*op, NaryArithOp::Min);
             assert_eq!(args.len(), 3);
@@ -611,8 +607,7 @@ mod tests {
 
     #[test]
     fn test_max_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("max"), atom("1"), atom("9")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("max"), atom("1"), atom("9")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::NaryOp {
@@ -638,8 +633,7 @@ mod tests {
 
     #[test]
     fn test_idiv_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("div"), atom("10"), atom("3")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("div"), atom("10"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::BinOp {
@@ -670,8 +664,7 @@ mod tests {
 
     #[test]
     fn test_rem_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("rem"), atom("10"), atom("3")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("rem"), atom("10"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::BinOp {
@@ -691,8 +684,7 @@ mod tests {
 
     #[test]
     fn test_pow_two_args() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("**"), atom("2"), atom("3")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("**"), atom("2"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::BinOp {
@@ -716,8 +708,7 @@ mod tests {
 
     #[test]
     fn test_abs_one_arg() {
-        let expr =
-            parse_arith_expr(&list(vec![atom("abs"), atom("-5")]), 1).unwrap();
+        let expr = parse_arith_expr(&list(vec![atom("abs"), atom("-5")]), 1).unwrap();
         assert_eq!(
             expr,
             ArithExpr::UnaryOp {
@@ -736,8 +727,7 @@ mod tests {
 
     #[test]
     fn test_abs_two_args_error() {
-        let err =
-            parse_arith_expr(&list(vec![atom("abs"), atom("1"), atom("2")]), 1).unwrap_err();
+        let err = parse_arith_expr(&list(vec![atom("abs"), atom("1"), atom("2")]), 1).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("exactly 1 argument"), "got: {msg}");
     }
@@ -779,7 +769,13 @@ mod tests {
         if let ArithExpr::NaryOp { op, args } = &expr {
             assert_eq!(*op, NaryArithOp::Add);
             assert_eq!(args.len(), 2);
-            assert!(matches!(&args[0], ArithExpr::UnaryOp { op: UnaryArithOp::Abs, .. }));
+            assert!(matches!(
+                &args[0],
+                ArithExpr::UnaryOp {
+                    op: UnaryArithOp::Abs,
+                    ..
+                }
+            ));
         } else {
             panic!("Expected NaryOp");
         }
@@ -823,8 +819,7 @@ mod tests {
     fn test_nested_error_propagation() {
         // (+ (abs 1 2) 3) — inner abs has wrong arity
         let bad_abs = list(vec![atom("abs"), atom("1"), atom("2")]);
-        let err =
-            parse_arith_expr(&list(vec![atom("+"), bad_abs, atom("3")]), 1).unwrap_err();
+        let err = parse_arith_expr(&list(vec![atom("+"), bad_abs, atom("3")]), 1).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("exactly 1 argument"), "got: {msg}");
     }
@@ -860,8 +855,7 @@ mod tests {
     #[test]
     fn test_list_head_not_atom() {
         let inner = list(vec![atom("1")]);
-        let err =
-            parse_arith_expr(&list(vec![inner, atom("2")]), 1).unwrap_err();
+        let err = parse_arith_expr(&list(vec![inner, atom("2")]), 1).unwrap_err();
         let msg = format!("{err}");
         assert!(
             msg.contains("Expected arithmetic operator atom"),

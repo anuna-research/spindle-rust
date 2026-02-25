@@ -87,10 +87,10 @@ pub mod prelude {
     };
     pub use crate::rule::{IntoRuleBody, Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
-    pub use crate::term::{FiniteFloat, NumericValue, Term};
     pub use crate::temporal::{
         AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,
     };
+    pub use crate::term::{FiniteFloat, NumericValue, Term};
     pub use crate::theory::{Meta, MetaValue, Theory};
 }
 

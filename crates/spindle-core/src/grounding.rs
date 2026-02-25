@@ -32,12 +32,12 @@ use crate::intern::{SymbolId, resolve};
 #[cfg(test)]
 use crate::intern::intern;
 use crate::literal::Literal;
-use crate::term::Term;
 use crate::mode::Mode;
 use crate::rule::{Rule, RuleBody, RuleLabel, RuleType};
 use crate::temporal::{
     AllenConstraint, Temporal, TemporalExpr, TemporalStateQuery, TimeExpr, TimePoint,
 };
+use crate::term::Term;
 use crate::theory::Theory;
 
 /// Variable substitution for grounding.
@@ -496,17 +496,11 @@ fn resolve_body_logic(lit: &BodyLogicLiteral, subst: &Substitution) -> Option<Li
     for arg in lit.predicate_args() {
         match arg {
             BodyArg::Term(t) => {
-                if let Term::Symbol(pid) = t {
-                    if is_variable(resolve(*pid)) {
-                        terms.push(
-                            subst
-                                .terms
-                                .get(pid)
-                                .cloned()
-                                .unwrap_or_else(|| t.clone()),
-                        );
-                        continue;
-                    }
+                if let Term::Symbol(pid) = t
+                    && is_variable(resolve(*pid))
+                {
+                    terms.push(subst.terms.get(pid).cloned().unwrap_or_else(|| t.clone()));
+                    continue;
                 }
                 terms.push(t.clone());
             }
@@ -608,10 +602,7 @@ fn match_body_against_facts(
                 if let Some(new_bindings) = match_literal(&first_lit, fact) {
                     if let Some(merged) = merge_substitutions(current_subst, &new_bindings) {
                         results.extend(match_body_against_facts(
-                            rest,
-                            fact_index,
-                            all_facts,
-                            &merged,
+                            rest, fact_index, all_facts, &merged,
                         ));
                     }
                 }
@@ -715,18 +706,18 @@ fn match_body_ordered_delta(
             let mut results = Vec::new();
 
             for fact in candidates {
-                if let Some(new_bindings) = match_literal(&first_lit, fact) {
-                    if let Some(merged) = merge_substitutions(current_subst, &new_bindings) {
-                        let is_delta = delta_keys.contains(&literal_key(fact));
-                        results.extend(match_body_ordered_delta(
-                            rest,
-                            fact_index,
-                            all_facts,
-                            delta_keys,
-                            &merged,
-                            used_delta || is_delta,
-                        ));
-                    }
+                if let Some(new_bindings) = match_literal(&first_lit, fact)
+                    && let Some(merged) = merge_substitutions(current_subst, &new_bindings)
+                {
+                    let is_delta = delta_keys.contains(&literal_key(fact));
+                    results.extend(match_body_ordered_delta(
+                        rest,
+                        fact_index,
+                        all_facts,
+                        delta_keys,
+                        &merged,
+                        used_delta || is_delta,
+                    ));
                 }
             }
 
@@ -736,12 +727,7 @@ fn match_body_ordered_delta(
             let mut sub_copy = current_subst.clone();
             if constraint.eval(&mut sub_copy).is_ok() {
                 match_body_ordered_delta(
-                    rest,
-                    fact_index,
-                    all_facts,
-                    delta_keys,
-                    &sub_copy,
-                    used_delta,
+                    rest, fact_index, all_facts, delta_keys, &sub_copy, used_delta,
                 )
             } else {
                 Vec::new()
@@ -882,12 +868,8 @@ pub fn ground_theory_with_limit(
                 break;
             }
 
-            let substitutions = match_body_with_delta(
-                &rule.body,
-                &fact_index,
-                &facts_list,
-                &facts_new,
-            );
+            let substitutions =
+                match_body_with_delta(&rule.body, &fact_index, &facts_list, &facts_new);
 
             for subst in substitutions {
                 if instance_counter >= max_instances {
@@ -996,10 +978,7 @@ mod tests {
         let subst = match_literal(&pattern, &ground).unwrap();
         let x_id = intern("?x");
         let y_id = intern("?y");
-        assert_eq!(
-            subst.terms.get(&x_id),
-            Some(&Term::Symbol(intern("alice")))
-        );
+        assert_eq!(subst.terms.get(&x_id), Some(&Term::Symbol(intern("alice"))));
         assert_eq!(subst.terms.get(&y_id), Some(&Term::Symbol(intern("bob"))));
     }
 
@@ -1308,8 +1287,7 @@ mod tests {
     #[test]
     fn test_merge_substitutions_conflict() {
         let mut s1 = Substitution::default();
-        s1.terms
-            .insert(intern("?x"), Term::Symbol(intern("alice")));
+        s1.terms.insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
         s2.terms.insert(intern("?x"), Term::Symbol(intern("bob"))); // Conflict!
@@ -1324,8 +1302,7 @@ mod tests {
     #[test]
     fn test_merge_substitutions_compatible() {
         let mut s1 = Substitution::default();
-        s1.terms
-            .insert(intern("?x"), Term::Symbol(intern("alice")));
+        s1.terms.insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
         s2.terms.insert(intern("?y"), Term::Symbol(intern("bob")));
@@ -1337,12 +1314,10 @@ mod tests {
     #[test]
     fn test_merge_substitutions_same_value() {
         let mut s1 = Substitution::default();
-        s1.terms
-            .insert(intern("?x"), Term::Symbol(intern("alice")));
+        s1.terms.insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms
-            .insert(intern("?x"), Term::Symbol(intern("alice"))); // Same value
+        s2.terms.insert(intern("?x"), Term::Symbol(intern("alice"))); // Same value
 
         let merged = merge_substitutions(&s1, &s2).unwrap();
         assert_eq!(merged.terms.len(), 1);
@@ -1957,10 +1932,7 @@ mod tests {
         assert!(result.is_some(), "[O]pay(?x) should match [O]pay(alice)");
         let subst = result.unwrap();
         let x_id = intern("?x");
-        assert_eq!(
-            subst.terms.get(&x_id),
-            Some(&Term::Symbol(intern("alice")))
-        );
+        assert_eq!(subst.terms.get(&x_id), Some(&Term::Symbol(intern("alice"))));
     }
 
     #[test]
@@ -2424,7 +2396,10 @@ mod tests {
             false,
             Default::default(),
             Default::default(),
-            vec![Term::Symbol(intern("item")), Term::Decimal(Decimal::new(10000, 2))],
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Decimal(Decimal::new(10000, 2)),
+            ],
         );
 
         assert!(
@@ -2530,20 +2505,14 @@ mod tests {
             false,
             Default::default(),
             Default::default(),
-            vec![
-                Term::Symbol(intern("?x")),
-                Term::Symbol(intern("?x")),
-            ],
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?x"))],
         );
         let ground = Literal::from_ids(
             intern("eq"),
             false,
             Default::default(),
             Default::default(),
-            vec![
-                Term::Integer(100),
-                Term::Decimal(Decimal::new(10000, 2)),
-            ],
+            vec![Term::Integer(100), Term::Decimal(Decimal::new(10000, 2))],
         );
 
         assert!(
@@ -2562,20 +2531,14 @@ mod tests {
             false,
             Default::default(),
             Default::default(),
-            vec![
-                Term::Symbol(intern("?x")),
-                Term::Symbol(intern("?x")),
-            ],
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?x"))],
         );
         let ground = Literal::from_ids(
             intern("eq"),
             false,
             Default::default(),
             Default::default(),
-            vec![
-                Term::Integer(100),
-                Term::Decimal(Decimal::new(9900, 2)),
-            ],
+            vec![Term::Integer(100), Term::Decimal(Decimal::new(9900, 2))],
         );
 
         assert!(
@@ -2592,10 +2555,11 @@ mod tests {
     fn build_fact_index(
         facts: &[Literal],
     ) -> FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> {
-        let mut idx: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
-            FxHashMap::default();
+        let mut idx: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> = FxHashMap::default();
         for lit in facts {
-            idx.entry(fact_index_key(lit)).or_default().push(lit.clone());
+            idx.entry(fact_index_key(lit))
+                .or_default()
+                .push(lit.clone());
         }
         idx
     }
@@ -3073,11 +3037,7 @@ mod tests {
         // pen:    tax = 5*2  = 10 ≤ 15 → no derivation
         let expensive_rules: Vec<_> = grounded
             .rules()
-            .filter(|r| {
-                r.head
-                    .iter()
-                    .any(|h| h.name() == "expensive")
-            })
+            .filter(|r| r.head.iter().any(|h| h.name() == "expensive"))
             .collect();
 
         assert_eq!(
@@ -3284,10 +3244,7 @@ mod tests {
             false,
             Mode::empty(),
             Temporal::empty(),
-            vec![
-                Term::Symbol(intern("?name")),
-                Term::Symbol(intern("?val")),
-            ],
+            vec![Term::Symbol(intern("?name")), Term::Symbol(intern("?val"))],
         );
         theory.add_rule(Rule::new(
             "r1",
@@ -3345,10 +3302,7 @@ mod tests {
             false,
             Mode::empty(),
             Temporal::empty(),
-            vec![
-                Term::Symbol(intern("?item")),
-                Term::Symbol(intern("?p")),
-            ],
+            vec![Term::Symbol(intern("?item")), Term::Symbol(intern("?p"))],
         );
         theory.add_rule(Rule::new(
             "r1",
@@ -3409,10 +3363,7 @@ mod tests {
             false,
             Mode::empty(),
             Temporal::empty(),
-            vec![
-                Term::Symbol(intern("?kind")),
-                Term::Symbol(intern("?v")),
-            ],
+            vec![Term::Symbol(intern("?kind")), Term::Symbol(intern("?v"))],
         );
         theory.add_rule(Rule::new(
             "r1",
@@ -3476,10 +3427,7 @@ mod tests {
                 false,
                 Mode::empty(),
                 Temporal::empty(),
-                vec![
-                    Term::Symbol(intern("?x")),
-                    Term::Symbol(intern("?n")),
-                ],
+                vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
             )],
         ));
 
@@ -3502,10 +3450,7 @@ mod tests {
                 false,
                 Mode::empty(),
                 Temporal::empty(),
-                vec![
-                    Term::Symbol(intern("?x")),
-                    Term::Symbol(intern("?n")),
-                ],
+                vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
             )],
         ));
 

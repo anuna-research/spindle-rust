@@ -948,7 +948,9 @@ mod tests {
         let err = parse_spl("(given (myPred (nested)))").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("Arithmetic expressions cannot appear as arguments in rule heads or facts"),
+            msg.contains(
+                "Arithmetic expressions cannot appear as arguments in rule heads or facts"
+            ),
             "Expected REQ-009 error for nested list in predicate, got: {msg}"
         );
     }
@@ -1544,19 +1546,17 @@ mod tests {
 
     #[test]
     fn test_bind_in_body_still_works() {
-        let theory = parse_spl(
-            "(normally r1 (and (price ?x ?p) (bind ?doubled (* ?p 2))) (result ?x))",
-        )
-        .unwrap();
+        let theory =
+            parse_spl("(normally r1 (and (price ?x ?p) (bind ?doubled (* ?p 2))) (result ?x))")
+                .unwrap();
         assert_eq!(theory.rule_count(), 1);
     }
 
     #[test]
     fn test_arith_expr_in_body_arg_still_works() {
-        let theory = parse_spl(
-            "(normally r1 (and (price ?x ?p) (bind ?total (* ?p 2))) (result ?x))",
-        )
-        .unwrap();
+        let theory =
+            parse_spl("(normally r1 (and (price ?x ?p) (bind ?total (* ?p 2))) (result ?x))")
+                .unwrap();
         assert_eq!(theory.rule_count(), 1);
     }
 

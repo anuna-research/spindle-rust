@@ -169,7 +169,10 @@ fn nfr_001_grounding_performance_regression() {
 
     // The real assertion: both complete without panic or error
     let result = prepare(&theory_arith, opts);
-    assert!(result.is_ok(), "Arithmetic theory should prepare successfully");
+    assert!(
+        result.is_ok(),
+        "Arithmetic theory should prepare successfully"
+    );
 }
 
 // ===========================================================================
@@ -188,8 +191,7 @@ fn nfr_003_no_unsafe_in_arithmetic_modules() {
         for line in src.lines() {
             let trimmed = line.trim();
             // Skip comments
-            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*')
-            {
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
                 continue;
             }
             // Check for unsafe keyword

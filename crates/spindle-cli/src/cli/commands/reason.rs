@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use spindle_contract::literal::{LiteralStructJson, LiteralStructJsonV2};
 use spindle_contract::reason::{
-    ConclusionEntry, ConclusionEntryV2, GroundingStats, ReasonOutput, ReasonOutputV2, TheoryStats,
-    SCHEMA_V1, SCHEMA_V2,
+    ConclusionEntry, ConclusionEntryV2, GroundingStats, ReasonOutput, ReasonOutputV2, SCHEMA_V1,
+    SCHEMA_V2, TheoryStats,
 };
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
@@ -189,19 +189,19 @@ fn trust_fields(
     weighted: &Option<Vec<WeightedConclusion>>,
     index: usize,
 ) -> (Option<f64>, Option<Vec<String>>) {
-    if let Some(wcs) = weighted {
-        if let Some(wc) = wcs.get(index) {
-            let mut sources: Vec<String> = wc.sources.iter().map(|s| s.id.clone()).collect();
-            sources.sort();
-            return (
-                Some(wc.degree),
-                if sources.is_empty() {
-                    None
-                } else {
-                    Some(sources)
-                },
-            );
-        }
+    if let Some(wcs) = weighted
+        && let Some(wc) = wcs.get(index)
+    {
+        let mut sources: Vec<String> = wc.sources.iter().map(|s| s.id.clone()).collect();
+        sources.sort();
+        return (
+            Some(wc.degree),
+            if sources.is_empty() {
+                None
+            } else {
+                Some(sources)
+            },
+        );
     }
     (None, None)
 }

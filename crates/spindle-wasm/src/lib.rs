@@ -28,8 +28,8 @@ use wasm_bindgen::prelude::*;
 use spindle_contract::error::ProblemDetails;
 use spindle_contract::literal::{LiteralStructJson, LiteralStructJsonV2};
 use spindle_contract::reason::{
-    ConclusionEntry, ConclusionEntryV2, GroundingStats, ReasonOutput, ReasonOutputV2, TheoryStats,
-    SCHEMA_V1, SCHEMA_V2,
+    ConclusionEntry, ConclusionEntryV2, GroundingStats, ReasonOutput, ReasonOutputV2, SCHEMA_V1,
+    SCHEMA_V2, TheoryStats,
 };
 use spindle_core::error::SpindleError;
 use spindle_core::literal::Literal;

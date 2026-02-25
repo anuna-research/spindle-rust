@@ -20,10 +20,8 @@ use spindle_parser::parse_spl;
 /// `ArithExpr::NaryOp(Add, [Lit(3), Lit(4)])`
 #[test]
 fn test_002_01_add_in_argument_position() {
-    let theory = parse_spl(
-        "(normally r1 (and (price ?x ?p) (bind ?total (+ 3 4))) (result ?x))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (price ?x ?p) (bind ?total (+ 3 4))) (result ?x))").unwrap();
     assert_eq!(theory.rule_count(), 1);
     let rule = theory.rules().next().unwrap();
     // The bind constraint should be an arithmetic body literal
@@ -51,10 +49,9 @@ fn test_002_01_add_in_argument_position() {
 /// TEST-002 scenario 2: Nested: `(* (+ ?a ?b) 2)` → parses as nested ArithExpr
 #[test]
 fn test_002_02_nested_arith_expr() {
-    let theory = parse_spl(
-        "(normally r1 (and (val ?a) (val ?b) (bind ?c (* (+ ?a ?b) 2))) (result ?c))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?a) (val ?b) (bind ?c (* (+ ?a ?b) 2))) (result ?c))")
+            .unwrap();
     let rule = theory.rules().next().unwrap();
     let arith = rule
         .body
@@ -91,16 +88,9 @@ fn test_002_02_nested_arith_expr() {
 /// TEST-002 scenario 3: Variadic: `(+ 1 2 3)` → NaryOp(Add, [Lit(1), Lit(2), Lit(3)])
 #[test]
 fn test_002_03_variadic_add() {
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?s (+ 1 2 3))) (result ?s))",
-    )
-    .unwrap();
+    let theory = parse_spl("(normally r1 (and (val ?x) (bind ?s (+ 1 2 3))) (result ?s))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -123,16 +113,9 @@ fn test_002_03_variadic_add() {
 #[test]
 fn test_002_04_zero_arg_identity() {
     // (+) zero args — identity for add
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?s (+))) (result ?s))",
-    )
-    .unwrap();
+    let theory = parse_spl("(normally r1 (and (val ?x) (bind ?s (+))) (result ?s))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -146,16 +129,9 @@ fn test_002_04_zero_arg_identity() {
     }
 
     // (*) zero args — identity for mul
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?s (*))) (result ?s))",
-    )
-    .unwrap();
+    let theory = parse_spl("(normally r1 (and (val ?x) (bind ?s (*))) (result ?s))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -174,16 +150,10 @@ fn test_002_04_zero_arg_identity() {
 #[test]
 fn test_002_05_unary_sub_and_div() {
     // (- ?x) → NaryOp(Sub, [Var(?x)])
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?neg (- ?x))) (result ?neg))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?neg (- ?x))) (result ?neg))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -197,16 +167,10 @@ fn test_002_05_unary_sub_and_div() {
     }
 
     // (/ ?x) → NaryOp(Div, [Var(?x)])
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?recip (/ ?x))) (result ?recip))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?recip (/ ?x))) (result ?recip))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -225,16 +189,10 @@ fn test_002_05_unary_sub_and_div() {
 #[test]
 fn test_002_06_left_fold_sub_div() {
     // (- 10 3 2) → NaryOp(Sub, [10, 3, 2])
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?s (- 10 3 2))) (result ?s))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?s (- 10 3 2))) (result ?s))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -252,16 +210,10 @@ fn test_002_06_left_fold_sub_div() {
     }
 
     // (/ 12 3 2) → NaryOp(Div, [12, 3, 2])
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?s (/ 12 3 2))) (result ?s))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?s (/ 12 3 2))) (result ?s))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -283,16 +235,10 @@ fn test_002_06_left_fold_sub_div() {
 #[test]
 fn test_002_07_binary_operators() {
     // (div 10 3) → BinOp(IDiv, 10, 3)
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?d (div 10 3))) (result ?d))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?d (div 10 3))) (result ?d))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -307,16 +253,10 @@ fn test_002_07_binary_operators() {
     }
 
     // (rem 10 3) → BinOp(Rem, 10, 3)
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?r (rem 10 3))) (result ?r))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?r (rem 10 3))) (result ?r))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -331,16 +271,9 @@ fn test_002_07_binary_operators() {
     }
 
     // (** 2 3) → BinOp(Pow, 2, 3)
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?p (** 2 3))) (result ?p))",
-    )
-    .unwrap();
+    let theory = parse_spl("(normally r1 (and (val ?x) (bind ?p (** 2 3))) (result ?p))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -358,16 +291,11 @@ fn test_002_07_binary_operators() {
 /// TEST-002 scenario 8: `(abs (- ?a ?b))` → absolute difference
 #[test]
 fn test_002_08_abs_difference() {
-    let theory = parse_spl(
-        "(normally r1 (and (val ?a) (val ?b) (bind ?d (abs (- ?a ?b)))) (result ?d))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?a) (val ?b) (bind ?d (abs (- ?a ?b)))) (result ?d))")
+            .unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         match expr {
             ArithExpr::UnaryOp {
@@ -401,11 +329,7 @@ fn test_002_09_variadic_min_max() {
     )
     .unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         match expr {
             ArithExpr::NaryOp {
@@ -424,16 +348,10 @@ fn test_002_09_variadic_min_max() {
     }
 
     // (max 0 ?x)
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?m (max 0 ?x))) (result ?m))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (val ?x) (bind ?m (max 0 ?x))) (result ?m))").unwrap();
     let rule = theory.rules().next().unwrap();
-    let arith = rule
-        .body
-        .iter()
-        .find_map(|bl| bl.as_arithmetic())
-        .unwrap();
+    let arith = rule.body.iter().find_map(|bl| bl.as_arithmetic()).unwrap();
     if let spindle_core::arith::ArithConstraint::Bind { expr, .. } = arith {
         assert_eq!(
             *expr,
@@ -453,10 +371,8 @@ fn test_002_09_variadic_min_max() {
 /// TEST-002 scenario 10: `(div 10 3 2)` → parse error (div requires exactly 2 arguments)
 #[test]
 fn test_002_10_div_wrong_arity() {
-    let err = parse_spl(
-        "(normally r1 (and (val ?x) (bind ?d (div 10 3 2))) (result ?d))",
-    )
-    .unwrap_err();
+    let err =
+        parse_spl("(normally r1 (and (val ?x) (bind ?d (div 10 3 2))) (result ?d))").unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("exactly 2 arguments"),
@@ -480,10 +396,8 @@ fn test_002_11_arith_op_as_predicate() {
 /// parses as `BodyArg::Arith`
 #[test]
 fn test_002_12_arith_in_body_literal_arg() {
-    let theory = parse_spl(
-        "(normally r1 (and (price ?i ?p) (line-total ?i (* ?p 2))) (ok ?i))",
-    )
-    .unwrap();
+    let theory =
+        parse_spl("(normally r1 (and (price ?i ?p) (line-total ?i (* ?p 2))) (ok ?i))").unwrap();
     let rule = theory.rules().next().unwrap();
 
     // Find the line-total body literal
@@ -663,10 +577,7 @@ fn test_009_03_arith_expr_in_head_arg() {
 /// TEST-011 scenario 1: `(not (> ?x 100))` in body → parse error
 #[test]
 fn test_011_01_negated_gt() {
-    let err = parse_spl(
-        "(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))",
-    )
-    .unwrap_err();
+    let err = parse_spl("(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))").unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("cannot be negated") && msg.contains("REQ-011"),
@@ -677,10 +588,7 @@ fn test_011_01_negated_gt() {
 /// TEST-011 scenario 2: `(not (= ?x 0))` in body → parse error
 #[test]
 fn test_011_02_negated_eq() {
-    let err = parse_spl(
-        "(normally r1 (and (val ?x) (not (= ?x 0))) (nonzero ?x))",
-    )
-    .unwrap_err();
+    let err = parse_spl("(normally r1 (and (val ?x) (not (= ?x 0))) (nonzero ?x))").unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("cannot be negated") && msg.contains("REQ-011"),
@@ -691,10 +599,8 @@ fn test_011_02_negated_eq() {
 /// TEST-011 scenario 3: `(not (bind ?y (+ ?x 1)))` in body → parse error
 #[test]
 fn test_011_03_negated_bind() {
-    let err = parse_spl(
-        "(normally r1 (and (val ?x) (not (bind ?y (+ ?x 1)))) (result ?x))",
-    )
-    .unwrap_err();
+    let err =
+        parse_spl("(normally r1 (and (val ?x) (not (bind ?y (+ ?x 1)))) (result ?x))").unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("cannot be negated") && msg.contains("REQ-011"),
@@ -713,10 +619,7 @@ fn test_011_04_tilde_negation_variant() {
     // The spec shows (~(> ?x 100)) but SPL tilde works on atoms like ~name.
     // The closest valid representation would use (not ...) form.
     // Trying ~> as an atom — should be rejected as reserved keyword
-    let err = parse_spl(
-        "(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))",
-    )
-    .unwrap_err();
+    let err = parse_spl("(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))").unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("cannot be negated") && msg.contains("REQ-011"),
@@ -727,18 +630,12 @@ fn test_011_04_tilde_negation_variant() {
 /// TEST-011 scenario 5: Complementary comparison `(<= ?x 100)` → legal
 #[test]
 fn test_011_05_complementary_comparison_legal() {
-    let theory = parse_spl(
-        "(normally r1 (and (val ?x) (<= ?x 100)) (low ?x))",
-    )
-    .unwrap();
+    let theory = parse_spl("(normally r1 (and (val ?x) (<= ?x 100)) (low ?x))").unwrap();
     assert_eq!(theory.rule_count(), 1);
 
     let rule = theory.rules().next().unwrap();
     // Body should contain a logic literal and a comparison constraint
-    let has_comparison = rule
-        .body
-        .iter()
-        .any(|bl| bl.is_arithmetic());
+    let has_comparison = rule.body.iter().any(|bl| bl.is_arithmetic());
     assert!(
         has_comparison,
         "Expected arithmetic comparison constraint in body"

@@ -25,7 +25,7 @@ use std::hash::{Hash, Hasher};
 
 use rust_decimal::Decimal;
 
-use crate::intern::{resolve, SymbolId};
+use crate::intern::{SymbolId, resolve};
 
 // ---------------------------------------------------------------------------
 // FiniteFloat — canonicalized, hashable f64 wrapper
@@ -251,9 +251,7 @@ impl NumericValue {
             (NumericValue::Float(a), NumericValue::Float(b)) => a == b,
             // Cross-type promotion
             (NumericValue::Integer(a), NumericValue::Decimal(b))
-            | (NumericValue::Decimal(b), NumericValue::Integer(a)) => {
-                Decimal::from(*a) == *b
-            }
+            | (NumericValue::Decimal(b), NumericValue::Integer(a)) => Decimal::from(*a) == *b,
             (NumericValue::Integer(a), NumericValue::Float(b))
             | (NumericValue::Float(b), NumericValue::Integer(a)) => (*a as f64) == *b,
             (NumericValue::Decimal(a), NumericValue::Float(b))
@@ -604,7 +602,15 @@ mod tests {
         let s = result.to_string();
         assert!(s.starts_with("3."), "expected '3.' prefix, got: {s}");
         let frac = &s[2..];
-        assert_eq!(frac.len(), 28, "expected 28 fractional digits, got {}", frac.len());
-        assert!(frac.chars().all(|c| c == '3'), "expected all '3's, got: {frac}");
+        assert_eq!(
+            frac.len(),
+            28,
+            "expected 28 fractional digits, got {}",
+            frac.len()
+        );
+        assert!(
+            frac.chars().all(|c| c == '3'),
+            "expected all '3's, got: {frac}"
+        );
     }
 }

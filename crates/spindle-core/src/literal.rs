@@ -212,10 +212,7 @@ impl Literal {
             mode,
             temporal,
             temporal_expr: None,
-            predicate_args: predicates
-                .iter()
-                .map(|s| Term::Symbol(intern(s)))
-                .collect(),
+            predicate_args: predicates.iter().map(|s| Term::Symbol(intern(s))).collect(),
             interval_var: None,
         }
     }
@@ -243,10 +240,7 @@ impl Literal {
             mode,
             temporal,
             temporal_expr: expr,
-            predicate_args: predicates
-                .iter()
-                .map(|s| Term::Symbol(intern(s)))
-                .collect(),
+            predicate_args: predicates.iter().map(|s| Term::Symbol(intern(s))).collect(),
             interval_var: None,
         }
     }
@@ -522,7 +516,11 @@ impl From<&Literal> for LiteralStruct {
             mode: literal.mode.clone(),
             negated: literal.negation,
             functor: literal.name().to_string(),
-            args: literal.predicate_args.iter().map(|t| t.to_string()).collect(),
+            args: literal
+                .predicate_args
+                .iter()
+                .map(|t| t.to_string())
+                .collect(),
             temporal: literal.temporal.clone(),
         }
     }

@@ -54,7 +54,11 @@ fn main() {
     // Determine schema version and json flag based on the command before we move out of cli.command
     let (schema_version, json_flag) = match &cli.command {
         Commands::Reason { json, v2, .. } => {
-            let ver = if *v2 { "spindle.reason.v2" } else { "spindle.reason.v1" };
+            let ver = if *v2 {
+                "spindle.reason.v2"
+            } else {
+                "spindle.reason.v1"
+            };
             (Some(ver), *json || cli.json)
         }
         Commands::Query { json, .. } => (Some("spindle.query.v1"), *json || cli.json),

@@ -92,11 +92,11 @@ fn rewrite_body_logic_wildcards(
         .iter()
         .map(|a| match a {
             BodyArg::Term(t) => {
-                if let Term::Symbol(id) = t {
-                    if resolve(*id) == "_" {
-                        *counter += 1;
-                        return BodyArg::Term(Term::Symbol(intern(&format!("?_w{counter}"))));
-                    }
+                if let Term::Symbol(id) = t
+                    && resolve(*id) == "_"
+                {
+                    *counter += 1;
+                    return BodyArg::Term(Term::Symbol(intern(&format!("?_w{counter}"))));
                 }
                 a.clone()
             }
@@ -105,7 +105,11 @@ fn rewrite_body_logic_wildcards(
         .collect();
 
     let mut result = BodyLogicLiteral::from_ids(
-        name_id, lit.negation, lit.mode.clone(), lit.temporal.clone(), args,
+        name_id,
+        lit.negation,
+        lit.mode.clone(),
+        lit.temporal.clone(),
+        args,
     );
     result.temporal_expr = lit.temporal_expr.clone();
     result.interval_var = lit.interval_var;
@@ -124,11 +128,11 @@ fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
         .predicate_args()
         .iter()
         .map(|t| {
-            if let Term::Symbol(id) = t {
-                if resolve(*id) == "_" {
-                    *counter += 1;
-                    return Term::Symbol(intern(&format!("?_w{counter}")));
-                }
+            if let Term::Symbol(id) = t
+                && resolve(*id) == "_"
+            {
+                *counter += 1;
+                return Term::Symbol(intern(&format!("?_w{counter}")));
             }
             t.clone()
         })

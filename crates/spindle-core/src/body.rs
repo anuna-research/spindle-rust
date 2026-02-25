@@ -677,13 +677,8 @@ mod tests {
     #[test]
     fn body_logic_literal_from_ids() {
         let name_id = InternedLiteralName::intern("test");
-        let lit = BodyLogicLiteral::from_ids(
-            name_id,
-            false,
-            Mode::empty(),
-            Temporal::empty(),
-            vec![],
-        );
+        let lit =
+            BodyLogicLiteral::from_ids(name_id, false, Mode::empty(), Temporal::empty(), vec![]);
         assert_eq!(lit.name(), "test");
         assert_eq!(lit.interned_name(), name_id);
         assert_eq!(lit.name_id(), name_id.symbol_id());
@@ -757,13 +752,8 @@ mod tests {
 
     #[test]
     fn body_logic_literal_modal() {
-        let lit = BodyLogicLiteral::new(
-            "pay",
-            false,
-            Mode::obligation(),
-            Temporal::empty(),
-            vec![],
-        );
+        let lit =
+            BodyLogicLiteral::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]);
         assert!(lit.is_modal());
         let display = format!("{lit}");
         assert_eq!(display, "[O]pay");

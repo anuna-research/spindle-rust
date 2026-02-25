@@ -8,7 +8,6 @@
 use proptest::prelude::*;
 use rust_decimal::Decimal;
 
-
 #[allow(unused_imports)]
 use spindle_core::arith::{
     ArithConstraint, ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
@@ -68,9 +67,11 @@ fn arb_arith_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> {
     leaf.prop_recursive(max_depth, 64, 4, |inner| {
         prop_oneof![
             // NaryOp with 1-3 args
-            (arb_nary_op(), proptest::collection::vec(inner.clone(), 1..=3)).prop_map(
-                |(op, args)| ArithExpr::NaryOp { op, args }
-            ),
+            (
+                arb_nary_op(),
+                proptest::collection::vec(inner.clone(), 1..=3)
+            )
+                .prop_map(|(op, args)| ArithExpr::NaryOp { op, args }),
             // BinOp
             (arb_bin_op(), inner.clone(), inner.clone()).prop_map(|(op, lhs, rhs)| {
                 ArithExpr::BinOp {
@@ -80,23 +81,17 @@ fn arb_arith_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> {
                 }
             }),
             // UnaryOp
-            inner
-                .clone()
-                .prop_map(|e| ArithExpr::UnaryOp {
-                    op: UnaryArithOp::Abs,
-                    expr: Box::new(e),
-                }),
+            inner.clone().prop_map(|e| ArithExpr::UnaryOp {
+                op: UnaryArithOp::Abs,
+                expr: Box::new(e),
+            }),
         ]
     })
 }
 
 /// Generate a substitution with some bound variables.
 fn arb_substitution() -> impl Strategy<Value = Substitution> {
-    proptest::collection::vec(
-        (0..5u32, arb_numeric_value()),
-        0..=5,
-    )
-    .prop_map(|bindings| {
+    proptest::collection::vec((0..5u32, arb_numeric_value()), 0..=5).prop_map(|bindings| {
         let mut subst = Substitution::default();
         for (idx, val) in bindings {
             let var_name = format!("?v{}", idx);
