@@ -1,12 +1,12 @@
 {
-  "task_id": "body-literal",
+  "task_id": "cross-type-matching",
   "token_budget": 8000,
-  "tokens_used": 342,
+  "tokens_used": 363,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Add BodyLiteral, BodyLogicLiteral, and BodyArg types per SPEC-017 section 7.4. BodyArg::Term(Term) for concrete args, BodyArg::Arith(ArithExpr) for expression args. BodyLogicLiteral mirrors Literal fields but uses Vec<BodyArg> for predicate_args. BodyLiteral::Logic(BodyLogicLiteral) for fact-matching, BodyLiteral::Arithmetic(ArithConstraint) for bind/compare. Place in a new crates/spindle-core/src/body.rs or extend rule.rs. NOTE: ArithConstraint has no negation flag (REQ-011 makes negation of arithmetic a parse error).",
-      "token_cost": 131,
+      "content": "Extend grounding.rs match_literal to handle cross-type numeric matching per REQ-010/CON-005. When a bound variable holds a numeric Term and a candidate fact argument is a different numeric Term type, promote both to a common type using REQ-005 rules and compare for equality. Integer(100) matches Decimal(100.00), Integer(100) matches Float(100.0), Decimal(100.00) matches Float(100.0). Symbol never matches numeric. Use Term::numeric_eq() from task 1.2.",
+      "token_cost": 113,
       "priority": "PlanMeta"
     },
     {
@@ -50,8 +50,14 @@
       "content": "Modified 1 files (+71, -4): crates/spindle-core/src/arith.rs",
       "token_cost": 15,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-body-literal-changes",
+      "content": "Modified 4 files (+649, -5): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/body.rs, crates/spindle-core/src/lib.rs",
+      "token_cost": 39,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T04:09:43Z"
+  "constructed_at": "2026-02-25T04:13:45Z"
 }
