@@ -455,11 +455,26 @@ fn normalize_body_against_facts(
 }
 
 /// Apply a substitution to a body literal, returning a new body literal.
+///
+/// For logic literals, `BodyArg::Arith` arguments are evaluated under the
+/// substitution and replaced with concrete `Term` values.  This ensures the
+/// grounded rule's body literal has the correct arity and can be matched by
+/// the reasoner.
 fn apply_substitution_to_body_literal(bl: &BodyLiteral, subst: &Substitution) -> BodyLiteral {
     match bl {
         BodyLiteral::Logic(lit) => {
-            let as_lit = lit.to_literal();
-            BodyLiteral::from(apply_substitution_to_literal(&as_lit, subst))
+            // Use resolve_body_logic to evaluate any BodyArg::Arith arguments,
+            // then apply substitution to produce a fully ground literal.
+            match resolve_body_logic(lit, subst) {
+                Some(resolved) => {
+                    BodyLiteral::from(apply_substitution_to_literal(&resolved, subst))
+                }
+                None => {
+                    // Arithmetic evaluation failed — fall back to dropping arith args.
+                    let as_lit = lit.to_literal();
+                    BodyLiteral::from(apply_substitution_to_literal(&as_lit, subst))
+                }
+            }
         }
         // Arithmetic constraints are passed through unchanged during body matching.
         // (Evaluation of arithmetic constraints is handled separately.)

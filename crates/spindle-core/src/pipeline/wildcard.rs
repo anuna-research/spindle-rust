@@ -45,9 +45,9 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
         for bl in &rule.body {
             match bl {
                 crate::body::BodyLiteral::Logic(logic_lit) => {
-                    let as_lit = logic_lit.to_literal();
-                    let rewritten = rewrite_literal_wildcards(&as_lit, &mut counter);
-                    new_body.push(crate::body::BodyLiteral::from(rewritten));
+                    new_body.push(crate::body::BodyLiteral::Logic(
+                        rewrite_body_logic_wildcards(logic_lit, &mut counter),
+                    ));
                 }
                 crate::body::BodyLiteral::Arithmetic(c) => {
                     new_body.push(crate::body::BodyLiteral::Arithmetic(c.clone()));
@@ -67,6 +67,49 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
         new_theory.add_rule(new_rule);
     }
     new_theory
+}
+
+/// Rewrite wildcards in a [`BodyLogicLiteral`], preserving `BodyArg::Arith` arguments.
+///
+/// Unlike `rewrite_literal_wildcards` which works on `Literal` (dropping arith args
+/// via `to_literal()`), this function directly rewrites `BodyArg::Term` entries while
+/// passing `BodyArg::Arith` entries through unchanged.
+fn rewrite_body_logic_wildcards(
+    lit: &crate::body::BodyLogicLiteral,
+    counter: &mut usize,
+) -> crate::body::BodyLogicLiteral {
+    use crate::body::{BodyArg, BodyLogicLiteral};
+
+    let name_id = if lit.name() == "_" {
+        *counter += 1;
+        intern(&format!("?_w{counter}"))
+    } else {
+        lit.name_id()
+    };
+
+    let args: Vec<BodyArg> = lit
+        .predicate_args()
+        .iter()
+        .map(|a| match a {
+            BodyArg::Term(t) => {
+                if let Term::Symbol(id) = t {
+                    if resolve(*id) == "_" {
+                        *counter += 1;
+                        return BodyArg::Term(Term::Symbol(intern(&format!("?_w{counter}"))));
+                    }
+                }
+                a.clone()
+            }
+            BodyArg::Arith(_) => a.clone(),
+        })
+        .collect();
+
+    let mut result = BodyLogicLiteral::from_ids(
+        name_id, lit.negation, lit.mode.clone(), lit.temporal.clone(), args,
+    );
+    result.temporal_expr = lit.temporal_expr.clone();
+    result.interval_var = lit.interval_var;
+    result
 }
 
 fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {

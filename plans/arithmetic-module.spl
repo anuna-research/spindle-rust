@@ -683,3 +683,41 @@
 (claims agent:claude
   :at "2026-02-25T08:45:23Z"
   (given completed-tests-parser))
+
+(claims agent:claude
+  :at "2026-02-25T09:10:25Z"
+  (given claim-v1-tests-worked-examples)
+  (normally r-cl-state-v1-tests-worked-examples claim-v1-tests-worked-examples state-claimed-v1-tests-worked-examples)
+  (normally r-cl-chain-v1-tests-worked-examples state-claimed-v1-tests-worked-examples claimed-tests-worked-examples)
+)
+
+(claims agent:claude
+  :at "2026-02-25T09:10:26Z"
+  (given claim-v1-tests-nfr)
+  (normally r-cl-state-v1-tests-nfr claim-v1-tests-nfr state-claimed-v1-tests-nfr)
+  (normally r-cl-chain-v1-tests-nfr state-claimed-v1-tests-nfr claimed-tests-nfr)
+)
+
+(claims agent:claude
+  :at "2026-02-25T09:10:26Z"
+  (given claim-v1-tests-pbt)
+  (normally r-cl-state-v1-tests-pbt claim-v1-tests-pbt state-claimed-v1-tests-pbt)
+  (normally r-cl-chain-v1-tests-pbt state-claimed-v1-tests-pbt claimed-tests-pbt)
+)
+
+(claims agent:claude
+  :at "2026-02-25T09:10:27Z"
+  (given claim-v1-v2-json-schema)
+  (normally r-cl-state-v1-v2-json-schema claim-v1-v2-json-schema state-claimed-v1-v2-json-schema)
+  (normally r-cl-chain-v1-v2-json-schema state-claimed-v1-v2-json-schema claimed-v2-json-schema)
+)
+
+;; Propagation rules: failures in 'v2-json-schema' block downstream tasks
+(normally r-propagate-tests-v2-json-from-v2-json-schema-failed failed-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-failed failed-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
