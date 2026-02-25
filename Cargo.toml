@@ -37,6 +37,9 @@ serde_json = "1"
 # Date/Time
 chrono = "0.4"
 
+# Numeric
+rust_decimal = "1"
+
 # Collections
 indexmap = "2"
 rustc-hash = "2"
