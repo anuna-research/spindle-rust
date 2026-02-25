@@ -1,15 +1,27 @@
 {
   "task_id": "add-rust-decimal",
   "token_budget": 8000,
-  "tokens_used": 36,
+  "tokens_used": 76,
   "elements_selected": [
     {
       "source": "plan-meta/description",
       "content": "Add rust_decimal = '1.x' to spindle-core/Cargo.toml [dependencies] and workspace Cargo.toml [workspace.dependencies]. Verify `cargo check` passes.",
       "token_cost": 36,
       "priority": "PlanMeta"
+    },
+    {
+      "source": "memory/episodic/task-add-rust-decimal-changes",
+      "content": "Modified 2 files (+4, -0): Cargo.toml, crates/spindle-core/Cargo.toml",
+      "token_cost": 17,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-term-enum-changes",
+      "content": "Modified 2 files (+765, -0): crates/spindle-core/src/lib.rs, crates/spindle-core/src/term.rs",
+      "token_cost": 23,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T01:49:01Z"
+  "constructed_at": "2026-02-25T03:19:54Z"
 }
