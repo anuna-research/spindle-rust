@@ -4,6 +4,7 @@
 //! values, handling negation, modals, temporal annotations, and predicates.
 
 use chrono::DateTime;
+use rust_decimal::Decimal;
 use spindle_core::Literal;
 use spindle_core::arith::ArithConstraint;
 use spindle_core::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
@@ -13,7 +14,7 @@ use spindle_core::temporal::{
     AllenConstraint, AllenRelation, StateQueryKind, Temporal, TemporalExpr, TemporalStateQuery,
     TimeExpr, TimePoint,
 };
-use spindle_core::term::Term;
+use spindle_core::term::{FiniteFloat, Term};
 
 use crate::ParseError;
 use crate::error::ParserFormat;
@@ -448,25 +449,24 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                 }
                 _ => {
                     // Predicate: (name arg1 arg2 ...)
-                    let predicates: Result<Vec<String>, _> = items[1..]
+                    let terms: Result<Vec<Term>, _> = items[1..]
                         .iter()
                         .map(|a| {
-                            a.as_atom().map(|s| s.to_string()).ok_or_else(|| {
-                                ParseError::ParserError {
-                                    line,
-                                    message: "Expected atom argument".to_string(),
-                                    format: ParserFormat::Spl,
-                                    source_line: None,
-                                }
-                            })
+                            let s = a.as_atom().ok_or_else(|| ParseError::ParserError {
+                                line,
+                                message: "Expected atom argument".to_string(),
+                                format: ParserFormat::Spl,
+                                source_line: None,
+                            })?;
+                            parse_term_from_atom(s, line)
                         })
                         .collect();
-                    Ok(Literal::new(
+                    Ok(Literal::from_ids(
                         first,
                         false,
-                        Default::default(),
-                        Default::default(),
-                        predicates?,
+                        Mode::empty(),
+                        Temporal::empty(),
+                        terms?,
                     ))
                 }
             }
@@ -630,14 +630,115 @@ fn parse_body_logic_literal_with_line(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Numeric literal detection helpers
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if `s` matches the integer pattern: `-?[0-9]+`.
+fn is_integer_literal(s: &str) -> bool {
+    let s = s.strip_prefix('-').unwrap_or(s);
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Returns `true` if `s` matches the decimal pattern: `-?[0-9]+.[0-9]+`.
+fn is_decimal_literal(s: &str) -> bool {
+    let s = s.strip_prefix('-').unwrap_or(s);
+    if let Some(dot_pos) = s.find('.') {
+        let before = &s[..dot_pos];
+        let after = &s[dot_pos + 1..];
+        !before.is_empty()
+            && before.bytes().all(|b| b.is_ascii_digit())
+            && !after.is_empty()
+            && after.bytes().all(|b| b.is_ascii_digit())
+    } else {
+        false
+    }
+}
+
+/// Returns `true` if `s` matches the float pattern: `-?[0-9]+(.[0-9]+)?[eE]-?[0-9]+`.
+fn is_float_literal(s: &str) -> bool {
+    let e_pos = s.find(|c: char| c == 'e' || c == 'E');
+    let e_pos = match e_pos {
+        Some(pos) => pos,
+        None => return false,
+    };
+
+    let mantissa = &s[..e_pos];
+    let exponent = &s[e_pos + 1..];
+
+    (is_integer_literal(mantissa) || is_decimal_literal(mantissa))
+        && is_integer_literal(exponent)
+}
+
+/// Try to parse an atom as a numeric [`Term`].
+///
+/// Detection order: float (has e/E) → decimal (has .) → integer.
+/// Returns `Ok(None)` if the atom does not match any numeric pattern (i.e., it's a symbol).
+/// Returns `Err` if the atom matches a numeric pattern but the value is out of range.
+fn try_parse_numeric_term(value: &str, line: usize) -> Result<Option<Term>, ParseError> {
+    // Float (has e/E): checked first
+    if is_float_literal(value) {
+        let f = value.parse::<f64>().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Float out of range: {value}"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        let ff = FiniteFloat::new(f).ok_or_else(|| ParseError::ParserError {
+            line,
+            message: format!("Non-finite float value: {value}"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        return Ok(Some(Term::Float(ff)));
+    }
+
+    // Decimal (has .): checked second
+    if is_decimal_literal(value) {
+        let d = value.parse::<Decimal>().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Decimal out of range: {value}"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        return Ok(Some(Term::Decimal(d)));
+    }
+
+    // Integer: checked third
+    if is_integer_literal(value) {
+        let n = value.parse::<i64>().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Integer out of range: {value}"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        return Ok(Some(Term::Integer(n)));
+    }
+
+    // Not numeric — it's a symbol
+    Ok(None)
+}
+
+/// Parse an atom string as a [`Term`], detecting numeric literals.
+///
+/// If the atom matches a numeric pattern, returns the appropriate numeric Term.
+/// Otherwise returns `Term::Symbol`.
+fn parse_term_from_atom(value: &str, line: usize) -> Result<Term, ParseError> {
+    if let Some(term) = try_parse_numeric_term(value, line)? {
+        Ok(term)
+    } else {
+        Ok(Term::Symbol(intern(value)))
+    }
+}
+
 /// Parse a single predicate argument as a [`BodyArg`].
 ///
-/// - Atom → `BodyArg::Term(Term::Symbol(...))`
+/// - Atom → `BodyArg::Term(...)` (numeric literals detected automatically)
 /// - List starting with arithmetic operator → `BodyArg::Arith(ArithExpr)`
 /// - Other list → error
 fn parse_body_arg(expr: &SExpr, line: usize) -> Result<BodyArg, ParseError> {
     match expr {
-        SExpr::Atom { value, .. } => Ok(BodyArg::Term(Term::Symbol(intern(value)))),
+        SExpr::Atom { value, .. } => Ok(BodyArg::Term(parse_term_from_atom(value, line)?)),
         SExpr::List { items, .. } => {
             if let Some(head) = items.first().and_then(|i| i.as_atom()) {
                 if is_arith_op(head) {
@@ -1255,6 +1356,344 @@ mod tests {
         assert_eq!(
             lit.predicate_args()[1],
             BodyArg::Term(Term::Symbol(intern("bob")))
+        );
+    }
+
+    // =====================================================================
+    // Numeric literal detection helpers
+    // =====================================================================
+
+    #[test]
+    fn test_is_integer_literal() {
+        assert!(is_integer_literal("42"));
+        assert!(is_integer_literal("0"));
+        assert!(is_integer_literal("-7"));
+        assert!(is_integer_literal("123456789"));
+        assert!(!is_integer_literal(""));
+        assert!(!is_integer_literal("-"));
+        assert!(!is_integer_literal("abc"));
+        assert!(!is_integer_literal("3.14"));
+        assert!(!is_integer_literal("1e5"));
+        assert!(!is_integer_literal("?x"));
+    }
+
+    #[test]
+    fn test_is_decimal_literal() {
+        assert!(is_decimal_literal("3.14"));
+        assert!(is_decimal_literal("-0.5"));
+        assert!(is_decimal_literal("100.00"));
+        assert!(!is_decimal_literal("42"));
+        assert!(!is_decimal_literal(".5"));
+        assert!(!is_decimal_literal("5."));
+        assert!(!is_decimal_literal("abc"));
+        assert!(!is_decimal_literal("1e5"));
+        assert!(!is_decimal_literal("1.5e2"));
+    }
+
+    #[test]
+    fn test_is_float_literal() {
+        assert!(is_float_literal("1e5"));
+        assert!(is_float_literal("1E5"));
+        assert!(is_float_literal("1.5e2"));
+        assert!(is_float_literal("-1.5e-2"));
+        assert!(is_float_literal("3e-10"));
+        assert!(!is_float_literal("42"));
+        assert!(!is_float_literal("3.14"));
+        assert!(!is_float_literal("abc"));
+        assert!(!is_float_literal("eE"));
+        assert!(!is_float_literal("1e"));
+        assert!(!is_float_literal("e5"));
+    }
+
+    // =====================================================================
+    // Numeric literal parsing — parse_term_from_atom
+    // =====================================================================
+
+    #[test]
+    fn test_parse_term_integer() {
+        let t = parse_term_from_atom("42", 1).unwrap();
+        assert_eq!(t, Term::Integer(42));
+    }
+
+    #[test]
+    fn test_parse_term_negative_integer() {
+        let t = parse_term_from_atom("-100", 1).unwrap();
+        assert_eq!(t, Term::Integer(-100));
+    }
+
+    #[test]
+    fn test_parse_term_zero() {
+        let t = parse_term_from_atom("0", 1).unwrap();
+        assert_eq!(t, Term::Integer(0));
+    }
+
+    #[test]
+    fn test_parse_term_decimal() {
+        let t = parse_term_from_atom("3.14", 1).unwrap();
+        let expected = "3.14".parse::<Decimal>().unwrap();
+        assert_eq!(t, Term::Decimal(expected));
+    }
+
+    #[test]
+    fn test_parse_term_negative_decimal() {
+        let t = parse_term_from_atom("-0.5", 1).unwrap();
+        let expected = "-0.5".parse::<Decimal>().unwrap();
+        assert_eq!(t, Term::Decimal(expected));
+    }
+
+    #[test]
+    fn test_parse_term_float_scientific() {
+        let t = parse_term_from_atom("1.5e2", 1).unwrap();
+        assert_eq!(t, Term::Float(FiniteFloat::new(150.0).unwrap()));
+    }
+
+    #[test]
+    fn test_parse_term_float_no_decimal() {
+        let t = parse_term_from_atom("1e6", 1).unwrap();
+        assert_eq!(t, Term::Float(FiniteFloat::new(1_000_000.0).unwrap()));
+    }
+
+    #[test]
+    fn test_parse_term_float_negative_exponent() {
+        let t = parse_term_from_atom("5e-3", 1).unwrap();
+        assert_eq!(t, Term::Float(FiniteFloat::new(0.005).unwrap()));
+    }
+
+    #[test]
+    fn test_parse_term_float_negative_mantissa() {
+        let t = parse_term_from_atom("-2.5e3", 1).unwrap();
+        assert_eq!(t, Term::Float(FiniteFloat::new(-2500.0).unwrap()));
+    }
+
+    #[test]
+    fn test_parse_term_symbol() {
+        let t = parse_term_from_atom("alice", 1).unwrap();
+        assert_eq!(t, Term::Symbol(intern("alice")));
+    }
+
+    #[test]
+    fn test_parse_term_variable() {
+        // Variables like ?x should remain as symbols
+        let t = parse_term_from_atom("?x", 1).unwrap();
+        assert_eq!(t, Term::Symbol(intern("?x")));
+    }
+
+    #[test]
+    fn test_parse_term_integer_out_of_range() {
+        // i64::MAX + 1
+        let err = parse_term_from_atom("9999999999999999999999", 5).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Integer out of range"),
+            "Expected integer overflow error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_parse_term_float_infinity() {
+        // A value that parses as f64 infinity
+        let err = parse_term_from_atom("1e999", 3).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Non-finite float") || msg.contains("Float out of range"),
+            "Expected float range error, got: {msg}"
+        );
+    }
+
+    // =====================================================================
+    // Numeric literals in head literal positions (parse_literal_with_line)
+    // =====================================================================
+
+    #[test]
+    fn test_head_literal_integer_arg() {
+        // (cost item 42) → predicate "cost" with args [Symbol("item"), Integer(42)]
+        let expr = list(vec![atom("cost"), atom("item"), atom("42")]);
+        let lit = parse_literal_with_line(&expr, 1).unwrap();
+        assert_eq!(lit.name(), "cost");
+        assert_eq!(lit.predicate_args().len(), 2);
+        assert_eq!(lit.predicate_args()[0], Term::Symbol(intern("item")));
+        assert_eq!(lit.predicate_args()[1], Term::Integer(42));
+    }
+
+    #[test]
+    fn test_head_literal_decimal_arg() {
+        // (price item 9.99) → predicate "price" with args [Symbol("item"), Decimal(9.99)]
+        let expr = list(vec![atom("price"), atom("item"), atom("9.99")]);
+        let lit = parse_literal_with_line(&expr, 1).unwrap();
+        assert_eq!(lit.predicate_args()[1], Term::Decimal("9.99".parse::<Decimal>().unwrap()));
+    }
+
+    #[test]
+    fn test_head_literal_float_arg() {
+        // (sensor reading 1.5e3) → predicate with Float arg
+        let expr = list(vec![atom("sensor"), atom("reading"), atom("1.5e3")]);
+        let lit = parse_literal_with_line(&expr, 1).unwrap();
+        assert_eq!(
+            lit.predicate_args()[1],
+            Term::Float(FiniteFloat::new(1500.0).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_head_literal_negative_integer_arg() {
+        // (temp sensor -40) → predicate with negative integer
+        let expr = list(vec![atom("temp"), atom("sensor"), atom("-40")]);
+        let lit = parse_literal_with_line(&expr, 1).unwrap();
+        assert_eq!(lit.predicate_args()[1], Term::Integer(-40));
+    }
+
+    #[test]
+    fn test_head_literal_mixed_args() {
+        // (measurement device 42 3.14 1e2) — symbol, int, decimal, float
+        let expr = list(vec![
+            atom("measurement"),
+            atom("device"),
+            atom("42"),
+            atom("3.14"),
+            atom("1e2"),
+        ]);
+        let lit = parse_literal_with_line(&expr, 1).unwrap();
+        assert_eq!(lit.predicate_args().len(), 4);
+        assert_eq!(lit.predicate_args()[0], Term::Symbol(intern("device")));
+        assert_eq!(lit.predicate_args()[1], Term::Integer(42));
+        assert_eq!(lit.predicate_args()[2], Term::Decimal("3.14".parse::<Decimal>().unwrap()));
+        assert_eq!(
+            lit.predicate_args()[3],
+            Term::Float(FiniteFloat::new(100.0).unwrap())
+        );
+    }
+
+    // =====================================================================
+    // Numeric literals in body literal positions (parse_body_arg)
+    // =====================================================================
+
+    #[test]
+    fn test_body_arg_integer() {
+        let expr = list(vec![atom("cost"), atom("item"), atom("42")]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(lit.predicate_args()[1], BodyArg::Term(Term::Integer(42)));
+    }
+
+    #[test]
+    fn test_body_arg_decimal() {
+        let expr = list(vec![atom("price"), atom("item"), atom("9.99")]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(
+            lit.predicate_args()[1],
+            BodyArg::Term(Term::Decimal("9.99".parse::<Decimal>().unwrap()))
+        );
+    }
+
+    #[test]
+    fn test_body_arg_float() {
+        let expr = list(vec![atom("sensor"), atom("reading"), atom("1.5e3")]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(
+            lit.predicate_args()[1],
+            BodyArg::Term(Term::Float(FiniteFloat::new(1500.0).unwrap()))
+        );
+    }
+
+    #[test]
+    fn test_body_arg_negative_integer() {
+        let expr = list(vec![atom("temp"), atom("sensor"), atom("-40")]);
+        let (body, _, _) = parse_body_with_line(&expr, 1).unwrap();
+        let lit = body[0].as_logic().unwrap();
+        assert_eq!(
+            lit.predicate_args()[1],
+            BodyArg::Term(Term::Integer(-40))
+        );
+    }
+
+    // =====================================================================
+    // Detection order: float > decimal > integer
+    // =====================================================================
+
+    #[test]
+    fn test_detection_order_float_over_decimal() {
+        // "1.5e2" has both '.' and 'e', should be float (not decimal)
+        let t = parse_term_from_atom("1.5e2", 1).unwrap();
+        assert!(matches!(t, Term::Float(_)));
+    }
+
+    #[test]
+    fn test_detection_order_float_over_integer() {
+        // "1e5" has 'e', should be float (not integer)
+        let t = parse_term_from_atom("1e5", 1).unwrap();
+        assert!(matches!(t, Term::Float(_)));
+    }
+
+    #[test]
+    fn test_detection_order_decimal_over_integer() {
+        // "3.0" has '.', should be decimal (not integer)
+        let t = parse_term_from_atom("3.0", 1).unwrap();
+        assert!(matches!(t, Term::Decimal(_)));
+    }
+
+    // =====================================================================
+    // Integration: numeric literals through parse_spl
+    // =====================================================================
+
+    #[test]
+    fn test_spl_fact_with_integer_arg() {
+        use crate::spl::parse_spl;
+        let theory = parse_spl("(given (cost item 42))").unwrap();
+        let fact = theory.facts().next().unwrap();
+        let lit = fact.head_literal();
+        assert_eq!(lit.name(), "cost");
+        assert_eq!(lit.predicate_args()[1], Term::Integer(42));
+    }
+
+    #[test]
+    fn test_spl_fact_with_decimal_arg() {
+        use crate::spl::parse_spl;
+        let theory = parse_spl("(given (price item 9.99))").unwrap();
+        let fact = theory.facts().next().unwrap();
+        let lit = fact.head_literal();
+        assert_eq!(
+            lit.predicate_args()[1],
+            Term::Decimal("9.99".parse::<Decimal>().unwrap())
+        );
+    }
+
+    #[test]
+    fn test_spl_fact_with_float_arg() {
+        use crate::spl::parse_spl;
+        let theory = parse_spl("(given (sensor reading 1.5e3))").unwrap();
+        let fact = theory.facts().next().unwrap();
+        let lit = fact.head_literal();
+        assert_eq!(
+            lit.predicate_args()[1],
+            Term::Float(FiniteFloat::new(1500.0).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_spl_integer_out_of_range_error() {
+        use crate::spl::parse_spl;
+        let err = parse_spl("(given (cost item 99999999999999999999))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Integer out of range"),
+            "Expected integer overflow error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_spl_rule_with_numeric_body_args() {
+        use crate::spl::parse_spl;
+        let theory = parse_spl("(normally r1 (and (price ?item 100) (quality ?item high)) (buy ?item))").unwrap();
+        let rule = theory.rules().next().unwrap();
+        // Body literal "price" should have Integer(100) as second arg
+        let price_body = &rule.body[0];
+        let lit = price_body.as_logic().unwrap();
+        assert_eq!(lit.name(), "price");
+        assert_eq!(
+            lit.predicate_args()[1],
+            BodyArg::Term(Term::Integer(100))
         );
     }
 }
