@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use spindle_core::literal::Literal;
 use spindle_core::temporal::{Temporal, TimePoint};
 
+use crate::term::TermDto;
+
 /// JSON-serializable literal representation (contract-compliant).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiteralStructJson {
@@ -62,6 +64,35 @@ impl From<&Temporal> for TemporalJson {
                 TimePoint::Moment(v) => Some(v),
                 TimePoint::NegInf | TimePoint::PosInf => None,
             },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// V2 literal struct — typed term arguments
+// ---------------------------------------------------------------------------
+
+/// V2 JSON-serializable literal with typed [`TermDto`] arguments.
+///
+/// Unlike [`LiteralStructJson`] (v1) which uses `Vec<String>` for args,
+/// this preserves the original term type (symbol, integer, decimal, float).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiteralStructJsonV2 {
+    pub mode: ModeJson,
+    pub negated: bool,
+    pub functor: String,
+    pub args: Vec<TermDto>,
+    pub temporal: TemporalJson,
+}
+
+impl From<&Literal> for LiteralStructJsonV2 {
+    fn from(literal: &Literal) -> Self {
+        Self {
+            mode: ModeJson::from(&literal.mode),
+            negated: literal.negation,
+            functor: literal.name().to_string(),
+            args: literal.predicate_args().iter().map(TermDto::from).collect(),
+            temporal: TemporalJson::from(&literal.temporal),
         }
     }
 }
