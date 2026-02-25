@@ -1,12 +1,12 @@
 {
-  "task_id": "body-eval-order",
+  "task_id": "propagate-terms",
   "token_budget": 8000,
-  "tokens_used": 482,
+  "tokens_used": 439,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Refactor the grounding loop (match_body_against_facts / match_body_with_delta) to evaluate BodyLiteral elements in source order, threading substitutions. For each body element: (1) BodyLiteral::Logic — evaluate any BodyArg::Arith arguments under current substitution (call ArithExpr::eval), replace with resulting Term, then match against facts. If ArithExpr::eval fails, discard substitution path. (2) BodyLiteral::Arithmetic — call ArithConstraint::eval on current substitution. Bind extends substitution, Compare filters. On failure, discard substitution path. Each step sees bindings from all preceding steps (ADR-001b).",
-      "token_cost": 157,
+      "content": "Update apply_substitution_to_literal and apply_substitution_to_rule to propagate Term::Integer, Term::Decimal, Term::Float values from the substitution into ground literals. After grounding, rule heads should contain only concrete Term values (Symbol, Integer, Decimal, Float) — no ArithExpr. The head is still a regular Literal with Vec<Term> predicate_args. Ensure ground rules added back to the theory as new facts have correct Term-based predicate_args.",
+      "token_cost": 114,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T04:48:57Z"
+  "constructed_at": "2026-02-25T05:00:51Z"
 }
