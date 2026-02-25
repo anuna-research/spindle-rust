@@ -1,12 +1,12 @@
 {
-  "task_id": "extend-lexer",
+  "task_id": "body-eval-order",
   "token_budget": 8000,
-  "tokens_used": 424,
+  "tokens_used": 482,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Extend spl/lexer.rs parse_atom to accept *, /, <, >, =, ! as atom characters so that operator tokens (*, /, <=, >=, !=, **) lex as atoms. Currently parse_atom accepts alphanumeric, -, _, ?, ~, :, ., +. Add the missing characters. Verify that multi-char atoms containing these chars (e.g. high-earner, c++test) still lex correctly — reservation applies only to standalone tokens, not substrings.",
-      "token_cost": 99,
+      "content": "Refactor the grounding loop (match_body_against_facts / match_body_with_delta) to evaluate BodyLiteral elements in source order, threading substitutions. For each body element: (1) BodyLiteral::Logic — evaluate any BodyArg::Arith arguments under current substitution (call ArithExpr::eval), replace with resulting Term, then match against facts. If ArithExpr::eval fails, discard substitution path. (2) BodyLiteral::Arithmetic — call ArithConstraint::eval on current substitution. Bind extends substitution, Compare filters. On failure, discard substitution path. Each step sees bindings from all preceding steps (ADR-001b).",
+      "token_cost": 157,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T04:47:49Z"
+  "constructed_at": "2026-02-25T04:48:57Z"
 }
