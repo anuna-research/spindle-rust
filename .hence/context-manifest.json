@@ -1,12 +1,12 @@
 {
-  "task_id": "migrate-rulebody",
+  "task_id": "extend-lexer",
   "token_budget": 8000,
-  "tokens_used": 371,
+  "tokens_used": 424,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Change RuleBody type alias from SmallVec<[Literal; 4]> to SmallVec<[BodyLiteral; 4]>. All code that constructs or iterates RuleBody must handle the BodyLiteral enum. For non-arithmetic rules, all body literals are BodyLiteral::Logic. Existing test fixtures and parser output must wrap Literals in BodyLiteral::Logic. The grounding loop (match_body_against_facts, match_body_with_delta) must dispatch on BodyLiteral variant.",
-      "token_cost": 105,
+      "content": "Extend spl/lexer.rs parse_atom to accept *, /, <, >, =, ! as atom characters so that operator tokens (*, /, <=, >=, !=, **) lex as atoms. Currently parse_atom accepts alphanumeric, -, _, ?, ~, :, ., +. Add the missing characters. Verify that multi-char atoms containing these chars (e.g. high-earner, c++test) still lex correctly — reservation applies only to standalone tokens, not substrings.",
+      "token_cost": 99,
       "priority": "PlanMeta"
     },
     {
@@ -62,8 +62,14 @@
       "content": "Modified 1 files (+186, -5): crates/spindle-core/src/grounding.rs",
       "token_cost": 16,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-migrate-rulebody-changes",
+      "content": "Modified 15 files (+474, -105): crates/spindle-core/src/analysis/validation.rs, crates/spindle-core/src/body.rs, crates/spindle-core/src/explanation/mod.rs, crates/spindle-core/src/grounding.rs, crates/spindle-core/src/index.rs and 10 more",
+      "token_cost": 59,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T04:17:23Z"
+  "constructed_at": "2026-02-25T04:47:49Z"
 }

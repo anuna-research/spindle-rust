@@ -3,38 +3,24 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 15,
-    "insertions": 474,
-    "deletions": 105,
+    "files_changed": 1,
+    "insertions": 6,
+    "deletions": 0,
     "file_list": [
-      "crates/spindle-core/src/analysis/validation.rs",
-      "crates/spindle-core/src/body.rs",
-      "crates/spindle-core/src/explanation/mod.rs",
-      "crates/spindle-core/src/grounding.rs",
-      "crates/spindle-core/src/index.rs",
-      "crates/spindle-core/src/lib.rs",
-      "crates/spindle-core/src/pipeline/mod.rs",
-      "crates/spindle-core/src/pipeline/temporal.rs",
-      "crates/spindle-core/src/pipeline/wildcard.rs",
-      "crates/spindle-core/src/query/abduce.rs",
-      "crates/spindle-core/src/query/why_not.rs",
-      "crates/spindle-core/src/rule.rs",
-      "crates/spindle-core/src/theory.rs",
-      "crates/spindle-core/tests/allen_constraint_tests.rs",
-      "crates/spindle-core/tests/proptest_grounding.rs"
+      "crates/spindle-parser/src/spl/lexer.rs"
     ],
     "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-migrate-rulebody-changes",
-      "content": "Modified 15 files (+474, -105): crates/spindle-core/src/analysis/validation.rs, crates/spindle-core/src/body.rs, crates/spindle-core/src/explanation/mod.rs, crates/spindle-core/src/grounding.rs, crates/spindle-core/src/index.rs and 10 more",
+      "key": "task-extend-lexer-changes",
+      "content": "Modified 1 files (+6, -0): crates/spindle-parser/src/spl/lexer.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/migrate-rulebody-v1",
-  "evaluated_at": "2026-02-25T04:47:42Z",
+  "branch_name": "hence/extend-lexer-v1",
+  "evaluated_at": "2026-02-25T04:48:52Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
