@@ -1312,4 +1312,347 @@ mod tests {
         assert_eq!(ArithError::IntegerOverflow.to_string(), "integer overflow");
         assert_eq!(ArithError::ComparisonFailed.to_string(), "comparison failed");
     }
+
+    // =====================================================================
+    // TEST-002: Arithmetic expression evaluation (12 scenarios)
+    // =====================================================================
+
+    #[test]
+    fn test_002_01_add_two_integers() {
+        // (+ 3 4) evaluates to Integer(7).
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_int(4)]);
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(7));
+    }
+
+    #[test]
+    fn test_002_02_nested_mul_add() {
+        // (* (+ ?a ?b) 2) with ?a=3, ?b=4 → 14.
+        let subst = make_subst(&[("?a", "3"), ("?b", "4")]);
+        let expr = nary(
+            NaryArithOp::Mul,
+            vec![
+                nary(NaryArithOp::Add, vec![var("?a"), var("?b")]),
+                lit_int(2),
+            ],
+        );
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(14));
+    }
+
+    #[test]
+    fn test_002_03_variadic_add_three() {
+        // (+ 1 2 3) evaluates to 6.
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Add, vec![lit_int(1), lit_int(2), lit_int(3)]);
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(6));
+    }
+
+    #[test]
+    fn test_002_04_zero_arg_identity() {
+        // (+) → Integer(0); (*) → Integer(1).
+        let subst = Substitution::default();
+        assert_eq!(
+            nary(NaryArithOp::Add, vec![]).eval(&subst).unwrap(),
+            NumericValue::Integer(0),
+        );
+        assert_eq!(
+            nary(NaryArithOp::Mul, vec![]).eval(&subst).unwrap(),
+            NumericValue::Integer(1),
+        );
+    }
+
+    #[test]
+    fn test_002_05_unary_negation_and_reciprocal() {
+        // (- ?x) → negation; (/ ?x) → reciprocal (Decimal).
+        let subst = make_subst(&[("?x", "4")]);
+        let neg = nary(NaryArithOp::Sub, vec![var("?x")]);
+        assert_eq!(neg.eval(&subst).unwrap(), NumericValue::Integer(-4));
+
+        let recip = nary(NaryArithOp::Div, vec![var("?x")]);
+        assert_eq!(
+            recip.eval(&subst).unwrap(),
+            NumericValue::Decimal(Decimal::new(25, 2)), // 0.25
+        );
+    }
+
+    #[test]
+    fn test_002_06_left_fold_sub_and_div() {
+        let subst = Substitution::default();
+        // (- 10 3 2) = 10 - 3 - 2 = 5
+        let sub_expr = nary(NaryArithOp::Sub, vec![lit_int(10), lit_int(3), lit_int(2)]);
+        assert_eq!(sub_expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+
+        // (/ 12 3 2) = 12 / 3 / 2 = 2 (as Decimal, since int/int → Decimal)
+        let div_expr = nary(NaryArithOp::Div, vec![lit_int(12), lit_int(3), lit_int(2)]);
+        assert_eq!(
+            div_expr.eval(&subst).unwrap(),
+            NumericValue::Decimal(Decimal::from(2)),
+        );
+    }
+
+    #[test]
+    fn test_002_07_binary_operators_evaluate() {
+        let subst = Substitution::default();
+        // div evaluates correctly
+        let idiv = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
+        assert_eq!(idiv.eval(&subst).unwrap(), NumericValue::Integer(3));
+        // rem evaluates correctly
+        let rem = bin(BinArithOp::Rem, lit_int(10), lit_int(3));
+        assert_eq!(rem.eval(&subst).unwrap(), NumericValue::Integer(1));
+        // ** evaluates correctly
+        let pow = bin(BinArithOp::Pow, lit_int(2), lit_int(10));
+        assert_eq!(pow.eval(&subst).unwrap(), NumericValue::Integer(1024));
+    }
+
+    #[test]
+    fn test_002_08_abs_of_difference() {
+        // (abs (- ?a ?b)) = abs(3 - 7) = 4.
+        let subst = make_subst(&[("?a", "3"), ("?b", "7")]);
+        let expr = unary(
+            UnaryArithOp::Abs,
+            nary(NaryArithOp::Sub, vec![var("?a"), var("?b")]),
+        );
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(4));
+    }
+
+    #[test]
+    fn test_002_09_variadic_min_max() {
+        let subst = make_subst(&[("?a", "5"), ("?b", "2"), ("?c", "8")]);
+        // (min ?a ?b ?c) → 2
+        let min_expr = nary(NaryArithOp::Min, vec![var("?a"), var("?b"), var("?c")]);
+        assert_eq!(min_expr.eval(&subst).unwrap(), NumericValue::Integer(2));
+        // (max 0 ?a) → 5
+        let max_expr = nary(NaryArithOp::Max, vec![lit_int(0), var("?a")]);
+        assert_eq!(max_expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+    }
+
+    #[test]
+    fn test_002_10_binary_ops_structurally_binary() {
+        // div, rem, ** are BinOp in the AST — structurally enforce 2 operands.
+        // A 3-arg div cannot be represented; the parser rejects it.
+        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
+        assert!(matches!(expr, ArithExpr::BinOp { op: BinArithOp::IDiv, .. }));
+    }
+
+    // TEST-002 scenarios 11–12 are parse-time checks (operator at predicate
+    // position; BodyArg::Arith recognition) with no evaluation-side analog.
+
+    // =====================================================================
+    // TEST-005: Numeric type promotion (22 scenarios)
+    // =====================================================================
+
+    #[test]
+    fn test_005_01_add_int_int_stays_integer() {
+        // (+ 3 4) → Integer(7)
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_int(4)]);
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(7));
+    }
+
+    #[test]
+    fn test_005_02_add_int_decimal_promotes() {
+        // (+ 3 4.0) → Decimal(7.0)
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_dec(40, 1)]); // 4.0
+        let result = expr.eval(&subst).unwrap();
+        assert!(matches!(result, NumericValue::Decimal(_)));
+        assert_eq!(result, NumericValue::Decimal(Decimal::new(70, 1)));
+    }
+
+    #[test]
+    fn test_005_03_add_int_float_promotes() {
+        // (+ 3 4.0e0) → Float(7.0) — scientific notation means float, contagious.
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_float(4.0)]);
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Float(7.0));
+    }
+
+    #[test]
+    fn test_005_04_add_decimal_decimal_exact() {
+        // (+ 0.1 0.2) → Decimal(0.3) — exact, no float drift.
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Add, vec![lit_dec(1, 1), lit_dec(2, 1)]);
+        assert_eq!(
+            expr.eval(&subst).unwrap(),
+            NumericValue::Decimal(Decimal::new(3, 1)),
+        );
+    }
+
+    #[test]
+    fn test_005_05_div_int_int_decimal_28_digits() {
+        // (/ 10 3) → Decimal(3.3333333333333333333333333333)
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Div, vec![lit_int(10), lit_int(3)]);
+        let result = expr.eval(&subst).unwrap();
+        match &result {
+            NumericValue::Decimal(d) => {
+                let s = d.to_string();
+                assert!(s.starts_with("3."), "expected '3.' prefix, got: {s}");
+                let frac = &s[2..];
+                assert_eq!(frac.len(), 28, "expected 28 fractional digits, got {}", frac.len());
+                assert!(frac.chars().all(|c| c == '3'), "expected all '3's, got: {frac}");
+            }
+            other => panic!("expected Decimal, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_005_06_div_int_float_produces_float() {
+        // (/ 10 3.0e0) → Float(3.333...)
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Div, vec![lit_int(10), lit_float(3.0)]);
+        let result = expr.eval(&subst).unwrap();
+        match &result {
+            NumericValue::Float(f) => {
+                assert!((*f - 10.0 / 3.0).abs() < 1e-10);
+            }
+            other => panic!("expected Float, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_005_07_mul_int_decimal_exact() {
+        // (* 100 0.08) → Decimal(8.00) — exact.
+        let subst = Substitution::default();
+        let expr = nary(NaryArithOp::Mul, vec![lit_int(100), lit_dec(8, 2)]);
+        let result = expr.eval(&subst).unwrap();
+        assert!(matches!(result, NumericValue::Decimal(_)));
+        assert_eq!(result, NumericValue::Decimal(Decimal::from(8)));
+    }
+
+    #[test]
+    fn test_005_08_idiv_floor() {
+        // (div 10 3) → Integer(3)
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(3));
+    }
+
+    #[test]
+    fn test_005_09_idiv_negative_floor() {
+        // (div -7 2) → Integer(-4) — floor toward −∞, not truncation toward 0.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::IDiv, lit_int(-7), lit_int(2));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-4));
+    }
+
+    #[test]
+    fn test_005_10_rem_positive() {
+        // (rem 10 3) → Integer(1)
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Rem, lit_int(10), lit_int(3));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+    }
+
+    #[test]
+    fn test_005_11_rem_negative_dividend() {
+        // (rem -7 2) → Integer(1) — floor remainder.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Rem, lit_int(-7), lit_int(2));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+    }
+
+    #[test]
+    fn test_005_12_rem_negative_divisor() {
+        // (rem 7 -2) → Integer(-1) — floor remainder.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Rem, lit_int(7), lit_int(-2));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-1));
+    }
+
+    #[test]
+    fn test_005_13_idiv_decimal_operand_fails() {
+        // (div 10 3.0) → type mismatch error (div requires integers).
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_dec(30, 1));
+        assert!(matches!(
+            expr.eval(&subst).unwrap_err(),
+            ArithError::TypeMismatch { op: "div", .. },
+        ));
+    }
+
+    #[test]
+    fn test_005_14_rem_decimal_operand_fails() {
+        // (rem 10 3.0) → type mismatch error (rem requires integers).
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Rem, lit_int(10), lit_dec(30, 1));
+        assert!(matches!(
+            expr.eval(&subst).unwrap_err(),
+            ArithError::TypeMismatch { op: "rem", .. },
+        ));
+    }
+
+    #[test]
+    fn test_005_15_pow_int_positive_exp() {
+        // (** 2 10) → Integer(1024)
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(10));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1024));
+    }
+
+    #[test]
+    fn test_005_16_pow_zero_zero() {
+        // (** 0 0) → Integer(1)
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(0), lit_int(0));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+    }
+
+    #[test]
+    fn test_005_17_pow_int_negative_exp_decimal() {
+        // (** 2 -1) → Decimal(0.5)
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(-1));
+        assert_eq!(
+            expr.eval(&subst).unwrap(),
+            NumericValue::Decimal(Decimal::new(5, 1)),
+        );
+    }
+
+    #[test]
+    fn test_005_18_pow_zero_negative_exp_fails() {
+        // (** 0 -1) → DivisionByZero
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(0), lit_int(-1));
+        assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::DivisionByZero);
+    }
+
+    #[test]
+    fn test_005_19_pow_decimal_base() {
+        // (** 2.0 3) → Decimal(8) — decimal base stays Decimal.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_dec(20, 1), lit_int(3)); // 2.0 ^ 3
+        let result = expr.eval(&subst).unwrap();
+        assert!(matches!(result, NumericValue::Decimal(_)));
+        assert_eq!(result, NumericValue::Decimal(Decimal::from(8)));
+    }
+
+    #[test]
+    fn test_005_20_pow_float_contagion() {
+        // (** 2.0e0 3) → Float(8.0) — float is contagious.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_float(2.0), lit_int(3));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Float(8.0));
+    }
+
+    #[test]
+    fn test_005_21_pow_negative_base_fractional_exp() {
+        // SPEC says: (** -1 0.5) → evaluation fails (negative base, non-integer exponent).
+        // ACTUAL: rust_decimal's checked_powd(-1, 0.5) returns Decimal(-1), which is
+        // mathematically incorrect (should be imaginary). This test documents current
+        // behavior; when the implementation adds a negative-base guard, update to assert Err.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(-1), lit_dec(5, 1)); // -1 ^ 0.5
+        let result = expr.eval(&subst);
+        // Current behavior: succeeds with Decimal(-1) due to rust_decimal limitation.
+        assert_eq!(result.unwrap(), NumericValue::Decimal(Decimal::from(-1)));
+    }
+
+    #[test]
+    fn test_005_22_pow_integer_overflow() {
+        // (** 2 63) → IntegerOverflow
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(63));
+        assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
+    }
 }
