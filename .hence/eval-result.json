@@ -3,25 +3,24 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 399,
-    "deletions": 11,
+    "files_changed": 1,
+    "insertions": 455,
+    "deletions": 16,
     "file_list": [
-      ".hence/context-manifest.json",
       "crates/spindle-parser/src/spl/literals.rs"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-parse-body-arith-args-changes",
-      "content": "Modified 2 files (+399, -11): .hence/context-manifest.json, crates/spindle-parser/src/spl/literals.rs",
+      "key": "task-parse-numeric-literals-changes",
+      "content": "Modified 1 files (+455, -16): crates/spindle-parser/src/spl/literals.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/parse-body-arith-args-v1",
-  "evaluated_at": "2026-02-25T05:26:12Z",
+  "branch_name": "hence/parse-numeric-literals-v1",
+  "evaluated_at": "2026-02-25T05:32:25Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

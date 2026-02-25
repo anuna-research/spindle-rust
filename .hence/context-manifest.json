@@ -1,12 +1,12 @@
 {
-  "task_id": "parse-body-arith-args",
+  "task_id": "parse-numeric-literals",
   "token_budget": 8000,
-  "tokens_used": 416,
+  "tokens_used": 440,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "When parsing a user-defined body literal like (line-total ?i (* ?p 2)), detect arithmetic expressions in argument positions and produce BodyArg::Arith(ArithExpr) instead of BodyArg::Term. This requires the parser to check if an argument is an S-expression starting with an arithmetic operator. If so, recursively parse as ArithExpr via the arith parser from task 2.3.",
-      "token_cost": 91,
+      "content": "Extend spl/literals.rs to detect and parse numeric literals in predicate argument positions. When an atom matches integer pattern (-?[0-9]+), parse as Term::Integer(i64). When it matches decimal pattern (-?[0-9]+.[0-9]+), parse as Term::Decimal. When it matches float pattern (-?[0-9]+(.[0-9]+)?[eE]-?[0-9]+), parse as Term::Float(f64). Out-of-range values produce ParseError with source offset. Order of detection: float (has e/E) > decimal (has .) > integer.",
+      "token_cost": 115,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T05:19:31Z"
+  "constructed_at": "2026-02-25T05:26:18Z"
 }
