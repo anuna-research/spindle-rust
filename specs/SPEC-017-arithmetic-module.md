@@ -167,7 +167,7 @@ Trace:
 
 The system SHALL support arithmetic between `Integer`, `Decimal`, and `Float` operands. Promotion follows a **precision-loss hierarchy**: operations stay at the most precise type possible, and only widen toward `Float` when explicitly introduced.
 
-**Promotion rules** (for binary operators `+`, `-`, `*`, `/`, `min`, `max`, `**`):
+**Promotion rules** (for operators `+`, `-`, `*`, `/`, `min`, `max`, `**`; applied pairwise in left-fold for variadic operators):
 
 - Integer OP Integer → Integer (except `/`, which produces Decimal)
 - Integer OP Decimal → Decimal
@@ -223,7 +223,7 @@ Trace:
 
 ### REQ-008: Reserved Arithmetic Keywords
 
-The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`), the `bind` predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names, rule labels, or labels in `(prefer ...)` declarations.
+The arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `min`, `max`, `**`), the `bind` predicate, and the comparison predicates (`=`, `!=`, `<`, `>`, `<=`, `>=`) are **reserved keywords**. They cannot be used as user-defined predicate names, rule labels, or labels in `(prefer ...)` declarations.
 
 The following keywords are also **reserved for future use**: `sum`, `count`, `avg`, `round`, `floor`, `ceil`. These are anticipated for aggregate operations and numeric rounding functions in a future specification. Reserving them now prevents user-defined predicates from colliding with future built-ins, avoiding breaking changes. Using any of these as a predicate name, rule label, or superiority label SHALL produce a parse error.
 
@@ -371,7 +371,7 @@ In parsed rule bodies, arithmetic expressions may appear in `BodyLiteral::Arithm
 
 **Context**: SPL already uses S-expression syntax (parenthesised prefix lists). Arithmetic expressions must be distinguishable from predicate applications.
 
-**Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `neg`, `min`, `max`, `**`) and built-in predicates (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are **always reserved keywords**. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
+**Decision**: Arithmetic operators (`+`, `-`, `*`, `/`, `div`, `rem`, `abs`, `min`, `max`, `**`) and built-in predicates (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) are **always reserved keywords**. When the parser sees `(+ ...)` or `(* ...)` etc. in a term position (i.e., as a predicate argument), it parses the form as an `ArithExpr` rather than a literal application.
 
 This means:
 - `(+ ?x ?y)` in argument position → `ArithExpr::BinOp(Add, Var(?x), Var(?y))`
@@ -423,6 +423,7 @@ Verified by: TEST-001
 pub enum ArithExpr {
     Lit(NumericValue),
     Var(SymbolId),
+    NaryOp { op: NaryArithOp, args: Vec<ArithExpr> },
     BinOp { op: BinArithOp, lhs: Box<ArithExpr>, rhs: Box<ArithExpr> },
     UnaryOp { op: UnaryArithOp, expr: Box<ArithExpr> },
 }
@@ -433,44 +434,70 @@ pub enum NumericValue {
     Float(f64),
 }
 
+pub enum NaryArithOp {
+    Add,      // +  (0+ args; identity: 0)
+    Sub,      // -  (1+ args; unary: negation; n-ary: left-fold subtraction)
+    Mul,      // *  (0+ args; identity: 1)
+    Div,      // /  (1+ args; unary: reciprocal; n-ary: left-fold division)
+    Min,      // min (1+ args)
+    Max,      // max (1+ args)
+}
+
 pub enum BinArithOp {
-    Add,      // +
-    Sub,      // -
-    Mul,      // *
-    Div,      // /   (exact division; integer/integer → decimal; any float operand → float)
     IDiv,     // div (integer floor division, rounds toward −∞; non-integer operands → fail)
     Rem,      // rem (floor remainder: a − (a div b)×b; non-integer operands → fail)
-    Min,      // min
-    Max,      // max
     Pow,      // **
 }
 
 pub enum UnaryArithOp {
-    Neg,  // neg
     Abs,  // abs
 }
 ```
+
+**Variadic semantics** follow Racket and Common Lisp conventions:
+
+| Operator | 0 args | 1 arg | 2+ args |
+|---|---|---|---|
+| `+` | `0` (identity) | `x` (identity) | Left-fold addition |
+| `-` | parse error | `(- x)` → negation | `(- a b c)` → `a - b - c` (left-fold) |
+| `*` | `1` (identity) | `x` (identity) | Left-fold multiplication |
+| `/` | parse error | `(/ x)` → reciprocal (`1/x`, Decimal) | `(/ a b c)` → `a / b / c` (left-fold) |
+| `min` | parse error | `x` (identity) | Minimum of all args |
+| `max` | parse error | `x` (identity) | Maximum of all args |
+| `div` | — | — | Binary only (2 args required) |
+| `rem` | — | — | Binary only (2 args required) |
+| `**` | — | — | Binary only (2 args required) |
+| `abs` | — | Absolute value | — |
+
+Unary `(- x)` replaces the former `neg` keyword. `neg` is no longer a reserved keyword.
 
 **S-expression grammar for arithmetic expressions**:
 
 ```
 arith-expr     ::= numeric-literal
                  | variable
+                 | '(' nary-op arith-expr* ')'
                  | '(' bin-op arith-expr arith-expr ')'
-                 | '(' unary-op arith-expr ')'
+                 | '(' 'abs' arith-expr ')'
 
-bin-op         ::= '+' | '-' | '*' | '/' | 'div' | 'rem' | 'min' | 'max' | '**'
-unary-op       ::= 'neg' | 'abs'
+nary-op        ::= '+' | '-' | '*' | '/' | 'min' | 'max'
+bin-op         ::= 'div' | 'rem' | '**'
 ```
 
 Examples:
 ```lisp
-(+ ?x ?y)                  ; add
+(+ ?x ?y ?z)               ; variadic add: x + y + z
+(+ ?x ?y)                  ; binary add (also valid)
+(- ?x)                     ; unary negation (replaces neg)
+(- ?a ?b ?c)               ; left-fold: a - b - c
 (* 2 ?radius)              ; multiply by constant
 (/ (- ?a ?b) 2)            ; (a - b) / 2, result is decimal
-(div ?n 3)                 ; floor division
+(/ ?x)                     ; reciprocal: 1/x
+(div ?n 3)                 ; floor division (binary only)
 (abs (- ?x ?y))            ; absolute difference
-(** ?base ?exp)            ; exponentiation
+(** ?base 2)               ; exponentiation (binary only)
+(min ?a ?b ?c)             ; minimum of three values
+(max ?score 0)             ; clamp to non-negative
 ```
 
 Float safety and identity:
@@ -656,17 +683,16 @@ The following arithmetic forms are valid in rule bodies:
 | `(> <e1> <e2>)` | Greater-than guard | `(> ?salary 50000)` |
 | `(<= <e1> <e2>)` | Less-than-or-equal guard | `(<= ?score 100)` |
 | `(>= <e1> <e2>)` | Greater-than-or-equal guard | `(>= ?balance 0)` |
-| `(+ e1 e2)` | Addition expression | `(+ ?base ?bonus)` |
-| `(- e1 e2)` | Subtraction expression | `(- ?total ?discount)` |
-| `(* e1 e2)` | Multiplication expression | `(* ?qty ?price)` |
-| `(/ e1 e2)` | Division (decimal by default, float if either operand is float) | `(/ ?revenue ?days)` |
-| `(div e1 e2)` | Integer floor division | `(div ?total 3)` |
-| `(rem e1 e2)` | Integer floor remainder | `(rem ?n 2)` |
-| `(** e1 e2)` | Exponentiation | `(** ?base 2)` |
-| `(neg e)` | Unary negation | `(neg ?loss)` |
+| `(+ e ...)` | Addition (variadic, 0+ args; identity: 0) | `(+ ?base ?bonus ?adj)` |
+| `(- e ...)` | Unary negation or left-fold subtraction (1+ args) | `(- ?x)` / `(- ?total ?a ?b)` |
+| `(* e ...)` | Multiplication (variadic, 0+ args; identity: 1) | `(* ?qty ?price)` |
+| `(/ e ...)` | Unary reciprocal or left-fold division (1+ args) | `(/ ?x)` / `(/ ?revenue ?days)` |
+| `(div e1 e2)` | Integer floor division (binary only) | `(div ?total 3)` |
+| `(rem e1 e2)` | Integer floor remainder (binary only) | `(rem ?n 2)` |
+| `(** e1 e2)` | Exponentiation (binary only) | `(** ?base 2)` |
 | `(abs e)` | Absolute value | `(abs (- ?a ?b))` |
-| `(min e1 e2)` | Minimum | `(min ?x ?y)` |
-| `(max e1 e2)` | Maximum | `(max ?x 0)` |
+| `(min e ...)` | Minimum (variadic, 1+ args) | `(min ?a ?b ?c)` |
+| `(max e ...)` | Maximum (variadic, 1+ args) | `(max ?score 0)` |
 
 ---
 
@@ -803,12 +829,18 @@ Verifies: REQ-001, CON-001
 ### TEST-002: Arithmetic Expression Parsing
 
 **Scenarios**:
-1. `(+ 3 4)` in argument position → `ArithExpr::BinOp(Add, Lit(3), Lit(4))`
+1. `(+ 3 4)` in argument position → `ArithExpr::NaryOp(Add, [Lit(3), Lit(4)])`
 2. Nested: `(* (+ ?a ?b) 2)` → parses as nested `ArithExpr`
-3. All binary operators parse: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `min`, `max`
-4. Unary operators parse: `(neg ?x)`, `(abs (- ?a ?b))`
-5. Arithmetic operator at predicate (non-argument) position → parse error
-6. Arithmetic expression inside a user-defined body literal argument parses as `BodyArg::Arith`, e.g. `(normally r1 (and (price ?i ?p) (line-total ?i (* ?p 2))) (ok ?i))`
+3. Variadic: `(+ 1 2 3)` → `NaryOp(Add, [Lit(1), Lit(2), Lit(3)])`, evaluates to `6`
+4. Zero-arg identity: `(+)` → `Integer(0)`; `(*)` → `Integer(1)`
+5. Unary `-`: `(- ?x)` → negation; unary `/`: `(/ ?x)` → reciprocal (Decimal)
+6. `(- 10 3 2)` → left-fold: `10 - 3 - 2 = 5`; `(/ 12 3 2)` → `12 / 3 / 2 = 2`
+7. Strictly binary operators parse: `div`, `rem`, `**`
+8. `(abs (- ?a ?b))` → absolute difference
+9. Variadic min/max: `(min ?a ?b ?c)`, `(max 0 ?x)` parse correctly
+10. `(div 10 3 2)` → parse error (div requires exactly 2 arguments)
+11. Arithmetic operator at predicate (non-argument) position → parse error
+12. Arithmetic expression inside a user-defined body literal argument parses as `BodyArg::Arith`, e.g. `(normally r1 (and (price ?i ?p) (line-total ?i (* ?p 2))) (ok ?i))`
 
 Verifies: REQ-002, CON-002
 
@@ -1030,6 +1062,15 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST
 | OQ-6 | Should `why_not` explain arithmetic failures? | Medium | Desirable; deferred — requires arithmetic constraint explanation |
 | OQ-7 | Should overflow produce a warning or strict error rather than silent failure? | Low | Silent failure preferred (consistent with Prolog's arithmetic); observable via `why_not` if implemented |
 | OQ-8 | Rational numbers (exact fractions)? | Low | Partially addressed by `Decimal`; full rationals (arbitrary numerator/denominator) deferred |
+| OQ-9 | Cross-type fact matching: if a fact stores `Integer(100)` and `bind` produces `Decimal(100.00)`, does matching `(cost ?item ?x)` against the fact succeed? `Integer(100) ≠ Decimal(100.00)` at the `Term` level, which could silently discard valid groundings. | High | Needs resolution — options: (a) numeric promotion during matching, (b) normalize `bind` results to match source type, (c) document as expected behavior |
+| OQ-10 | Cross-type comparison vs unification: `(= 1 1.0)` is true under comparison promotion rules, but should `Integer(1)` and `Decimal(1.0)` unify during pattern matching? If not, users will encounter subtle mismatches where a comparison succeeds but a fact lookup fails for the same values. | High | Closely related to OQ-9; should be resolved together |
+| OQ-11 | Arithmetic in negated body literals: is `(and (not (> ?x 100)) ...)` legal? If so, what are the semantics — does `not` negate the guard (i.e., `<= 100`), or does negation-as-failure apply (the guard is "not provable")? If the variable is unbound inside `not`, should it fail silently or produce a parse error? | High | Needs resolution before implementation |
+| OQ-12 | Decimal display formatting: `100 * 0.08` yields `Decimal(8.00)` because `rust_decimal` preserves scale. Should output display `8.00`, `8.0`, or `8`? For financial/policy use cases trailing zeros carry meaning; for general use they may confuse. | Medium | Needs resolution — affects CLI output, JSON serialization, and `why_not` explanations |
+| OQ-13 | Multi-arity arithmetic operators: should `(+ 1 2 3)` be valid (variadic, as in Lisp)? | Medium | **Resolved**: Yes. `+`, `-`, `*`, `/`, `min`, `max` follow Racket/Common Lisp variadic conventions. `div`, `rem`, `**` remain binary-only. See CON-002. |
+| OQ-14 | Arithmetic in queries: can the query interface accept arithmetic guards, e.g., `(query (and (salary ?emp ?amt) (> ?amt 100000)))`? The spec covers rules but not the query system. | Medium | Likely yes — queries evaluate rule bodies, so arithmetic guards should work; needs explicit confirmation |
+| OQ-15 | Arithmetic in `except` (defeater) rules: defeater bodies should support arithmetic guards (e.g., `(except r1 (and (hardship ?emp) (< ?income 30000)) (high-earner ?emp))`). The spec says "body-only" but does not explicitly mention defeaters. | Medium | Likely yes — defeaters have bodies; needs explicit confirmation |
+| OQ-16 | Variable safety with `bind`: if `bind` introduces a variable that only appears in the head and not in any fact-matching literal (e.g., `(normally r1 (bind ?x (+ 1 2)) (result ?x))`), is this safe? The variable has no grounding source from facts. | Low | Valid per spec — `bind` produces a ground value — but unusual; may warrant a lint warning |
+| OQ-17 | Aggregates and defeasibility: when `sum`/`count`/`avg` are eventually implemented, should aggregation occur before or after defeasible conflict resolution? Aggregating before resolution could include defeated conclusions; aggregating after could miss intermediate values. | Medium | Deferred — to be resolved in the aggregation spec; flagged here because it affects the semantic model |
 
 ---
 
