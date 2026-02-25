@@ -1,8 +1,11 @@
 //! Validate pipeline stage -- checks wildcard placement and range restriction.
 
 use super::{Diagnostic, PipelineContext, PipelineStage, Severity};
+use crate::arith::ArithConstraint;
+use crate::body::BodyLiteral;
 use crate::error::{Result, SpindleError};
 use crate::grounding::is_variable;
+use crate::intern::resolve;
 use crate::theory::Theory;
 use std::collections::HashSet;
 
@@ -69,6 +72,13 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
             for pred in lit.predicates() {
                 if is_variable(pred) {
                     body_vars.insert(pred.to_string());
+                }
+            }
+            // Variables introduced by bind constraints are also body variables.
+            if let BodyLiteral::Arithmetic(ArithConstraint::Bind { var, .. }) = lit {
+                let var_name = resolve(*var);
+                if is_variable(var_name) {
+                    body_vars.insert(var_name.to_string());
                 }
             }
         }

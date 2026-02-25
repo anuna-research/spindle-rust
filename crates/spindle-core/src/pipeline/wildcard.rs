@@ -6,7 +6,9 @@
 
 use super::{PipelineContext, PipelineStage};
 use crate::error::Result;
+use crate::intern::{intern, resolve};
 use crate::literal::Literal;
+use crate::term::Term;
 use crate::theory::Theory;
 
 /// Rewrites anonymous wildcards (`_`) to unique variables (`?_wN`).
@@ -68,32 +70,33 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
 }
 
 fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
-    let name = if lit.name() == "_" {
+    let name_id = if lit.name() == "_" {
         *counter += 1;
-        format!("?_w{counter}")
+        intern(&format!("?_w{counter}"))
     } else {
-        lit.name().to_string()
+        lit.name_id()
     };
 
-    let predicates = lit
-        .predicates()
+    let args: Vec<Term> = lit
+        .predicate_args()
         .iter()
-        .map(|p| {
-            if *p == "_" {
-                *counter += 1;
-                format!("?_w{counter}")
-            } else {
-                p.to_string()
+        .map(|t| {
+            if let Term::Symbol(id) = t {
+                if resolve(*id) == "_" {
+                    *counter += 1;
+                    return Term::Symbol(intern(&format!("?_w{counter}")));
+                }
             }
+            t.clone()
         })
         .collect();
 
-    let mut result = Literal::new(
-        name,
+    let mut result = Literal::from_ids(
+        name_id,
         lit.negation,
         lit.mode.clone(),
         lit.temporal.clone(),
-        predicates,
+        args,
     );
     // Propagate pre-grounding temporal expression (temporal variables)
     result.temporal_expr = lit.temporal_expr.clone();

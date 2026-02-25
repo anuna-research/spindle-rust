@@ -315,12 +315,18 @@ fn resolve_time_expr(
     }
 }
 
-/// Apply a substitution to a rule, creating a ground instance
+/// Apply a substitution to a rule, creating a ground instance.
+///
+/// Arithmetic body literals (`bind`/comparison constraints) are stripped from the
+/// grounded rule because they have already been evaluated during the grounding phase.
+/// The reasoner only understands logic body literals; keeping arithmetic constraints
+/// would prevent the rule from firing.
 fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: usize) -> Rule {
     let new_label = format!("{}_{}", rule.label, instance_num);
     let new_body: RuleBody = rule
         .body
         .iter()
+        .filter(|bl| bl.as_logic().is_some())
         .map(|bl| apply_substitution_to_body_literal(bl, subst))
         .collect();
     let new_head: Vec<Literal> = rule
@@ -401,6 +407,51 @@ fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<crate::term::Term>, Mode, 
         lit.mode.clone(),
         lit.temporal.clone(),
     )
+}
+
+/// Normalize body literals in a grounded rule to match existing facts exactly.
+///
+/// When `bind` produces a value like `Decimal(8.00)` that is numerically equal
+/// to a fact argument `Integer(8)`, the grounded body literal will contain
+/// `Decimal(8.00)` while the fact has `Integer(8)`. The reasoner uses
+/// structural equality, so these won't match. This function replaces body
+/// literal arguments with the fact's values when they match via `numeric_eq`.
+fn normalize_body_against_facts(
+    rule: &mut Rule,
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+) {
+    let new_body: RuleBody = rule
+        .body
+        .iter()
+        .map(|bl| {
+            let logic = match bl.as_logic() {
+                Some(l) => l,
+                None => return bl.clone(),
+            };
+            let lit = logic.to_literal();
+            let key = fact_index_key(&lit);
+            let facts = match fact_index.get(&key) {
+                Some(f) => f,
+                None => return bl.clone(),
+            };
+            for fact in facts {
+                if lit.name_id() == fact.name_id()
+                    && lit.negation == fact.negation
+                    && lit.mode == fact.mode
+                    && lit.predicate_args().len() == fact.predicate_args().len()
+                    && lit
+                        .predicate_args()
+                        .iter()
+                        .zip(fact.predicate_args().iter())
+                        .all(|(a, b)| a == b || a.numeric_eq(b))
+                {
+                    return BodyLiteral::from(fact.clone());
+                }
+            }
+            bl.clone()
+        })
+        .collect();
+    rule.body = new_body;
 }
 
 /// Apply a substitution to a body literal, returning a new body literal.
@@ -848,7 +899,9 @@ pub fn ground_theory_with_limit(
                     known_instances.insert(sig);
                     instance_counter += 1;
 
-                    let ground_rule = apply_substitution_to_rule(rule, &subst, instance_counter);
+                    let mut ground_rule =
+                        apply_substitution_to_rule(rule, &subst, instance_counter);
+                    normalize_body_against_facts(&mut ground_rule, &fact_index);
 
                     // Add head literals as new facts (for non-defeaters)
                     if ground_rule.rule_type != RuleType::Defeater {

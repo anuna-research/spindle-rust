@@ -570,3 +570,116 @@
 (meta r-ready-tests-grounding
   (description "Grounding tests need full pipeline: parser + grounding + reasoning")
   (justification "End-to-end tests parse SPL, ground with arithmetic, reason, and check conclusions"))
+
+(claims agent:claude
+  :at "2026-02-25T08:38:53Z"
+  (given completed-propagate-terms))
+
+(claims agent:claude
+  :at "2026-02-25T08:38:53Z"
+  (given completed-temporal-guard))
+
+(claims agent:claude
+  :at "2026-02-25T08:38:54Z"
+  (given completed-parse-guards))
+
+(claims agent:claude
+  :at "2026-02-25T08:38:57Z"
+  (given claim-v1-tests-grounding)
+  (normally r-cl-state-v1-tests-grounding claim-v1-tests-grounding state-claimed-v1-tests-grounding)
+  (normally r-cl-chain-v1-tests-grounding state-claimed-v1-tests-grounding claimed-tests-grounding)
+)
+
+;; Propagation rules: failures in 'tests-grounding' block downstream tasks
+(normally r-propagate-tests-nfr-from-tests-grounding-failed failed-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-nfr-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-nfr-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-nfr-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-nfr-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-pbt-from-tests-grounding-failed failed-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-pbt-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-pbt-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-pbt-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-pbt-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-failed failed-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-v2-json-schema-from-tests-grounding-failed failed-tests-grounding upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-v2-json-schema)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-tests-v2-json-from-v2-json-schema-blocked upstream-blocked-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-blocked upstream-blocked-v2-json-schema upstream-blocked-v2-cli-wasm)
+
+(claims agent:claude
+  :at "2026-02-25T08:45:09Z"
+  (given completed-tests-grounding))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-add-rust-decimal))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-term-enum))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-arith-ast))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-body-literal))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-migrate-literal))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-migrate-substitution))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-migrate-rulebody))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-extend-lexer))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-parse-numeric-literals))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-parse-arith-expr))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-parse-bind-compare))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-parse-body-arith-args))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-cross-type-matching))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-body-eval-order))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-tests-term-arith))
+
+(claims agent:claude
+  :at "2026-02-25T08:45:23Z"
+  (given completed-tests-parser))
