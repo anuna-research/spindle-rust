@@ -33,7 +33,6 @@
 (given agent-core-available)
 (given agent-parser-available)
 (given agent-grounding-available)
-(given agent-testing-available)
 (given agent-contracts-available)
 
 ;; ============================================================
@@ -453,28 +452,28 @@
 
 ;; Phase 4 assignments
 (normally r-assign-tests-term-arith
-  (and ready-tests-term-arith agent-testing-available)
-  assign-to-tests-term-arith-testing)
+  (and ready-tests-term-arith agent-core-available)
+  assign-to-tests-term-arith-core)
 
 (normally r-assign-tests-parser
-  (and ready-tests-parser agent-testing-available)
-  assign-to-tests-parser-testing)
+  (and ready-tests-parser agent-core-available)
+  assign-to-tests-parser-core)
 
 (normally r-assign-tests-grounding
-  (and ready-tests-grounding agent-testing-available)
-  assign-to-tests-grounding-testing)
+  (and ready-tests-grounding agent-core-available)
+  assign-to-tests-grounding-core)
 
 (normally r-assign-tests-worked-examples
-  (and ready-tests-worked-examples agent-testing-available)
-  assign-to-tests-worked-examples-testing)
+  (and ready-tests-worked-examples agent-core-available)
+  assign-to-tests-worked-examples-core)
 
 (normally r-assign-tests-nfr
-  (and ready-tests-nfr agent-testing-available)
-  assign-to-tests-nfr-testing)
+  (and ready-tests-nfr agent-core-available)
+  assign-to-tests-nfr-core)
 
 (normally r-assign-tests-pbt
-  (and ready-tests-pbt agent-testing-available)
-  assign-to-tests-pbt-testing)
+  (and ready-tests-pbt agent-core-available)
+  assign-to-tests-pbt-core)
 
 ;; ============================================================
 ;; PHASE 5: CONTRACT AND CLI OUTPUT (REQ-012, CON-006)
@@ -532,8 +531,8 @@
   assign-to-v2-cli-wasm-contracts)
 
 (normally r-assign-tests-v2-json
-  (and ready-tests-v2-json agent-testing-available)
-  assign-to-tests-v2-json-testing)
+  (and ready-tests-v2-json agent-core-available)
+  assign-to-tests-v2-json-core)
 
 ;; ============================================================
 ;; RULE METADATA (justifications for key dependency decisions)
@@ -1184,8 +1183,8 @@
   ;; v2 assignment: fresh conclusion that Hence can match to agent:claude
   ;; Uses the correct naming convention (assign-to-{task}-{agent})
   (normally r-assign-v2-tests-grounding
-    (and ready-v2-tests-grounding agent-testing-available)
-    assign-to-tests-grounding-testing)
+    (and ready-v2-tests-grounding agent-core-available)
+    assign-to-tests-grounding-core)
 
   ;; Defeat the stale marker so claimed-tests-grounding is not blocked
   ;; (stale rule used prefer to defeat the v1 claim chain; we now defeat the stale rule)
@@ -1214,3 +1213,22 @@
 (meta r-assign-v2-tests-grounding
   (description "v2 retry assignment for tests-grounding after v1 timeout")
   (justification "The v1 attempt went stale (lease expired) and was auto-failed with confidence 0.00 — this is not a genuine implementation failure, just a timeout. Creates a fresh assignment conclusion for Hence to act on."))
+
+(claims agent:ed25519:xfRAzZFG
+  :at "2026-02-25T08:31:31Z"
+  (given claim-v2-tests-grounding)
+  (normally r-cl-state-v2-tests-grounding claim-v2-tests-grounding state-claimed-v2-tests-grounding)
+  (normally r-cl-chain-v2-tests-grounding state-claimed-v2-tests-grounding claimed-tests-grounding)
+  (prefer r-cl-chain-v2-tests-grounding r-stale-v1-tests-grounding)
+)
+
+
+(claims agent:ed25519:xfRAzZFG
+  :at "2026-02-25T08:34:34Z"
+  (given unclaim-v3-tests-grounding)
+  (normally r-ucl-state-v3-tests-grounding unclaim-v3-tests-grounding state-unclaimed-v3-tests-grounding)
+  (normally r-ucl-cancel-v2-tests-grounding unclaim-v3-tests-grounding (not state-claimed-v2-tests-grounding))
+  (prefer r-ucl-cancel-v2-tests-grounding r-cl-state-v2-tests-grounding)
+  (normally r-ucl-unclaimed-v3-tests-grounding unclaim-v3-tests-grounding (not claimed-tests-grounding))
+  (prefer r-ucl-unclaimed-v3-tests-grounding r-cl-chain-v2-tests-grounding)
+)
