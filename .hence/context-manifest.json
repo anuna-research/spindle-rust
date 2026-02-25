@@ -1,12 +1,12 @@
 {
-  "task_id": "propagate-terms",
+  "task_id": "parse-arith-expr",
   "token_budget": 8000,
-  "tokens_used": 439,
+  "tokens_used": 444,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Update apply_substitution_to_literal and apply_substitution_to_rule to propagate Term::Integer, Term::Decimal, Term::Float values from the substitution into ground literals. After grounding, rule heads should contain only concrete Term values (Symbol, Integer, Decimal, Float) — no ArithExpr. The head is still a regular Literal with Vec<Term> predicate_args. Ensure ground rules added back to the theory as new facts have correct Term-based predicate_args.",
-      "token_cost": 114,
+      "content": "Create crates/spindle-parser/src/spl/arith.rs. When the parser encounters an S-expression whose first atom is a reserved arithmetic operator (+, -, *, /, div, rem, abs, min, max, **) in an argument position, parse recursively as ArithExpr. Enforce arity constraints: + and * accept 0+ args, - and / accept 1+ args, min and max accept 1+ args, div/rem/** accept exactly 2, abs accepts exactly 1. Return ArithExpr::NaryOp, BinOp, or UnaryOp accordingly. Wrong arity -> ParseError.",
+      "token_cost": 119,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T05:00:51Z"
+  "constructed_at": "2026-02-25T05:07:16Z"
 }
