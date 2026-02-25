@@ -1,0 +1,572 @@
+; SPEC-017: Arithmetic Module Implementation Plan
+; Adds built-in arithmetic to SPL: numeric terms (Integer/Decimal/Float),
+; arithmetic expressions in Polish notation, bind/comparison predicates,
+; type promotion, and cross-type numeric matching.
+;
+; Architecture: Five-phase implementation following the spec's guidance:
+;   Phase 1 — Core Term Type (spindle-core types + evaluation)
+;   Phase 2 — Parser Extension (spindle-parser lexer + arithmetic parsing)
+;   Phase 3 — Grounding Integration (body evaluation + cross-type matching)
+;   Phase 4 — Tests (unit, integration, property-based)
+;   Phase 5 — Contract and CLI Output (v2 JSON serialization)
+;
+; Key files affected:
+;   spindle-core: literal.rs, grounding.rs, rule.rs, Cargo.toml + new term.rs, arith.rs
+;   spindle-parser: spl/lexer.rs, spl/literals.rs + new spl/arith.rs
+;   spindle-cli: output serialization
+;   spindle-wasm: output serialization
+
+(meta plan
+  (id "IMPL-017")
+  (title "SPEC-017 Arithmetic Module")
+  (version "1.0.0")
+  (status "active")
+  (created "2026-02-25")
+  (author "agent:architect")
+  (spec "SPEC-017")
+  (description "Implement built-in arithmetic for SPL: numeric terms, Polish-notation expressions, bind/comparison predicates, type promotion, and v2 JSON contracts"))
+
+;; ============================================================
+;; AGENTS
+;; ============================================================
+
+(given agent-core-available)
+(given agent-parser-available)
+(given agent-grounding-available)
+(given agent-testing-available)
+(given agent-contracts-available)
+
+;; ============================================================
+;; PHASE 1: CORE TERM TYPE (spindle-core)
+;; REQ-001, REQ-002, REQ-005, ADR-002, CON-001, CON-002
+;; ============================================================
+
+;; --- Task 1.1: Add rust_decimal dependency ---
+
+(given task-add-rust-decimal)
+(given no-deps-add-rust-decimal)
+(meta task-add-rust-decimal
+  (description "Add rust_decimal = '1.x' to spindle-core/Cargo.toml [dependencies] and workspace Cargo.toml [workspace.dependencies]. Verify `cargo check` passes.")
+  (acceptance "rust_decimal appears in Cargo.toml, cargo check succeeds, no other changes")
+  (phase "1-core")
+  (spec-ref "ADR-002")
+  (file "crates/spindle-core/Cargo.toml"))
+
+;; --- Task 1.2: Implement Term enum ---
+
+(given task-term-enum)
+(meta task-term-enum
+  (description "Create crates/spindle-core/src/term.rs with Term enum: Symbol(SymbolId), Integer(i64), Decimal(rust_decimal::Decimal), Float(f64). Implement Display, Clone, Debug. For Float variant, implement a canonicalized finite-float wrapper (or OrderedFloat equivalent) that normalizes -0.0 to 0.0 and rejects NaN/Inf, with stable Eq+Hash. Add Term::is_numeric(), Term::numeric_eq() with cross-type promotion (REQ-005). Add NumericValue enum (Integer/Decimal/Float) for arithmetic expression evaluation results that converts to/from Term.")
+  (acceptance "Term enum compiles with Eq, Hash, Clone, Debug, Display. Float hashing is deterministic. Unit tests for equality: Integer(0) != Symbol('0'), Float(-0.0) == Float(0.0), NaN rejected. Cross-type numeric_eq: Integer(8) matches Decimal(8.00)")
+  (phase "1-core")
+  (spec-ref "ADR-002, REQ-001, REQ-005, REQ-010")
+  (file "crates/spindle-core/src/term.rs"))
+
+;; --- Task 1.3: Implement ArithExpr and ArithConstraint ---
+
+(given task-arith-ast)
+(meta task-arith-ast
+  (description "Create crates/spindle-core/src/arith.rs with: ArithExpr enum (Lit, Var, NaryOp, BinOp, UnaryOp), NaryArithOp (Add, Sub, Mul, Div, Min, Max), BinArithOp (IDiv, Rem, Pow), UnaryArithOp (Abs), CmpOp (Eq, Ne, Lt, Gt, Le, Ge), ArithConstraint (Bind{var, expr}, Compare{op, lhs, rhs}), ArithError enum (DivisionByZero, IntegerOverflow, DecimalOverflow, UnboundVariable, TypeMismatch, NonFiniteFloat, ReciprocalOfZero, ComparisonFailed). Implement ArithExpr::eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> with: checked integer arithmetic, rust_decimal for decimal ops, f64 for float ops, promotion rules per REQ-005 (Integer+Decimal->Decimal, any+Float->Float, Integer/Integer->Decimal for division). Implement variadic semantics per CON-002 (identity elements, left-fold, unary negation/reciprocal). Implement ArithConstraint::eval(&self, subst: &mut Substitution) -> Result<(), ArithError>.")
+  (acceptance "All ArithExpr variants evaluate correctly. Checked integer overflow returns IntegerOverflow. Division by zero returns DivisionByZero. Type promotion matches REQ-005 exactly. Variadic +/* with 0 args return identity. Unary - negates, unary / gives reciprocal. div/rem reject non-integers. ** handles all exponentiation cases from REQ-005. Unit tests for every ArithError variant.")
+  (phase "1-core")
+  (spec-ref "CON-002, CON-003, CON-004, REQ-002, REQ-003, REQ-004, REQ-005")
+  (file "crates/spindle-core/src/arith.rs"))
+
+;; --- Task 1.4: Implement BodyLiteral enum and BodyArg ---
+
+(given task-body-literal)
+(meta task-body-literal
+  (description "Add BodyLiteral, BodyLogicLiteral, and BodyArg types per SPEC-017 section 7.4. BodyArg::Term(Term) for concrete args, BodyArg::Arith(ArithExpr) for expression args. BodyLogicLiteral mirrors Literal fields but uses Vec<BodyArg> for predicate_args. BodyLiteral::Logic(BodyLogicLiteral) for fact-matching, BodyLiteral::Arithmetic(ArithConstraint) for bind/compare. Place in a new crates/spindle-core/src/body.rs or extend rule.rs. NOTE: ArithConstraint has no negation flag (REQ-011 makes negation of arithmetic a parse error).")
+  (acceptance "BodyLiteral enum compiles. Can construct BodyLiteral::Logic with BodyArg::Arith arguments. Can construct BodyLiteral::Arithmetic with Bind and Compare variants. No negation field on ArithConstraint.")
+  (phase "1-core")
+  (spec-ref "Section 7.4, REQ-011")
+  (file "crates/spindle-core/src/body.rs"))
+
+;; --- Task 1.5: Migrate Literal predicate_ids to Vec<Term> ---
+
+(given task-migrate-literal)
+(meta task-migrate-literal
+  (description "Change Literal::predicate_ids from Vec<SymbolId> to predicate_args: Vec<Term>. Update all accessor methods (predicate_ids() -> &[Term], predicates(), from_ids(), new()). Update Eq/Hash impls to work with Term. Update all call sites across spindle-core that destructure predicate_ids — primarily grounding.rs match_literal, apply_substitution_to_literal, pipeline.rs, reason.rs, scalable.rs, query.rs, explain.rs, index.rs. Existing code should construct Term::Symbol(id) where it previously used bare SymbolId. This is the highest-risk change — audit every match arm.")
+  (acceptance "All existing tests pass. cargo test --all succeeds. Literal stores Vec<Term>. All callers updated. No regressions in reasoning output.")
+  (phase "1-core")
+  (spec-ref "ADR-002, Section 7.1")
+  (file "crates/spindle-core/src/literal.rs")
+  (risk "high — breaking change touching every module that handles literals"))
+
+;; --- Task 1.6: Migrate Substitution terms to FxHashMap<SymbolId, Term> ---
+
+(given task-migrate-substitution)
+(meta task-migrate-substitution
+  (description "Change Substitution::terms from FxHashMap<SymbolId, SymbolId> to FxHashMap<SymbolId, Term>. Update match_literal to produce Term values in substitution. Update apply_substitution_to_literal to read Term values and place them in predicate_args. Update merge_substitutions to handle Term equality (use Term::Eq, which handles canonical float). Existing symbol bindings become Term::Symbol(id). All grounding.rs functions that read/write substitution.terms must be updated.")
+  (acceptance "All existing tests pass. Substitution stores Term values. Grounding produces correct results for non-arithmetic theories (regression check).")
+  (phase "1-core")
+  (spec-ref "Section 7.2")
+  (file "crates/spindle-core/src/grounding.rs")
+  (risk "high — coupled with task-migrate-literal"))
+
+;; --- Task 1.7: Update RuleBody to use BodyLiteral ---
+
+(given task-migrate-rulebody)
+(meta task-migrate-rulebody
+  (description "Change RuleBody type alias from SmallVec<[Literal; 4]> to SmallVec<[BodyLiteral; 4]>. All code that constructs or iterates RuleBody must handle the BodyLiteral enum. For non-arithmetic rules, all body literals are BodyLiteral::Logic. Existing test fixtures and parser output must wrap Literals in BodyLiteral::Logic. The grounding loop (match_body_against_facts, match_body_with_delta) must dispatch on BodyLiteral variant.")
+  (acceptance "All existing tests pass. RuleBody contains BodyLiteral values. Non-arithmetic rules produce BodyLiteral::Logic wrappers. Grounding dispatches correctly.")
+  (phase "1-core")
+  (spec-ref "Section 7.4")
+  (file "crates/spindle-core/src/rule.rs")
+  (risk "medium — broad change but mechanical"))
+
+;; Phase 1 dependency chain
+(normally r-ready-add-rust-decimal
+  (and task-add-rust-decimal no-deps-add-rust-decimal)
+  ready-add-rust-decimal)
+
+(normally r-ready-term-enum
+  (and task-term-enum completed-add-rust-decimal)
+  ready-term-enum)
+
+(normally r-ready-arith-ast
+  (and task-arith-ast completed-term-enum)
+  ready-arith-ast)
+
+(normally r-ready-body-literal
+  (and task-body-literal completed-arith-ast completed-term-enum)
+  ready-body-literal)
+
+(normally r-ready-migrate-literal
+  (and task-migrate-literal completed-term-enum)
+  ready-migrate-literal)
+
+(normally r-ready-migrate-substitution
+  (and task-migrate-substitution completed-migrate-literal completed-term-enum)
+  ready-migrate-substitution)
+
+(normally r-ready-migrate-rulebody
+  (and task-migrate-rulebody completed-body-literal completed-migrate-literal)
+  ready-migrate-rulebody)
+
+;; Phase 1 assignments
+(normally r-assign-add-rust-decimal
+  (and ready-add-rust-decimal agent-core-available)
+  assign-to-add-rust-decimal-core)
+
+(normally r-assign-term-enum
+  (and ready-term-enum agent-core-available)
+  assign-to-term-enum-core)
+
+(normally r-assign-arith-ast
+  (and ready-arith-ast agent-core-available)
+  assign-to-arith-ast-core)
+
+(normally r-assign-body-literal
+  (and ready-body-literal agent-core-available)
+  assign-to-body-literal-core)
+
+(normally r-assign-migrate-literal
+  (and ready-migrate-literal agent-core-available)
+  assign-to-migrate-literal-core)
+
+(normally r-assign-migrate-substitution
+  (and ready-migrate-substitution agent-core-available)
+  assign-to-migrate-substitution-core)
+
+(normally r-assign-migrate-rulebody
+  (and ready-migrate-rulebody agent-core-available)
+  assign-to-migrate-rulebody-core)
+
+;; ============================================================
+;; PHASE 2: PARSER EXTENSION (spindle-parser)
+;; REQ-001, REQ-002, REQ-003, REQ-004, REQ-008, REQ-009, REQ-011, ADR-003
+;; ============================================================
+
+;; --- Task 2.1: Extend lexer for arithmetic operator tokens ---
+
+(given task-extend-lexer)
+(meta task-extend-lexer
+  (description "Extend spl/lexer.rs parse_atom to accept *, /, <, >, =, ! as atom characters so that operator tokens (*, /, <=, >=, !=, **) lex as atoms. Currently parse_atom accepts alphanumeric, -, _, ?, ~, :, ., +. Add the missing characters. Verify that multi-char atoms containing these chars (e.g. high-earner, c++test) still lex correctly — reservation applies only to standalone tokens, not substrings.")
+  (acceptance "Tokens *, /, <=, >=, !=, **, div, rem, abs, min, max, bind all lex as SExpr::Atom. Existing atoms like 'high-earner' unaffected. Roundtrip: lex then check value.")
+  (phase "2-parser")
+  (spec-ref "ADR-003")
+  (file "crates/spindle-parser/src/spl/lexer.rs"))
+
+;; --- Task 2.2: Parse numeric literals in argument positions ---
+
+(given task-parse-numeric-literals)
+(meta task-parse-numeric-literals
+  (description "Extend spl/literals.rs to detect and parse numeric literals in predicate argument positions. When an atom matches integer pattern (-?[0-9]+), parse as Term::Integer(i64). When it matches decimal pattern (-?[0-9]+.[0-9]+), parse as Term::Decimal. When it matches float pattern (-?[0-9]+(.[0-9]+)?[eE]-?[0-9]+), parse as Term::Float(f64). Out-of-range values produce ParseError with source offset. Order of detection: float (has e/E) > decimal (has .) > integer.")
+  (acceptance "Integer: '42' -> Term::Integer(42). Decimal: '0.08' -> Term::Decimal(0.08) exact. Float: '1.5e3' -> Term::Float(1500.0). Negative: '-100' -> Term::Integer(-100). Overflow i64 -> ParseError. Exceeds 29 significant digits -> ParseError. Non-finite float -> ParseError.")
+  (phase "2-parser")
+  (spec-ref "REQ-001, CON-001")
+  (file "crates/spindle-parser/src/spl/literals.rs"))
+
+;; --- Task 2.3: Parse arithmetic expressions ---
+
+(given task-parse-arith-expr)
+(meta task-parse-arith-expr
+  (description "Create crates/spindle-parser/src/spl/arith.rs. When the parser encounters an S-expression whose first atom is a reserved arithmetic operator (+, -, *, /, div, rem, abs, min, max, **) in an argument position, parse recursively as ArithExpr. Enforce arity constraints: + and * accept 0+ args, - and / accept 1+ args, min and max accept 1+ args, div/rem/** accept exactly 2, abs accepts exactly 1. Return ArithExpr::NaryOp, BinOp, or UnaryOp accordingly. Wrong arity -> ParseError.")
+  (acceptance "All examples from CON-002 parse correctly. (+ ?x ?y ?z) -> NaryOp(Add, 3 args). (- ?x) -> NaryOp(Sub, 1 arg) = negation. (/ ?x) -> NaryOp(Div, 1 arg) = reciprocal. (div 10 3 2) -> ParseError. Nested: (* (+ ?a ?b) 2) -> nested ArithExpr.")
+  (phase "2-parser")
+  (spec-ref "REQ-002, CON-002")
+  (file "crates/spindle-parser/src/spl/arith.rs"))
+
+;; --- Task 2.4: Parse bind and comparison predicates ---
+
+(given task-parse-bind-compare)
+(meta task-parse-bind-compare
+  (description "Extend the body-literal parsing in spl/literals.rs (or spl/arith.rs) to recognize (bind ?var expr) and (<cmp> expr1 expr2) where <cmp> is =, !=, <, >, <=, >= in body position. Produce BodyLiteral::Arithmetic(ArithConstraint::Bind{..}) and BodyLiteral::Arithmetic(ArithConstraint::Compare{..}). bind's first arg must be a ?-variable (else ParseError). bind's second arg must be a valid arith-expr (else ParseError).")
+  (acceptance "(bind ?x (+ 1 2)) -> ArithConstraint::Bind with var and expr. (> ?amount 100000) -> ArithConstraint::Compare(Gt, ...). (bind 5 (+ 2 3)) -> ParseError. All six comparison operators parse correctly.")
+  (phase "2-parser")
+  (spec-ref "REQ-003, REQ-004, CON-003, CON-004")
+  (file "crates/spindle-parser/src/spl/literals.rs"))
+
+;; --- Task 2.5: Parse arithmetic expressions in body literal arguments ---
+
+(given task-parse-body-arith-args)
+(meta task-parse-body-arith-args
+  (description "When parsing a user-defined body literal like (line-total ?i (* ?p 2)), detect arithmetic expressions in argument positions and produce BodyArg::Arith(ArithExpr) instead of BodyArg::Term. This requires the parser to check if an argument is an S-expression starting with an arithmetic operator. If so, recursively parse as ArithExpr via the arith parser from task 2.3.")
+  (acceptance "(normally r1 (and (price ?i ?p) (line-total ?i (* ?p 2))) (ok ?i)) parses with line-total having BodyArg::Arith for the second argument. Plain arguments remain BodyArg::Term.")
+  (phase "2-parser")
+  (spec-ref "REQ-002, ADR-001b, Section 7.4")
+  (file "crates/spindle-parser/src/spl/literals.rs"))
+
+;; --- Task 2.6: Parse-time guards (head prohibition, negation, reserved keywords) ---
+
+(given task-parse-guards)
+(meta task-parse-guards
+  (description "Add parse-time error checks: (1) Arithmetic predicates (bind, =, !=, <, >, <=, >=) in rule head position -> ParseError per REQ-009. (2) Arithmetic expressions as arguments in rule heads or facts -> ParseError per REQ-009. (3) Negation of arithmetic predicates (not (> ...) or ~(> ...)) -> ParseError per REQ-011. (4) Reserved keywords (+, -, *, /, div, rem, abs, min, max, **, bind, =, !=, <, >, <=, >=) as predicate names or rule labels -> ParseError per REQ-008. (5) Future-reserved keywords (sum, count, avg, round, floor, ceil) as predicate names or rule labels -> ParseError per REQ-008. (6) Reserved keywords in (prefer ...) declarations -> ParseError.")
+  (acceptance "(normally r1 body (bind ?x 5)) -> ParseError. (given (cost (+ 3 4))) -> ParseError. (not (> ?x 100)) in body -> ParseError. (normally + body head) -> ParseError. (given (sum report 100)) -> ParseError. (prefer r1 bind) -> ParseError. (prefer r1 count) -> ParseError.")
+  (phase "2-parser")
+  (spec-ref "REQ-008, REQ-009, REQ-011")
+  (file "crates/spindle-parser/src/spl/expressions.rs"))
+
+;; Phase 2 dependency chain
+(normally r-ready-extend-lexer
+  (and task-extend-lexer completed-migrate-rulebody)
+  ready-extend-lexer)
+
+(normally r-ready-parse-numeric-literals
+  (and task-parse-numeric-literals completed-extend-lexer completed-migrate-literal)
+  ready-parse-numeric-literals)
+
+(normally r-ready-parse-arith-expr
+  (and task-parse-arith-expr completed-extend-lexer completed-arith-ast)
+  ready-parse-arith-expr)
+
+(normally r-ready-parse-bind-compare
+  (and task-parse-bind-compare completed-parse-arith-expr completed-body-literal)
+  ready-parse-bind-compare)
+
+(normally r-ready-parse-body-arith-args
+  (and task-parse-body-arith-args completed-parse-arith-expr completed-body-literal)
+  ready-parse-body-arith-args)
+
+(normally r-ready-parse-guards
+  (and task-parse-guards completed-parse-bind-compare completed-parse-body-arith-args)
+  ready-parse-guards)
+
+;; Phase 2 assignments
+(normally r-assign-extend-lexer
+  (and ready-extend-lexer agent-parser-available)
+  assign-to-extend-lexer-parser)
+
+(normally r-assign-parse-numeric-literals
+  (and ready-parse-numeric-literals agent-parser-available)
+  assign-to-parse-numeric-literals-parser)
+
+(normally r-assign-parse-arith-expr
+  (and ready-parse-arith-expr agent-parser-available)
+  assign-to-parse-arith-expr-parser)
+
+(normally r-assign-parse-bind-compare
+  (and ready-parse-bind-compare agent-parser-available)
+  assign-to-parse-bind-compare-parser)
+
+(normally r-assign-parse-body-arith-args
+  (and ready-parse-body-arith-args agent-parser-available)
+  assign-to-parse-body-arith-args-parser)
+
+(normally r-assign-parse-guards
+  (and ready-parse-guards agent-parser-available)
+  assign-to-parse-guards-parser)
+
+;; ============================================================
+;; PHASE 3: GROUNDING INTEGRATION (spindle-core)
+;; REQ-010, ADR-001, ADR-001b, CON-005
+;; ============================================================
+
+;; --- Task 3.1: Cross-type numeric matching in match_literal ---
+
+(given task-cross-type-matching)
+(meta task-cross-type-matching
+  (description "Extend grounding.rs match_literal to handle cross-type numeric matching per REQ-010/CON-005. When a bound variable holds a numeric Term and a candidate fact argument is a different numeric Term type, promote both to a common type using REQ-005 rules and compare for equality. Integer(100) matches Decimal(100.00), Integer(100) matches Float(100.0), Decimal(100.00) matches Float(100.0). Symbol never matches numeric. Use Term::numeric_eq() from task 1.2.")
+  (acceptance "Grounding matches Integer fact arg against Decimal substitution value when numerically equal. Does not match when unequal. Symbol(\"100\") does not match Integer(100). All TEST-010 scenarios pass.")
+  (phase "3-grounding")
+  (spec-ref "REQ-010, CON-005")
+  (file "crates/spindle-core/src/grounding.rs"))
+
+;; --- Task 3.2: Source-order body evaluation with arithmetic dispatch ---
+
+(given task-body-eval-order)
+(meta task-body-eval-order
+  (description "Refactor the grounding loop (match_body_against_facts / match_body_with_delta) to evaluate BodyLiteral elements in source order, threading substitutions. For each body element: (1) BodyLiteral::Logic — evaluate any BodyArg::Arith arguments under current substitution (call ArithExpr::eval), replace with resulting Term, then match against facts. If ArithExpr::eval fails, discard substitution path. (2) BodyLiteral::Arithmetic — call ArithConstraint::eval on current substitution. Bind extends substitution, Compare filters. On failure, discard substitution path. Each step sees bindings from all preceding steps (ADR-001b).")
+  (acceptance "Rule (and (price ?i ?p) (bind ?tax (* ?p 0.08)) (> ?tax 5)) fires correctly when price > 62.50. Reversed order (and (> ?tax 5) (bind ?tax ...)) fails because ?tax is unbound. Chained binds work: (and (bind ?a (+ 1 2)) (bind ?b (* ?a 3))) -> ?b = 9. BodyArg::Arith in logic literal evaluated before matching.")
+  (phase "3-grounding")
+  (spec-ref "ADR-001, ADR-001b")
+  (file "crates/spindle-core/src/grounding.rs"))
+
+;; --- Task 3.3: Propagate Term values through apply_substitution ---
+
+(given task-propagate-terms)
+(meta task-propagate-terms
+  (description "Update apply_substitution_to_literal and apply_substitution_to_rule to propagate Term::Integer, Term::Decimal, Term::Float values from the substitution into ground literals. After grounding, rule heads should contain only concrete Term values (Symbol, Integer, Decimal, Float) — no ArithExpr. The head is still a regular Literal with Vec<Term> predicate_args. Ensure ground rules added back to the theory as new facts have correct Term-based predicate_args.")
+  (acceptance "After grounding a rule with (bind ?total (* ?p ?q)), the head literal contains Term::Integer or Term::Decimal for ?total, not a symbol string of the number. New ground facts are indexed correctly by the fact index (name, negation, arity, mode).")
+  (phase "3-grounding")
+  (spec-ref "Section 7.3")
+  (file "crates/spindle-core/src/grounding.rs"))
+
+;; --- Task 3.4: Temporal variable guard ---
+
+(given task-temporal-guard)
+(meta task-temporal-guard
+  (description "Ensure that temporal endpoint variables (?start, ?end from 'during' literals) and interval variables (?T) cannot be used as arithmetic operands. In ArithExpr::eval, if a variable resolves to a temporal binding (found in subst.temporal or subst.intervals but not in subst.terms), return ArithError::TypeMismatch. This causes silent failure per REQ-006.")
+  (acceptance "Rule body with (during (salary ?emp ?amt) ?s ?e) and (+ ?s 1) in arithmetic position — the arithmetic literal fails silently. Rule body with (> ?amt 100000) where ?amt is bound via terms (not temporal) works correctly.")
+  (phase "3-grounding")
+  (spec-ref "REQ-006")
+  (file "crates/spindle-core/src/arith.rs"))
+
+;; Phase 3 dependency chain
+(normally r-ready-cross-type-matching
+  (and task-cross-type-matching completed-migrate-substitution completed-migrate-literal)
+  ready-cross-type-matching)
+
+(normally r-ready-body-eval-order
+  (and task-body-eval-order completed-migrate-rulebody completed-migrate-substitution completed-arith-ast)
+  ready-body-eval-order)
+
+(normally r-ready-propagate-terms
+  (and task-propagate-terms completed-body-eval-order completed-cross-type-matching)
+  ready-propagate-terms)
+
+(normally r-ready-temporal-guard
+  (and task-temporal-guard completed-arith-ast completed-migrate-substitution)
+  ready-temporal-guard)
+
+;; Phase 3 assignments
+(normally r-assign-cross-type-matching
+  (and ready-cross-type-matching agent-grounding-available)
+  assign-to-cross-type-matching-grounding)
+
+(normally r-assign-body-eval-order
+  (and ready-body-eval-order agent-grounding-available)
+  assign-to-body-eval-order-grounding)
+
+(normally r-assign-propagate-terms
+  (and ready-propagate-terms agent-grounding-available)
+  assign-to-propagate-terms-grounding)
+
+(normally r-assign-temporal-guard
+  (and ready-temporal-guard agent-grounding-available)
+  assign-to-temporal-guard-grounding)
+
+;; ============================================================
+;; PHASE 4: TESTS
+;; TEST-001 through TEST-012, TEST-NFR-001/002, TEST-PBT-001
+;; ============================================================
+
+;; --- Task 4.1: Unit tests for Term and ArithExpr ---
+
+(given task-tests-term-arith)
+(meta task-tests-term-arith
+  (description "Write unit tests in spindle-core for: TEST-001 (numeric literal terms — all 10 scenarios), TEST-002 (arithmetic expression parsing — all 12 scenarios, evaluation side), TEST-005 (numeric type promotion — all 22 scenarios). Place in crates/spindle-core/src/term.rs #[cfg(test)] and crates/spindle-core/src/arith.rs #[cfg(test)].")
+  (acceptance "All TEST-001, TEST-002 evaluation scenarios, and TEST-005 scenarios pass. Covers identity elements, left-fold, unary ops, div/rem integer-only enforcement, ** all cases.")
+  (phase "4-tests")
+  (spec-ref "TEST-001, TEST-002, TEST-005"))
+
+;; --- Task 4.2: Parser integration tests ---
+
+(given task-tests-parser)
+(meta task-tests-parser
+  (description "Write integration tests in spindle-parser for: TEST-002 (parsing side — all 12 scenarios), TEST-008 (reserved keyword enforcement — all 8 scenarios), TEST-009 (no arithmetic in heads — all 3 scenarios), TEST-011 (no negation of arithmetic — all 5 scenarios). Place in crates/spindle-parser/tests/ or src/spl/ test modules.")
+  (acceptance "All TEST-002 parse scenarios, TEST-008, TEST-009, TEST-011 scenarios pass. Parse errors have correct error messages and source positions.")
+  (phase "4-tests")
+  (spec-ref "TEST-002, TEST-008, TEST-009, TEST-011"))
+
+;; --- Task 4.3: Grounding integration tests ---
+
+(given task-tests-grounding)
+(meta task-tests-grounding
+  (description "Write integration tests for: TEST-003 (bind predicate — all 7 scenarios), TEST-004 (comparison predicates — all 10 scenarios including order-dependent), TEST-006 (arithmetic in temporal rules — both scenarios), TEST-007 (arithmetic predicates not in superiority — both scenarios), TEST-010 (cross-type matching — all 6 unit + end-to-end scenario). These are end-to-end: parse SPL -> ground -> reason -> check conclusions. Place in crates/spindle-core/tests/arithmetic.rs.")
+  (acceptance "All TEST-003, TEST-004, TEST-006, TEST-007, TEST-010 scenarios pass. Order-dependent test (TEST-004 scenarios 9-10) verifies source-order evaluation. Cross-type matching end-to-end from TEST-010 works.")
+  (phase "4-tests")
+  (spec-ref "TEST-003, TEST-004, TEST-006, TEST-007, TEST-010"))
+
+;; --- Task 4.4: Worked examples as integration tests ---
+
+(given task-tests-worked-examples)
+(meta task-tests-worked-examples
+  (description "Implement the four worked examples from Section 9 as integration tests: 9.1 Order Total with Tax, 9.2 Defeasible Classification with Override, 9.3 Temporal Arithmetic (Salary Bands Over Time), 9.4 Decimal Precision and Rounding. Each test parses the SPL, runs the full pipeline, and checks expected conclusions exactly.")
+  (acceptance "All four worked examples produce the exact conclusions listed in the spec. Decimal precision is exact (0.3, not 0.30000000000000004). Tax calculation produces Decimal(8.00) not Float. Temporal example only derives senior-earner for the 110000 period.")
+  (phase "4-tests")
+  (spec-ref "Section 9"))
+
+;; --- Task 4.5: NFR tests (overflow safety + performance) ---
+
+(given task-tests-nfr)
+(meta task-tests-nfr
+  (description "Implement TEST-NFR-002 (integer overflow safety — 3 scenarios: add, mul, sub at i64 boundary, no panic). Implement TEST-NFR-001 (grounding performance regression — generate 500-fact/200-rule theory with arithmetic vs equivalent without, compare median grounding time, warn if >10% overhead). NFR-003 (no unsafe) verified by cargo clippy or grep.")
+  (acceptance "Overflow tests pass without panic. Performance benchmark runs (warning-only, not hard fail). No unsafe blocks in arith.rs or term.rs.")
+  (phase "4-tests")
+  (spec-ref "TEST-NFR-001, TEST-NFR-002, NFR-003"))
+
+;; --- Task 4.6: Property-based tests ---
+
+(given task-tests-pbt)
+(meta task-tests-pbt
+  (description "Implement TEST-PBT-001 with proptest. Generators: bounded-depth ArithExpr (max depth 4), random NumericValue (Integer, Decimal, finite Float), random Substitution, random rule-body fragments. Properties: (1) determinism, (2) panic safety, (3) promotion correctness, (4) div/rem identity a = b*div(a,b)+rem(a,b), (5) floor remainder sign rule, (6) comparison reflexivity, (7) float safety, (8) source-order dependency, (9) body-arg expression equivalence, (10) parser round-trip stability.")
+  (acceptance "proptest runs 500+ cases per property without failure. All 10 properties hold. No panics on any generated input.")
+  (phase "4-tests")
+  (spec-ref "TEST-PBT-001"))
+
+;; Phase 4 dependency chain
+(normally r-ready-tests-term-arith
+  (and task-tests-term-arith completed-arith-ast completed-term-enum)
+  ready-tests-term-arith)
+
+(normally r-ready-tests-parser
+  (and task-tests-parser completed-parse-guards)
+  ready-tests-parser)
+
+(normally r-ready-tests-grounding
+  (and task-tests-grounding completed-propagate-terms completed-temporal-guard completed-parse-guards)
+  ready-tests-grounding)
+
+(normally r-ready-tests-worked-examples
+  (and task-tests-worked-examples completed-tests-grounding)
+  ready-tests-worked-examples)
+
+(normally r-ready-tests-nfr
+  (and task-tests-nfr completed-tests-grounding)
+  ready-tests-nfr)
+
+(normally r-ready-tests-pbt
+  (and task-tests-pbt completed-tests-grounding)
+  ready-tests-pbt)
+
+;; Phase 4 assignments
+(normally r-assign-tests-term-arith
+  (and ready-tests-term-arith agent-testing-available)
+  assign-to-tests-term-arith-testing)
+
+(normally r-assign-tests-parser
+  (and ready-tests-parser agent-testing-available)
+  assign-to-tests-parser-testing)
+
+(normally r-assign-tests-grounding
+  (and ready-tests-grounding agent-testing-available)
+  assign-to-tests-grounding-testing)
+
+(normally r-assign-tests-worked-examples
+  (and ready-tests-worked-examples agent-testing-available)
+  assign-to-tests-worked-examples-testing)
+
+(normally r-assign-tests-nfr
+  (and ready-tests-nfr agent-testing-available)
+  assign-to-tests-nfr-testing)
+
+(normally r-assign-tests-pbt
+  (and ready-tests-pbt agent-testing-available)
+  assign-to-tests-pbt-testing)
+
+;; ============================================================
+;; PHASE 5: CONTRACT AND CLI OUTPUT (REQ-012, CON-006)
+;; ============================================================
+
+;; --- Task 5.1: v2 JSON schema with typed arguments ---
+
+(given task-v2-json-schema)
+(meta task-v2-json-schema
+  (description "Add v2 JSON contract schema types and serialization for Term. Term::Symbol -> {type: 'symbol', value: str}. Term::Integer -> {type: 'integer', value: number} (string if >2^53). Term::Decimal -> {type: 'decimal', value: str} (always string to preserve scale). Term::Float -> {type: 'float', value: number}. Add serde Serialize/Deserialize for v2 TermDto. v1 schemas unchanged (all args as strings). Add schema version negotiation or explicit v2 output flag.")
+  (acceptance "v2 JSON output for mixed args [Symbol('widget'), Integer(25), Decimal(0.08)] serializes correctly. Integer >2^53 uses string. Decimal preserves trailing zeros ('8.00'). Round-trip: serialize then deserialize produces identical Term values. v1 output unchanged for same theory.")
+  (phase "5-contracts")
+  (spec-ref "REQ-012, CON-006")
+  (file "crates/spindle-core/src/contracts/"))
+
+;; --- Task 5.2: CLI and WASM v2 output integration ---
+
+(given task-v2-cli-wasm)
+(meta task-v2-cli-wasm
+  (description "Update spindle-cli and spindle-wasm to support v2 JSON output. Add --v2 flag or similar for CLI. WASM API gets v2 output methods. Ensure backward compatibility: default output remains v1. v2 is opt-in. Update CLI text output to display numeric terms naturally (Integer as-is, Decimal with rust_decimal Display preserving trailing zeros, Float with standard f64 display).")
+  (acceptance "CLI --v2 flag produces v2 JSON. Default output is v1. WASM v2 methods return typed JSON. CLI text shows 'total(order-001, 108.00)' with decimal scale preserved.")
+  (phase "5-contracts")
+  (spec-ref "REQ-012")
+  (file "crates/spindle-cli/src/, crates/spindle-wasm/src/"))
+
+;; --- Task 5.3: v2 JSON tests ---
+
+(given task-tests-v2-json)
+(meta task-tests-v2-json
+  (description "Implement TEST-012 (v2 JSON typed argument serialization — all 8 scenarios). Verify round-trip for all Term variants, large integer string serialization, decimal string preservation, v1 compatibility. Place in crates/spindle-core/tests/json_v2.rs or contracts test module.")
+  (acceptance "All 8 TEST-012 scenarios pass. v1 output for same theory is byte-identical to pre-arithmetic v1 output.")
+  (phase "5-contracts")
+  (spec-ref "TEST-012"))
+
+;; Phase 5 dependency chain
+(normally r-ready-v2-json-schema
+  (and task-v2-json-schema completed-term-enum completed-tests-grounding)
+  ready-v2-json-schema)
+
+(normally r-ready-v2-cli-wasm
+  (and task-v2-cli-wasm completed-v2-json-schema)
+  ready-v2-cli-wasm)
+
+(normally r-ready-tests-v2-json
+  (and task-tests-v2-json completed-v2-json-schema)
+  ready-tests-v2-json)
+
+;; Phase 5 assignments
+(normally r-assign-v2-json-schema
+  (and ready-v2-json-schema agent-contracts-available)
+  assign-to-v2-json-schema-contracts)
+
+(normally r-assign-v2-cli-wasm
+  (and ready-v2-cli-wasm agent-contracts-available)
+  assign-to-v2-cli-wasm-contracts)
+
+(normally r-assign-tests-v2-json
+  (and ready-tests-v2-json agent-testing-available)
+  assign-to-tests-v2-json-testing)
+
+;; ============================================================
+;; RULE METADATA (justifications for key dependency decisions)
+;; ============================================================
+
+(meta r-ready-term-enum
+  (description "Term enum requires rust_decimal crate")
+  (justification "Term::Decimal wraps rust_decimal::Decimal"))
+
+(meta r-ready-arith-ast
+  (description "ArithExpr evaluates to NumericValue which maps to Term")
+  (justification "ArithExpr::eval returns NumericValue; needs Term for type promotion"))
+
+(meta r-ready-migrate-literal
+  (description "Literal migration depends on Term enum being defined")
+  (justification "predicate_ids: Vec<SymbolId> becomes predicate_args: Vec<Term>"))
+
+(meta r-ready-migrate-substitution
+  (description "Substitution migration depends on Literal migration")
+  (justification "Substitution produces/consumes Term values that go into Literal predicate_args"))
+
+(meta r-ready-migrate-rulebody
+  (description "RuleBody migration depends on BodyLiteral and Literal migration")
+  (justification "RuleBody changes from SmallVec<[Literal; 4]> to SmallVec<[BodyLiteral; 4]>"))
+
+(meta r-ready-body-eval-order
+  (description "Grounding body evaluation needs BodyLiteral enum, Substitution with Term, and ArithExpr evaluator")
+  (justification "Source-order evaluation dispatches on BodyLiteral::Logic vs ::Arithmetic and calls ArithExpr::eval/ArithConstraint::eval"))
+
+(meta r-ready-parse-guards
+  (description "Parse guards depend on all parser components being in place")
+  (justification "Guards check for arithmetic in heads, negation of arithmetic, and reserved keywords — all parser features must exist first"))
+
+(meta r-ready-tests-grounding
+  (description "Grounding tests need full pipeline: parser + grounding + reasoning")
+  (justification "End-to-end tests parse SPL, ground with arithmetic, reason, and check conclusions"))
