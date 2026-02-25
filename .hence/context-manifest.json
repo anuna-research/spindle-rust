@@ -1,12 +1,12 @@
 {
-  "task_id": "parse-bind-compare",
+  "task_id": "parse-body-arith-args",
   "token_budget": 8000,
-  "tokens_used": 428,
+  "tokens_used": 416,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Extend the body-literal parsing in spl/literals.rs (or spl/arith.rs) to recognize (bind ?var expr) and (<cmp> expr1 expr2) where <cmp> is =, !=, <, >, <=, >= in body position. Produce BodyLiteral::Arithmetic(ArithConstraint::Bind{..}) and BodyLiteral::Arithmetic(ArithConstraint::Compare{..}). bind's first arg must be a ?-variable (else ParseError). bind's second arg must be a valid arith-expr (else ParseError).",
-      "token_cost": 103,
+      "content": "When parsing a user-defined body literal like (line-total ?i (* ?p 2)), detect arithmetic expressions in argument positions and produce BodyArg::Arith(ArithExpr) instead of BodyArg::Term. This requires the parser to check if an argument is an S-expression starting with an arithmetic operator. If so, recursively parse as ArithExpr via the arith parser from task 2.3.",
+      "token_cost": 91,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T05:12:21Z"
+  "constructed_at": "2026-02-25T05:19:31Z"
 }
