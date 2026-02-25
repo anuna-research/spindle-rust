@@ -57,6 +57,7 @@ pub mod reason;
 pub mod rule;
 pub mod superiority;
 pub mod temporal;
+pub mod term;
 pub mod theory;
 pub mod trust;
 pub mod worklist;
@@ -80,6 +81,7 @@ pub mod prelude {
     };
     pub use crate::rule::{Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
+    pub use crate::term::{FiniteFloat, NumericValue, Term};
     pub use crate::temporal::{
         AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,
     };

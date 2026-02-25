@@ -3,15 +3,26 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 0,
-    "insertions": 0,
-    "deletions": 0,
-    "file_list": [],
-    "dirty_files": 1
+    "files_changed": 3,
+    "insertions": 507,
+    "deletions": 5,
+    "file_list": [
+      ".hence/context-manifest.json",
+      "crates/spindle-core/src/lib.rs",
+      "crates/spindle-core/src/term.rs"
+    ],
+    "dirty_files": 0
   },
-  "learnings": [],
-  "branch_name": "hence/add-rust-decimal-v1",
-  "evaluated_at": "2026-02-25T03:20:34Z",
+  "learnings": [
+    {
+      "key": "task-term-enum-changes",
+      "content": "Modified 3 files (+507, -5): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/term.rs",
+      "memory_type": "episodic",
+      "confidence": 0.8
+    }
+  ],
+  "branch_name": "hence/term-enum-v1",
+  "evaluated_at": "2026-02-25T03:23:46Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
