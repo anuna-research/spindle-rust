@@ -1,12 +1,12 @@
 {
-  "task_id": "parse-guards",
+  "task_id": "tests-parser",
   "token_budget": 8000,
-  "tokens_used": 489,
+  "tokens_used": 407,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Add parse-time error checks: (1) Arithmetic predicates (bind, =, !=, <, >, <=, >=) in rule head position -> ParseError per REQ-009. (2) Arithmetic expressions as arguments in rule heads or facts -> ParseError per REQ-009. (3) Negation of arithmetic predicates (not (> ...) or ~(> ...)) -> ParseError per REQ-011. (4) Reserved keywords (+, -, *, /, div, rem, abs, min, max, **, bind, =, !=, <, >, <=, >=) as predicate names or rule labels -> ParseError per REQ-008. (5) Future-reserved keywords (sum, count, avg, round, floor, ceil) as predicate names or rule labels -> ParseError per REQ-008. (6) Reserved keywords in (prefer ...) declarations -> ParseError.",
-      "token_cost": 164,
+      "content": "Write integration tests in spindle-parser for: TEST-002 (parsing side — all 12 scenarios), TEST-008 (reserved keyword enforcement — all 8 scenarios), TEST-009 (no arithmetic in heads — all 3 scenarios), TEST-011 (no negation of arithmetic — all 5 scenarios). Place in crates/spindle-parser/tests/ or src/spl/ test modules.",
+      "token_cost": 82,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T05:32:31Z"
+  "constructed_at": "2026-02-25T06:09:06Z"
 }
