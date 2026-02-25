@@ -4,25 +4,25 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 3,
-    "insertions": 462,
-    "deletions": 5,
+    "insertions": 142,
+    "deletions": 87,
     "file_list": [
       ".hence/context-manifest.json",
       "crates/spindle-core/src/arith.rs",
-      "crates/spindle-core/src/term.rs"
+      "crates/spindle-core/src/grounding.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-tests-term-arith-changes",
-      "content": "Modified 3 files (+462, -5): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/term.rs",
+      "key": "task-migrate-substitution-changes",
+      "content": "Modified 3 files (+142, -87): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/grounding.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/tests-term-arith-v1",
-  "evaluated_at": "2026-02-25T03:59:30Z",
+  "branch_name": "hence/migrate-substitution-v1",
+  "evaluated_at": "2026-02-25T04:07:07Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
