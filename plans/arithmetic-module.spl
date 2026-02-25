@@ -721,3 +721,41 @@
 (normally r-propagate-v2-cli-wasm-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-v2-cli-wasm)
 (normally r-propagate-v2-cli-wasm-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
 (normally r-propagate-v2-cli-wasm-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
+
+(claims agent:claude
+  :at "2026-02-25T09:27:07Z"
+  (given completed-tests-worked-examples))
+
+(claims agent:claude
+  :at "2026-02-25T09:27:08Z"
+  (given completed-tests-nfr))
+
+(claims agent:claude
+  :at "2026-02-25T09:27:08Z"
+  (given completed-tests-pbt))
+
+(claims agent:claude
+  :at "2026-02-25T09:32:44Z"
+  (given completed-v2-json-schema))
+
+(claims agent:claude
+  :at "2026-02-25T09:32:55Z"
+  (given claim-v1-v2-cli-wasm)
+  (normally r-cl-state-v1-v2-cli-wasm claim-v1-v2-cli-wasm state-claimed-v1-v2-cli-wasm)
+  (normally r-cl-chain-v1-v2-cli-wasm state-claimed-v1-v2-cli-wasm claimed-v2-cli-wasm)
+)
+
+(claims agent:claude
+  :at "2026-02-25T09:32:56Z"
+  (given claim-v1-tests-v2-json)
+  (normally r-cl-state-v1-tests-v2-json claim-v1-tests-v2-json state-claimed-v1-tests-v2-json)
+  (normally r-cl-chain-v1-tests-v2-json state-claimed-v1-tests-v2-json claimed-tests-v2-json)
+)
+
+(claims agent:claude
+  :at "2026-02-25T09:36:55Z"
+  (given completed-v2-cli-wasm))
+
+(claims agent:claude
+  :at "2026-02-25T09:38:53Z"
+  (given completed-tests-v2-json))
