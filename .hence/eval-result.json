@@ -3,24 +3,29 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 1,
-    "insertions": 455,
-    "deletions": 16,
+    "files_changed": 6,
+    "insertions": 619,
+    "deletions": 8,
     "file_list": [
-      "crates/spindle-parser/src/spl/literals.rs"
+      ".hence/context-manifest.json",
+      "crates/spindle-parser/src/spl/arith.rs",
+      "crates/spindle-parser/src/spl/expressions.rs",
+      "crates/spindle-parser/src/spl/literals.rs",
+      "crates/spindle-parser/src/spl/mod.rs",
+      "crates/spindle-parser/src/spl/rules.rs"
     ],
-    "dirty_files": 1
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-parse-numeric-literals-changes",
-      "content": "Modified 1 files (+455, -16): crates/spindle-parser/src/spl/literals.rs",
+      "key": "task-parse-guards-changes",
+      "content": "Modified 6 files (+619, -8): .hence/context-manifest.json, crates/spindle-parser/src/spl/arith.rs, crates/spindle-parser/src/spl/expressions.rs, crates/spindle-parser/src/spl/literals.rs, crates/spindle-parser/src/spl/mod.rs and 1 more",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/parse-numeric-literals-v1",
-  "evaluated_at": "2026-02-25T05:32:25Z",
+  "branch_name": "hence/parse-guards-v1",
+  "evaluated_at": "2026-02-25T05:41:40Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
