@@ -31,6 +31,7 @@ use crate::intern::{SymbolId, resolve};
 #[cfg(test)]
 use crate::intern::intern;
 use crate::literal::Literal;
+use crate::term::Term;
 use crate::mode::Mode;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::temporal::{
@@ -40,13 +41,12 @@ use crate::theory::Theory;
 
 /// Variable substitution for grounding.
 ///
-/// Contains both term bindings (variable -> interned value) and temporal
-/// bindings (temporal variable -> concrete timepoint). Uses interned
-/// `SymbolId` for O(1) hashing and zero-allocation lookups.
+/// Contains both term bindings (variable -> typed Term value) and temporal
+/// bindings (temporal variable -> concrete timepoint).
 #[derive(Clone, Debug, Default)]
 pub struct Substitution {
-    /// Term variable bindings (e.g., ?x -> alice)
-    pub terms: FxHashMap<SymbolId, SymbolId>,
+    /// Term variable bindings (e.g., ?x -> Term::Symbol(alice), ?n -> Term::Integer(42))
+    pub terms: FxHashMap<SymbolId, Term>,
     /// Temporal variable bindings (e.g., ?t1 -> TimePoint::Moment(100))
     pub temporal: FxHashMap<SymbolId, TimePoint>,
     /// Interval variable bindings (e.g., ?T -> Temporal[0, 10])
@@ -100,7 +100,9 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
     let pattern_name = resolve(pattern_name_id);
 
     if is_variable(pattern_name) {
-        subst.terms.insert(pattern_name_id, ground_name_id);
+        subst
+            .terms
+            .insert(pattern_name_id, Term::Symbol(ground_name_id));
     } else if pattern_name_id != ground_name_id {
         return None;
     }
@@ -114,21 +116,16 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
 
     for (parg, garg) in pattern_args.iter().zip(ground_args.iter()) {
         // Variables are always Term::Symbol(id) where resolve(id) starts with '?'
-        if let crate::term::Term::Symbol(parg_id) = parg {
+        if let Term::Symbol(parg_id) = parg {
             let parg_str = resolve(*parg_id);
             if is_variable(parg_str) {
-                // Ground side must be a symbol for variable binding
-                if let crate::term::Term::Symbol(garg_id) = garg {
-                    if let Some(existing) = subst.terms.get(parg_id) {
-                        if *existing != *garg_id {
-                            return None;
-                        }
-                    } else {
-                        subst.terms.insert(*parg_id, *garg_id);
+                // Variable binds to the full Term value
+                if let Some(existing) = subst.terms.get(parg_id) {
+                    if *existing != *garg {
+                        return None;
                     }
                 } else {
-                    // Variable can't bind to non-symbol term (yet)
-                    return None;
+                    subst.terms.insert(*parg_id, garg.clone());
                 }
                 continue;
             }
@@ -217,23 +214,31 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
     let name_id = lit.name_id();
     let name = resolve(name_id);
 
-    // Apply substitution to name (if it's a variable)
+    // Apply substitution to name (if it's a variable).
+    // Literal names must be symbols, so extract SymbolId from Term::Symbol.
     let new_name_id = if is_variable(name) {
-        subst.terms.get(&name_id).copied().unwrap_or(name_id)
+        match subst.terms.get(&name_id) {
+            Some(Term::Symbol(id)) => *id,
+            _ => name_id,
+        }
     } else {
         name_id
     };
 
-    // Apply substitution to predicate arguments
-    let new_pred_args: Vec<crate::term::Term> = lit
+    // Apply substitution to predicate arguments.
+    // Variables are resolved to their bound Term value directly.
+    let new_pred_args: Vec<Term> = lit
         .predicate_args()
         .iter()
         .map(|term| {
-            if let crate::term::Term::Symbol(pid) = term {
+            if let Term::Symbol(pid) = term {
                 let p = resolve(*pid);
                 if is_variable(p) {
-                    let bound_id = subst.terms.get(pid).copied().unwrap_or(*pid);
-                    return crate::term::Term::Symbol(bound_id);
+                    return subst
+                        .terms
+                        .get(pid)
+                        .cloned()
+                        .unwrap_or_else(|| term.clone());
                 }
             }
             term.clone()
@@ -325,14 +330,14 @@ fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: u
 fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitution> {
     let mut merged = s1.clone();
 
-    // Merge term bindings
+    // Merge term bindings (Term equality handles canonical float via derived Eq)
     for (k, v) in &s2.terms {
         if let Some(existing) = merged.terms.get(k) {
             if *existing != *v {
                 return None;
             }
         } else {
-            merged.terms.insert(*k, *v);
+            merged.terms.insert(*k, v.clone());
         }
     }
 
@@ -489,14 +494,14 @@ fn match_body_with_delta(
 
 /// A hashable key representing a substitution (term, temporal, and interval bindings).
 type SubstitutionKey = (
-    Vec<(SymbolId, SymbolId)>,
+    Vec<(SymbolId, Term)>,
     Vec<(SymbolId, TimePoint)>,
     Vec<(SymbolId, Temporal)>,
 );
 
 /// Build a hashable key from a substitution for deduplication.
 fn substitution_key(subst: &Substitution) -> SubstitutionKey {
-    let mut term_pairs: Vec<_> = subst.terms.iter().map(|(k, v)| (*k, *v)).collect();
+    let mut term_pairs: Vec<_> = subst.terms.iter().map(|(k, v)| (*k, v.clone())).collect();
     term_pairs.sort_by_key(|(k, _)| k.as_raw());
 
     let mut temporal_pairs: Vec<_> = subst.temporal.iter().map(|(k, v)| (*k, *v)).collect();
@@ -742,10 +747,11 @@ mod tests {
         let subst = match_literal(&pattern, &ground).unwrap();
         let x_id = intern("?x");
         let y_id = intern("?y");
-        let alice_id = intern("alice");
-        let bob_id = intern("bob");
-        assert_eq!(subst.terms.get(&x_id), Some(&alice_id));
-        assert_eq!(subst.terms.get(&y_id), Some(&bob_id));
+        assert_eq!(
+            subst.terms.get(&x_id),
+            Some(&Term::Symbol(intern("alice")))
+        );
+        assert_eq!(subst.terms.get(&y_id), Some(&Term::Symbol(intern("bob"))));
     }
 
     #[test]
@@ -778,8 +784,12 @@ mod tests {
             vec!["?x".to_string(), "?y".to_string()],
         );
         let mut subst = Substitution::default();
-        subst.terms.insert(intern("?x"), intern("alice"));
-        subst.terms.insert(intern("?y"), intern("bob"));
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
+        subst
+            .terms
+            .insert(intern("?y"), Term::Symbol(intern("bob")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
         assert_eq!(result.predicates(), vec!["alice", "bob"]);
@@ -1049,10 +1059,11 @@ mod tests {
     #[test]
     fn test_merge_substitutions_conflict() {
         let mut s1 = Substitution::default();
-        s1.terms.insert(intern("?x"), intern("alice"));
+        s1.terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms.insert(intern("?x"), intern("bob")); // Conflict!
+        s2.terms.insert(intern("?x"), Term::Symbol(intern("bob"))); // Conflict!
 
         let merged = merge_substitutions(&s1, &s2);
         assert!(
@@ -1064,10 +1075,11 @@ mod tests {
     #[test]
     fn test_merge_substitutions_compatible() {
         let mut s1 = Substitution::default();
-        s1.terms.insert(intern("?x"), intern("alice"));
+        s1.terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms.insert(intern("?y"), intern("bob"));
+        s2.terms.insert(intern("?y"), Term::Symbol(intern("bob")));
 
         let merged = merge_substitutions(&s1, &s2).unwrap();
         assert_eq!(merged.terms.len(), 2);
@@ -1076,10 +1088,12 @@ mod tests {
     #[test]
     fn test_merge_substitutions_same_value() {
         let mut s1 = Substitution::default();
-        s1.terms.insert(intern("?x"), intern("alice"));
+        s1.terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms.insert(intern("?x"), intern("alice")); // Same value
+        s2.terms
+            .insert(intern("?x"), Term::Symbol(intern("alice"))); // Same value
 
         let merged = merge_substitutions(&s1, &s2).unwrap();
         assert_eq!(merged.terms.len(), 1);
@@ -1104,8 +1118,10 @@ mod tests {
 
         let subst = match_literal(&pattern, &ground).unwrap();
         let rel_id = intern("?rel");
-        let parent_id = intern("parent");
-        assert_eq!(subst.terms.get(&rel_id), Some(&parent_id));
+        assert_eq!(
+            subst.terms.get(&rel_id),
+            Some(&Term::Symbol(intern("parent")))
+        );
     }
 
     #[test]
@@ -1118,8 +1134,12 @@ mod tests {
             vec!["?x".to_string()],
         );
         let mut subst = Substitution::default();
-        subst.terms.insert(intern("?rel"), intern("parent"));
-        subst.terms.insert(intern("?x"), intern("alice"));
+        subst
+            .terms
+            .insert(intern("?rel"), Term::Symbol(intern("parent")));
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
         assert_eq!(result.name(), "parent");
@@ -1352,8 +1372,7 @@ mod tests {
 
         let mut subst = Substitution::default();
         let x_id = intern("?x");
-        let val_id = intern("value");
-        subst.terms.insert(x_id, val_id);
+        subst.terms.insert(x_id, Term::Symbol(intern("value")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
         assert_eq!(result.predicates()[0], "constant");
@@ -1691,8 +1710,10 @@ mod tests {
         assert!(result.is_some(), "[O]pay(?x) should match [O]pay(alice)");
         let subst = result.unwrap();
         let x_id = intern("?x");
-        let alice_id = intern("alice");
-        assert_eq!(subst.terms.get(&x_id), Some(&alice_id));
+        assert_eq!(
+            subst.terms.get(&x_id),
+            Some(&Term::Symbol(intern("alice")))
+        );
     }
 
     #[test]
@@ -1818,7 +1839,10 @@ mod tests {
         );
 
         let subst = match_literal(&pattern, &ground).unwrap();
-        assert_eq!(subst.terms.get(&intern("?x")), Some(&intern("alice")));
+        assert_eq!(
+            subst.terms.get(&intern("?x")),
+            Some(&Term::Symbol(intern("alice")))
+        );
         assert_eq!(
             subst.temporal.get(&intern("?t1")),
             Some(&TimePoint::Moment(100))
@@ -1946,7 +1970,9 @@ mod tests {
         );
 
         let mut subst = Substitution::default();
-        subst.terms.insert(intern("?x"), intern("alice"));
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
         subst.temporal.insert(intern("?t1"), TimePoint::Moment(100));
         subst.temporal.insert(intern("?t2"), TimePoint::Moment(200));
 

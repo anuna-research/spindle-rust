@@ -24,8 +24,8 @@ use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
 use crate::grounding::Substitution;
-use crate::intern::{intern, resolve, SymbolId};
-use crate::term::NumericValue;
+use crate::intern::{SymbolId, resolve};
+use crate::term::{FiniteFloat, NumericValue, Term};
 
 // ---------------------------------------------------------------------------
 // Operator enums
@@ -540,32 +540,38 @@ fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericValue, Arith
 
 /// Resolve a variable from the substitution to a numeric value.
 ///
-/// Currently the substitution maps `SymbolId → SymbolId`, so we resolve the
-/// bound symbol to its string and parse as a number. This will be simplified
-/// when the substitution is migrated to use `Term` values (task 1.6).
+/// The substitution maps `SymbolId → Term`, so we extract the numeric
+/// value directly from the bound `Term`.
 fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, ArithError> {
     let bound = subst
         .terms
         .get(&name)
         .ok_or(ArithError::UnboundVariable { name })?;
-    let s = resolve(*bound);
-
-    if let Ok(n) = s.parse::<i64>() {
-        return Ok(NumericValue::Integer(n));
-    }
-    if let Ok(d) = s.parse::<Decimal>() {
-        return Ok(NumericValue::Decimal(d));
-    }
-    if let Ok(f) = s.parse::<f64>() {
-        if f.is_finite() {
-            return Ok(NumericValue::Float(f));
+    match bound {
+        Term::Integer(n) => Ok(NumericValue::Integer(*n)),
+        Term::Decimal(d) => Ok(NumericValue::Decimal(*d)),
+        Term::Float(f) => Ok(NumericValue::Float(f.value())),
+        Term::Symbol(id) => {
+            // Legacy path: try to parse the symbol string as a number.
+            let s = resolve(*id);
+            if let Ok(n) = s.parse::<i64>() {
+                return Ok(NumericValue::Integer(n));
+            }
+            if let Ok(d) = s.parse::<Decimal>() {
+                return Ok(NumericValue::Decimal(d));
+            }
+            if let Ok(f) = s.parse::<f64>() {
+                if f.is_finite() {
+                    return Ok(NumericValue::Float(f));
+                }
+            }
+            Err(ArithError::TypeMismatch {
+                op: "var",
+                expected: "numeric",
+                got: "symbol",
+            })
         }
     }
-    Err(ArithError::TypeMismatch {
-        op: "var",
-        expected: "numeric",
-        got: "symbol",
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -755,14 +761,15 @@ impl ArithConstraint {
         match self {
             ArithConstraint::Bind { var, expr } => {
                 let val = expr.eval(subst)?;
-                // Bind the variable by interning the string representation.
-                // This will be simplified when Substitution uses Term (task 1.6).
-                let s = match &val {
-                    NumericValue::Integer(n) => format!("{n}"),
-                    NumericValue::Decimal(d) => format!("{d}"),
-                    NumericValue::Float(f) => format!("{f}"),
+                // Bind the variable directly as a typed Term value.
+                let term = match val {
+                    NumericValue::Integer(n) => Term::Integer(n),
+                    NumericValue::Decimal(d) => Term::Decimal(d),
+                    NumericValue::Float(f) => {
+                        Term::Float(FiniteFloat::new(f).unwrap_or(FiniteFloat::new(0.0).unwrap()))
+                    }
                 };
-                subst.terms.insert(*var, intern(&s));
+                subst.terms.insert(*var, term);
                 Ok(())
             }
             ArithConstraint::Compare { op, lhs, rhs } => {
@@ -797,10 +804,26 @@ mod tests {
     use crate::intern::intern;
 
     /// Create a substitution with the given variable bindings.
+    ///
+    /// Values are parsed as numeric types when possible (Integer, Decimal,
+    /// Float), falling back to Symbol for non-numeric strings.
     fn make_subst(bindings: &[(&str, &str)]) -> Substitution {
         let mut subst = Substitution::default();
         for (var, val) in bindings {
-            subst.terms.insert(intern(var), intern(val));
+            let term = if let Ok(n) = val.parse::<i64>() {
+                Term::Integer(n)
+            } else if let Ok(d) = val.parse::<Decimal>() {
+                Term::Decimal(d)
+            } else if let Ok(f) = val.parse::<f64>() {
+                if f.is_finite() {
+                    Term::Float(FiniteFloat::new(f).unwrap())
+                } else {
+                    Term::Symbol(intern(val))
+                }
+            } else {
+                Term::Symbol(intern(val))
+            };
+            subst.terms.insert(intern(var), term);
         }
         subst
     }
@@ -1210,9 +1233,9 @@ mod tests {
         };
         constraint.eval(&mut subst).unwrap();
 
-        // ?result should now be bound
-        let result_sym = subst.terms.get(&intern("?result")).unwrap();
-        assert_eq!(resolve(*result_sym), "13");
+        // ?result should now be bound as Term::Integer(13)
+        let result_term = subst.terms.get(&intern("?result")).unwrap();
+        assert_eq!(*result_term, Term::Integer(13));
     }
 
     // -- ArithConstraint: Compare ------------------------------------------
