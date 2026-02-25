@@ -255,6 +255,60 @@ Trace:
 
 ---
 
+### REQ-010: Cross-Type Numeric Matching During Grounding
+
+The system SHALL use numeric promotion when matching bound variable values against fact arguments during grounding. If a bound variable holds a numeric `Term` and the candidate fact argument is a different numeric `Term` type, the system SHALL promote both to a common type using the same promotion rules as REQ-005 and compare for equality.
+
+Specifically:
+- `Integer(100)` SHALL match `Decimal(100.00)` (integer promoted to decimal)
+- `Integer(100)` SHALL match `Float(100.0)` (integer promoted to float)
+- `Decimal(100.00)` SHALL match `Float(100.0)` (decimal promoted to float)
+- `Integer(3)` SHALL NOT match `Decimal(3.14)` (not numerically equal after promotion)
+- Non-numeric terms (`Symbol`) are never promoted; they match only by exact identity
+
+**Rationale**: Without promotion during matching, arithmetic that produces `Decimal` values (e.g., `(* 100 0.08)` → `Decimal(8.00)`) would silently fail to match `Integer` facts (e.g., `(given (threshold 8))`). This creates a type-awareness burden on theory authors that contradicts the goal of transparent numeric support. Promotion during matching ensures that numerically equal values match regardless of how they were produced.
+
+```lisp
+(given (threshold 8))       ; Integer(8)
+(given (rate standard 0.08))
+
+(normally r1
+  (and (rate standard ?r) (bind ?val (* 100 ?r))
+       (threshold ?val))    ; Decimal(8.00) matches Integer(8) via promotion
+  (threshold-met))
+
+; Derived: +d threshold-met
+```
+
+Trace:
+- TEST-010
+- CON-005
+
+---
+
+### REQ-011: No Negation of Arithmetic Predicates
+
+The system SHALL emit a parse error if an arithmetic predicate (`bind`, `=`, `!=`, `<`, `>`, `<=`, `>=`) appears inside a `not`/`~` negation in a rule body.
+
+**Rationale**: SPL's `not`/`~` is classical negation — it matches explicit negated ground facts (e.g., `(not flies)` matches `~flies`). Arithmetic predicates are grounding-phase guards that produce no ground facts, so negating them is semantically meaningless. Users should write the complementary comparison directly:
+
+- Instead of `(not (> ?x 100))`, write `(<= ?x 100)`
+- Instead of `(not (< ?x 0))`, write `(>= ?x 0)`
+- Instead of `(not (= ?x ?y))`, write `(!= ?x ?y)`
+
+```lisp
+; ILLEGAL — negation of arithmetic predicate
+(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))
+
+; LEGAL — use complementary comparison
+(normally r1 (and (val ?x) (<= ?x 100)) (low ?x))
+```
+
+Trace:
+- TEST-011
+
+---
+
 ## 4. Non-Functional Requirements
 
 ### NFR-001: Grounding Performance
@@ -565,6 +619,34 @@ Errors (parse time):
 
 Implements: REQ-004
 Verified by: TEST-004
+
+---
+
+### CON-005: Cross-Type Numeric Matching
+
+```
+Context:       Grounding — matching a bound variable value against a fact argument
+Pre-conditions:
+  - A variable ?x is bound to a numeric Term (Integer, Decimal, or Float)
+  - A candidate fact argument is also a numeric Term
+Behavior:
+  - Promote both values to a common type using REQ-005 promotion rules:
+      Integer + Decimal → both Decimal
+      Integer + Float  → both Float
+      Decimal + Float  → both Float
+      same type        → no promotion
+  - Compare promoted values for exact equality
+  - If equal: match succeeds (substitution extended or validated)
+  - If not equal: match fails (substitution path discarded)
+  - Symbol terms are never promoted; Symbol matches only by exact SymbolId identity
+  - A numeric Term never matches a Symbol Term (and vice versa)
+Non-finite float:
+  - A Float value that is non-finite cannot be stored (per CON-002),
+    so non-finite matching is not reachable at runtime
+```
+
+Implements: REQ-010
+Verified by: TEST-010
 
 ---
 
@@ -954,6 +1036,45 @@ Verifies: REQ-009
 
 ---
 
+### TEST-010: Cross-Type Numeric Matching
+
+**Scenarios**:
+1. Fact `(given (threshold 8))` (Integer), variable bound to `Decimal(8.00)` via `(bind ?val (* 100 0.08))` — matching `(threshold ?val)` succeeds (Integer promoted to Decimal, `8 == 8.00`).
+2. Fact `(given (limit 100))` (Integer), variable bound to `Float(100.0)` via `(bind ?val (* 50.0e0 2.0e0))` — matching `(limit ?val)` succeeds (Integer promoted to Float).
+3. Fact `(given (rate 0.5))` (Decimal), variable bound to `Integer(1)` via `(bind ?val (+ 0 1))` — matching `(rate ?val)` fails (`Decimal(0.5) != Decimal(1)`).
+4. Fact `(given (name alice))` (Symbol), variable bound to `Integer(100)` — matching `(name ?val)` fails (Symbol never matches numeric).
+5. Fact `(given (score 95))` (Integer), variable bound to `Decimal(95.00)` — matching `(score ?val)` succeeds.
+6. Fact `(given (score 95))` (Integer), variable bound to `Decimal(95.01)` — matching `(score ?val)` fails (`95 != 95.01`).
+
+**End-to-end scenario**:
+```lisp
+(given (threshold 8))
+(given (rate standard 0.08))
+
+(normally r1
+  (and (rate standard ?r) (bind ?val (* 100 ?r)) (threshold ?val))
+  (threshold-met))
+
+; Derived: +d threshold-met
+```
+
+Verifies: REQ-010, CON-005
+
+---
+
+### TEST-011: No Negation of Arithmetic Predicates
+
+**Scenarios**:
+1. `(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))` → parse error ("arithmetic predicate cannot be negated; use complementary comparison")
+2. `(normally r1 (and (val ?x) (not (= ?x 0))) (nonzero ?x))` → parse error
+3. `(normally r1 (and (val ?x) (not (bind ?y (+ ?x 1)))) (result ?x))` → parse error
+4. `(normally r1 (and (val ?x) (~(> ?x 100))) (low ?x))` → parse error (tilde negation variant)
+5. `(normally r1 (and (val ?x) (<= ?x 100)) (low ?x))` → legal (complementary comparison)
+
+Verifies: REQ-011
+
+---
+
 ### TEST-NFR-001: Grounding Performance Baseline
 
 **Setup**: Generate a theory with 500 facts, 200 defeasible rules with 3-literal bodies including arithmetic `bind` and comparison predicates.
@@ -1026,11 +1147,11 @@ Verifies: REQ-002, REQ-003, REQ-004, REQ-005, NFR-002
 3. Add `spl/arith.rs` to parse arithmetic expressions recursively and produce `ArithExpr`.
 4. Parse arithmetic expressions in user-defined body literal argument positions; produce `BodyArg::Arith`.
 5. Parse `bind` and comparison predicates in body literal position; produce `BodyLiteral::Arithmetic`.
-6. Add parse-time guards: arithmetic in head position → parse error; reserved keywords as predicate names and rule labels (`normally`/`always`/`except` labels, `prefer` labels) → parse error.
+6. Add parse-time guards: arithmetic in head position → parse error; negation of arithmetic predicates → parse error (REQ-011); reserved keywords as predicate names and rule labels (`normally`/`always`/`except` labels, `prefer` labels) → parse error.
 
 ### Phase 3 — Grounding Integration (spindle-core)
 
-1. Extend `grounding.rs` `match_literal` to handle `Term::Integer`/`Term::Decimal`/`Term::Float` in substitution matching (exact numeric equality).
+1. Extend `grounding.rs` `match_literal` to handle `Term::Integer`/`Term::Decimal`/`Term::Float` in substitution matching with cross-type numeric promotion (REQ-010, CON-005). When both sides are numeric, promote to common type and compare.
 2. Evaluate rule bodies in source order, threading substitutions through each `BodyLiteral`:
    - For `BodyLiteral::Logic`, evaluate any `BodyArg::Arith` arguments first, then match facts.
    - For `BodyLiteral::Arithmetic`, evaluate `bind`/comparison directly.
@@ -1056,15 +1177,15 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST
 |---|---|---|---|
 | OQ-1 | Should rule-body evaluation be strictly source-ordered to support dependent bindings across logic and arithmetic forms? | High | **Resolved**: Yes. Rule bodies are evaluated left-to-right in source order, and each element sees substitutions extended by preceding elements. See ADR-001b. |
 | OQ-2 | Should JSON/contracts represent numeric predicate args as typed numbers or continue string-only serialization? | Medium | **Resolved**: Introduce typed numeric args in a new `spindle.*.v2` schema family; keep `spindle.*.v1` string args unchanged for compatibility. |
-| OQ-3 | Should `=` be overloaded for both numeric equality and symbol identity? | High | Keep symbol identity via pattern matching in substitution; `=` is numeric-only (reserved keyword) |
-| OQ-4 | Should arithmetic predicates produce `+D` conclusions (strict) or `+d` (defeasible)? | High | Neither — they are grounding-phase guards; they produce no conclusions |
+| OQ-3 | Should `=` be overloaded for both numeric equality and symbol identity? | High | **Resolved**: No. `=` is numeric-only (reserved keyword). Symbol identity is handled via pattern matching in substitution. |
+| OQ-4 | Should arithmetic predicates produce `+D` conclusions (strict) or `+d` (defeasible)? | High | **Resolved**: Neither — they are grounding-phase guards; they produce no conclusions. See REQ-007. |
 | OQ-5 | Should abduction support arithmetic? E.g. "what value of ?x makes `(> ?x 100)` hold?" | Medium | Out of scope for this spec; deferred |
 | OQ-6 | Should `why_not` explain arithmetic failures? | Medium | Desirable; deferred — requires arithmetic constraint explanation |
 | OQ-7 | Should overflow produce a warning or strict error rather than silent failure? | Low | Silent failure preferred (consistent with Prolog's arithmetic); observable via `why_not` if implemented |
 | OQ-8 | Rational numbers (exact fractions)? | Low | Partially addressed by `Decimal`; full rationals (arbitrary numerator/denominator) deferred |
-| OQ-9 | Cross-type fact matching: if a fact stores `Integer(100)` and `bind` produces `Decimal(100.00)`, does matching `(cost ?item ?x)` against the fact succeed? `Integer(100) ≠ Decimal(100.00)` at the `Term` level, which could silently discard valid groundings. | High | Needs resolution — options: (a) numeric promotion during matching, (b) normalize `bind` results to match source type, (c) document as expected behavior |
-| OQ-10 | Cross-type comparison vs unification: `(= 1 1.0)` is true under comparison promotion rules, but should `Integer(1)` and `Decimal(1.0)` unify during pattern matching? If not, users will encounter subtle mismatches where a comparison succeeds but a fact lookup fails for the same values. | High | Closely related to OQ-9; should be resolved together |
-| OQ-11 | Arithmetic in negated body literals: is `(and (not (> ?x 100)) ...)` legal? If so, what are the semantics — does `not` negate the guard (i.e., `<= 100`), or does negation-as-failure apply (the guard is "not provable")? If the variable is unbound inside `not`, should it fail silently or produce a parse error? | High | Needs resolution before implementation |
+| OQ-9 | Cross-type fact matching: if a fact stores `Integer(100)` and `bind` produces `Decimal(100.00)`, does matching `(cost ?item ?x)` against the fact succeed? `Integer(100) ≠ Decimal(100.00)` at the `Term` level, which could silently discard valid groundings. | High | **Resolved**: Yes — numeric promotion during matching. When both values are numeric, promote to a common type per REQ-005 and compare for equality. See REQ-010, CON-005, TEST-010. |
+| OQ-10 | Cross-type comparison vs unification: `(= 1 1.0)` is true under comparison promotion rules, but should `Integer(1)` and `Decimal(1.0)` unify during pattern matching? If not, users will encounter subtle mismatches where a comparison succeeds but a fact lookup fails for the same values. | High | **Resolved**: Yes — matching uses the same promotion rules as comparison predicates. `Integer(1)` matches `Decimal(1.0)` during fact lookup. See REQ-010. |
+| OQ-11 | Arithmetic in negated body literals: is `(and (not (> ?x 100)) ...)` legal? If so, what are the semantics — does `not` negate the guard (i.e., `<= 100`), or does negation-as-failure apply (the guard is "not provable")? If the variable is unbound inside `not`, should it fail silently or produce a parse error? | High | **Resolved**: Parse error. SPL's `not`/`~` is classical negation (matches explicit negated ground facts). Arithmetic predicates produce no ground facts, so negating them is meaningless. Users write the complementary comparison directly. See REQ-011, TEST-011. |
 | OQ-12 | Decimal display formatting: `100 * 0.08` yields `Decimal(8.00)` because `rust_decimal` preserves scale. Should output display `8.00`, `8.0`, or `8`? For financial/policy use cases trailing zeros carry meaning; for general use they may confuse. | Medium | Needs resolution — affects CLI output, JSON serialization, and `why_not` explanations |
 | OQ-13 | Multi-arity arithmetic operators: should `(+ 1 2 3)` be valid (variadic, as in Lisp)? | Medium | **Resolved**: Yes. `+`, `-`, `*`, `/`, `min`, `max` follow Racket/Common Lisp variadic conventions. `div`, `rem`, `**` remain binary-only. See CON-002. |
 | OQ-14 | Arithmetic in queries: can the query interface accept arithmetic guards, e.g., `(query (and (salary ?emp ?amt) (> ?amt 100000)))`? The spec covers rules but not the query system. | Medium | Likely yes — queries evaluate rule bodies, so arithmetic guards should work; needs explicit confirmation |
@@ -1087,6 +1208,8 @@ Write tests in the order of TEST-001 through TEST-009, then NFR tests, then TEST
 | REQ-007 | — | ADR-001 | — | TEST-007 |
 | REQ-008 | — | ADR-003 | — | TEST-008 |
 | REQ-009 | — | ADR-003 | — | TEST-009 |
+| REQ-010 | — | — | CON-005 | TEST-010 |
+| REQ-011 | — | — | — | TEST-011 |
 | — | NFR-001 | — | — | TEST-NFR-001 |
 | — | NFR-002 | — | — | TEST-NFR-002 |
 | — | NFR-003 | — | — | (static analysis) |
