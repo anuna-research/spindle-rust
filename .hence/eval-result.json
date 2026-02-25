@@ -3,26 +3,24 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 142,
-    "deletions": 87,
+    "files_changed": 1,
+    "insertions": 71,
+    "deletions": 4,
     "file_list": [
-      ".hence/context-manifest.json",
-      "crates/spindle-core/src/arith.rs",
-      "crates/spindle-core/src/grounding.rs"
+      "crates/spindle-core/src/arith.rs"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-migrate-substitution-changes",
-      "content": "Modified 3 files (+142, -87): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/grounding.rs",
+      "key": "task-temporal-guard-changes",
+      "content": "Modified 1 files (+71, -4): crates/spindle-core/src/arith.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/migrate-substitution-v1",
-  "evaluated_at": "2026-02-25T04:07:07Z",
+  "branch_name": "hence/temporal-guard-v1",
+  "evaluated_at": "2026-02-25T04:09:37Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

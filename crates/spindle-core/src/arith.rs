@@ -543,10 +543,21 @@ fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericValue, Arith
 /// The substitution maps `SymbolId → Term`, so we extract the numeric
 /// value directly from the bound `Term`.
 fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, ArithError> {
-    let bound = subst
-        .terms
-        .get(&name)
-        .ok_or(ArithError::UnboundVariable { name })?;
+    let bound = match subst.terms.get(&name) {
+        Some(t) => t,
+        None => {
+            // Temporal endpoint and interval variables cannot be used as
+            // arithmetic operands (REQ-006: silent failure via TypeMismatch).
+            if subst.temporal.contains_key(&name) || subst.intervals.contains_key(&name) {
+                return Err(ArithError::TypeMismatch {
+                    op: "var",
+                    expected: "numeric",
+                    got: "temporal",
+                });
+            }
+            return Err(ArithError::UnboundVariable { name });
+        }
+    };
     match bound {
         Term::Integer(n) => Ok(NumericValue::Integer(*n)),
         Term::Decimal(d) => Ok(NumericValue::Decimal(*d)),
@@ -896,6 +907,62 @@ mod tests {
         let subst = make_subst(&[("?x", "alice")]);
         let err = var("?x").eval(&subst).unwrap_err();
         assert!(matches!(err, ArithError::TypeMismatch { .. }));
+    }
+
+    // -- Temporal guard (REQ-006) ------------------------------------------
+
+    #[test]
+    fn eval_temporal_endpoint_variable_rejected() {
+        use crate::temporal::TimePoint;
+        let mut subst = Substitution::default();
+        subst.temporal.insert(intern("?start"), TimePoint::Moment(100));
+        let err = var("?start").eval(&subst).unwrap_err();
+        assert!(matches!(
+            err,
+            ArithError::TypeMismatch { got: "temporal", .. }
+        ));
+    }
+
+    #[test]
+    fn eval_interval_variable_rejected() {
+        use crate::temporal::{Temporal, TimePoint};
+        let mut subst = Substitution::default();
+        subst.intervals.insert(
+            intern("?T"),
+            Temporal {
+                start: TimePoint::Moment(0),
+                end: TimePoint::Moment(10),
+            },
+        );
+        let err = var("?T").eval(&subst).unwrap_err();
+        assert!(matches!(
+            err,
+            ArithError::TypeMismatch { got: "temporal", .. }
+        ));
+    }
+
+    #[test]
+    fn eval_temporal_var_with_term_binding_uses_term() {
+        use crate::temporal::TimePoint;
+        // If a variable exists in both terms and temporal, the term binding wins.
+        let mut subst = Substitution::default();
+        subst.terms.insert(intern("?x"), Term::Integer(42));
+        subst.temporal.insert(intern("?x"), TimePoint::Moment(100));
+        assert_eq!(var("?x").eval(&subst).unwrap(), NumericValue::Integer(42));
+    }
+
+    #[test]
+    fn eval_temporal_var_in_expression_rejected() {
+        use crate::temporal::TimePoint;
+        let mut subst = Substitution::default();
+        subst.temporal.insert(intern("?end"), TimePoint::Moment(200));
+        // (+ 1 ?end) should fail because ?end is temporal
+        let expr = nary(NaryArithOp::Add, vec![lit_int(1), var("?end")]);
+        let err = expr.eval(&subst).unwrap_err();
+        assert!(matches!(
+            err,
+            ArithError::TypeMismatch { got: "temporal", .. }
+        ));
     }
 
     // -- Addition ----------------------------------------------------------
