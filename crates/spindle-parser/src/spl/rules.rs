@@ -6,6 +6,7 @@ use spindle_core::{Rule, RuleType, Theory};
 use crate::ParseError;
 use crate::error::ParserFormat;
 
+use super::arith::{is_future_reserved_keyword, is_reserved_keyword};
 use super::expressions::generate_unique_label;
 use super::lexer::SExpr;
 use super::literals::{parse_body_with_line, parse_literal_with_line};
@@ -32,6 +33,28 @@ pub(crate) fn process_rule_with_line(
         if let Some(label_str) = args[0].as_atom() {
             // Check if it looks like a label (not a keyword like "and")
             if label_str != "and" && label_str != "not" && !label_str.starts_with('(') {
+                // REQ-008: Reserved keywords cannot be used as rule labels
+                if is_reserved_keyword(label_str) {
+                    return Err(ParseError::ParserError {
+                        line,
+                        message: format!(
+                            "Reserved keyword '{label_str}' cannot be used as a rule label (REQ-008)"
+                        ),
+                        format: ParserFormat::Spl,
+                        source_line: None,
+                    });
+                }
+                // REQ-008: Future-reserved keywords cannot be used as rule labels
+                if is_future_reserved_keyword(label_str) {
+                    return Err(ParseError::ParserError {
+                        line,
+                        message: format!(
+                            "'{label_str}' is reserved for future use and cannot be used as a rule label (REQ-008)"
+                        ),
+                        format: ParserFormat::Spl,
+                        source_line: None,
+                    });
+                }
                 (Some(label_str.to_string()), &args[1], &args[2])
             } else {
                 (None, &args[0], &args[1])

@@ -31,6 +31,19 @@ const ARITH_OPS: &[&str] = &["+", "-", "*", "/", "div", "rem", "abs", "min", "ma
 /// Reserved comparison operator names.
 const CMP_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">="];
 
+/// Reserved keywords that cannot be used as predicate names or rule labels (REQ-008).
+///
+/// This includes arithmetic operators, comparison operators, and the `bind` keyword.
+const RESERVED_KEYWORDS: &[&str] = &[
+    "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "bind", "=", "!=", "<", ">",
+    "<=", ">=",
+];
+
+/// Future-reserved keywords that cannot be used as predicate names or rule labels (REQ-008).
+///
+/// These are aggregate/math functions reserved for future use.
+const FUTURE_RESERVED_KEYWORDS: &[&str] = &["sum", "count", "avg", "round", "floor", "ceil"];
+
 /// Returns `true` if `name` is a reserved arithmetic operator.
 pub(crate) fn is_arith_op(name: &str) -> bool {
     ARITH_OPS.contains(&name)
@@ -39,6 +52,23 @@ pub(crate) fn is_arith_op(name: &str) -> bool {
 /// Returns `true` if `name` is a reserved comparison operator.
 pub(crate) fn is_cmp_op(name: &str) -> bool {
     CMP_OPS.contains(&name)
+}
+
+/// Returns `true` if `name` is a reserved keyword (REQ-008).
+pub(crate) fn is_reserved_keyword(name: &str) -> bool {
+    RESERVED_KEYWORDS.contains(&name)
+}
+
+/// Returns `true` if `name` is a future-reserved keyword (REQ-008).
+pub(crate) fn is_future_reserved_keyword(name: &str) -> bool {
+    FUTURE_RESERVED_KEYWORDS.contains(&name)
+}
+
+/// Returns `true` if `name` is an arithmetic predicate (`bind` or comparison operator).
+///
+/// Used by guards that reject arithmetic predicates in head position (REQ-009).
+pub(crate) fn is_arith_predicate(name: &str) -> bool {
+    name == "bind" || is_cmp_op(name)
 }
 
 /// Parse a comparison operator name into a [`CmpOp`].
