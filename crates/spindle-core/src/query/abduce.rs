@@ -140,12 +140,15 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 
     for rule in theory.rules() {
         if rule.head_literal() == goal && rule.rule_type != RuleType::Defeater {
-            // Find missing body literals
-            let missing: HashSet<_> = rule
+            // Find missing body literals (only logic literals)
+            let body_lits: Vec<Literal> = rule
                 .body
                 .iter()
-                .filter(|b| !proven.contains(*b))
-                .cloned()
+                .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
+                .collect();
+            let missing: HashSet<_> = body_lits
+                .into_iter()
+                .filter(|b| !proven.contains(b))
                 .collect();
 
             if missing.is_empty() {

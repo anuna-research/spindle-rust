@@ -26,6 +26,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::body::BodyLiteral;
 use crate::intern::{SymbolId, resolve};
 
 #[cfg(test)]
@@ -33,7 +34,7 @@ use crate::intern::intern;
 use crate::literal::Literal;
 use crate::term::Term;
 use crate::mode::Mode;
-use crate::rule::{Rule, RuleLabel, RuleType};
+use crate::rule::{Rule, RuleBody, RuleLabel, RuleType};
 use crate::temporal::{
     AllenConstraint, Temporal, TemporalExpr, TemporalStateQuery, TimeExpr, TimePoint,
 };
@@ -65,12 +66,23 @@ pub fn literal_has_variables(lit: &Literal) -> bool {
         || lit.has_temporal_variables()
 }
 
+/// Check if a body literal contains variables (dispatches on variant).
+fn body_literal_has_variables(bl: &BodyLiteral) -> bool {
+    match bl {
+        BodyLiteral::Logic(lit) => {
+            let as_lit = lit.to_literal();
+            literal_has_variables(&as_lit)
+        }
+        BodyLiteral::Arithmetic(_) => true, // arithmetic constraints always contain variables
+    }
+}
+
 /// Check if a rule contains any variables.
 ///
 /// Allen constraints and state queries are treated as variable-bearing because
 /// they reference interval variables that must be validated during grounding.
 pub fn has_variables(rule: &Rule) -> bool {
-    rule.body.iter().any(literal_has_variables)
+    rule.body.iter().any(body_literal_has_variables)
         || rule.head.iter().any(literal_has_variables)
         || !rule.constraints.is_empty()
         || !rule.state_queries.is_empty()
@@ -306,10 +318,10 @@ fn resolve_time_expr(
 /// Apply a substitution to a rule, creating a ground instance
 fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: usize) -> Rule {
     let new_label = format!("{}_{}", rule.label, instance_num);
-    let new_body: Vec<Literal> = rule
+    let new_body: RuleBody = rule
         .body
         .iter()
-        .map(|lit| apply_substitution_to_literal(lit, subst))
+        .map(|bl| apply_substitution_to_body_literal(bl, subst))
         .collect();
     let new_head: Vec<Literal> = rule
         .head
@@ -391,9 +403,25 @@ fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<crate::term::Term>, Mode, 
     )
 }
 
-/// Match body literals against facts, returning all valid substitutions
+/// Apply a substitution to a body literal, returning a new body literal.
+fn apply_substitution_to_body_literal(bl: &BodyLiteral, subst: &Substitution) -> BodyLiteral {
+    match bl {
+        BodyLiteral::Logic(lit) => {
+            let as_lit = lit.to_literal();
+            BodyLiteral::from(apply_substitution_to_literal(&as_lit, subst))
+        }
+        // Arithmetic constraints are passed through unchanged during body matching.
+        // (Evaluation of arithmetic constraints is handled separately.)
+        BodyLiteral::Arithmetic(_) => bl.clone(),
+    }
+}
+
+/// Match body literals against facts, returning all valid substitutions.
+///
+/// Dispatches on [`BodyLiteral`] variant: logic literals are matched
+/// against facts; arithmetic constraints are skipped (passed through).
 fn match_body_against_facts(
-    body: &[Literal],
+    body: &[BodyLiteral],
     fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     all_facts: &[Literal],
 ) -> Vec<Substitution> {
@@ -401,44 +429,59 @@ fn match_body_against_facts(
         return vec![Substitution::default()];
     }
 
-    let first_lit = &body[0];
+    let first = &body[0];
     let rest = &body[1..];
 
-    // Get candidate facts
-    let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
-        all_facts.iter().collect()
-    } else {
-        fact_index
-            .get(&fact_index_key(first_lit))
-            .map(|v| v.iter().collect())
-            .unwrap_or_default()
-    };
+    match first {
+        BodyLiteral::Logic(logic_lit) => {
+            let first_lit = logic_lit.to_literal();
 
-    let mut results = Vec::new();
+            // Get candidate facts
+            let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
+                all_facts.iter().collect()
+            } else {
+                fact_index
+                    .get(&fact_index_key(&first_lit))
+                    .map(|v| v.iter().collect())
+                    .unwrap_or_default()
+            };
 
-    for fact in candidates {
-        if let Some(subst) = match_literal(first_lit, fact) {
-            // Apply substitution to rest of body
-            let substituted_rest: Vec<Literal> = rest
-                .iter()
-                .map(|l| apply_substitution_to_literal(l, &subst))
-                .collect();
+            let mut results = Vec::new();
 
-            // Recursively match rest
-            for rest_subst in match_body_against_facts(&substituted_rest, fact_index, all_facts) {
-                if let Some(merged) = merge_substitutions(&subst, &rest_subst) {
-                    results.push(merged);
+            for fact in candidates {
+                if let Some(subst) = match_literal(&first_lit, fact) {
+                    // Apply substitution to rest of body
+                    let substituted_rest: Vec<BodyLiteral> = rest
+                        .iter()
+                        .map(|bl| apply_substitution_to_body_literal(bl, &subst))
+                        .collect();
+
+                    // Recursively match rest
+                    for rest_subst in
+                        match_body_against_facts(&substituted_rest, fact_index, all_facts)
+                    {
+                        if let Some(merged) = merge_substitutions(&subst, &rest_subst) {
+                            results.push(merged);
+                        }
+                    }
                 }
             }
+
+            results
+        }
+        BodyLiteral::Arithmetic(_) => {
+            // Skip arithmetic constraints during fact matching — just recurse on rest.
+            match_body_against_facts(rest, fact_index, all_facts)
         }
     }
-
-    results
 }
 
-/// Match body with at least one delta (new) fact
+/// Match body with at least one delta (new) fact.
+///
+/// Dispatches on [`BodyLiteral`] variant: only logic literals are
+/// considered as delta candidates; arithmetic constraints are skipped.
 fn match_body_with_delta(
-    body: &[Literal],
+    body: &[BodyLiteral],
     fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     delta_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     all_facts: &[Literal],
@@ -451,28 +494,34 @@ fn match_body_with_delta(
     let mut results = Vec::new();
     let mut seen: FxHashSet<SubstitutionKey> = FxHashSet::default();
 
-    for (i, delta_lit) in body.iter().enumerate() {
-        let rest: Vec<Literal> = body
+    for (i, body_elem) in body.iter().enumerate() {
+        // Only logic literals can be matched against delta facts
+        let delta_lit = match body_elem {
+            BodyLiteral::Logic(lit) => lit.to_literal(),
+            BodyLiteral::Arithmetic(_) => continue,
+        };
+
+        let rest: Vec<BodyLiteral> = body
             .iter()
             .enumerate()
             .filter(|(j, _)| *j != i)
-            .map(|(_, l)| l.clone())
+            .map(|(_, bl)| bl.clone())
             .collect();
 
         let delta_candidates: Vec<&Literal> = if is_variable(delta_lit.name()) {
             delta_facts.iter().collect()
         } else {
             delta_index
-                .get(&fact_index_key(delta_lit))
+                .get(&fact_index_key(&delta_lit))
                 .map(|v| v.iter().collect())
                 .unwrap_or_default()
         };
 
         for fact in delta_candidates {
-            if let Some(subst) = match_literal(delta_lit, fact) {
-                let substituted_rest: Vec<Literal> = rest
+            if let Some(subst) = match_literal(&delta_lit, fact) {
+                let substituted_rest: Vec<BodyLiteral> = rest
                     .iter()
-                    .map(|l| apply_substitution_to_literal(l, &subst))
+                    .map(|bl| apply_substitution_to_body_literal(bl, &subst))
                     .collect();
 
                 for rest_subst in match_body_against_facts(&substituted_rest, fact_index, all_facts)

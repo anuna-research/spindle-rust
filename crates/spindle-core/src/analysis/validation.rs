@@ -94,8 +94,14 @@ fn check_tautological_bodies(rules: &[&Rule], diags: &mut Vec<ValidationDiagnost
         // are exact complements: same name, args, mode, and temporal but
         // opposite negation.  Comparing by name alone produces false
         // positives for bodies like `p(a), ~p(b)`.
-        let positive: Vec<_> = rule.body.iter().filter(|l| !l.is_negated()).collect();
-        let negative: Vec<_> = rule.body.iter().filter(|l| l.is_negated()).collect();
+        // Only logic body literals participate in tautology checks.
+        let logic_lits: Vec<_> = rule
+            .body
+            .iter()
+            .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
+            .collect();
+        let positive: Vec<_> = logic_lits.iter().filter(|l| !l.is_negated()).collect();
+        let negative: Vec<_> = logic_lits.iter().filter(|l| l.is_negated()).collect();
 
         'outer: for pos in &positive {
             let pos_key = analysis_key_unsigned(pos);
@@ -177,8 +183,12 @@ fn check_unreachable_rules(rules: &[&Rule], diags: &mut Vec<ValidationDiagnostic
         if rule.body.is_empty() {
             continue; // facts / empty-body rules checked elsewhere
         }
-        for lit in &rule.body {
-            if !produced.contains(&analysis_key(lit)) {
+        for bl in &rule.body {
+            let lit = match bl.as_logic() {
+                Some(l) => l.to_literal(),
+                None => continue, // skip arithmetic constraints
+            };
+            if !produced.contains(&analysis_key(&lit)) {
                 let display = if lit.is_negated() {
                     format!("~{}", lit.name())
                 } else {

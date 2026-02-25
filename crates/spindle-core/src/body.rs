@@ -25,7 +25,7 @@ use std::fmt;
 
 use crate::arith::{ArithConstraint, ArithExpr};
 use crate::intern::SymbolId;
-use crate::literal::InternedLiteralName;
+use crate::literal::{InternedLiteralName, Literal, render_spl_atom};
 use crate::mode::Mode;
 use crate::temporal::{Temporal, TemporalExpr};
 use crate::term::Term;
@@ -239,6 +239,129 @@ impl BodyLogicLiteral {
             .iter()
             .any(|a| matches!(a, BodyArg::Arith(_)))
     }
+
+    /// Get predicates as strings (for display/serialization).
+    ///
+    /// Term arguments are resolved to their interned string; arithmetic
+    /// expressions use their Display representation.
+    pub fn predicates(&self) -> Vec<&'static str> {
+        self.predicate_args
+            .iter()
+            .map(|a| match a {
+                BodyArg::Term(t) => match t {
+                    Term::Symbol(id) => crate::intern::resolve(*id),
+                    other => {
+                        let s = other.to_string();
+                        Box::leak(s.into_boxed_str()) as &'static str
+                    }
+                },
+                BodyArg::Arith(expr) => {
+                    let s = expr.to_string();
+                    Box::leak(s.into_boxed_str()) as &'static str
+                }
+            })
+            .collect()
+    }
+
+    /// Convert this body logic literal to a [`Literal`].
+    ///
+    /// Arithmetic expression arguments are dropped; only `BodyArg::Term`
+    /// arguments survive the conversion.
+    pub fn to_literal(&self) -> Literal {
+        let terms: Vec<Term> = self
+            .predicate_args
+            .iter()
+            .filter_map(|a| match a {
+                BodyArg::Term(t) => Some(t.clone()),
+                BodyArg::Arith(_) => None,
+            })
+            .collect();
+        let mut lit = Literal::from_ids(
+            self.name_id,
+            self.negation,
+            self.mode.clone(),
+            self.temporal.clone(),
+            terms,
+        );
+        lit.temporal_expr = self.temporal_expr.clone();
+        lit.interval_var = self.interval_var;
+        lit
+    }
+
+    /// Render this literal in canonical SPL s-expression form.
+    pub fn to_spl(&self) -> String {
+        let mut parts = Vec::with_capacity(1 + self.predicate_args.len());
+        parts.push(render_spl_atom(self.name()));
+        for arg in &self.predicate_args {
+            parts.push(render_spl_atom(&arg.to_string()));
+        }
+
+        let mut expr = format!("({})", parts.join(" "));
+
+        if self.negation {
+            expr = format!("(not {expr})");
+        }
+
+        if !self.mode.is_empty() {
+            let tag = match self.mode.name.as_deref() {
+                Some("O") => "must",
+                Some("P") => "may",
+                Some("F") => "forbidden",
+                Some(name) => name,
+                None => "",
+            };
+
+            if !tag.is_empty() {
+                if self.mode.negation {
+                    expr = format!("(not ({tag} {expr}))");
+                } else {
+                    expr = format!("({tag} {expr})");
+                }
+            }
+        }
+
+        if let Some(var_id) = self.interval_var {
+            expr = format!("(during {expr} {})", crate::intern::resolve(var_id));
+        } else if let Some(ref texpr) = self.temporal_expr {
+            let start_spl = match &texpr.start {
+                crate::temporal::TimeExpr::Const(tp) => tp.to_spl(),
+                crate::temporal::TimeExpr::Var(id) => crate::intern::resolve(*id).to_string(),
+            };
+            let end_spl = match &texpr.end {
+                crate::temporal::TimeExpr::Const(tp) => tp.to_spl(),
+                crate::temporal::TimeExpr::Var(id) => crate::intern::resolve(*id).to_string(),
+            };
+            expr = format!("(during {expr} {start_spl} {end_spl})");
+        } else if !self.temporal.is_empty() {
+            expr = format!(
+                "(during {expr} {} {})",
+                self.temporal.start.to_spl(),
+                self.temporal.end.to_spl()
+            );
+        }
+
+        expr
+    }
+}
+
+impl From<Literal> for BodyLogicLiteral {
+    fn from(lit: Literal) -> Self {
+        let args: Vec<BodyArg> = lit
+            .predicate_args()
+            .iter()
+            .map(|t| BodyArg::Term(t.clone()))
+            .collect();
+        let mut bll = BodyLogicLiteral::from_ids(
+            lit.interned_name(),
+            lit.negation,
+            lit.mode.clone(),
+            lit.temporal.clone(),
+            args,
+        );
+        bll.temporal_expr = lit.temporal_expr.clone();
+        bll.interval_var = lit.interval_var;
+        bll
+    }
 }
 
 impl fmt::Display for BodyLogicLiteral {
@@ -287,6 +410,18 @@ pub enum BodyLiteral {
 }
 
 impl BodyLiteral {
+    /// Create a simple positive logic body literal (convenience for construction).
+    #[inline]
+    pub fn simple(name: impl AsRef<str>) -> Self {
+        BodyLiteral::Logic(BodyLogicLiteral::simple(name))
+    }
+
+    /// Create a negated logic body literal (convenience for construction).
+    #[inline]
+    pub fn negated(name: impl AsRef<str>) -> Self {
+        BodyLiteral::Logic(BodyLogicLiteral::negated(name))
+    }
+
     /// Returns `true` if this is a logic literal.
     #[inline]
     pub fn is_logic(&self) -> bool {
@@ -316,6 +451,82 @@ impl BodyLiteral {
             _ => None,
         }
     }
+
+    /// Get the predicate name (logic literals only; returns `"<arith>"` for arithmetic).
+    #[inline]
+    pub fn name(&self) -> &'static str {
+        match self {
+            BodyLiteral::Logic(lit) => lit.name(),
+            BodyLiteral::Arithmetic(_) => "<arith>",
+        }
+    }
+
+    /// Negation-aware canonical name (e.g. `"~flies"` or `"bird"`).
+    ///
+    /// Arithmetic constraints return `"<arith>"`.
+    pub fn canonical_name(&self) -> String {
+        match self {
+            BodyLiteral::Logic(lit) => {
+                if lit.is_negated() {
+                    format!("~{}", lit.name())
+                } else {
+                    lit.name().to_owned()
+                }
+            }
+            BodyLiteral::Arithmetic(_) => "<arith>".to_owned(),
+        }
+    }
+
+    /// Check if this body literal is negated.
+    ///
+    /// Arithmetic constraints are never negated (REQ-011).
+    #[inline]
+    pub fn is_negated(&self) -> bool {
+        match self {
+            BodyLiteral::Logic(lit) => lit.is_negated(),
+            BodyLiteral::Arithmetic(_) => false,
+        }
+    }
+
+    /// Check if this body literal is positive (not negated).
+    #[inline]
+    pub fn is_positive(&self) -> bool {
+        !self.is_negated()
+    }
+
+    /// Check if this body literal has temporal bounds.
+    #[inline]
+    pub fn is_temporal(&self) -> bool {
+        match self {
+            BodyLiteral::Logic(lit) => lit.is_temporal(),
+            BodyLiteral::Arithmetic(_) => false,
+        }
+    }
+
+    /// Check if this body literal has unresolved temporal variables.
+    #[inline]
+    pub fn has_temporal_variables(&self) -> bool {
+        match self {
+            BodyLiteral::Logic(lit) => lit.has_temporal_variables(),
+            BodyLiteral::Arithmetic(_) => false,
+        }
+    }
+
+    /// Render this body literal in canonical SPL s-expression form.
+    pub fn to_spl(&self) -> String {
+        match self {
+            BodyLiteral::Logic(lit) => lit.to_spl(),
+            BodyLiteral::Arithmetic(c) => c.to_string(),
+        }
+    }
+
+    /// Get predicates as strings (logic literals only; returns empty for arithmetic).
+    pub fn predicates(&self) -> Vec<&'static str> {
+        match self {
+            BodyLiteral::Logic(lit) => lit.predicates(),
+            BodyLiteral::Arithmetic(_) => Vec::new(),
+        }
+    }
 }
 
 impl From<BodyLogicLiteral> for BodyLiteral {
@@ -329,6 +540,13 @@ impl From<ArithConstraint> for BodyLiteral {
     #[inline]
     fn from(c: ArithConstraint) -> Self {
         BodyLiteral::Arithmetic(c)
+    }
+}
+
+impl From<Literal> for BodyLiteral {
+    #[inline]
+    fn from(lit: Literal) -> Self {
+        BodyLiteral::Logic(BodyLogicLiteral::from(lit))
     }
 }
 

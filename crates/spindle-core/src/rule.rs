@@ -15,12 +15,40 @@ use std::fmt;
 
 use smallvec::SmallVec;
 
+use crate::body::BodyLiteral;
 use crate::literal::{Literal, render_spl_atom};
 use crate::mode::Mode;
 use crate::temporal::{AllenConstraint, Temporal, TemporalStateQuery};
 
-/// Type alias for rule body - most rules have 1-4 body literals
-pub type RuleBody = SmallVec<[Literal; 4]>;
+/// Type alias for rule body - most rules have 1-4 body literals.
+///
+/// Elements are [`BodyLiteral`], which can be either logic literals
+/// (fact-matching patterns) or arithmetic constraints.
+pub type RuleBody = SmallVec<[BodyLiteral; 4]>;
+
+/// Conversion trait for rule body construction.
+///
+/// Conversion trait for rule body construction.
+///
+/// Allows `Rule::new` and friends to accept `Vec<Literal>` or
+/// `SmallVec<[BodyLiteral; 4]>` seamlessly, auto-wrapping `Literal`s
+/// in `BodyLiteral::Logic`.
+pub trait IntoRuleBody {
+    /// Convert into a [`RuleBody`].
+    fn into_rule_body(self) -> RuleBody;
+}
+
+impl IntoRuleBody for Vec<Literal> {
+    fn into_rule_body(self) -> RuleBody {
+        self.into_iter().map(BodyLiteral::from).collect()
+    }
+}
+
+impl IntoRuleBody for SmallVec<[BodyLiteral; 4]> {
+    fn into_rule_body(self) -> RuleBody {
+        self
+    }
+}
 
 /// Type alias for rule head - most rules have 1 head literal
 pub type RuleHead = SmallVec<[Literal; 1]>;
@@ -75,7 +103,7 @@ impl fmt::Display for RuleType {
 }
 
 /// A rule in defeasible logic
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Rule {
     /// Unique label for this rule
     pub label: RuleLabel,
@@ -107,7 +135,7 @@ impl Rule {
     pub fn new(
         label: impl Into<String>,
         rule_type: RuleType,
-        body: impl Into<RuleBody>,
+        body: impl IntoRuleBody,
         head: impl Into<RuleHead>,
     ) -> Self {
         Self {
@@ -116,7 +144,7 @@ impl Rule {
             rule_type,
             mode: Mode::empty(),
             temporal: Temporal::empty(),
-            body: body.into(),
+            body: body.into_rule_body(),
             head: head.into(),
             constraints: Vec::new(),
             state_queries: Vec::new(),
@@ -134,17 +162,17 @@ impl Rule {
     }
 
     /// Create a strict rule
-    pub fn strict(label: impl Into<String>, body: impl Into<RuleBody>, head: Literal) -> Self {
+    pub fn strict(label: impl Into<String>, body: impl IntoRuleBody, head: Literal) -> Self {
         Self::new(label, RuleType::Strict, body, smallvec::smallvec![head])
     }
 
     /// Create a defeasible rule
-    pub fn defeasible(label: impl Into<String>, body: impl Into<RuleBody>, head: Literal) -> Self {
+    pub fn defeasible(label: impl Into<String>, body: impl IntoRuleBody, head: Literal) -> Self {
         Self::new(label, RuleType::Defeasible, body, smallvec::smallvec![head])
     }
 
     /// Create a defeater
-    pub fn defeater(label: impl Into<String>, body: impl Into<RuleBody>, head: Literal) -> Self {
+    pub fn defeater(label: impl Into<String>, body: impl IntoRuleBody, head: Literal) -> Self {
         Self::new(label, RuleType::Defeater, body, smallvec::smallvec![head])
     }
 
@@ -385,12 +413,16 @@ mod tests {
         let t = crate::intern::intern("?T");
         let s = crate::intern::intern("?S");
 
-        let mut p = Literal::simple("p");
-        p.interval_var = Some(t);
-        let mut q = Literal::simple("q");
-        q.interval_var = Some(s);
+        let mut p = BodyLiteral::simple("p");
+        if let BodyLiteral::Logic(ref mut lit) = p {
+            lit.interval_var = Some(t);
+        }
+        let mut q = BodyLiteral::simple("q");
+        if let BodyLiteral::Logic(ref mut lit) = q {
+            lit.interval_var = Some(s);
+        }
 
-        let mut rule = Rule::defeasible("r1", vec![p, q], Literal::simple("result"));
+        let mut rule = Rule::defeasible("r1", smallvec::smallvec![p, q], Literal::simple("result"));
         rule.constraints.push(AllenConstraint::new(
             crate::temporal::AllenRelation::Before,
             t,
@@ -408,12 +440,16 @@ mod tests {
         let t = crate::intern::intern("?T");
         let s = crate::intern::intern("?S");
 
-        let mut p = Literal::simple("p");
-        p.interval_var = Some(t);
-        let mut q = Literal::simple("q");
-        q.interval_var = Some(s);
+        let mut p = BodyLiteral::simple("p");
+        if let BodyLiteral::Logic(ref mut lit) = p {
+            lit.interval_var = Some(t);
+        }
+        let mut q = BodyLiteral::simple("q");
+        if let BodyLiteral::Logic(ref mut lit) = q {
+            lit.interval_var = Some(s);
+        }
 
-        let mut rule = Rule::defeasible("r1", vec![p, q], Literal::simple("result"));
+        let mut rule = Rule::defeasible("r1", smallvec::smallvec![p, q], Literal::simple("result"));
         rule.constraints.push(AllenConstraint::new(
             crate::temporal::AllenRelation::During,
             t,
@@ -428,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_template_label() {
-        let rule = Rule::defeasible("r1", vec![], Literal::simple("a"));
+        let rule: Rule = Rule::defeasible("r1", vec![], Literal::simple("a"));
         assert_eq!(rule.template_label(), "r1");
 
         let mut grounded = rule.clone();

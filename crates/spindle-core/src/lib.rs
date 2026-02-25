@@ -85,7 +85,7 @@ pub mod prelude {
     pub use crate::reason::{
         Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
     };
-    pub use crate::rule::{Rule, RuleLabel, RuleType};
+    pub use crate::rule::{IntoRuleBody, Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
     pub use crate::term::{FiniteFloat, NumericValue, Term};
     pub use crate::temporal::{

@@ -118,13 +118,17 @@ impl<'a> IndexedTheory<'a> {
                 idx.literal_set.insert(lit_id);
             }
 
-            for body_lit in &rule.body {
-                let lit_id = idx.intern_literal(body_lit);
-                idx.body_index
-                    .entry(lit_id)
-                    .or_default()
-                    .push(rule.label.clone());
-                idx.literal_set.insert(lit_id);
+            for body_bl in &rule.body {
+                // Only logic body literals are indexed; arithmetic constraints are skipped.
+                if let Some(logic_lit) = body_bl.as_logic() {
+                    let as_lit = logic_lit.to_literal();
+                    let lit_id = idx.intern_literal(&as_lit);
+                    idx.body_index
+                        .entry(lit_id)
+                        .or_default()
+                        .push(rule.label.clone());
+                    idx.literal_set.insert(lit_id);
+                }
             }
         }
 
