@@ -3,24 +3,27 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 1,
-    "insertions": 71,
-    "deletions": 4,
+    "files_changed": 4,
+    "insertions": 649,
+    "deletions": 5,
     "file_list": [
-      "crates/spindle-core/src/arith.rs"
+      ".hence/context-manifest.json",
+      "crates/spindle-core/src/arith.rs",
+      "crates/spindle-core/src/body.rs",
+      "crates/spindle-core/src/lib.rs"
     ],
-    "dirty_files": 1
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-temporal-guard-changes",
-      "content": "Modified 1 files (+71, -4): crates/spindle-core/src/arith.rs",
+      "key": "task-body-literal-changes",
+      "content": "Modified 4 files (+649, -5): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/body.rs, crates/spindle-core/src/lib.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/temporal-guard-v1",
-  "evaluated_at": "2026-02-25T04:09:37Z",
+  "branch_name": "hence/body-literal-v1",
+  "evaluated_at": "2026-02-25T04:13:40Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

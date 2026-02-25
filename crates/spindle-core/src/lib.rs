@@ -42,6 +42,7 @@
 
 pub mod analysis;
 pub mod arith;
+pub mod body;
 pub mod claims;
 pub mod conclusion;
 pub mod error;
@@ -68,6 +69,7 @@ pub mod prelude {
     pub use crate::arith::{
         ArithConstraint, ArithError, ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
     };
+    pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};

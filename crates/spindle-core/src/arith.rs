@@ -145,6 +145,89 @@ pub enum ArithConstraint {
 }
 
 // ---------------------------------------------------------------------------
+// Display impls
+// ---------------------------------------------------------------------------
+
+impl fmt::Display for NaryArithOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NaryArithOp::Add => write!(f, "+"),
+            NaryArithOp::Sub => write!(f, "-"),
+            NaryArithOp::Mul => write!(f, "*"),
+            NaryArithOp::Div => write!(f, "/"),
+            NaryArithOp::Min => write!(f, "min"),
+            NaryArithOp::Max => write!(f, "max"),
+        }
+    }
+}
+
+impl fmt::Display for BinArithOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BinArithOp::IDiv => write!(f, "div"),
+            BinArithOp::Rem => write!(f, "rem"),
+            BinArithOp::Pow => write!(f, "pow"),
+        }
+    }
+}
+
+impl fmt::Display for UnaryArithOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnaryArithOp::Abs => write!(f, "abs"),
+        }
+    }
+}
+
+impl fmt::Display for CmpOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CmpOp::Eq => write!(f, "="),
+            CmpOp::Ne => write!(f, "!="),
+            CmpOp::Lt => write!(f, "<"),
+            CmpOp::Gt => write!(f, ">"),
+            CmpOp::Le => write!(f, "<="),
+            CmpOp::Ge => write!(f, ">="),
+        }
+    }
+}
+
+impl fmt::Display for ArithExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ArithExpr::Lit(v) => write!(f, "{v}"),
+            ArithExpr::Var(id) => write!(f, "{}", resolve(*id)),
+            ArithExpr::NaryOp { op, args } => {
+                write!(f, "({op}")?;
+                for arg in args {
+                    write!(f, " {arg}")?;
+                }
+                write!(f, ")")
+            }
+            ArithExpr::BinOp { op, lhs, rhs } => {
+                write!(f, "({op} {lhs} {rhs})")
+            }
+            ArithExpr::UnaryOp { op, expr } => {
+                write!(f, "({op} {expr})")
+            }
+        }
+    }
+}
+
+impl fmt::Display for ArithConstraint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ArithConstraint::Bind { var, expr } => {
+                write!(f, "(bind {} {expr})", resolve(*var))
+            }
+            ArithConstraint::Compare { op, lhs, rhs } => {
+                write!(f, "({op} {lhs} {rhs})")
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ArithError
 // ---------------------------------------------------------------------------
 

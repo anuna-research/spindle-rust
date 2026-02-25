@@ -1,12 +1,12 @@
 {
-  "task_id": "temporal-guard",
+  "task_id": "body-literal",
   "token_budget": 8000,
-  "tokens_used": 283,
+  "tokens_used": 342,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Ensure that temporal endpoint variables (?start, ?end from 'during' literals) and interval variables (?T) cannot be used as arithmetic operands. In ArithExpr::eval, if a variable resolves to a temporal binding (found in subst.temporal or subst.intervals but not in subst.terms), return ArithError::TypeMismatch. This causes silent failure per REQ-006.",
-      "token_cost": 87,
+      "content": "Add BodyLiteral, BodyLogicLiteral, and BodyArg types per SPEC-017 section 7.4. BodyArg::Term(Term) for concrete args, BodyArg::Arith(ArithExpr) for expression args. BodyLogicLiteral mirrors Literal fields but uses Vec<BodyArg> for predicate_args. BodyLiteral::Logic(BodyLogicLiteral) for fact-matching, BodyLiteral::Arithmetic(ArithConstraint) for bind/compare. Place in a new crates/spindle-core/src/body.rs or extend rule.rs. NOTE: ArithConstraint has no negation flag (REQ-011 makes negation of arithmetic a parse error).",
+      "token_cost": 131,
       "priority": "PlanMeta"
     },
     {
@@ -44,8 +44,14 @@
       "content": "Modified 3 files (+142, -87): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/grounding.rs",
       "token_cost": 32,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-temporal-guard-changes",
+      "content": "Modified 1 files (+71, -4): crates/spindle-core/src/arith.rs",
+      "token_cost": 15,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T04:07:14Z"
+  "constructed_at": "2026-02-25T04:09:43Z"
 }
