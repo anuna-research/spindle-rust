@@ -1,12 +1,12 @@
 {
-  "task_id": "term-enum",
+  "task_id": "arith-ast",
   "token_budget": 8000,
-  "tokens_used": 171,
+  "tokens_used": 274,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Create crates/spindle-core/src/term.rs with Term enum: Symbol(SymbolId), Integer(i64), Decimal(rust_decimal::Decimal), Float(f64). Implement Display, Clone, Debug. For Float variant, implement a canonicalized finite-float wrapper (or OrderedFloat equivalent) that normalizes -0.0 to 0.0 and rejects NaN/Inf, with stable Eq+Hash. Add Term::is_numeric(), Term::numeric_eq() with cross-type promotion (REQ-005). Add NumericValue enum (Integer/Decimal/Float) for arithmetic expression evaluation results that converts to/from Term.",
-      "token_cost": 131,
+      "content": "Create crates/spindle-core/src/arith.rs with: ArithExpr enum (Lit, Var, NaryOp, BinOp, UnaryOp), NaryArithOp (Add, Sub, Mul, Div, Min, Max), BinArithOp (IDiv, Rem, Pow), UnaryArithOp (Abs), CmpOp (Eq, Ne, Lt, Gt, Le, Ge), ArithConstraint (Bind{var, expr}, Compare{op, lhs, rhs}), ArithError enum (DivisionByZero, IntegerOverflow, DecimalOverflow, UnboundVariable, TypeMismatch, NonFiniteFloat, ReciprocalOfZero, ComparisonFailed). Implement ArithExpr::eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> with: checked integer arithmetic, rust_decimal for decimal ops, f64 for float ops, promotion rules per REQ-005 (Integer+Decimal->Decimal, any+Float->Float, Integer/Integer->Decimal for division). Implement variadic semantics per CON-002 (identity elements, left-fold, unary negation/reciprocal). Implement ArithConstraint::eval(&self, subst: &mut Substitution) -> Result<(), ArithError>.",
+      "token_cost": 227,
       "priority": "PlanMeta"
     },
     {
@@ -17,11 +17,11 @@
     },
     {
       "source": "memory/episodic/task-term-enum-changes",
-      "content": "Modified 2 files (+765, -0): crates/spindle-core/src/lib.rs, crates/spindle-core/src/term.rs",
-      "token_cost": 23,
+      "content": "Modified 3 files (+507, -5): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/term.rs",
+      "token_cost": 30,
       "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T03:20:39Z"
+  "constructed_at": "2026-02-25T03:23:51Z"
 }
