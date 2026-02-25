@@ -121,7 +121,7 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
             if is_variable(parg_str) {
                 // Variable binds to the full Term value
                 if let Some(existing) = subst.terms.get(parg_id) {
-                    if *existing != *garg {
+                    if *existing != *garg && !existing.numeric_eq(garg) {
                         return None;
                     }
                 } else {
@@ -130,8 +130,8 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
                 continue;
             }
         }
-        // Non-variable: compare terms directly
-        if parg != garg {
+        // Non-variable: compare terms directly (with cross-type numeric promotion per REQ-010/CON-005)
+        if parg != garg && !parg.numeric_eq(garg) {
             return None;
         }
     }
@@ -330,10 +330,10 @@ fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: u
 fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitution> {
     let mut merged = s1.clone();
 
-    // Merge term bindings (Term equality handles canonical float via derived Eq)
+    // Merge term bindings (with cross-type numeric promotion per REQ-010/CON-005)
     for (k, v) in &s2.terms {
         if let Some(existing) = merged.terms.get(k) {
-            if *existing != *v {
+            if *existing != *v && !existing.numeric_eq(v) {
                 return None;
             }
         } else {
@@ -2153,6 +2153,187 @@ mod tests {
             grounded_rules.len(),
             2,
             "Two temporal facts should produce two groundings"
+        );
+    }
+
+    // =====================================================================
+    // Cross-type numeric matching (REQ-010/CON-005)
+    // =====================================================================
+
+    #[test]
+    fn test_match_literal_integer_matches_decimal() {
+        use rust_decimal::Decimal;
+
+        // Pattern has Integer(100), ground has Decimal(100.00)
+        let pattern = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("item")), Term::Integer(100)],
+        );
+        let ground = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("item")), Term::Decimal(Decimal::new(10000, 2))],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Integer(100) should match Decimal(100.00)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_integer_matches_float() {
+        use crate::term::FiniteFloat;
+
+        // Pattern has Integer(100), ground has Float(100.0)
+        let pattern = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("item")), Term::Integer(100)],
+        );
+        let ground = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Float(FiniteFloat::new(100.0).unwrap()),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Integer(100) should match Float(100.0)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_decimal_matches_float() {
+        use crate::term::FiniteFloat;
+        use rust_decimal::Decimal;
+
+        // Pattern has Decimal(100.00), ground has Float(100.0)
+        let pattern = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Decimal(Decimal::new(10000, 2)),
+            ],
+        );
+        let ground = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Float(FiniteFloat::new(100.0).unwrap()),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Decimal(100.00) should match Float(100.0)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_symbol_never_matches_numeric() {
+        // Symbol("100") must NOT match Integer(100)
+        let pattern = Literal::from_ids(
+            intern("val"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("100"))],
+        );
+        let ground = Literal::from_ids(
+            intern("val"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Integer(100)],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_none(),
+            "Symbol(\"100\") must not match Integer(100)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_cross_type_variable_consistency() {
+        use rust_decimal::Decimal;
+
+        // Variable ?x appears twice. First bound to Integer(100),
+        // second position in ground has Decimal(100.00) — should still match.
+        let pattern = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("?x")),
+                Term::Symbol(intern("?x")),
+            ],
+        );
+        let ground = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Integer(100),
+                Term::Decimal(Decimal::new(10000, 2)),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Variable bound to Integer(100) should accept Decimal(100.00) on re-use"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_cross_type_variable_inconsistency_rejects() {
+        use rust_decimal::Decimal;
+
+        // Variable ?x bound to Integer(100), second position has Decimal(99.00) — must reject.
+        let pattern = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("?x")),
+                Term::Symbol(intern("?x")),
+            ],
+        );
+        let ground = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Integer(100),
+                Term::Decimal(Decimal::new(9900, 2)),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_none(),
+            "Variable bound to Integer(100) should reject Decimal(99.00)"
         );
     }
 }
