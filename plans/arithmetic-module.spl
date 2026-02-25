@@ -461,8 +461,8 @@
   assign-to-tests-parser-testing)
 
 (normally r-assign-tests-grounding
-  ready-tests-grounding
-  assign-to-tests-grounding)
+  (and ready-tests-grounding agent-testing-available)
+  assign-to-tests-grounding-testing)
 
 (normally r-assign-tests-worked-examples
   (and ready-tests-worked-examples agent-testing-available)
@@ -1162,42 +1162,55 @@
 )
 
 ;; Retry mechanism for tests-grounding (failed v1 attempt at 06:09:01Z with confidence 0.00)
-;; The evaluator marked failed-tests-grounding and supervisor marked stale-v1-tests-grounding,
-;; which propagates upstream-blocked to downstream tasks (tests-nfr, tests-pbt,
-;; tests-worked-examples, v2-json-schema). This claim defeats those failure/stale states
-;; and re-enables assignment.
+;; The v1 attempt went stale (lease expired) and was auto-failed with confidence 0.00 —
+;; this is not a genuine implementation failure, just a timeout.
+;;
+;; APPROACH: Cannot negate given facts (failed-tests-grounding, stale-v1-tests-grounding)
+;; in defeasible logic — givens are strict/irrevocable. Instead, create an alternative
+;; v2 assignment pathway that bypasses the v1 failure state, and defeat downstream
+;; propagation rules (which ARE defeasible) with preferred retry rules.
 
 (claims supervisor:ed25519:xfRAzZFG
   :at "2026-02-25T08:00:00Z"
 
-  ;; Signal retry intent
-  (given retry-v1-tests-grounding)
+  ;; Signal retry intent — this is the v2 attempt
+  (given retry-v2-tests-grounding)
 
-  ;; Defeat the v1 failure and stale markers so the task is assignable again
-  (normally r-retry-not-failed-tg retry-v1-tests-grounding (not failed-tests-grounding))
-  (normally r-retry-not-stale-tg retry-v1-tests-grounding (not stale-v1-tests-grounding))
+  ;; v2 readiness: the original dependencies are all still met, create a fresh ready signal
+  ;; that the v2 assignment rule can use (the v1 ready-tests-grounding is still valid but
+  ;; the v1 assignment was already consumed by the supervisor)
+  (given ready-v2-tests-grounding)
 
-  ;; Unblock downstream: defeat each failure/stale propagation rule
-  (normally r-retry-unblock-tests-nfr retry-v1-tests-grounding (not upstream-blocked-tests-nfr))
+  ;; v2 assignment: fresh conclusion that Hence can match to agent:claude
+  ;; Uses the correct naming convention (assign-to-{task}-{agent})
+  (normally r-assign-v2-tests-grounding
+    (and ready-v2-tests-grounding agent-testing-available)
+    assign-to-tests-grounding-testing)
+
+  ;; Defeat the stale marker so claimed-tests-grounding is not blocked
+  ;; (stale rule used prefer to defeat the v1 claim chain; we now defeat the stale rule)
+  (normally r-retry-v2-not-stale retry-v2-tests-grounding (not stale-v1-tests-grounding))
+  (prefer r-retry-v2-not-stale r-stale-v1-tests-grounding)
+
+  ;; Unblock downstream: defeat each failure/stale propagation rule with preferred alternatives
+  ;; These work because both the propagation rules and these retry rules are defeasible
+  (normally r-retry-unblock-tests-nfr retry-v2-tests-grounding (not upstream-blocked-tests-nfr))
   (prefer r-retry-unblock-tests-nfr r-propagate-tests-nfr-from-tests-grounding-failed)
   (prefer r-retry-unblock-tests-nfr r-propagate-tests-nfr-from-tests-grounding-stale-v1)
 
-  (normally r-retry-unblock-tests-pbt retry-v1-tests-grounding (not upstream-blocked-tests-pbt))
+  (normally r-retry-unblock-tests-pbt retry-v2-tests-grounding (not upstream-blocked-tests-pbt))
   (prefer r-retry-unblock-tests-pbt r-propagate-tests-pbt-from-tests-grounding-failed)
   (prefer r-retry-unblock-tests-pbt r-propagate-tests-pbt-from-tests-grounding-stale-v1)
 
-  (normally r-retry-unblock-tests-worked-examples retry-v1-tests-grounding (not upstream-blocked-tests-worked-examples))
+  (normally r-retry-unblock-tests-worked-examples retry-v2-tests-grounding (not upstream-blocked-tests-worked-examples))
   (prefer r-retry-unblock-tests-worked-examples r-propagate-tests-worked-examples-from-tests-grounding-failed)
   (prefer r-retry-unblock-tests-worked-examples r-propagate-tests-worked-examples-from-tests-grounding-stale-v1)
 
-  (normally r-retry-unblock-v2-json-schema retry-v1-tests-grounding (not upstream-blocked-v2-json-schema))
+  (normally r-retry-unblock-v2-json-schema retry-v2-tests-grounding (not upstream-blocked-v2-json-schema))
   (prefer r-retry-unblock-v2-json-schema r-propagate-v2-json-schema-from-tests-grounding-failed)
   (prefer r-retry-unblock-v2-json-schema r-propagate-v2-json-schema-from-tests-grounding-stale-v1)
 )
 
-(meta r-retry-not-failed-tg
-  (description "Retry defeats the v1 failure marker so the supervisor can re-delegate")
-  (justification "The v1 attempt went stale (lease expired) and was auto-failed with confidence 0.00 — this is not a genuine implementation failure, just a timeout"))
-
-(meta r-retry-not-stale-tg
-  (description "Retry clears the stale marker from the expired v1 lease"))
+(meta r-assign-v2-tests-grounding
+  (description "v2 retry assignment for tests-grounding after v1 timeout")
+  (justification "The v1 attempt went stale (lease expired) and was auto-failed with confidence 0.00 — this is not a genuine implementation failure, just a timeout. Creates a fresh assignment conclusion for Hence to act on."))
