@@ -1,12 +1,12 @@
 {
-  "task_id": "arith-ast",
+  "task_id": "migrate-literal",
   "token_budget": 8000,
-  "tokens_used": 274,
+  "tokens_used": 220,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Create crates/spindle-core/src/arith.rs with: ArithExpr enum (Lit, Var, NaryOp, BinOp, UnaryOp), NaryArithOp (Add, Sub, Mul, Div, Min, Max), BinArithOp (IDiv, Rem, Pow), UnaryArithOp (Abs), CmpOp (Eq, Ne, Lt, Gt, Le, Ge), ArithConstraint (Bind{var, expr}, Compare{op, lhs, rhs}), ArithError enum (DivisionByZero, IntegerOverflow, DecimalOverflow, UnboundVariable, TypeMismatch, NonFiniteFloat, ReciprocalOfZero, ComparisonFailed). Implement ArithExpr::eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> with: checked integer arithmetic, rust_decimal for decimal ops, f64 for float ops, promotion rules per REQ-005 (Integer+Decimal->Decimal, any+Float->Float, Integer/Integer->Decimal for division). Implement variadic semantics per CON-002 (identity elements, left-fold, unary negation/reciprocal). Implement ArithConstraint::eval(&self, subst: &mut Substitution) -> Result<(), ArithError>.",
-      "token_cost": 227,
+      "content": "Change Literal::predicate_ids from Vec<SymbolId> to predicate_args: Vec<Term>. Update all accessor methods (predicate_ids() -> &[Term], predicates(), from_ids(), new()). Update Eq/Hash impls to work with Term. Update all call sites across spindle-core that destructure predicate_ids — primarily grounding.rs match_literal, apply_substitution_to_literal, pipeline.rs, reason.rs, scalable.rs, query.rs, explain.rs, index.rs. Existing code should construct Term::Symbol(id) where it previously used bare SymbolId. This is the highest-risk change — audit every match arm.",
+      "token_cost": 142,
       "priority": "PlanMeta"
     },
     {
@@ -20,8 +20,14 @@
       "content": "Modified 3 files (+507, -5): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/term.rs",
       "token_cost": 30,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-arith-ast-changes",
+      "content": "Modified 3 files (+1320, -1): crates/spindle-core/Cargo.toml, crates/spindle-core/src/arith.rs, crates/spindle-core/src/lib.rs",
+      "token_cost": 31,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T03:23:51Z"
+  "constructed_at": "2026-02-25T03:42:55Z"
 }

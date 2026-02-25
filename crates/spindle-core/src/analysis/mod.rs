@@ -13,11 +13,11 @@ pub mod conflicts;
 pub mod superiority;
 pub mod validation;
 
-use crate::intern::SymbolId;
 use crate::literal::Literal;
 use crate::mode::Mode;
 use crate::rule::RuleLabel;
 use crate::temporal::Temporal;
+use crate::term::Term;
 use std::fmt;
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ use std::fmt;
 /// correctness), this captures the complete identity of a literal so that
 /// diagnostic checks do not produce false positives when predicates differ
 /// by arguments, mode, or temporal scope.
-pub(crate) type AnalysisKey<'a> = (&'static str, bool, &'a [SymbolId], &'a Mode, &'a Temporal);
+pub(crate) type AnalysisKey<'a> = (&'static str, bool, &'a [Term], &'a Mode, &'a Temporal);
 
 /// Return a full-identity key for a literal, **including** temporal.
 ///
@@ -41,7 +41,7 @@ pub(crate) fn analysis_key(lit: &Literal) -> AnalysisKey<'_> {
     (
         lit.name(),
         lit.is_negated(),
-        lit.predicate_ids(),
+        lit.predicate_args(),
         &lit.mode,
         &lit.temporal,
     )
@@ -52,8 +52,8 @@ pub(crate) fn analysis_key(lit: &Literal) -> AnalysisKey<'_> {
 #[inline]
 pub(crate) fn analysis_key_unsigned(
     lit: &Literal,
-) -> (&'static str, &[SymbolId], &Mode, &Temporal) {
-    (lit.name(), lit.predicate_ids(), &lit.mode, &lit.temporal)
+) -> (&'static str, &[Term], &Mode, &Temporal) {
+    (lit.name(), lit.predicate_args(), &lit.mode, &lit.temporal)
 }
 
 // ---------------------------------------------------------------------------

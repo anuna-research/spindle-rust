@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::intern::{SymbolId, intern, resolve};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel};
+use crate::term::Term;
 use crate::theory::Theory;
 
 /// Unique identifier for an atom (predicate + args + mode) within an IndexedTheory.
@@ -71,7 +72,7 @@ impl LitId {
 struct AtomKey {
     functor: SymbolId,
     mode: (SymbolId, bool), // name_id, negated
-    args: Vec<SymbolId>,
+    args: Vec<Term>,
 }
 
 /// An indexed theory for efficient rule lookup.
@@ -141,7 +142,7 @@ impl<'a> IndexedTheory<'a> {
         let key = AtomKey {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
-            args: lit.predicate_ids().to_vec(),
+            args: lit.predicate_args().to_vec(),
         };
 
         let atom_id = if let Some(&id) = self.atom_map.get(&key) {
@@ -167,7 +168,7 @@ impl<'a> IndexedTheory<'a> {
         let key = AtomKey {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
-            args: lit.predicate_ids().to_vec(),
+            args: lit.predicate_args().to_vec(),
         };
 
         self.atom_map
