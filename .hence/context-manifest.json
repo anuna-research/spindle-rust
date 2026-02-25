@@ -1,12 +1,12 @@
 {
-  "task_id": "migrate-substitution",
+  "task_id": "temporal-guard",
   "token_budget": 8000,
-  "tokens_used": 281,
+  "tokens_used": 283,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Change Substitution::terms from FxHashMap<SymbolId, SymbolId> to FxHashMap<SymbolId, Term>. Update match_literal to produce Term values in substitution. Update apply_substitution_to_literal to read Term values and place them in predicate_args. Update merge_substitutions to handle Term equality (use Term::Eq, which handles canonical float). Existing symbol bindings become Term::Symbol(id). All grounding.rs functions that read/write substitution.terms must be updated.",
-      "token_cost": 117,
+      "content": "Ensure that temporal endpoint variables (?start, ?end from 'during' literals) and interval variables (?T) cannot be used as arithmetic operands. In ArithExpr::eval, if a variable resolves to a temporal binding (found in subst.temporal or subst.intervals but not in subst.terms), return ArithError::TypeMismatch. This causes silent failure per REQ-006.",
+      "token_cost": 87,
       "priority": "PlanMeta"
     },
     {
@@ -38,8 +38,14 @@
       "content": "Modified 3 files (+462, -5): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/term.rs",
       "token_cost": 31,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-migrate-substitution-changes",
+      "content": "Modified 3 files (+142, -87): .hence/context-manifest.json, crates/spindle-core/src/arith.rs, crates/spindle-core/src/grounding.rs",
+      "token_cost": 32,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T03:59:35Z"
+  "constructed_at": "2026-02-25T04:07:14Z"
 }
