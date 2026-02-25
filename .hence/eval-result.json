@@ -1,0 +1,27 @@
+{
+  "recommended_status": "completed",
+  "confidence": 1.0,
+  "exit_code": 0,
+  "diff_summary": {
+    "files_changed": 2,
+    "insertions": 4,
+    "deletions": 0,
+    "file_list": [
+      "Cargo.toml",
+      "crates/spindle-core/Cargo.toml"
+    ],
+    "dirty_files": 1
+  },
+  "learnings": [
+    {
+      "key": "task-add-rust-decimal-changes",
+      "content": "Modified 2 files (+4, -0): Cargo.toml, crates/spindle-core/Cargo.toml",
+      "memory_type": "episodic",
+      "confidence": 0.8
+    }
+  ],
+  "branch_name": "hence/add-rust-decimal-v1",
+  "evaluated_at": "2026-02-25T01:49:48Z",
+  "checks_passed": 0,
+  "checks_failed": 0
+}
