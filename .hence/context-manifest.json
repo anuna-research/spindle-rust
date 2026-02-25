@@ -1,12 +1,12 @@
 {
-  "task_id": "migrate-literal",
+  "task_id": "tests-term-arith",
   "token_budget": 8000,
-  "tokens_used": 220,
+  "tokens_used": 216,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Change Literal::predicate_ids from Vec<SymbolId> to predicate_args: Vec<Term>. Update all accessor methods (predicate_ids() -> &[Term], predicates(), from_ids(), new()). Update Eq/Hash impls to work with Term. Update all call sites across spindle-core that destructure predicate_ids — primarily grounding.rs match_literal, apply_substitution_to_literal, pipeline.rs, reason.rs, scalable.rs, query.rs, explain.rs, index.rs. Existing code should construct Term::Symbol(id) where it previously used bare SymbolId. This is the highest-risk change — audit every match arm.",
-      "token_cost": 142,
+      "content": "Write unit tests in spindle-core for: TEST-001 (numeric literal terms — all 10 scenarios), TEST-002 (arithmetic expression parsing — all 12 scenarios, evaluation side), TEST-005 (numeric type promotion — all 22 scenarios). Place in crates/spindle-core/src/term.rs #[cfg(test)] and crates/spindle-core/src/arith.rs #[cfg(test)].",
+      "token_cost": 83,
       "priority": "PlanMeta"
     },
     {
@@ -26,8 +26,14 @@
       "content": "Modified 3 files (+1320, -1): crates/spindle-core/Cargo.toml, crates/spindle-core/src/arith.rs, crates/spindle-core/src/lib.rs",
       "token_cost": 31,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-migrate-literal-changes",
+      "content": "Modified 6 files (+102, -63): crates/spindle-core/src/analysis/mod.rs, crates/spindle-core/src/grounding.rs, crates/spindle-core/src/index.rs, crates/spindle-core/src/literal.rs, crates/spindle-core/src/term.rs and 1 more",
+      "token_cost": 55,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-02-25T03:42:55Z"
+  "constructed_at": "2026-02-25T03:50:38Z"
 }

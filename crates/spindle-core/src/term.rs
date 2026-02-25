@@ -499,4 +499,112 @@ mod tests {
         let _: Term = Decimal::ONE.into();
         let _: Term = FiniteFloat::new(1.0).unwrap().into();
     }
+
+    // =====================================================================
+    // TEST-001: Numeric literal terms (10 scenarios)
+    // =====================================================================
+
+    #[test]
+    fn test_001_01_integer_literal() {
+        let t = Term::Integer(42);
+        assert!(t.is_numeric());
+        assert_eq!(t, Term::Integer(42));
+        assert_eq!(format!("{t}"), "42");
+    }
+
+    #[test]
+    fn test_001_02_negative_integer() {
+        let t = Term::Integer(-100);
+        assert!(t.is_numeric());
+        assert_eq!(t, Term::Integer(-100));
+        assert_eq!(format!("{t}"), "-100");
+    }
+
+    #[test]
+    fn test_001_03_decimal_literal_exact() {
+        // 0.15 as Decimal is exact — not a float approximation.
+        let d = Decimal::new(15, 2); // 0.15
+        let t = Term::Decimal(d);
+        assert!(t.is_numeric());
+        assert_eq!(format!("{t}"), "0.15");
+        // Prove exactness: 0.15 × 100 = exactly 15
+        assert_eq!(d * Decimal::from(100), Decimal::from(15));
+    }
+
+    #[test]
+    fn test_001_04_decimal_leading_zero_exact() {
+        // 0.08 must be exact Decimal, not 0.07999... as float.
+        let d = Decimal::new(8, 2); // 0.08
+        let t = Term::Decimal(d);
+        assert_eq!(format!("{t}"), "0.08");
+        // Prove exactness: 0.08 × 100 = exactly 8
+        assert_eq!(d * Decimal::from(100), Decimal::from(8));
+    }
+
+    #[test]
+    fn test_001_05_float_scientific_notation() {
+        // 1.5e3 = 1500.0 stored as Float.
+        let ff = FiniteFloat::new(1.5e3).unwrap();
+        let t = Term::Float(ff);
+        assert!(t.is_numeric());
+        assert_eq!(ff.value(), 1500.0);
+    }
+
+    #[test]
+    fn test_001_06_float_without_decimal_point() {
+        // 1e6 = 1000000.0 stored as Float.
+        let ff = FiniteFloat::new(1e6).unwrap();
+        let t = Term::Float(ff);
+        assert!(t.is_numeric());
+        assert_eq!(ff.value(), 1_000_000.0);
+    }
+
+    #[test]
+    fn test_001_07_symbol_and_integer_coexist() {
+        use std::collections::HashSet;
+        let sym = Term::Symbol(intern("item-a"));
+        let int = Term::Integer(1);
+        assert!(!sym.is_numeric());
+        assert!(int.is_numeric());
+        assert_ne!(sym, int);
+        // Both variants work correctly in a hash set.
+        let mut set = HashSet::new();
+        set.insert(sym);
+        set.insert(int);
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_001_08_integer_overflow_boundaries() {
+        // i64::MAX and i64::MIN are representable as Term::Integer.
+        let max_term = Term::Integer(i64::MAX);
+        let min_term = Term::Integer(i64::MIN);
+        assert_eq!(max_term, Term::Integer(9_223_372_036_854_775_807));
+        assert_eq!(min_term, Term::Integer(-9_223_372_036_854_775_808));
+        assert_ne!(max_term, min_term);
+    }
+
+    #[test]
+    fn test_001_09_decimal_precision_28_digits() {
+        // rust_decimal supports up to 28–29 significant digits.
+        use std::str::FromStr;
+        let s = "1234567890123456789012345678";
+        let d = Decimal::from_str(s).unwrap();
+        let t = Term::Decimal(d);
+        assert!(t.is_numeric());
+        assert_eq!(d.to_string(), s);
+    }
+
+    #[test]
+    fn test_001_10_decimal_division_28_frac_digits() {
+        // (/ 10 3) → Decimal(3.3333333333333333333333333333) — 28 '3's.
+        let result = Decimal::from(10) / Decimal::from(3);
+        let t = Term::Decimal(result);
+        assert!(t.is_numeric());
+        let s = result.to_string();
+        assert!(s.starts_with("3."), "expected '3.' prefix, got: {s}");
+        let frac = &s[2..];
+        assert_eq!(frac.len(), 28, "expected 28 fractional digits, got {}", frac.len());
+        assert!(frac.chars().all(|c| c == '3'), "expected all '3's, got: {frac}");
+    }
 }
