@@ -103,7 +103,7 @@ fn test_parse_single_var_during() {
     let rule = theory.rules().find(|r| r.label == "r1").unwrap();
     assert_eq!(rule.body.len(), 1);
     assert!(
-        rule.body[0].interval_var.is_some(),
+        rule.body[0].as_logic().unwrap().interval_var.is_some(),
         "Body literal should have interval_var set"
     );
     assert!(

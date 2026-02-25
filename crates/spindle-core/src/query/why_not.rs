@@ -212,9 +212,13 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 result.would_derive = Some(rule.label.clone());
             }
 
-            // Check which body literals are missing
-            let missing: Vec<_> = rule
+            // Check which body literals are missing (only logic literals)
+            let body_lits: Vec<Literal> = rule
                 .body
+                .iter()
+                .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
+                .collect();
+            let missing: Vec<_> = body_lits
                 .iter()
                 .filter(|b| !proven.contains(*b))
                 .cloned()
@@ -230,8 +234,13 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 let mut blocked = false;
                 for attacker in theory.rules() {
                     if attacker.head_literal() == &complement {
+                        let attacker_body_lits: Vec<Literal> = attacker
+                            .body
+                            .iter()
+                            .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
+                            .collect();
                         let attacker_body_satisfied =
-                            attacker.body.iter().all(|b| proven.contains(b));
+                            attacker_body_lits.iter().all(|b| proven.contains(b));
                         if !attacker_body_satisfied {
                             continue;
                         }

@@ -215,12 +215,15 @@ proptest! {
                 "Grounded rule '{}' still has variables: {:?}",
                 rule.label, rule
             );
-            for lit in &rule.body {
-                prop_assert!(
-                    !literal_has_variables(lit),
-                    "Body literal '{}' in rule '{}' has variables",
-                    lit, rule.label
-                );
+            for bl in &rule.body {
+                if let Some(logic) = bl.as_logic() {
+                    let lit = logic.to_literal();
+                    prop_assert!(
+                        !literal_has_variables(&lit),
+                        "Body literal '{}' in rule '{}' has variables",
+                        lit, rule.label
+                    );
+                }
             }
             for lit in &rule.head {
                 prop_assert!(

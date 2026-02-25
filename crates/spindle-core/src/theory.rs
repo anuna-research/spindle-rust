@@ -77,7 +77,7 @@ impl Theory {
     /// Add a strict rule to the theory
     pub fn add_strict_rule(&mut self, body: &[&str], head: &str) -> RuleLabel {
         let label = self.next_label("s");
-        let body_lits: Vec<_> = body.iter().map(|s| parse_literal_str(s)).collect();
+        let body_lits: Vec<Literal> = body.iter().map(|s| parse_literal_str(s)).collect();
         let rule = Rule::strict(&label, body_lits, parse_literal_str(head));
         self.add_rule(rule);
         label
@@ -86,7 +86,7 @@ impl Theory {
     /// Add a defeasible rule to the theory
     pub fn add_defeasible_rule(&mut self, body: &[&str], head: &str) -> RuleLabel {
         let label = self.next_label("r");
-        let body_lits: Vec<_> = body.iter().map(|s| parse_literal_str(s)).collect();
+        let body_lits: Vec<Literal> = body.iter().map(|s| parse_literal_str(s)).collect();
         let rule = Rule::defeasible(&label, body_lits, parse_literal_str(head));
         self.add_rule(rule);
         label
@@ -95,7 +95,7 @@ impl Theory {
     /// Add a defeater to the theory
     pub fn add_defeater(&mut self, body: &[&str], head: &str) -> RuleLabel {
         let label = self.next_label("d");
-        let body_lits: Vec<_> = body.iter().map(|s| parse_literal_str(s)).collect();
+        let body_lits: Vec<Literal> = body.iter().map(|s| parse_literal_str(s)).collect();
         let rule = Rule::defeater(&label, body_lits, parse_literal_str(head));
         self.add_rule(rule);
         label
@@ -231,8 +231,10 @@ impl Theory {
         self.rules.values().any(|r| {
             r.body
                 .iter()
-                .chain(r.head.iter())
-                .any(|lit| lit.is_temporal() || lit.has_temporal_variables())
+                .any(|bl| bl.is_temporal() || bl.has_temporal_variables())
+                || r.head
+                    .iter()
+                    .any(|lit| lit.is_temporal() || lit.has_temporal_variables())
         })
     }
 

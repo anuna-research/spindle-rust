@@ -39,9 +39,18 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
         let mut new_rule = rule.clone();
 
         // Rewrite body literals
-        let mut new_body = Vec::new();
-        for lit in &rule.body {
-            new_body.push(rewrite_literal_wildcards(lit, &mut counter));
+        let mut new_body: Vec<crate::body::BodyLiteral> = Vec::new();
+        for bl in &rule.body {
+            match bl {
+                crate::body::BodyLiteral::Logic(logic_lit) => {
+                    let as_lit = logic_lit.to_literal();
+                    let rewritten = rewrite_literal_wildcards(&as_lit, &mut counter);
+                    new_body.push(crate::body::BodyLiteral::from(rewritten));
+                }
+                crate::body::BodyLiteral::Arithmetic(c) => {
+                    new_body.push(crate::body::BodyLiteral::Arithmetic(c.clone()));
+                }
+            }
         }
         new_rule.body = new_body.into();
 

@@ -53,9 +53,14 @@ pub(crate) fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
             lit.temporal_expr.is_some() || lit.temporal.is_empty() || lit.temporal.active_at(t)
         });
 
-        // Check body
-        let body_active = rule.body.iter().all(|lit| {
-            lit.temporal_expr.is_some() || lit.temporal.is_empty() || lit.temporal.active_at(t)
+        // Check body (only logic body literals have temporal)
+        let body_active = rule.body.iter().all(|bl| match bl.as_logic() {
+            Some(lit) => {
+                lit.temporal_expr.is_some()
+                    || lit.temporal.is_empty()
+                    || lit.temporal.active_at(t)
+            }
+            None => true, // arithmetic constraints have no temporal
         });
 
         let rule_active = rule.temporal.is_empty() || rule.temporal.active_at(t);
@@ -114,7 +119,18 @@ impl PipelineStage for TemporalVarValidation {
         let mut unresolved = Vec::new();
 
         for rule in theory.rules() {
-            for lit in rule.body.iter().chain(rule.head.iter()) {
+            // Check body literals
+            for bl in &rule.body {
+                if bl.has_temporal_variables() {
+                    unresolved.push(format!(
+                        "rule '{}': literal '{}' has unresolved temporal variables",
+                        rule.label,
+                        bl.to_spl(),
+                    ));
+                }
+            }
+            // Check head literals
+            for lit in &rule.head {
                 if lit.has_temporal_variables() {
                     unresolved.push(format!(
                         "rule '{}': literal '{}' has unresolved temporal variables",
