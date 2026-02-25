@@ -178,7 +178,7 @@ The system SHALL support arithmetic between `Integer`, `Decimal`, and `Float` op
 
 The `/` operator returns `Decimal` for Integer/Integer and Decimal operands (e.g. `(/ 10 3)` → `Decimal(3.3333...)`), and `Float` if either operand is `Float`.
 
-For Decimal division, evaluation follows `rust_decimal` semantics: results are represented with up to 28 fractional digits, using round-half-even when an exact representation exceeds available precision.
+**Decimal precision limits**: `Decimal` values have a maximum of 29 significant digits and a scale of 0–28 (i.e., up to 28 fractional digits). The representable range is `±79,228,162,514,264,337,593,543,950,335` (2^96 − 1) with the decimal point placed anywhere within that digit span. When an exact result exceeds available precision (e.g., repeating decimals from division), the result is rounded using **round-half-even** (banker's rounding). If a decimal operation overflows the representable range, it is treated as an arithmetic error and fails silently. Implementation uses `rust_decimal::Decimal` (128-bit).
 
 Float values are restricted to finite IEEE 754 values. Any arithmetic operation that yields `NaN`, `+inf`, or `-inf` is treated as an arithmetic error and fails silently.
 
@@ -404,6 +404,11 @@ The presence of an `e`/`E` exponent distinguishes `Float` from `Decimal`:
 - `42` → `Term::Integer`
 
 Parsing produces `Term::Integer(i64)`, `Term::Decimal(rust_decimal::Decimal)`, or `Term::Float(f64)`. Parse errors for out-of-range values use the existing `ParseError` type with source offset.
+
+**Range limits**:
+- `Integer`: `−9,223,372,036,854,775,808` to `9,223,372,036,854,775,807` (i64)
+- `Decimal`: up to 29 significant digits; max value `±79,228,162,514,264,337,593,543,950,335`; up to 28 fractional digits. Literals exceeding these limits produce a parse error.
+- `Float`: finite IEEE 754 f64 values (`±1.7976931348623157 × 10^308`). Non-finite parse results produce a parse error.
 
 Implements: REQ-001
 Verified by: TEST-001
@@ -748,6 +753,29 @@ Expected:
 +d during(senior-earner(alice), 100, 200)  ; only the 110000 period qualifies
 ```
 
+### 9.4 Decimal Precision and Rounding
+
+```lisp
+; Exact decimal arithmetic — no float drift
+(given (amount x 0.1))
+(given (amount y 0.2))
+(normally r1
+  (and (amount x ?a) (amount y ?b) (is ?sum (+ ?a ?b)))
+  (total ?sum))
+
+; Derived: +d total(0.3)  — exact, not 0.30000000000000004
+
+; Division with rounding
+(given (shares total 10))
+(given (parties count 3))
+(normally r2
+  (and (shares total ?n) (parties count ?d) (is ?each (/ ?n ?d)))
+  (share-per-party ?each))
+
+; Derived: +d share-per-party(3.3333333333333333333333333333)
+; 28 fractional digits, round-half-even applied
+```
+
 ---
 
 ## 10. Test Specifications
@@ -763,7 +791,8 @@ Expected:
 6. Float without decimal: `(given (big x 1e6))` → `Term::Float(1000000.0)`
 7. Integer and symbol as separate arguments: `(given (indexed item-a 1))` — parses correctly.
 8. Integer that overflows i64 — parse error with source position.
-9. Decimal that exceeds `rust_decimal` precision — parse error with source position.
+9. Decimal that exceeds 29 significant digits (e.g., `123456789012345678901234567890.0`) — parse error with source position.
+10. Decimal rounding: `(is ?z (/ 10 3))` → `Decimal(3.3333333333333333333333333333)` — 28 fractional digits, round-half-even applied.
 
 Verifies: REQ-001, CON-001
 
