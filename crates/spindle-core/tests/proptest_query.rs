@@ -5,16 +5,15 @@
 //! - TEST-001: `what_if(empty hypotheticals)` produces the same provability as `reason()`
 //! - TEST-002: `why_not` returns valid `BlockingType` variants for non-provable literals
 //! - TEST-003: `abduce` solutions, when injected as facts, make the goal provable
-//! - TEST-004: `requires` result is a subset of what `abduce` returns
+//! - TEST-004: `requires` verified facts make the goal provable when injected
 
 use proptest::prelude::*;
-use std::collections::HashSet;
-
 use spindle_core::literal::Literal;
 use spindle_core::query::{
     BlockingType, HypotheticalClaim, abduce, query, requires, what_if, why_not,
 };
 use spindle_core::reason::reason;
+use spindle_core::rule::Rule;
 use spindle_core::theory::Theory;
 
 // =============================================================================
@@ -255,43 +254,39 @@ proptest! {
 }
 
 // =============================================================================
-// TEST-004: requires is subset of abduce
+// TEST-004: requires verified solution is goal-achieving when injected
 // =============================================================================
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(200))]
 
-    /// `requires(goal)` should return a subset of the facts found by
-    /// `abduce(goal, 1).smallest_solution()`.
+    /// If `requires(goal)` returns facts, injecting those facts should make the
+    /// goal positively provable.
     #[test]
-    fn requires_subset_of_abduce(theory in arb_theory(), atom in arb_query_atom()) {
+    fn requires_solution_is_verified(theory in arb_theory(), atom in arb_query_atom()) {
         let lit = Literal::simple(&atom);
 
         let req_result = requires(&theory, &lit).unwrap();
-        let ab_result = abduce(&theory, &lit, 1).unwrap();
-
-        // requires delegates to abduce(max_solutions=1), so the results
-        // should be consistent
-        if let Some(smallest) = ab_result.smallest_solution() {
-            let abduce_facts: HashSet<_> = smallest.facts.iter().collect();
-            let req_facts: HashSet<_> = req_result.iter().collect();
-
-            // Every fact in requires should appear in abduce's smallest solution
-            for fact in &req_facts {
-                prop_assert!(
-                    abduce_facts.contains(fact),
-                    "requires returned fact {:?} not in abduce solution {:?}",
-                    fact,
-                    abduce_facts
-                );
-            }
-        } else {
-            // If abduce has no solutions, requires should return empty
-            prop_assert!(
-                req_result.is_empty(),
-                "requires returned facts but abduce found no solutions"
-            );
+        if req_result.is_empty() {
+            return Ok(());
         }
+
+        let mut modified = theory.clone();
+        for (i, fact) in req_result.iter().enumerate() {
+            modified.add_rule(Rule::fact(format!("__req_prop_{i}"), fact.clone()));
+        }
+
+        let conclusions = reason(&modified).unwrap();
+        let goal_provable = conclusions
+            .iter()
+            .any(|c| c.literal == lit && c.conclusion_type.is_positive());
+
+        prop_assert!(
+            goal_provable,
+            "requires returned facts {:?} but goal '{}' was not provable after injection",
+            req_result,
+            atom
+        );
     }
 }
 
