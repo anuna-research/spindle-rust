@@ -898,7 +898,7 @@ impl ArithConstraint {
                     NumericValue::Integer(n) => Term::Integer(n),
                     NumericValue::Decimal(d) => Term::Decimal(d),
                     NumericValue::Float(f) => {
-                        Term::Float(FiniteFloat::new(f).unwrap_or(FiniteFloat::new(0.0).unwrap()))
+                        Term::Float(FiniteFloat::new(f).ok_or(ArithError::NonFiniteFloat)?)
                     }
                 };
                 subst.terms.insert(*var, term);
@@ -1892,5 +1892,46 @@ mod tests {
         let subst = Substitution::default();
         let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(63));
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
+    }
+
+    // -- P2: Non-finite float values must error, not silently coerce ----------
+
+    #[test]
+    fn bind_nan_returns_error() {
+        let mut subst = Substitution::default();
+        let constraint = ArithConstraint::Bind {
+            var: intern("?r"),
+            expr: lit_float(f64::NAN),
+        };
+        assert_eq!(
+            constraint.eval(&mut subst).unwrap_err(),
+            ArithError::NonFiniteFloat
+        );
+    }
+
+    #[test]
+    fn bind_positive_infinity_returns_error() {
+        let mut subst = Substitution::default();
+        let constraint = ArithConstraint::Bind {
+            var: intern("?r"),
+            expr: lit_float(f64::INFINITY),
+        };
+        assert_eq!(
+            constraint.eval(&mut subst).unwrap_err(),
+            ArithError::NonFiniteFloat
+        );
+    }
+
+    #[test]
+    fn bind_negative_infinity_returns_error() {
+        let mut subst = Substitution::default();
+        let constraint = ArithConstraint::Bind {
+            var: intern("?r"),
+            expr: lit_float(f64::NEG_INFINITY),
+        };
+        assert_eq!(
+            constraint.eval(&mut subst).unwrap_err(),
+            ArithError::NonFiniteFloat
+        );
     }
 }

@@ -448,6 +448,7 @@ fn normalize_body_against_facts(
                 if lit.name_id() == fact.name_id()
                     && lit.negation == fact.negation
                     && lit.mode == fact.mode
+                    && lit.temporal == fact.temporal
                     && lit.predicate_args().len() == fact.predicate_args().len()
                     && lit
                         .predicate_args()
@@ -3603,5 +3604,35 @@ mod tests {
                 Term::Float(FiniteFloat::new(2.718).unwrap()),
             ]
         );
+    }
+
+    // -- P1: normalize_body_against_facts must preserve temporal bounds --------
+
+    #[test]
+    fn normalize_body_preserves_temporal() {
+        let t1 = Temporal::new(TimePoint::Moment(1), TimePoint::Moment(2));
+        let t2 = Temporal::new(TimePoint::Moment(3), TimePoint::Moment(4));
+
+        // Two facts with the same predicate/args but different temporal bounds.
+        let fact_t1 = Literal::new("p", false, Mode::empty(), t1.clone(), vec![]);
+        let fact_t2 = Literal::new("p", false, Mode::empty(), t2.clone(), vec![]);
+
+        let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
+            FxHashMap::default();
+        let key = fact_index_key(&fact_t1);
+        let key2 = fact_index_key(&fact_t2);
+        fact_index.entry(key).or_default().push(fact_t1.clone());
+        fact_index.entry(key2).or_default().push(fact_t2.clone());
+
+        // Build a rule whose body literal has temporal t1.
+        let body_lit = Literal::new("p", false, Mode::empty(), t1.clone(), vec![]);
+        let head = Literal::new("q", false, Mode::empty(), Temporal::empty(), vec![]);
+        let mut rule = Rule::defeasible("r1", vec![body_lit], head);
+
+        normalize_body_against_facts(&mut rule, &fact_index);
+
+        // The normalized body literal must still have temporal t1, not t2.
+        let normalized = rule.body[0].as_logic().unwrap().to_literal();
+        assert_eq!(normalized.temporal, t1);
     }
 }
