@@ -47,6 +47,15 @@ This project is part of the SPINdle family:
 cargo install --path crates/spindle-cli
 ```
 
+## Versioning Policy
+
+This project is currently pre-1.0 and follows strict Semantic Versioning for
+`0.y.z` releases:
+
+- Breaking changes bump `y` (for example, `0.1.3` -> `0.2.0`)
+- Backward-compatible changes and fixes bump `z` (for example, `0.1.3` -> `0.1.4`)
+- `1.0.0` will be used once API stability guarantees are in place
+
 ## Usage
 
 ```bash

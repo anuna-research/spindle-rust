@@ -33,7 +33,6 @@
 (given agent-core-available)
 (given agent-parser-available)
 (given agent-grounding-available)
-(given agent-testing-available)
 (given agent-contracts-available)
 
 ;; ============================================================
@@ -453,28 +452,28 @@
 
 ;; Phase 4 assignments
 (normally r-assign-tests-term-arith
-  (and ready-tests-term-arith agent-testing-available)
-  assign-to-tests-term-arith-testing)
+  (and ready-tests-term-arith agent-core-available)
+  assign-to-tests-term-arith-core)
 
 (normally r-assign-tests-parser
-  (and ready-tests-parser agent-testing-available)
-  assign-to-tests-parser-testing)
+  (and ready-tests-parser agent-core-available)
+  assign-to-tests-parser-core)
 
 (normally r-assign-tests-grounding
-  (and ready-tests-grounding agent-testing-available)
-  assign-to-tests-grounding-testing)
+  (and ready-tests-grounding agent-core-available)
+  assign-to-tests-grounding-core)
 
 (normally r-assign-tests-worked-examples
-  (and ready-tests-worked-examples agent-testing-available)
-  assign-to-tests-worked-examples-testing)
+  (and ready-tests-worked-examples agent-core-available)
+  assign-to-tests-worked-examples-core)
 
 (normally r-assign-tests-nfr
-  (and ready-tests-nfr agent-testing-available)
-  assign-to-tests-nfr-testing)
+  (and ready-tests-nfr agent-core-available)
+  assign-to-tests-nfr-core)
 
 (normally r-assign-tests-pbt
-  (and ready-tests-pbt agent-testing-available)
-  assign-to-tests-pbt-testing)
+  (and ready-tests-pbt agent-core-available)
+  assign-to-tests-pbt-core)
 
 ;; ============================================================
 ;; PHASE 5: CONTRACT AND CLI OUTPUT (REQ-012, CON-006)
@@ -532,8 +531,8 @@
   assign-to-v2-cli-wasm-contracts)
 
 (normally r-assign-tests-v2-json
-  (and ready-tests-v2-json agent-testing-available)
-  assign-to-tests-v2-json-testing)
+  (and ready-tests-v2-json agent-core-available)
+  assign-to-tests-v2-json-core)
 
 ;; ============================================================
 ;; RULE METADATA (justifications for key dependency decisions)
@@ -571,23 +570,540 @@
   (description "Grounding tests need full pipeline: parser + grounding + reasoning")
   (justification "End-to-end tests parse SPL, ground with arithmetic, reason, and check conclusions"))
 
-(claims agent:claude
-  :at "2026-02-25T08:38:53Z"
-  (given completed-propagate-terms))
 
-(claims agent:claude
-  :at "2026-02-25T08:38:53Z"
-  (given completed-temporal-guard))
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:19:53Z"
+  (given delegated-v1-add-rust-decimal-to-agent:claude)
+  (given (during (leased-v1-add-rust-decimal) (moment "2026-02-25T03:19:53Z") (moment "2026-02-25T03:49:53Z")))
+  (given claim-v1-add-rust-decimal-by-claude)
+  (normally r-cl-state-v1-add-rust-decimal-by-claude claim-v1-add-rust-decimal-by-claude state-claimed-v1-add-rust-decimal-by-claude)
+  (normally r-cl-chain-v1-add-rust-decimal-by-claude state-claimed-v1-add-rust-decimal-by-claude claimed-add-rust-decimal)
+)
 
-(claims agent:claude
-  :at "2026-02-25T08:38:54Z"
-  (given completed-parse-guards))
+;; Propagation rules: failures in 'add-rust-decimal' block downstream tasks
+(normally r-propagate-term-enum-from-add-rust-decimal-failed failed-add-rust-decimal upstream-blocked-term-enum)
+(normally r-propagate-term-enum-from-add-rust-decimal-permanently-failed permanently-failed-add-rust-decimal upstream-blocked-term-enum)
+(normally r-propagate-term-enum-from-add-rust-decimal-stale-v1 stale-v1-add-rust-decimal upstream-blocked-term-enum)
+(normally r-propagate-term-enum-from-add-rust-decimal-timeout-v1 timeout-v1-add-rust-decimal upstream-blocked-term-enum)
+(normally r-propagate-term-enum-from-add-rust-decimal-blocked upstream-blocked-add-rust-decimal upstream-blocked-term-enum)
 
-(claims agent:claude
-  :at "2026-02-25T08:38:57Z"
-  (given claim-v1-tests-grounding)
-  (normally r-cl-state-v1-tests-grounding claim-v1-tests-grounding state-claimed-v1-tests-grounding)
-  (normally r-cl-chain-v1-tests-grounding state-claimed-v1-tests-grounding claimed-tests-grounding)
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-arith-ast-from-term-enum-blocked upstream-blocked-term-enum upstream-blocked-arith-ast)
+(normally r-propagate-body-literal-from-term-enum-blocked upstream-blocked-term-enum upstream-blocked-body-literal)
+(normally r-propagate-migrate-literal-from-term-enum-blocked upstream-blocked-term-enum upstream-blocked-migrate-literal)
+(normally r-propagate-migrate-substitution-from-term-enum-blocked upstream-blocked-term-enum upstream-blocked-migrate-substitution)
+(normally r-propagate-tests-term-arith-from-term-enum-blocked upstream-blocked-term-enum upstream-blocked-tests-term-arith)
+(normally r-propagate-v2-json-schema-from-term-enum-blocked upstream-blocked-term-enum upstream-blocked-v2-json-schema)
+(normally r-propagate-body-eval-order-from-arith-ast-blocked upstream-blocked-arith-ast upstream-blocked-body-eval-order)
+(normally r-propagate-body-literal-from-arith-ast-blocked upstream-blocked-arith-ast upstream-blocked-body-literal)
+(normally r-propagate-parse-arith-expr-from-arith-ast-blocked upstream-blocked-arith-ast upstream-blocked-parse-arith-expr)
+(normally r-propagate-temporal-guard-from-arith-ast-blocked upstream-blocked-arith-ast upstream-blocked-temporal-guard)
+(normally r-propagate-tests-term-arith-from-arith-ast-blocked upstream-blocked-arith-ast upstream-blocked-tests-term-arith)
+(normally r-propagate-migrate-rulebody-from-body-literal-blocked upstream-blocked-body-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-parse-bind-compare-from-body-literal-blocked upstream-blocked-body-literal upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-body-arith-args-from-body-literal-blocked upstream-blocked-body-literal upstream-blocked-parse-body-arith-args)
+(normally r-propagate-cross-type-matching-from-migrate-literal-blocked upstream-blocked-migrate-literal upstream-blocked-cross-type-matching)
+(normally r-propagate-migrate-rulebody-from-migrate-literal-blocked upstream-blocked-migrate-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-substitution-from-migrate-literal-blocked upstream-blocked-migrate-literal upstream-blocked-migrate-substitution)
+(normally r-propagate-parse-numeric-literals-from-migrate-literal-blocked upstream-blocked-migrate-literal upstream-blocked-parse-numeric-literals)
+(normally r-propagate-body-eval-order-from-migrate-substitution-blocked upstream-blocked-migrate-substitution upstream-blocked-body-eval-order)
+(normally r-propagate-cross-type-matching-from-migrate-substitution-blocked upstream-blocked-migrate-substitution upstream-blocked-cross-type-matching)
+(normally r-propagate-temporal-guard-from-migrate-substitution-blocked upstream-blocked-migrate-substitution upstream-blocked-temporal-guard)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-blocked upstream-blocked-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-blocked upstream-blocked-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-propagate-terms-from-body-eval-order-blocked upstream-blocked-body-eval-order upstream-blocked-propagate-terms)
+(normally r-propagate-parse-bind-compare-from-parse-arith-expr-blocked upstream-blocked-parse-arith-expr upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-body-arith-args-from-parse-arith-expr-blocked upstream-blocked-parse-arith-expr upstream-blocked-parse-body-arith-args)
+(normally r-propagate-tests-grounding-from-temporal-guard-blocked upstream-blocked-temporal-guard upstream-blocked-tests-grounding)
+(normally r-propagate-body-eval-order-from-migrate-rulebody-blocked upstream-blocked-migrate-rulebody upstream-blocked-body-eval-order)
+(normally r-propagate-extend-lexer-from-migrate-rulebody-blocked upstream-blocked-migrate-rulebody upstream-blocked-extend-lexer)
+(normally r-propagate-parse-guards-from-parse-bind-compare-blocked upstream-blocked-parse-bind-compare upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-body-arith-args-blocked upstream-blocked-parse-body-arith-args upstream-blocked-parse-guards)
+(normally r-propagate-propagate-terms-from-cross-type-matching-blocked upstream-blocked-cross-type-matching upstream-blocked-propagate-terms)
+(normally r-propagate-tests-grounding-from-propagate-terms-blocked upstream-blocked-propagate-terms upstream-blocked-tests-grounding)
+(normally r-propagate-tests-nfr-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-pbt-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-v2-json-schema-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-v2-json-schema)
+(normally r-propagate-parse-arith-expr-from-extend-lexer-blocked upstream-blocked-extend-lexer upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-numeric-literals-from-extend-lexer-blocked upstream-blocked-extend-lexer upstream-blocked-parse-numeric-literals)
+(normally r-propagate-tests-grounding-from-parse-guards-blocked upstream-blocked-parse-guards upstream-blocked-tests-grounding)
+(normally r-propagate-tests-parser-from-parse-guards-blocked upstream-blocked-parse-guards upstream-blocked-tests-parser)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T03:20:34Z"
+  (given completed-add-rust-decimal)
+  (given eval-result-v1-add-rust-decimal-by-claude)
+  (given eval-confidence-v1-add-rust-decimal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:20:39Z"
+  (given delegated-v1-term-enum-to-agent:claude)
+  (given (during (leased-v1-term-enum) (moment "2026-02-25T03:20:39Z") (moment "2026-02-25T03:50:39Z")))
+  (given claim-v1-term-enum-by-claude)
+  (normally r-cl-state-v1-term-enum-by-claude claim-v1-term-enum-by-claude state-claimed-v1-term-enum-by-claude)
+  (normally r-cl-chain-v1-term-enum-by-claude state-claimed-v1-term-enum-by-claude claimed-term-enum)
+)
+
+;; Propagation rules: failures in 'term-enum' block downstream tasks
+(normally r-propagate-arith-ast-from-term-enum-failed failed-term-enum upstream-blocked-arith-ast)
+(normally r-propagate-arith-ast-from-term-enum-permanently-failed permanently-failed-term-enum upstream-blocked-arith-ast)
+(normally r-propagate-arith-ast-from-term-enum-stale-v1 stale-v1-term-enum upstream-blocked-arith-ast)
+(normally r-propagate-arith-ast-from-term-enum-timeout-v1 timeout-v1-term-enum upstream-blocked-arith-ast)
+(normally r-propagate-body-literal-from-term-enum-failed failed-term-enum upstream-blocked-body-literal)
+(normally r-propagate-body-literal-from-term-enum-permanently-failed permanently-failed-term-enum upstream-blocked-body-literal)
+(normally r-propagate-body-literal-from-term-enum-stale-v1 stale-v1-term-enum upstream-blocked-body-literal)
+(normally r-propagate-body-literal-from-term-enum-timeout-v1 timeout-v1-term-enum upstream-blocked-body-literal)
+(normally r-propagate-migrate-literal-from-term-enum-failed failed-term-enum upstream-blocked-migrate-literal)
+(normally r-propagate-migrate-literal-from-term-enum-permanently-failed permanently-failed-term-enum upstream-blocked-migrate-literal)
+(normally r-propagate-migrate-literal-from-term-enum-stale-v1 stale-v1-term-enum upstream-blocked-migrate-literal)
+(normally r-propagate-migrate-literal-from-term-enum-timeout-v1 timeout-v1-term-enum upstream-blocked-migrate-literal)
+(normally r-propagate-migrate-substitution-from-term-enum-failed failed-term-enum upstream-blocked-migrate-substitution)
+(normally r-propagate-migrate-substitution-from-term-enum-permanently-failed permanently-failed-term-enum upstream-blocked-migrate-substitution)
+(normally r-propagate-migrate-substitution-from-term-enum-stale-v1 stale-v1-term-enum upstream-blocked-migrate-substitution)
+(normally r-propagate-migrate-substitution-from-term-enum-timeout-v1 timeout-v1-term-enum upstream-blocked-migrate-substitution)
+(normally r-propagate-tests-term-arith-from-term-enum-failed failed-term-enum upstream-blocked-tests-term-arith)
+(normally r-propagate-tests-term-arith-from-term-enum-permanently-failed permanently-failed-term-enum upstream-blocked-tests-term-arith)
+(normally r-propagate-tests-term-arith-from-term-enum-stale-v1 stale-v1-term-enum upstream-blocked-tests-term-arith)
+(normally r-propagate-tests-term-arith-from-term-enum-timeout-v1 timeout-v1-term-enum upstream-blocked-tests-term-arith)
+(normally r-propagate-v2-json-schema-from-term-enum-failed failed-term-enum upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-term-enum-permanently-failed permanently-failed-term-enum upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-term-enum-stale-v1 stale-v1-term-enum upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-term-enum-timeout-v1 timeout-v1-term-enum upstream-blocked-v2-json-schema)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T03:23:46Z"
+  (given completed-term-enum)
+  (given eval-result-v1-term-enum-by-claude)
+  (given eval-confidence-v1-term-enum-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:23:51Z"
+  (given delegated-v1-arith-ast-to-agent:claude)
+  (given (during (leased-v1-arith-ast) (moment "2026-02-25T03:23:51Z") (moment "2026-02-25T03:53:51Z")))
+  (given claim-v1-arith-ast-by-claude)
+  (normally r-cl-state-v1-arith-ast-by-claude claim-v1-arith-ast-by-claude state-claimed-v1-arith-ast-by-claude)
+  (normally r-cl-chain-v1-arith-ast-by-claude state-claimed-v1-arith-ast-by-claude claimed-arith-ast)
+)
+
+;; Propagation rules: failures in 'arith-ast' block downstream tasks
+(normally r-propagate-body-eval-order-from-arith-ast-failed failed-arith-ast upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-arith-ast-permanently-failed permanently-failed-arith-ast upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-arith-ast-stale-v1 stale-v1-arith-ast upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-arith-ast-timeout-v1 timeout-v1-arith-ast upstream-blocked-body-eval-order)
+(normally r-propagate-body-literal-from-arith-ast-failed failed-arith-ast upstream-blocked-body-literal)
+(normally r-propagate-body-literal-from-arith-ast-permanently-failed permanently-failed-arith-ast upstream-blocked-body-literal)
+(normally r-propagate-body-literal-from-arith-ast-stale-v1 stale-v1-arith-ast upstream-blocked-body-literal)
+(normally r-propagate-body-literal-from-arith-ast-timeout-v1 timeout-v1-arith-ast upstream-blocked-body-literal)
+(normally r-propagate-parse-arith-expr-from-arith-ast-failed failed-arith-ast upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-arith-expr-from-arith-ast-permanently-failed permanently-failed-arith-ast upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-arith-expr-from-arith-ast-stale-v1 stale-v1-arith-ast upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-arith-expr-from-arith-ast-timeout-v1 timeout-v1-arith-ast upstream-blocked-parse-arith-expr)
+(normally r-propagate-temporal-guard-from-arith-ast-failed failed-arith-ast upstream-blocked-temporal-guard)
+(normally r-propagate-temporal-guard-from-arith-ast-permanently-failed permanently-failed-arith-ast upstream-blocked-temporal-guard)
+(normally r-propagate-temporal-guard-from-arith-ast-stale-v1 stale-v1-arith-ast upstream-blocked-temporal-guard)
+(normally r-propagate-temporal-guard-from-arith-ast-timeout-v1 timeout-v1-arith-ast upstream-blocked-temporal-guard)
+(normally r-propagate-tests-term-arith-from-arith-ast-failed failed-arith-ast upstream-blocked-tests-term-arith)
+(normally r-propagate-tests-term-arith-from-arith-ast-permanently-failed permanently-failed-arith-ast upstream-blocked-tests-term-arith)
+(normally r-propagate-tests-term-arith-from-arith-ast-stale-v1 stale-v1-arith-ast upstream-blocked-tests-term-arith)
+(normally r-propagate-tests-term-arith-from-arith-ast-timeout-v1 timeout-v1-arith-ast upstream-blocked-tests-term-arith)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:38:52Z"
+  (given (during (leased-v1-arith-ast) (moment "2026-02-25T03:38:52Z") (moment "2026-02-25T04:08:52Z")))
+  (given lease-renewal-v1-arith-ast-by-claude-r1)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T03:42:50Z"
+  (given completed-arith-ast)
+  (given eval-result-v1-arith-ast-by-claude)
+  (given eval-confidence-v1-arith-ast-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:42:55Z"
+  (given delegated-v1-migrate-literal-to-agent:claude)
+  (given (during (leased-v1-migrate-literal) (moment "2026-02-25T03:42:55Z") (moment "2026-02-25T04:12:55Z")))
+  (given claim-v1-migrate-literal-by-claude)
+  (normally r-cl-state-v1-migrate-literal-by-claude claim-v1-migrate-literal-by-claude state-claimed-v1-migrate-literal-by-claude)
+  (normally r-cl-chain-v1-migrate-literal-by-claude state-claimed-v1-migrate-literal-by-claude claimed-migrate-literal)
+)
+
+;; Propagation rules: failures in 'migrate-literal' block downstream tasks
+(normally r-propagate-cross-type-matching-from-migrate-literal-failed failed-migrate-literal upstream-blocked-cross-type-matching)
+(normally r-propagate-cross-type-matching-from-migrate-literal-permanently-failed permanently-failed-migrate-literal upstream-blocked-cross-type-matching)
+(normally r-propagate-cross-type-matching-from-migrate-literal-stale-v1 stale-v1-migrate-literal upstream-blocked-cross-type-matching)
+(normally r-propagate-cross-type-matching-from-migrate-literal-timeout-v1 timeout-v1-migrate-literal upstream-blocked-cross-type-matching)
+(normally r-propagate-migrate-rulebody-from-migrate-literal-failed failed-migrate-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-rulebody-from-migrate-literal-permanently-failed permanently-failed-migrate-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-rulebody-from-migrate-literal-stale-v1 stale-v1-migrate-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-rulebody-from-migrate-literal-timeout-v1 timeout-v1-migrate-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-substitution-from-migrate-literal-failed failed-migrate-literal upstream-blocked-migrate-substitution)
+(normally r-propagate-migrate-substitution-from-migrate-literal-permanently-failed permanently-failed-migrate-literal upstream-blocked-migrate-substitution)
+(normally r-propagate-migrate-substitution-from-migrate-literal-stale-v1 stale-v1-migrate-literal upstream-blocked-migrate-substitution)
+(normally r-propagate-migrate-substitution-from-migrate-literal-timeout-v1 timeout-v1-migrate-literal upstream-blocked-migrate-substitution)
+(normally r-propagate-parse-numeric-literals-from-migrate-literal-failed failed-migrate-literal upstream-blocked-parse-numeric-literals)
+(normally r-propagate-parse-numeric-literals-from-migrate-literal-permanently-failed permanently-failed-migrate-literal upstream-blocked-parse-numeric-literals)
+(normally r-propagate-parse-numeric-literals-from-migrate-literal-stale-v1 stale-v1-migrate-literal upstream-blocked-parse-numeric-literals)
+(normally r-propagate-parse-numeric-literals-from-migrate-literal-timeout-v1 timeout-v1-migrate-literal upstream-blocked-parse-numeric-literals)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T03:50:32Z"
+  (given completed-migrate-literal)
+  (given eval-result-v1-migrate-literal-by-claude)
+  (given eval-confidence-v1-migrate-literal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:50:38Z"
+  (given delegated-v1-tests-term-arith-to-agent:claude)
+  (given (during (leased-v1-tests-term-arith) (moment "2026-02-25T03:50:38Z") (moment "2026-02-25T04:20:38Z")))
+  (given claim-v1-tests-term-arith-by-claude)
+  (normally r-cl-state-v1-tests-term-arith-by-claude claim-v1-tests-term-arith-by-claude state-claimed-v1-tests-term-arith-by-claude)
+  (normally r-cl-chain-v1-tests-term-arith-by-claude state-claimed-v1-tests-term-arith-by-claude claimed-tests-term-arith)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T03:59:30Z"
+  (given completed-tests-term-arith)
+  (given eval-result-v1-tests-term-arith-by-claude)
+  (given eval-confidence-v1-tests-term-arith-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T03:59:35Z"
+  (given delegated-v1-migrate-substitution-to-agent:claude)
+  (given (during (leased-v1-migrate-substitution) (moment "2026-02-25T03:59:35Z") (moment "2026-02-25T04:29:35Z")))
+  (given claim-v1-migrate-substitution-by-claude)
+  (normally r-cl-state-v1-migrate-substitution-by-claude claim-v1-migrate-substitution-by-claude state-claimed-v1-migrate-substitution-by-claude)
+  (normally r-cl-chain-v1-migrate-substitution-by-claude state-claimed-v1-migrate-substitution-by-claude claimed-migrate-substitution)
+)
+
+;; Propagation rules: failures in 'migrate-substitution' block downstream tasks
+(normally r-propagate-body-eval-order-from-migrate-substitution-failed failed-migrate-substitution upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-migrate-substitution-permanently-failed permanently-failed-migrate-substitution upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-migrate-substitution-stale-v1 stale-v1-migrate-substitution upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-migrate-substitution-timeout-v1 timeout-v1-migrate-substitution upstream-blocked-body-eval-order)
+(normally r-propagate-cross-type-matching-from-migrate-substitution-failed failed-migrate-substitution upstream-blocked-cross-type-matching)
+(normally r-propagate-cross-type-matching-from-migrate-substitution-permanently-failed permanently-failed-migrate-substitution upstream-blocked-cross-type-matching)
+(normally r-propagate-cross-type-matching-from-migrate-substitution-stale-v1 stale-v1-migrate-substitution upstream-blocked-cross-type-matching)
+(normally r-propagate-cross-type-matching-from-migrate-substitution-timeout-v1 timeout-v1-migrate-substitution upstream-blocked-cross-type-matching)
+(normally r-propagate-temporal-guard-from-migrate-substitution-failed failed-migrate-substitution upstream-blocked-temporal-guard)
+(normally r-propagate-temporal-guard-from-migrate-substitution-permanently-failed permanently-failed-migrate-substitution upstream-blocked-temporal-guard)
+(normally r-propagate-temporal-guard-from-migrate-substitution-stale-v1 stale-v1-migrate-substitution upstream-blocked-temporal-guard)
+(normally r-propagate-temporal-guard-from-migrate-substitution-timeout-v1 timeout-v1-migrate-substitution upstream-blocked-temporal-guard)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T04:07:07Z"
+  (given completed-migrate-substitution)
+  (given eval-result-v1-migrate-substitution-by-claude)
+  (given eval-confidence-v1-migrate-substitution-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:07:13Z"
+  (given delegated-v1-temporal-guard-to-agent:claude)
+  (given (during (leased-v1-temporal-guard) (moment "2026-02-25T04:07:13Z") (moment "2026-02-25T04:37:13Z")))
+  (given claim-v1-temporal-guard-by-claude)
+  (normally r-cl-state-v1-temporal-guard-by-claude claim-v1-temporal-guard-by-claude state-claimed-v1-temporal-guard-by-claude)
+  (normally r-cl-chain-v1-temporal-guard-by-claude state-claimed-v1-temporal-guard-by-claude claimed-temporal-guard)
+)
+
+;; Propagation rules: failures in 'temporal-guard' block downstream tasks
+(normally r-propagate-tests-grounding-from-temporal-guard-failed failed-temporal-guard upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-temporal-guard-permanently-failed permanently-failed-temporal-guard upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-temporal-guard-stale-v1 stale-v1-temporal-guard upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-temporal-guard-timeout-v1 timeout-v1-temporal-guard upstream-blocked-tests-grounding)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T04:09:38Z"
+  (given completed-temporal-guard)
+  (given eval-result-v1-temporal-guard-by-claude)
+  (given eval-confidence-v1-temporal-guard-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:09:43Z"
+  (given delegated-v1-body-literal-to-agent:claude)
+  (given (during (leased-v1-body-literal) (moment "2026-02-25T04:09:43Z") (moment "2026-02-25T04:39:43Z")))
+  (given claim-v1-body-literal-by-claude)
+  (normally r-cl-state-v1-body-literal-by-claude claim-v1-body-literal-by-claude state-claimed-v1-body-literal-by-claude)
+  (normally r-cl-chain-v1-body-literal-by-claude state-claimed-v1-body-literal-by-claude claimed-body-literal)
+)
+
+;; Propagation rules: failures in 'body-literal' block downstream tasks
+(normally r-propagate-migrate-rulebody-from-body-literal-failed failed-body-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-rulebody-from-body-literal-permanently-failed permanently-failed-body-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-rulebody-from-body-literal-stale-v1 stale-v1-body-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-migrate-rulebody-from-body-literal-timeout-v1 timeout-v1-body-literal upstream-blocked-migrate-rulebody)
+(normally r-propagate-parse-bind-compare-from-body-literal-failed failed-body-literal upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-bind-compare-from-body-literal-permanently-failed permanently-failed-body-literal upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-bind-compare-from-body-literal-stale-v1 stale-v1-body-literal upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-bind-compare-from-body-literal-timeout-v1 timeout-v1-body-literal upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-body-arith-args-from-body-literal-failed failed-body-literal upstream-blocked-parse-body-arith-args)
+(normally r-propagate-parse-body-arith-args-from-body-literal-permanently-failed permanently-failed-body-literal upstream-blocked-parse-body-arith-args)
+(normally r-propagate-parse-body-arith-args-from-body-literal-stale-v1 stale-v1-body-literal upstream-blocked-parse-body-arith-args)
+(normally r-propagate-parse-body-arith-args-from-body-literal-timeout-v1 timeout-v1-body-literal upstream-blocked-parse-body-arith-args)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T04:13:40Z"
+  (given completed-body-literal)
+  (given eval-result-v1-body-literal-by-claude)
+  (given eval-confidence-v1-body-literal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:13:45Z"
+  (given delegated-v1-cross-type-matching-to-agent:claude)
+  (given (during (leased-v1-cross-type-matching) (moment "2026-02-25T04:13:45Z") (moment "2026-02-25T04:43:45Z")))
+  (given claim-v1-cross-type-matching-by-claude)
+  (normally r-cl-state-v1-cross-type-matching-by-claude claim-v1-cross-type-matching-by-claude state-claimed-v1-cross-type-matching-by-claude)
+  (normally r-cl-chain-v1-cross-type-matching-by-claude state-claimed-v1-cross-type-matching-by-claude claimed-cross-type-matching)
+)
+
+;; Propagation rules: failures in 'cross-type-matching' block downstream tasks
+(normally r-propagate-propagate-terms-from-cross-type-matching-failed failed-cross-type-matching upstream-blocked-propagate-terms)
+(normally r-propagate-propagate-terms-from-cross-type-matching-permanently-failed permanently-failed-cross-type-matching upstream-blocked-propagate-terms)
+(normally r-propagate-propagate-terms-from-cross-type-matching-stale-v1 stale-v1-cross-type-matching upstream-blocked-propagate-terms)
+(normally r-propagate-propagate-terms-from-cross-type-matching-timeout-v1 timeout-v1-cross-type-matching upstream-blocked-propagate-terms)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T04:17:18Z"
+  (given completed-cross-type-matching)
+  (given eval-result-v1-cross-type-matching-by-claude)
+  (given eval-confidence-v1-cross-type-matching-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:17:23Z"
+  (given delegated-v1-migrate-rulebody-to-agent:claude)
+  (given (during (leased-v1-migrate-rulebody) (moment "2026-02-25T04:17:23Z") (moment "2026-02-25T04:47:23Z")))
+  (given claim-v1-migrate-rulebody-by-claude)
+  (normally r-cl-state-v1-migrate-rulebody-by-claude claim-v1-migrate-rulebody-by-claude state-claimed-v1-migrate-rulebody-by-claude)
+  (normally r-cl-chain-v1-migrate-rulebody-by-claude state-claimed-v1-migrate-rulebody-by-claude claimed-migrate-rulebody)
+)
+
+;; Propagation rules: failures in 'migrate-rulebody' block downstream tasks
+(normally r-propagate-body-eval-order-from-migrate-rulebody-failed failed-migrate-rulebody upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-migrate-rulebody-permanently-failed permanently-failed-migrate-rulebody upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-migrate-rulebody-stale-v1 stale-v1-migrate-rulebody upstream-blocked-body-eval-order)
+(normally r-propagate-body-eval-order-from-migrate-rulebody-timeout-v1 timeout-v1-migrate-rulebody upstream-blocked-body-eval-order)
+(normally r-propagate-extend-lexer-from-migrate-rulebody-failed failed-migrate-rulebody upstream-blocked-extend-lexer)
+(normally r-propagate-extend-lexer-from-migrate-rulebody-permanently-failed permanently-failed-migrate-rulebody upstream-blocked-extend-lexer)
+(normally r-propagate-extend-lexer-from-migrate-rulebody-stale-v1 stale-v1-migrate-rulebody upstream-blocked-extend-lexer)
+(normally r-propagate-extend-lexer-from-migrate-rulebody-timeout-v1 timeout-v1-migrate-rulebody upstream-blocked-extend-lexer)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:32:24Z"
+  (given (during (leased-v1-migrate-rulebody) (moment "2026-02-25T04:32:24Z") (moment "2026-02-25T05:02:24Z")))
+  (given lease-renewal-v1-migrate-rulebody-by-claude-r1)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:47:24Z"
+  (given (during (leased-v1-migrate-rulebody) (moment "2026-02-25T04:47:24Z") (moment "2026-02-25T05:17:24Z")))
+  (given lease-renewal-v1-migrate-rulebody-by-claude-r2)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T04:47:42Z"
+  (given completed-migrate-rulebody)
+  (given eval-result-v1-migrate-rulebody-by-claude)
+  (given eval-confidence-v1-migrate-rulebody-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:47:49Z"
+  (given delegated-v1-extend-lexer-to-agent:claude)
+  (given (during (leased-v1-extend-lexer) (moment "2026-02-25T04:47:49Z") (moment "2026-02-25T05:17:49Z")))
+  (given claim-v1-extend-lexer-by-claude)
+  (normally r-cl-state-v1-extend-lexer-by-claude claim-v1-extend-lexer-by-claude state-claimed-v1-extend-lexer-by-claude)
+  (normally r-cl-chain-v1-extend-lexer-by-claude state-claimed-v1-extend-lexer-by-claude claimed-extend-lexer)
+)
+
+;; Propagation rules: failures in 'extend-lexer' block downstream tasks
+(normally r-propagate-parse-arith-expr-from-extend-lexer-failed failed-extend-lexer upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-arith-expr-from-extend-lexer-permanently-failed permanently-failed-extend-lexer upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-arith-expr-from-extend-lexer-stale-v1 stale-v1-extend-lexer upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-arith-expr-from-extend-lexer-timeout-v1 timeout-v1-extend-lexer upstream-blocked-parse-arith-expr)
+(normally r-propagate-parse-numeric-literals-from-extend-lexer-failed failed-extend-lexer upstream-blocked-parse-numeric-literals)
+(normally r-propagate-parse-numeric-literals-from-extend-lexer-permanently-failed permanently-failed-extend-lexer upstream-blocked-parse-numeric-literals)
+(normally r-propagate-parse-numeric-literals-from-extend-lexer-stale-v1 stale-v1-extend-lexer upstream-blocked-parse-numeric-literals)
+(normally r-propagate-parse-numeric-literals-from-extend-lexer-timeout-v1 timeout-v1-extend-lexer upstream-blocked-parse-numeric-literals)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T04:48:52Z"
+  (given completed-extend-lexer)
+  (given eval-result-v1-extend-lexer-by-claude)
+  (given eval-confidence-v1-extend-lexer-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T04:48:57Z"
+  (given delegated-v1-body-eval-order-to-agent:claude)
+  (given (during (leased-v1-body-eval-order) (moment "2026-02-25T04:48:57Z") (moment "2026-02-25T05:18:57Z")))
+  (given claim-v1-body-eval-order-by-claude)
+  (normally r-cl-state-v1-body-eval-order-by-claude claim-v1-body-eval-order-by-claude state-claimed-v1-body-eval-order-by-claude)
+  (normally r-cl-chain-v1-body-eval-order-by-claude state-claimed-v1-body-eval-order-by-claude claimed-body-eval-order)
+)
+
+;; Propagation rules: failures in 'body-eval-order' block downstream tasks
+(normally r-propagate-propagate-terms-from-body-eval-order-failed failed-body-eval-order upstream-blocked-propagate-terms)
+(normally r-propagate-propagate-terms-from-body-eval-order-permanently-failed permanently-failed-body-eval-order upstream-blocked-propagate-terms)
+(normally r-propagate-propagate-terms-from-body-eval-order-stale-v1 stale-v1-body-eval-order upstream-blocked-propagate-terms)
+(normally r-propagate-propagate-terms-from-body-eval-order-timeout-v1 timeout-v1-body-eval-order upstream-blocked-propagate-terms)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:00:44Z"
+  (given completed-body-eval-order)
+  (given eval-result-v1-body-eval-order-by-claude)
+  (given eval-confidence-v1-body-eval-order-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:00:51Z"
+  (given delegated-v1-propagate-terms-to-agent:claude)
+  (given (during (leased-v1-propagate-terms) (moment "2026-02-25T05:00:51Z") (moment "2026-02-25T05:30:51Z")))
+  (given claim-v1-propagate-terms-by-claude)
+  (normally r-cl-state-v1-propagate-terms-by-claude claim-v1-propagate-terms-by-claude state-claimed-v1-propagate-terms-by-claude)
+  (normally r-cl-chain-v1-propagate-terms-by-claude state-claimed-v1-propagate-terms-by-claude claimed-propagate-terms)
+)
+
+;; Propagation rules: failures in 'propagate-terms' block downstream tasks
+(normally r-propagate-tests-grounding-from-propagate-terms-failed failed-propagate-terms upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-propagate-terms-permanently-failed permanently-failed-propagate-terms upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-propagate-terms-stale-v1 stale-v1-propagate-terms upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-propagate-terms-timeout-v1 timeout-v1-propagate-terms upstream-blocked-tests-grounding)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:07:10Z"
+  (given completed-propagate-terms)
+  (given eval-result-v1-propagate-terms-by-claude)
+  (given eval-confidence-v1-propagate-terms-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:07:16Z"
+  (given delegated-v1-parse-arith-expr-to-agent:claude)
+  (given (during (leased-v1-parse-arith-expr) (moment "2026-02-25T05:07:16Z") (moment "2026-02-25T05:37:16Z")))
+  (given claim-v1-parse-arith-expr-by-claude)
+  (normally r-cl-state-v1-parse-arith-expr-by-claude claim-v1-parse-arith-expr-by-claude state-claimed-v1-parse-arith-expr-by-claude)
+  (normally r-cl-chain-v1-parse-arith-expr-by-claude state-claimed-v1-parse-arith-expr-by-claude claimed-parse-arith-expr)
+)
+
+;; Propagation rules: failures in 'parse-arith-expr' block downstream tasks
+(normally r-propagate-parse-bind-compare-from-parse-arith-expr-failed failed-parse-arith-expr upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-bind-compare-from-parse-arith-expr-permanently-failed permanently-failed-parse-arith-expr upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-bind-compare-from-parse-arith-expr-stale-v1 stale-v1-parse-arith-expr upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-bind-compare-from-parse-arith-expr-timeout-v1 timeout-v1-parse-arith-expr upstream-blocked-parse-bind-compare)
+(normally r-propagate-parse-body-arith-args-from-parse-arith-expr-failed failed-parse-arith-expr upstream-blocked-parse-body-arith-args)
+(normally r-propagate-parse-body-arith-args-from-parse-arith-expr-permanently-failed permanently-failed-parse-arith-expr upstream-blocked-parse-body-arith-args)
+(normally r-propagate-parse-body-arith-args-from-parse-arith-expr-stale-v1 stale-v1-parse-arith-expr upstream-blocked-parse-body-arith-args)
+(normally r-propagate-parse-body-arith-args-from-parse-arith-expr-timeout-v1 timeout-v1-parse-arith-expr upstream-blocked-parse-body-arith-args)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:12:16Z"
+  (given completed-parse-arith-expr)
+  (given eval-result-v1-parse-arith-expr-by-claude)
+  (given eval-confidence-v1-parse-arith-expr-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:12:21Z"
+  (given delegated-v1-parse-bind-compare-to-agent:claude)
+  (given (during (leased-v1-parse-bind-compare) (moment "2026-02-25T05:12:21Z") (moment "2026-02-25T05:42:21Z")))
+  (given claim-v1-parse-bind-compare-by-claude)
+  (normally r-cl-state-v1-parse-bind-compare-by-claude claim-v1-parse-bind-compare-by-claude state-claimed-v1-parse-bind-compare-by-claude)
+  (normally r-cl-chain-v1-parse-bind-compare-by-claude state-claimed-v1-parse-bind-compare-by-claude claimed-parse-bind-compare)
+)
+
+;; Propagation rules: failures in 'parse-bind-compare' block downstream tasks
+(normally r-propagate-parse-guards-from-parse-bind-compare-failed failed-parse-bind-compare upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-bind-compare-permanently-failed permanently-failed-parse-bind-compare upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-bind-compare-stale-v1 stale-v1-parse-bind-compare upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-bind-compare-timeout-v1 timeout-v1-parse-bind-compare upstream-blocked-parse-guards)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:19:26Z"
+  (given completed-parse-bind-compare)
+  (given eval-result-v1-parse-bind-compare-by-claude)
+  (given eval-confidence-v1-parse-bind-compare-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:19:31Z"
+  (given delegated-v1-parse-body-arith-args-to-agent:claude)
+  (given (during (leased-v1-parse-body-arith-args) (moment "2026-02-25T05:19:31Z") (moment "2026-02-25T05:49:31Z")))
+  (given claim-v1-parse-body-arith-args-by-claude)
+  (normally r-cl-state-v1-parse-body-arith-args-by-claude claim-v1-parse-body-arith-args-by-claude state-claimed-v1-parse-body-arith-args-by-claude)
+  (normally r-cl-chain-v1-parse-body-arith-args-by-claude state-claimed-v1-parse-body-arith-args-by-claude claimed-parse-body-arith-args)
+)
+
+;; Propagation rules: failures in 'parse-body-arith-args' block downstream tasks
+(normally r-propagate-parse-guards-from-parse-body-arith-args-failed failed-parse-body-arith-args upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-body-arith-args-permanently-failed permanently-failed-parse-body-arith-args upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-body-arith-args-stale-v1 stale-v1-parse-body-arith-args upstream-blocked-parse-guards)
+(normally r-propagate-parse-guards-from-parse-body-arith-args-timeout-v1 timeout-v1-parse-body-arith-args upstream-blocked-parse-guards)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:26:12Z"
+  (given completed-parse-body-arith-args)
+  (given eval-result-v1-parse-body-arith-args-by-claude)
+  (given eval-confidence-v1-parse-body-arith-args-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:26:18Z"
+  (given delegated-v1-parse-numeric-literals-to-agent:claude)
+  (given (during (leased-v1-parse-numeric-literals) (moment "2026-02-25T05:26:18Z") (moment "2026-02-25T05:56:18Z")))
+  (given claim-v1-parse-numeric-literals-by-claude)
+  (normally r-cl-state-v1-parse-numeric-literals-by-claude claim-v1-parse-numeric-literals-by-claude state-claimed-v1-parse-numeric-literals-by-claude)
+  (normally r-cl-chain-v1-parse-numeric-literals-by-claude state-claimed-v1-parse-numeric-literals-by-claude claimed-parse-numeric-literals)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:32:25Z"
+  (given completed-parse-numeric-literals)
+  (given eval-result-v1-parse-numeric-literals-by-claude)
+  (given eval-confidence-v1-parse-numeric-literals-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:32:31Z"
+  (given delegated-v1-parse-guards-to-agent:claude)
+  (given (during (leased-v1-parse-guards) (moment "2026-02-25T05:32:31Z") (moment "2026-02-25T06:02:31Z")))
+  (given claim-v1-parse-guards-by-claude)
+  (normally r-cl-state-v1-parse-guards-by-claude claim-v1-parse-guards-by-claude state-claimed-v1-parse-guards-by-claude)
+  (normally r-cl-chain-v1-parse-guards-by-claude state-claimed-v1-parse-guards-by-claude claimed-parse-guards)
+)
+
+;; Propagation rules: failures in 'parse-guards' block downstream tasks
+(normally r-propagate-tests-grounding-from-parse-guards-failed failed-parse-guards upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-parse-guards-permanently-failed permanently-failed-parse-guards upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-parse-guards-stale-v1 stale-v1-parse-guards upstream-blocked-tests-grounding)
+(normally r-propagate-tests-grounding-from-parse-guards-timeout-v1 timeout-v1-parse-guards upstream-blocked-tests-grounding)
+(normally r-propagate-tests-parser-from-parse-guards-failed failed-parse-guards upstream-blocked-tests-parser)
+(normally r-propagate-tests-parser-from-parse-guards-permanently-failed permanently-failed-parse-guards upstream-blocked-tests-parser)
+(normally r-propagate-tests-parser-from-parse-guards-stale-v1 stale-v1-parse-guards upstream-blocked-tests-parser)
+(normally r-propagate-tests-parser-from-parse-guards-timeout-v1 timeout-v1-parse-guards upstream-blocked-tests-parser)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T05:41:40Z"
+  (given completed-parse-guards)
+  (given eval-result-v1-parse-guards-by-claude)
+  (given eval-confidence-v1-parse-guards-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:41:46Z"
+  (given delegated-v1-tests-grounding-to-agent:claude)
+  (given (during (leased-v1-tests-grounding) (moment "2026-02-25T05:41:46Z") (moment "2026-02-25T06:11:46Z")))
+  (given claim-v1-tests-grounding-by-claude)
+  (normally r-cl-state-v1-tests-grounding-by-claude claim-v1-tests-grounding-by-claude state-claimed-v1-tests-grounding-by-claude)
+  (normally r-cl-chain-v1-tests-grounding-by-claude state-claimed-v1-tests-grounding-by-claude claimed-tests-grounding)
 )
 
 ;; Propagation rules: failures in 'tests-grounding' block downstream tasks
@@ -595,167 +1111,124 @@
 (normally r-propagate-tests-nfr-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-tests-nfr)
 (normally r-propagate-tests-nfr-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-tests-nfr)
 (normally r-propagate-tests-nfr-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-tests-nfr)
-(normally r-propagate-tests-nfr-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-nfr)
 (normally r-propagate-tests-pbt-from-tests-grounding-failed failed-tests-grounding upstream-blocked-tests-pbt)
 (normally r-propagate-tests-pbt-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-tests-pbt)
 (normally r-propagate-tests-pbt-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-tests-pbt)
 (normally r-propagate-tests-pbt-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-tests-pbt)
-(normally r-propagate-tests-pbt-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-pbt)
 (normally r-propagate-tests-worked-examples-from-tests-grounding-failed failed-tests-grounding upstream-blocked-tests-worked-examples)
 (normally r-propagate-tests-worked-examples-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-tests-worked-examples)
 (normally r-propagate-tests-worked-examples-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-tests-worked-examples)
 (normally r-propagate-tests-worked-examples-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-tests-worked-examples)
-(normally r-propagate-tests-worked-examples-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-tests-worked-examples)
 (normally r-propagate-v2-json-schema-from-tests-grounding-failed failed-tests-grounding upstream-blocked-v2-json-schema)
 (normally r-propagate-v2-json-schema-from-tests-grounding-permanently-failed permanently-failed-tests-grounding upstream-blocked-v2-json-schema)
 (normally r-propagate-v2-json-schema-from-tests-grounding-stale-v1 stale-v1-tests-grounding upstream-blocked-v2-json-schema)
 (normally r-propagate-v2-json-schema-from-tests-grounding-timeout-v1 timeout-v1-tests-grounding upstream-blocked-v2-json-schema)
-(normally r-propagate-v2-json-schema-from-tests-grounding-blocked upstream-blocked-tests-grounding upstream-blocked-v2-json-schema)
 
-;; Transitive propagation: upstream-blocked cascades through dependency chain
-(normally r-propagate-tests-v2-json-from-v2-json-schema-blocked upstream-blocked-v2-json-schema upstream-blocked-tests-v2-json)
-(normally r-propagate-v2-cli-wasm-from-v2-json-schema-blocked upstream-blocked-v2-json-schema upstream-blocked-v2-cli-wasm)
-
-(claims agent:claude
-  :at "2026-02-25T08:45:09Z"
-  (given completed-tests-grounding))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-add-rust-decimal))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-term-enum))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-arith-ast))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-body-literal))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-migrate-literal))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-migrate-substitution))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-migrate-rulebody))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-extend-lexer))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-parse-numeric-literals))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-parse-arith-expr))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-parse-bind-compare))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-parse-body-arith-args))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-cross-type-matching))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-body-eval-order))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-tests-term-arith))
-
-(claims agent:claude
-  :at "2026-02-25T08:45:23Z"
-  (given completed-tests-parser))
-
-(claims agent:claude
-  :at "2026-02-25T09:10:25Z"
-  (given claim-v1-tests-worked-examples)
-  (normally r-cl-state-v1-tests-worked-examples claim-v1-tests-worked-examples state-claimed-v1-tests-worked-examples)
-  (normally r-cl-chain-v1-tests-worked-examples state-claimed-v1-tests-worked-examples claimed-tests-worked-examples)
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T05:56:46Z"
+  (given (during (leased-v1-tests-grounding) (moment "2026-02-25T05:56:46Z") (moment "2026-02-25T06:26:46Z")))
+  (given lease-renewal-v1-tests-grounding-by-claude-r1)
 )
 
-(claims agent:claude
-  :at "2026-02-25T09:10:26Z"
-  (given claim-v1-tests-nfr)
-  (normally r-cl-state-v1-tests-nfr claim-v1-tests-nfr state-claimed-v1-tests-nfr)
-  (normally r-cl-chain-v1-tests-nfr state-claimed-v1-tests-nfr claimed-tests-nfr)
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T06:09:01Z"
+  (given stale-v1-tests-grounding)
+  (normally r-stale-v1-tests-grounding stale-v1-tests-grounding (not claimed-tests-grounding))
+  (prefer r-stale-v1-tests-grounding r-cl-chain-v1-tests-grounding-by-claude)
 )
 
-(claims agent:claude
-  :at "2026-02-25T09:10:26Z"
-  (given claim-v1-tests-pbt)
-  (normally r-cl-state-v1-tests-pbt claim-v1-tests-pbt state-claimed-v1-tests-pbt)
-  (normally r-cl-chain-v1-tests-pbt state-claimed-v1-tests-pbt claimed-tests-pbt)
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T06:09:01Z"
+  (given failed-tests-grounding)
+  (given eval-result-v1-tests-grounding-by-claude)
+  (given eval-confidence-v1-tests-grounding-0.00)
 )
 
-(claims agent:claude
-  :at "2026-02-25T09:10:27Z"
-  (given claim-v1-v2-json-schema)
-  (normally r-cl-state-v1-v2-json-schema claim-v1-v2-json-schema state-claimed-v1-v2-json-schema)
-  (normally r-cl-chain-v1-v2-json-schema state-claimed-v1-v2-json-schema claimed-v2-json-schema)
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T06:09:06Z"
+  (given delegated-v1-tests-parser-to-agent:claude)
+  (given (during (leased-v1-tests-parser) (moment "2026-02-25T06:09:06Z") (moment "2026-02-25T06:39:06Z")))
+  (given claim-v1-tests-parser-by-claude)
+  (normally r-cl-state-v1-tests-parser-by-claude claim-v1-tests-parser-by-claude state-claimed-v1-tests-parser-by-claude)
+  (normally r-cl-chain-v1-tests-parser-by-claude state-claimed-v1-tests-parser-by-claude claimed-tests-parser)
 )
 
-;; Propagation rules: failures in 'v2-json-schema' block downstream tasks
-(normally r-propagate-tests-v2-json-from-v2-json-schema-failed failed-v2-json-schema upstream-blocked-tests-v2-json)
-(normally r-propagate-tests-v2-json-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-tests-v2-json)
-(normally r-propagate-tests-v2-json-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-tests-v2-json)
-(normally r-propagate-tests-v2-json-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-tests-v2-json)
-(normally r-propagate-v2-cli-wasm-from-v2-json-schema-failed failed-v2-json-schema upstream-blocked-v2-cli-wasm)
-(normally r-propagate-v2-cli-wasm-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-v2-cli-wasm)
-(normally r-propagate-v2-cli-wasm-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
-(normally r-propagate-v2-cli-wasm-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
-
-(claims agent:claude
-  :at "2026-02-25T09:27:07Z"
-  (given completed-tests-worked-examples))
-
-(claims agent:claude
-  :at "2026-02-25T09:27:08Z"
-  (given completed-tests-nfr))
-
-(claims agent:claude
-  :at "2026-02-25T09:27:08Z"
-  (given completed-tests-pbt))
-
-(claims agent:claude
-  :at "2026-02-25T09:32:44Z"
-  (given completed-v2-json-schema))
-
-(claims agent:claude
-  :at "2026-02-25T09:32:55Z"
-  (given claim-v1-v2-cli-wasm)
-  (normally r-cl-state-v1-v2-cli-wasm claim-v1-v2-cli-wasm state-claimed-v1-v2-cli-wasm)
-  (normally r-cl-chain-v1-v2-cli-wasm state-claimed-v1-v2-cli-wasm claimed-v2-cli-wasm)
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-02-25T06:15:10Z"
+  (given completed-tests-parser)
+  (given eval-result-v1-tests-parser-by-claude)
+  (given eval-confidence-v1-tests-parser-1.00)
 )
 
-(claims agent:claude
-  :at "2026-02-25T09:32:56Z"
-  (given claim-v1-tests-v2-json)
-  (normally r-cl-state-v1-tests-v2-json claim-v1-tests-v2-json state-claimed-v1-tests-v2-json)
-  (normally r-cl-chain-v1-tests-v2-json state-claimed-v1-tests-v2-json claimed-tests-v2-json)
+;; Retry mechanism for tests-grounding (failed v1 attempt at 06:09:01Z with confidence 0.00)
+;; The v1 attempt went stale (lease expired) and was auto-failed with confidence 0.00 —
+;; this is not a genuine implementation failure, just a timeout.
+;;
+;; APPROACH: Cannot negate given facts (failed-tests-grounding, stale-v1-tests-grounding)
+;; in defeasible logic — givens are strict/irrevocable. Instead, create an alternative
+;; v2 assignment pathway that bypasses the v1 failure state, and defeat downstream
+;; propagation rules (which ARE defeasible) with preferred retry rules.
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-02-25T08:00:00Z"
+
+  ;; Signal retry intent — this is the v2 attempt
+  (given retry-v2-tests-grounding)
+
+  ;; v2 readiness: the original dependencies are all still met, create a fresh ready signal
+  ;; that the v2 assignment rule can use (the v1 ready-tests-grounding is still valid but
+  ;; the v1 assignment was already consumed by the supervisor)
+  (given ready-v2-tests-grounding)
+
+  ;; v2 assignment: fresh conclusion that Hence can match to agent:claude
+  ;; Uses the correct naming convention (assign-to-{task}-{agent})
+  (normally r-assign-v2-tests-grounding
+    (and ready-v2-tests-grounding agent-core-available)
+    assign-to-tests-grounding-core)
+
+  ;; Defeat the stale marker so claimed-tests-grounding is not blocked
+  ;; (stale rule used prefer to defeat the v1 claim chain; we now defeat the stale rule)
+  (normally r-retry-v2-not-stale retry-v2-tests-grounding (not stale-v1-tests-grounding))
+  (prefer r-retry-v2-not-stale r-stale-v1-tests-grounding)
+
+  ;; Unblock downstream: defeat each failure/stale propagation rule with preferred alternatives
+  ;; These work because both the propagation rules and these retry rules are defeasible
+  (normally r-retry-unblock-tests-nfr retry-v2-tests-grounding (not upstream-blocked-tests-nfr))
+  (prefer r-retry-unblock-tests-nfr r-propagate-tests-nfr-from-tests-grounding-failed)
+  (prefer r-retry-unblock-tests-nfr r-propagate-tests-nfr-from-tests-grounding-stale-v1)
+
+  (normally r-retry-unblock-tests-pbt retry-v2-tests-grounding (not upstream-blocked-tests-pbt))
+  (prefer r-retry-unblock-tests-pbt r-propagate-tests-pbt-from-tests-grounding-failed)
+  (prefer r-retry-unblock-tests-pbt r-propagate-tests-pbt-from-tests-grounding-stale-v1)
+
+  (normally r-retry-unblock-tests-worked-examples retry-v2-tests-grounding (not upstream-blocked-tests-worked-examples))
+  (prefer r-retry-unblock-tests-worked-examples r-propagate-tests-worked-examples-from-tests-grounding-failed)
+  (prefer r-retry-unblock-tests-worked-examples r-propagate-tests-worked-examples-from-tests-grounding-stale-v1)
+
+  (normally r-retry-unblock-v2-json-schema retry-v2-tests-grounding (not upstream-blocked-v2-json-schema))
+  (prefer r-retry-unblock-v2-json-schema r-propagate-v2-json-schema-from-tests-grounding-failed)
+  (prefer r-retry-unblock-v2-json-schema r-propagate-v2-json-schema-from-tests-grounding-stale-v1)
 )
 
-(claims agent:claude
-  :at "2026-02-25T09:36:55Z"
-  (given completed-v2-cli-wasm))
+(meta r-assign-v2-tests-grounding
+  (description "v2 retry assignment for tests-grounding after v1 timeout")
+  (justification "The v1 attempt went stale (lease expired) and was auto-failed with confidence 0.00 — this is not a genuine implementation failure, just a timeout. Creates a fresh assignment conclusion for Hence to act on."))
 
-(claims agent:claude
-  :at "2026-02-25T09:38:53Z"
-  (given completed-tests-v2-json))
+(claims agent:ed25519:xfRAzZFG
+  :at "2026-02-25T08:31:31Z"
+  (given claim-v2-tests-grounding)
+  (normally r-cl-state-v2-tests-grounding claim-v2-tests-grounding state-claimed-v2-tests-grounding)
+  (normally r-cl-chain-v2-tests-grounding state-claimed-v2-tests-grounding claimed-tests-grounding)
+  (prefer r-cl-chain-v2-tests-grounding r-stale-v1-tests-grounding)
+)
+
+
+(claims agent:ed25519:xfRAzZFG
+  :at "2026-02-25T08:34:34Z"
+  (given unclaim-v3-tests-grounding)
+  (normally r-ucl-state-v3-tests-grounding unclaim-v3-tests-grounding state-unclaimed-v3-tests-grounding)
+  (normally r-ucl-cancel-v2-tests-grounding unclaim-v3-tests-grounding (not state-claimed-v2-tests-grounding))
+  (prefer r-ucl-cancel-v2-tests-grounding r-cl-state-v2-tests-grounding)
+  (normally r-ucl-unclaimed-v3-tests-grounding unclaim-v3-tests-grounding (not claimed-tests-grounding))
+  (prefer r-ucl-unclaimed-v3-tests-grounding r-cl-chain-v2-tests-grounding)
+)
