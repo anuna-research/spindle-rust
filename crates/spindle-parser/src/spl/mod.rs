@@ -1565,4 +1565,26 @@ mod tests {
         let theory = parse_spl("(prefer r1 r2 r3)").unwrap();
         assert_eq!(theory.superiorities().len(), 2);
     }
+
+    // -- P2: Flat and nested fact syntax must produce identical numeric terms --
+
+    #[test]
+    fn flat_and_nested_facts_parse_numeric_args_consistently() {
+        use spindle_core::term::Term;
+
+        let nested = parse_spl("(given (cost item 5))").unwrap();
+        let flat = parse_spl("(given cost item 5)").unwrap();
+
+        let nested_args = nested
+            .rules()
+            .next()
+            .unwrap()
+            .head_literal()
+            .predicate_args();
+        let flat_args = flat.rules().next().unwrap().head_literal().predicate_args();
+
+        assert_eq!(nested_args, flat_args);
+        // Specifically, "5" must parse as Integer in both paths.
+        assert_eq!(flat_args[1], Term::Integer(5));
+    }
 }

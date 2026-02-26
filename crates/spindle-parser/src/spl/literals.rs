@@ -863,7 +863,7 @@ fn try_parse_numeric_term(value: &str, line: usize) -> Result<Option<Term>, Pars
 ///
 /// If the atom matches a numeric pattern, returns the appropriate numeric Term.
 /// Otherwise returns `Term::Symbol`.
-fn parse_term_from_atom(value: &str, line: usize) -> Result<Term, ParseError> {
+pub(crate) fn parse_term_from_atom(value: &str, line: usize) -> Result<Term, ParseError> {
     if let Some(term) = try_parse_numeric_term(value, line)? {
         Ok(term)
     } else {

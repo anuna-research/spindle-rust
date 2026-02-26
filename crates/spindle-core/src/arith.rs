@@ -901,6 +901,16 @@ impl ArithConstraint {
                         Term::Float(FiniteFloat::new(f).ok_or(ArithError::NonFiniteFloat)?)
                     }
                 };
+                // If the variable is already bound, verify consistency
+                // instead of silently overwriting. This prevents rules like
+                // `(and (val ?x) (bind ?x (+ ?x 1)))` from producing
+                // grounded instances with inconsistent substitutions.
+                if let Some(existing) = subst.terms.get(var)
+                    && *existing != term
+                    && !existing.numeric_eq(&term)
+                {
+                    return Err(ArithError::ComparisonFailed);
+                }
                 subst.terms.insert(*var, term);
                 Ok(())
             }
@@ -1932,6 +1942,44 @@ mod tests {
         assert_eq!(
             constraint.eval(&mut subst).unwrap_err(),
             ArithError::NonFiniteFloat
+        );
+    }
+
+    // -- P1: Bind must check consistency when variable is already bound --------
+
+    #[test]
+    fn bind_rebound_consistent_succeeds() {
+        // Rebinding to the same value should succeed.
+        let mut subst = make_subst(&[("?x", "10")]);
+        let constraint = ArithConstraint::Bind {
+            var: intern("?x"),
+            expr: lit_int(10),
+        };
+        assert!(constraint.eval(&mut subst).is_ok());
+    }
+
+    #[test]
+    fn bind_rebound_numeric_eq_succeeds() {
+        // Rebinding to a numerically equal value (cross-type) should succeed.
+        let mut subst = make_subst(&[("?x", "8")]);
+        let constraint = ArithConstraint::Bind {
+            var: intern("?x"),
+            expr: lit_dec(800, 2), // Decimal(8.00)
+        };
+        assert!(constraint.eval(&mut subst).is_ok());
+    }
+
+    #[test]
+    fn bind_rebound_inconsistent_fails() {
+        // Rebinding to a different value should fail.
+        let mut subst = make_subst(&[("?x", "10")]);
+        let constraint = ArithConstraint::Bind {
+            var: intern("?x"),
+            expr: nary(NaryArithOp::Add, vec![var("?x"), lit_int(1)]),
+        };
+        assert_eq!(
+            constraint.eval(&mut subst).unwrap_err(),
+            ArithError::ComparisonFailed
         );
     }
 }

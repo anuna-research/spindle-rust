@@ -79,7 +79,10 @@ fn body_literal_has_variables(bl: &BodyLiteral) -> bool {
                             false
                         }
                     }
-                    BodyArg::Arith(expr) => expr.has_variables(),
+                    // Arithmetic args always need evaluation during grounding,
+                    // even when constant (e.g. `(+ 1 2)`), because unevaluated
+                    // BodyArg::Arith values are dropped by to_literal().
+                    BodyArg::Arith(_) => true,
                 })
                 || lit.has_temporal_variables()
         }
@@ -3634,5 +3637,34 @@ mod tests {
         // The normalized body literal must still have temporal t1, not t2.
         let normalized = rule.body[0].as_logic().unwrap().to_literal();
         assert_eq!(normalized.temporal, t1);
+    }
+
+    // -- P1b: Constant arithmetic body args must trigger grounding ------------
+
+    #[test]
+    fn has_variables_true_for_constant_arith_body_arg() {
+        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        // Build a body literal: target((+ 1 2))
+        let arith = ArithExpr::NaryOp {
+            op: NaryArithOp::Add,
+            args: vec![
+                ArithExpr::Lit(NumericValue::Integer(1)),
+                ArithExpr::Lit(NumericValue::Integer(2)),
+            ],
+        };
+        let body_lit = BodyLogicLiteral::new(
+            "target",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![BodyArg::Arith(arith)],
+        );
+        let bl = BodyLiteral::Logic(body_lit);
+
+        // Must report as variable-bearing so grounding evaluates the arithmetic.
+        assert!(body_literal_has_variables(&bl));
     }
 }
