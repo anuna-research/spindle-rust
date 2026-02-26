@@ -387,12 +387,18 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                 source_line: None,
             })?;
 
+            // Strip tilde prefix for reserved-name checks (e.g. ~> → >).
+            let bare_first = first
+                .strip_prefix("~~")
+                .or_else(|| first.strip_prefix('~'))
+                .unwrap_or(first);
+
             // REQ-009: Arithmetic predicates cannot appear in head position
-            if is_arith_predicate(first) {
+            if is_arith_predicate(bare_first) {
                 return Err(ParseError::ParserError {
                     line,
                     message: format!(
-                        "Arithmetic predicate '{first}' cannot appear in rule head or fact position (REQ-009)"
+                        "Arithmetic predicate '{bare_first}' cannot appear in rule head or fact position (REQ-009)"
                     ),
                     format: ParserFormat::Spl,
                     source_line: None,
@@ -400,11 +406,11 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
             }
 
             // REQ-009: Arithmetic operators cannot appear in head position
-            if is_arith_op(first) {
+            if is_arith_op(bare_first) {
                 return Err(ParseError::ParserError {
                     line,
                     message: format!(
-                        "Arithmetic expression '({first} ...)' cannot appear in rule head or fact position (REQ-009)"
+                        "Arithmetic expression '({bare_first} ...)' cannot appear in rule head or fact position (REQ-009)"
                     ),
                     format: ParserFormat::Spl,
                     source_line: None,
@@ -412,11 +418,11 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
             }
 
             // REQ-008: Reserved keywords cannot be used as predicate names
-            if is_reserved_keyword(first) {
+            if is_reserved_keyword(bare_first) {
                 return Err(ParseError::ParserError {
                     line,
                     message: format!(
-                        "Reserved keyword '{first}' cannot be used as a predicate name (REQ-008)"
+                        "Reserved keyword '{bare_first}' cannot be used as a predicate name (REQ-008)"
                     ),
                     format: ParserFormat::Spl,
                     source_line: None,
@@ -424,11 +430,11 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
             }
 
             // REQ-008: Future-reserved keywords cannot be used as predicate names
-            if is_future_reserved_keyword(first) {
+            if is_future_reserved_keyword(bare_first) {
                 return Err(ParseError::ParserError {
                     line,
                     message: format!(
-                        "'{first}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
+                        "'{bare_first}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
                     ),
                     format: ParserFormat::Spl,
                     source_line: None,
@@ -620,12 +626,17 @@ fn parse_body_logic_literal_with_line(
                 source_line: None,
             })?;
 
-            // REQ-008: Reserved keywords cannot be used as predicate names in body
-            if is_reserved_keyword(first) {
+            // REQ-008: Reserved keywords cannot be used as predicate names in body.
+            // Also reject tilde-negated reserved names (e.g. ~> for >).
+            let bare_name = first
+                .strip_prefix("~~")
+                .or_else(|| first.strip_prefix('~'))
+                .unwrap_or(first);
+            if is_reserved_keyword(bare_name) {
                 return Err(ParseError::ParserError {
                     line,
                     message: format!(
-                        "Reserved keyword '{first}' cannot be used as a predicate name (REQ-008)"
+                        "Reserved keyword '{bare_name}' cannot be used as a predicate name (REQ-008)"
                     ),
                     format: ParserFormat::Spl,
                     source_line: None,
@@ -633,11 +644,11 @@ fn parse_body_logic_literal_with_line(
             }
 
             // REQ-008: Future-reserved keywords cannot be used as predicate names in body
-            if is_future_reserved_keyword(first) {
+            if is_future_reserved_keyword(bare_name) {
                 return Err(ParseError::ParserError {
                     line,
                     message: format!(
-                        "'{first}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
+                        "'{bare_name}' is reserved for future use and cannot be used as a predicate name (REQ-008)"
                     ),
                     format: ParserFormat::Spl,
                     source_line: None,

@@ -611,35 +611,26 @@ fn test_011_03_negated_bind() {
 /// TEST-011 scenario 4: Tilde negation on comparison `~cmp` → parse error
 ///
 /// SPL tilde negation uses `~name` on atoms to negate a literal.
-/// Applying it to a comparison operator like `~>` should not silently produce
-/// a literal named "~>" — the parser should reject it since `>` is a reserved
-/// comparison operator (REQ-008 / REQ-011).
-///
-/// We also test that `(not (> ...))` is still rejected per REQ-011.
+/// Applying it to a comparison operator like `~>` must be rejected since
+/// `>` is a reserved comparison operator (REQ-008).
+/// We also verify that `(not (> ...))` is rejected per REQ-011.
 #[test]
 fn test_011_04_tilde_negation_variant() {
-    // Tilde-negated comparison atom in body: ~> used as a predicate name
-    // should be rejected since > is a reserved arithmetic operator.
-    let result = parse_spl("(normally r1 (and (val ?x) (~> ?x 100)) (low ?x))");
-    // If the parser accepts ~> as an ordinary predicate, that's a silent
-    // semantic error — the user intended negation of a comparison guard.
-    // Regardless of whether it errors or silently misparses, verify that
-    // (not (> ...)) form is still properly rejected per REQ-011:
+    // (~> ?x 100) in list form: ~> must be rejected as > is reserved
+    let err = parse_spl("(normally r1 (and (val ?x) (~> ?x 100)) (low ?x))").unwrap_err();
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("REQ-008") && msg.contains(">"),
+        "Expected REQ-008 error for tilde-negated comparison (~>), got: {msg}"
+    );
+
+    // (not (> ...)) form must also be rejected per REQ-011
     let err = parse_spl("(normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))").unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("cannot be negated") && msg.contains("REQ-011"),
         "Expected REQ-011 error for negated comparison, got: {msg}"
     );
-    // If the parser did accept (~> ?x 100), it should NOT have created a
-    // comparison constraint — it would be a misparsed literal:
-    if let Ok(theory) = result {
-        let rule = theory.rules().next().unwrap();
-        assert!(
-            !rule.body.iter().any(|bl| bl.is_arithmetic()),
-            "~> should not produce an arithmetic comparison constraint"
-        );
-    }
 }
 
 /// TEST-011 scenario 5: Complementary comparison `(<= ?x 100)` → legal
