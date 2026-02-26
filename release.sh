@@ -114,10 +114,14 @@ cargo test --all
 info "Running clippy..."
 cargo clippy --all -- -D warnings
 
-# Commit version bump
+# Commit version bump (skip if already at target version, e.g. re-run after failure)
 info "Committing version bump..."
 git add Cargo.toml
-git commit -m "chore: bump version to $VERSION"
+if git diff --cached --quiet; then
+  warn "Cargo.toml already at version $VERSION, skipping commit"
+else
+  git commit -m "chore: bump version to $VERSION"
+fi
 
 # Create and push tag
 info "Creating tag $TAG..."
