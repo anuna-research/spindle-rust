@@ -598,7 +598,14 @@ fn decimal_pow(base: Decimal, exp: Decimal) -> Result<NumericValue, ArithError> 
         }
         return Err(ArithError::DecimalOverflow);
     }
-    // Non-integral exponent: use rust_decimal's checked_powd
+    // Non-integral exponent: reject negative bases (result would be complex).
+    if base.is_sign_negative() && !base.is_zero() {
+        return Err(ArithError::TypeMismatch {
+            op: "**",
+            expected: "non-negative base",
+            got: "negative base with fractional exponent",
+        });
+    }
     use rust_decimal::MathematicalOps;
     base.checked_powd(exp)
         .map(NumericValue::Decimal)
@@ -1885,15 +1892,41 @@ mod tests {
 
     #[test]
     fn test_005_21_pow_negative_base_fractional_exp() {
-        // SPEC says: (** -1 0.5) → evaluation fails (negative base, non-integer exponent).
-        // ACTUAL: rust_decimal's checked_powd(-1, 0.5) returns Decimal(-1), which is
-        // mathematically incorrect (should be imaginary). This test documents current
-        // behavior; when the implementation adds a negative-base guard, update to assert Err.
+        // (** -1 0.5) → error: negative base with non-integer exponent
+        // (result would be imaginary).
         let subst = Substitution::default();
         let expr = bin(BinArithOp::Pow, lit_int(-1), lit_dec(5, 1)); // -1 ^ 0.5
-        let result = expr.eval(&subst);
-        // Current behavior: succeeds with Decimal(-1) due to rust_decimal limitation.
-        assert_eq!(result.unwrap(), NumericValue::Decimal(Decimal::from(-1)));
+        assert!(expr.eval(&subst).is_err());
+    }
+
+    #[test]
+    fn pow_negative_decimal_base_fractional_exp_rejected() {
+        // Regression: (** -4.0 0.5) must fail, not return a bogus value.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_dec(-40, 1), lit_dec(5, 1)); // -4.0 ^ 0.5
+        assert!(expr.eval(&subst).is_err());
+    }
+
+    #[test]
+    fn pow_negative_base_integer_exp_still_works() {
+        // (** -2 3) → Integer(-8) — integer exponents on negative bases are fine.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_int(-2), lit_int(3));
+        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-8));
+    }
+
+    #[test]
+    fn pow_positive_base_fractional_exp_works() {
+        // (** 4.0 0.5) → Decimal(2.0) — positive base with fractional exp is valid.
+        let subst = Substitution::default();
+        let expr = bin(BinArithOp::Pow, lit_dec(40, 1), lit_dec(5, 1)); // 4.0 ^ 0.5
+        let result = expr.eval(&subst).unwrap();
+        // rust_decimal's checked_powd should give us approximately 2.0
+        if let NumericValue::Decimal(d) = result {
+            assert!((d - Decimal::from(2)).abs() < Decimal::new(1, 4)); // within 0.0001
+        } else {
+            panic!("expected Decimal result");
+        }
     }
 
     #[test]
