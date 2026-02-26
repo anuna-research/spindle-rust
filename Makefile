@@ -1,4 +1,4 @@
-.PHONY: all build test clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory
+.PHONY: all build test clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory release-tag
 
 # Default target
 all: check build test
@@ -78,6 +78,11 @@ bench-memory:
 	cargo run --package spindle-core --example memory_profile --features dhat-heap --release
 	@echo "Memory profile saved to dhat-heap.json"
 	@echo "View at: https://nnethercote.github.io/dh_view/dh_view.html"
+
+# Cut a release (bump version, tag, push)
+# Usage: make release-tag VERSION=0.2.0
+release-tag:
+	@./release.sh $(VERSION)
 
 # Generate documentation
 doc:
