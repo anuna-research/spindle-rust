@@ -20,6 +20,7 @@
 
 - [Algorithms](guides/algorithms.md)
 - [Variables and Grounding](guides/grounding.md)
+- [Arithmetic Expressions](guides/arithmetic.md)
 - [Temporal Reasoning](guides/temporal.md)
 - [Modal Operators](guides/modal.md)
 - [Trust-Weighted Reasoning](guides/trust.md)

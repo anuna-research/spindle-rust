@@ -12,9 +12,10 @@ use spindle_core::{Rule, RuleType, Theory};
 use crate::ParseError;
 use crate::error::ParserFormat;
 
+use super::arith::{is_future_reserved_keyword, is_reserved_keyword};
 use super::lexer::SExpr;
 use super::lexer::source_line_text;
-use super::literals::{parse_literal_with_line, parse_timepoint_with_line};
+use super::literals::{parse_literal_with_line, parse_term_from_atom, parse_timepoint_with_line};
 use super::metadata::{
     process_claims, process_decays, process_meta_with_line, process_threshold, process_trusts,
 };
@@ -116,25 +117,24 @@ fn process_fact_with_line(
         match name {
             "during" | "must" | "may" | "forbidden" | "not" => lit,
             _ => {
-                let predicates: Result<Vec<String>, _> = args[1..]
+                let terms: Result<Vec<spindle_core::Term>, _> = args[1..]
                     .iter()
                     .map(|a| {
-                        a.as_atom()
-                            .map(|s| s.to_string())
-                            .ok_or_else(|| ParseError::ParserError {
-                                line,
-                                message: "Expected atom argument".to_string(),
-                                format: ParserFormat::Spl,
-                                source_line: None,
-                            })
+                        let s = a.as_atom().ok_or_else(|| ParseError::ParserError {
+                            line,
+                            message: "Expected atom argument".to_string(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        })?;
+                        parse_term_from_atom(s, line)
                     })
                     .collect();
-                spindle_core::Literal::new(
-                    name,
+                spindle_core::Literal::from_ids(
+                    spindle_core::intern::intern(name),
                     false,
                     Default::default(),
                     Default::default(),
-                    predicates?,
+                    terms?,
                 )
             }
         }
@@ -175,6 +175,30 @@ fn process_prefer_with_line(
         })
         .collect();
     let labels = labels?;
+
+    // REQ-008: Validate that no reserved keywords are used as labels in prefer
+    for label in &labels {
+        if is_reserved_keyword(label) {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "Reserved keyword '{label}' cannot be used as a rule label in prefer declaration (REQ-008)"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+        if is_future_reserved_keyword(label) {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "'{label}' is reserved for future use and cannot be used as a rule label in prefer declaration (REQ-008)"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+    }
 
     // Create chain of superiorities: r1 > r2 > r3 ...
     for window in labels.windows(2) {

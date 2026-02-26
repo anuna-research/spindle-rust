@@ -15,6 +15,7 @@ use std::hash::{Hash, Hasher};
 use crate::intern::{LiteralId, SymbolId, intern, resolve};
 use crate::mode::Mode;
 use crate::temporal::{Temporal, TemporalExpr};
+use crate::term::Term;
 
 /// A newtype wrapping `SymbolId` for internal literal-name storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
@@ -144,8 +145,8 @@ pub struct Literal {
     /// this is converted to a concrete `temporal` and set back to `None`.
     pub temporal_expr: Option<TemporalExpr>,
     /// Predicate arguments (e.g., for parent(alice, bob))
-    /// Stored as interned SymbolIds for efficiency
-    predicate_ids: Vec<SymbolId>,
+    /// Stored as typed [`Term`] values to support symbols, integers, decimals, and floats.
+    predicate_args: Vec<Term>,
     /// Interval variable for single-variable `(during ...)` binding.
     ///
     /// When set, this literal was parsed with `(during (lit) ?T)` and the
@@ -179,7 +180,7 @@ impl Literal {
             mode: Mode::empty(),
             temporal: Temporal::empty(),
             temporal_expr: None,
-            predicate_ids: Vec::new(),
+            predicate_args: Vec::new(),
             interval_var: None,
         }
     }
@@ -192,7 +193,7 @@ impl Literal {
             mode: Mode::empty(),
             temporal: Temporal::empty(),
             temporal_expr: None,
-            predicate_ids: Vec::new(),
+            predicate_args: Vec::new(),
             interval_var: None,
         }
     }
@@ -211,7 +212,7 @@ impl Literal {
             mode,
             temporal,
             temporal_expr: None,
-            predicate_ids: predicates.iter().map(|s| intern(s)).collect(),
+            predicate_args: predicates.iter().map(|s| Term::Symbol(intern(s))).collect(),
             interval_var: None,
         }
     }
@@ -239,14 +240,14 @@ impl Literal {
             mode,
             temporal,
             temporal_expr: expr,
-            predicate_ids: predicates.iter().map(|s| intern(s)).collect(),
+            predicate_args: predicates.iter().map(|s| Term::Symbol(intern(s))).collect(),
             interval_var: None,
         }
     }
 
-    /// Create a literal directly from interned IDs (zero allocation)
+    /// Create a literal directly from pre-built [`Term`] arguments (zero string allocation).
     ///
-    /// This is an optimized constructor for use when IDs are already
+    /// This is the optimized constructor for use when terms are already
     /// available, such as during grounding operations.
     ///
     /// Accepts anything convertible to `InternedLiteralName` (including
@@ -257,7 +258,7 @@ impl Literal {
         negation: bool,
         mode: Mode,
         temporal: Temporal,
-        predicate_ids: Vec<SymbolId>,
+        predicate_args: Vec<Term>,
     ) -> Self {
         Self {
             name_id: name_id.into(),
@@ -265,7 +266,7 @@ impl Literal {
             mode,
             temporal,
             temporal_expr: None,
-            predicate_ids,
+            predicate_args,
             interval_var: None,
         }
     }
@@ -281,7 +282,7 @@ impl Literal {
             mode: self.mode.clone(),
             temporal: self.temporal.clone(),
             temporal_expr: self.temporal_expr.clone(),
-            predicate_ids: self.predicate_ids.clone(),
+            predicate_args: self.predicate_args.clone(),
             interval_var: self.interval_var,
         }
     }
@@ -314,15 +315,24 @@ impl Literal {
         self.name_id.symbol_id()
     }
 
-    /// Get predicates as strings (for display/serialization)
-    pub fn predicates(&self) -> Vec<&'static str> {
-        self.predicate_ids.iter().map(|id| resolve(*id)).collect()
+    /// Get predicates as strings (for display/serialization).
+    ///
+    /// Symbol terms are resolved to their interned string; non-symbol terms
+    /// (Integer, Decimal, Float) use their `Display` representation.
+    pub fn predicates(&self) -> Vec<String> {
+        self.predicate_args
+            .iter()
+            .map(|t| match t {
+                Term::Symbol(id) => resolve(*id).to_string(),
+                other => other.to_string(),
+            })
+            .collect()
     }
 
-    /// Get predicate IDs (for efficient comparison)
+    /// Get predicate arguments as [`Term`] slices (for efficient comparison).
     #[inline]
-    pub fn predicate_ids(&self) -> &[SymbolId] {
-        &self.predicate_ids
+    pub fn predicate_args(&self) -> &[Term] {
+        &self.predicate_args
     }
 
     /// Check if this literal is positive (not negated)
@@ -352,7 +362,7 @@ impl Literal {
     /// Check if this literal has predicate arguments
     #[inline]
     pub fn is_predicate(&self) -> bool {
-        !self.predicate_ids.is_empty()
+        !self.predicate_args.is_empty()
     }
 
     /// Check if this literal has unresolved temporal variables.
@@ -404,10 +414,10 @@ impl Literal {
 
     /// Render this literal in canonical SPL s-expression form
     pub fn to_spl(&self) -> String {
-        let mut parts = Vec::with_capacity(1 + self.predicate_ids.len());
+        let mut parts = Vec::with_capacity(1 + self.predicate_args.len());
         parts.push(render_spl_atom(self.name()));
-        for pred in self.predicates() {
-            parts.push(render_spl_atom(pred));
+        for arg in &self.predicate_args {
+            parts.push(render_spl_atom(&arg.to_string()));
         }
 
         let mut expr = format!("({})", parts.join(" "));
@@ -499,7 +509,11 @@ impl From<&Literal> for LiteralStruct {
             mode: literal.mode.clone(),
             negated: literal.negation,
             functor: literal.name().to_string(),
-            args: literal.predicates().iter().map(|s| s.to_string()).collect(),
+            args: literal
+                .predicate_args
+                .iter()
+                .map(|t| t.to_string())
+                .collect(),
             temporal: literal.temporal.clone(),
         }
     }
@@ -516,7 +530,7 @@ impl PartialEq for Literal {
         self.name_id == other.name_id
             && self.negation == other.negation
             && self.mode == other.mode
-            && self.predicate_ids == other.predicate_ids
+            && self.predicate_args == other.predicate_args
         // Note: temporal is not included in equality for reasoning purposes
     }
 }
@@ -529,7 +543,7 @@ impl Hash for Literal {
         self.negation.hash(state);
         self.mode.name.hash(state);
         self.mode.negation.hash(state);
-        self.predicate_ids.hash(state);
+        self.predicate_args.hash(state);
     }
 }
 
@@ -549,8 +563,8 @@ impl fmt::Display for Literal {
         write!(f, "{}", self.name())?;
 
         // Predicates
-        if !self.predicate_ids.is_empty() {
-            let preds: Vec<_> = self.predicate_ids.iter().map(|id| resolve(*id)).collect();
+        if !self.predicate_args.is_empty() {
+            let preds: Vec<_> = self.predicate_args.iter().map(|t| t.to_string()).collect();
             write!(f, "({})", preds.join(", "))?;
         }
 
@@ -671,7 +685,7 @@ mod tests {
         );
 
         let preds = lit.predicates();
-        assert_eq!(preds, vec!["alice", "bob"]);
+        assert_eq!(preds, vec!["alice".to_string(), "bob".to_string()]);
     }
 
     #[test]

@@ -1,8 +1,11 @@
 //! Validate pipeline stage -- checks wildcard placement and range restriction.
 
 use super::{Diagnostic, PipelineContext, PipelineStage, Severity};
+use crate::arith::ArithConstraint;
+use crate::body::BodyLiteral;
 use crate::error::{Result, SpindleError};
 use crate::grounding::is_variable;
+use crate::intern::resolve;
 use crate::theory::Theory;
 use std::collections::HashSet;
 
@@ -48,7 +51,7 @@ impl PipelineStage for Validate {
 fn validate_wildcards(theory: &Theory) -> Result<()> {
     for rule in theory.rules() {
         for head in &rule.head {
-            if head.name() == "_" || head.predicates().contains(&"_") {
+            if head.name() == "_" || head.predicates().iter().any(|p| p == "_") {
                 return Err(SpindleError::Validation {
                     message: format!("Wildcard '_' found in rule head: {}", rule.label),
                 });
@@ -67,8 +70,15 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
                 body_vars.insert(lit.name().to_string());
             }
             for pred in lit.predicates() {
-                if is_variable(pred) {
-                    body_vars.insert(pred.to_string());
+                if is_variable(&pred) {
+                    body_vars.insert(pred);
+                }
+            }
+            // Variables introduced by bind constraints are also body variables.
+            if let BodyLiteral::Arithmetic(ArithConstraint::Bind { var, .. }) = lit {
+                let var_name = resolve(*var);
+                if is_variable(var_name) {
+                    body_vars.insert(var_name.to_string());
                 }
             }
         }
@@ -85,7 +95,7 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
                 });
             }
             for pred in lit.predicates() {
-                if is_variable(pred) && !body_vars.contains(pred) {
+                if is_variable(&pred) && !body_vars.contains(&pred) {
                     return Err(SpindleError::Validation {
                         message: format!(
                             "Unsafe rule '{}': variable {} in head but not in body",

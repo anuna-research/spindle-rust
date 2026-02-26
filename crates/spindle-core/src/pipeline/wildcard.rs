@@ -6,7 +6,9 @@
 
 use super::{PipelineContext, PipelineStage};
 use crate::error::Result;
+use crate::intern::{intern, resolve};
 use crate::literal::Literal;
+use crate::term::Term;
 use crate::theory::Theory;
 
 /// Rewrites anonymous wildcards (`_`) to unique variables (`?_wN`).
@@ -39,9 +41,18 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
         let mut new_rule = rule.clone();
 
         // Rewrite body literals
-        let mut new_body = Vec::new();
-        for lit in &rule.body {
-            new_body.push(rewrite_literal_wildcards(lit, &mut counter));
+        let mut new_body: Vec<crate::body::BodyLiteral> = Vec::new();
+        for bl in &rule.body {
+            match bl {
+                crate::body::BodyLiteral::Logic(logic_lit) => {
+                    new_body.push(crate::body::BodyLiteral::Logic(
+                        rewrite_body_logic_wildcards(logic_lit, &mut counter),
+                    ));
+                }
+                crate::body::BodyLiteral::Arithmetic(c) => {
+                    new_body.push(crate::body::BodyLiteral::Arithmetic(c.clone()));
+                }
+            }
         }
         new_rule.body = new_body.into();
 
@@ -58,33 +69,81 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
     new_theory
 }
 
-fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
-    let name = if lit.name() == "_" {
+/// Rewrite wildcards in a [`BodyLogicLiteral`], preserving `BodyArg::Arith` arguments.
+///
+/// Unlike `rewrite_literal_wildcards` which works on `Literal` (dropping arith args
+/// via `to_literal()`), this function directly rewrites `BodyArg::Term` entries while
+/// passing `BodyArg::Arith` entries through unchanged.
+fn rewrite_body_logic_wildcards(
+    lit: &crate::body::BodyLogicLiteral,
+    counter: &mut usize,
+) -> crate::body::BodyLogicLiteral {
+    use crate::body::{BodyArg, BodyLogicLiteral};
+
+    let name_id = if lit.name() == "_" {
         *counter += 1;
-        format!("?_w{counter}")
+        intern(&format!("?_w{counter}"))
     } else {
-        lit.name().to_string()
+        lit.name_id()
     };
 
-    let predicates = lit
-        .predicates()
+    let args: Vec<BodyArg> = lit
+        .predicate_args()
         .iter()
-        .map(|p| {
-            if *p == "_" {
-                *counter += 1;
-                format!("?_w{counter}")
-            } else {
-                p.to_string()
+        .map(|a| match a {
+            BodyArg::Term(t) => {
+                if let Term::Symbol(id) = t
+                    && resolve(*id) == "_"
+                {
+                    *counter += 1;
+                    return BodyArg::Term(Term::Symbol(intern(&format!("?_w{counter}"))));
+                }
+                a.clone()
             }
+            BodyArg::Arith(_) => a.clone(),
         })
         .collect();
 
-    let mut result = Literal::new(
-        name,
+    let mut result = BodyLogicLiteral::from_ids(
+        name_id,
         lit.negation,
         lit.mode.clone(),
         lit.temporal.clone(),
-        predicates,
+        args,
+    );
+    result.temporal_expr = lit.temporal_expr.clone();
+    result.interval_var = lit.interval_var;
+    result
+}
+
+fn rewrite_literal_wildcards(lit: &Literal, counter: &mut usize) -> Literal {
+    let name_id = if lit.name() == "_" {
+        *counter += 1;
+        intern(&format!("?_w{counter}"))
+    } else {
+        lit.name_id()
+    };
+
+    let args: Vec<Term> = lit
+        .predicate_args()
+        .iter()
+        .map(|t| {
+            if let Term::Symbol(id) = t
+                && resolve(*id) == "_"
+            {
+                *counter += 1;
+                return Term::Symbol(intern(&format!("?_w{counter}")));
+            }
+            t.clone()
+        })
+        .collect();
+
+    let mut result = Literal::from_ids(
+        name_id,
+        lit.negation,
+        lit.mode.clone(),
+        lit.temporal.clone(),
+        args,
     );
     // Propagate pre-grounding temporal expression (temporal variables)
     result.temporal_expr = lit.temporal_expr.clone();

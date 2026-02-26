@@ -103,7 +103,7 @@ fn test_parse_single_var_during() {
     let rule = theory.rules().find(|r| r.label == "r1").unwrap();
     assert_eq!(rule.body.len(), 1);
     assert!(
-        rule.body[0].interval_var.is_some(),
+        rule.body[0].as_logic().unwrap().interval_var.is_some(),
         "Body literal should have interval_var set"
     );
     assert!(
@@ -130,7 +130,7 @@ fn test_single_var_during_grounds() {
         r.label.starts_with("r1_")
             && r.head
                 .iter()
-                .any(|h| h.name() == "q" && h.predicates() == vec!["a"])
+                .any(|h| h.name() == "q" && h.predicates() == vec!["a".to_string()])
     });
     assert!(has_q, "Grounding should produce q(a)");
 }
@@ -153,7 +153,7 @@ fn test_single_var_during_propagates_temporal() {
         r.label.starts_with("r1_")
             && r.head.iter().any(|h| {
                 h.name() == "q"
-                    && h.predicates() == vec!["a"]
+                    && h.predicates() == vec!["a".to_string()]
                     && h.temporal.start == TimePoint::Moment(100)
                     && h.temporal.end == TimePoint::Moment(200)
             })
@@ -183,7 +183,7 @@ fn test_reason_pipeline_keeps_interval_bindings_after_wildcard_rewrite() {
         conclusions.iter().any(|c| {
             c.is_positive()
                 && c.literal.name() == "result"
-                && c.literal.predicates() == vec!["a", "b"]
+                && c.literal.predicates() == vec!["a".to_string(), "b".to_string()]
         }),
         "reason() should derive result(a,b) when Allen constraints are satisfiable"
     );
@@ -212,9 +212,9 @@ fn test_before_constraint_accepts() {
     let grounded = ground_theory(&theory);
 
     let has_result = grounded.rules().any(|r| {
-        r.head
-            .iter()
-            .any(|h| h.name() == "result" && h.predicates() == vec!["a", "b"])
+        r.head.iter().any(|h| {
+            h.name() == "result" && h.predicates() == vec!["a".to_string(), "b".to_string()]
+        })
     });
     assert!(
         has_result,

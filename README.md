@@ -27,6 +27,13 @@ This project is part of the SPINdle family:
 
 - **First-Order Variables**: Datalog-style grounding with `?x` variable syntax
 
+- **Arithmetic Expressions**: Numeric computation in rule bodies
+  - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`
+  - Variable binding: `(bind ?total (+ ?price ?tax))`
+  - Comparison guards: `(> ?age 18)`, `(<= ?score 100)`
+  - Three numeric types: Integer, Decimal (arbitrary-precision), Float
+  - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
+
 - **Input Format**:
   - SPL (Spindle Lisp) - Lisp-based DSL
 
@@ -89,6 +96,17 @@ spindle stats examples/penguin.spl
 ; Predicates with variables
 (given (parent alice bob))
 (normally r3 (parent ?x ?y) (ancestor ?x ?y))
+
+; Arithmetic: bind and compare
+(given (item widget 25))
+(given (tax-rate 0.1))
+(normally r4
+  (and (item ?name ?price) (tax-rate ?rate)
+       (bind ?total (+ ?price (* ?price ?rate))))
+  (total-cost ?name ?total))
+(normally r5
+  (and (total-cost ?name ?t) (> ?t 20))
+  (expensive ?name))
 ```
 
 ## Library Usage
@@ -177,18 +195,23 @@ const abduce = spindle.abduce("flies", 3);
   - `query/` - Query operators with `QueryOperator` trait (what-if, why-not, abduction)
   - `explanation/` - Proof trees with `ExplanationFormatter` trait (natural language, JSON, JSON-LD, DOT)
   - `analysis/` - Theory analysis (conflicts, validation, superiority suggestions)
+  - `arith` - Arithmetic expression AST, evaluation, and type promotion
+  - `body` - Body literals with arithmetic constraints (`BodyLiteral`, `BodyArg`)
+  - `term` - Typed term values (`Symbol`, `Integer`, `Decimal`, `Float`)
   - `temporal` - Allen interval algebra
-  - `grounding` - Datalog-style variable grounding
+  - `grounding` - Datalog-style variable grounding with arithmetic evaluation
   - `trust` - Trust-weighted reasoning
 - `spindle-parser` - SPL format parser
   - `spl/` - Lexer, expression dispatch, literal/rule/metadata handlers
+  - `spl/arith` - Arithmetic expression and constraint parsing
 - `spindle-cli` - Command-line interface
 - `spindle-wasm` - WebAssembly bindings for JavaScript/TypeScript
 
 ## Testing
 
-1,241 tests covering:
+1,500+ tests covering:
 - Core reasoning (facts, rules, conflicts, superiority)
+- Arithmetic expressions, type promotion, and numeric evaluation
 - Edge cases (cycles, empty theories, defeaters)
 - Stress tests (long chains, wide theories)
 - Query operators (what-if, why-not, abduction)

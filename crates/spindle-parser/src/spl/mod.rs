@@ -30,6 +30,7 @@
 //! (normally r3 (and bird healthy) flies)
 //! ```
 
+pub(crate) mod arith;
 mod expressions;
 pub(crate) mod lexer;
 pub(crate) mod literals;
@@ -943,11 +944,14 @@ mod tests {
     #[test]
     fn test_parse_predicate_nested_list_arg() {
         // (name (nested)) where predicate arg is a list, not atom
+        // REQ-009: Lists in head arguments are rejected as arithmetic expressions
         let err = parse_spl("(given (myPred (nested)))").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("Expected atom argument"),
-            "Expected atom argument error for nested list in predicate, got: {msg}"
+            msg.contains(
+                "Arithmetic expressions cannot appear as arguments in rule heads or facts"
+            ),
+            "Expected REQ-009 error for nested list in predicate, got: {msg}"
         );
     }
 
@@ -1165,5 +1169,422 @@ mod tests {
         // "and" is treated specially: label=None, body_expr=and, head_expr=body
         // But "and" as a bare atom in body position becomes a simple literal
         assert_eq!(rule.body[0].name(), "and");
+    }
+
+    // =========================================================================
+    // REQ-009: Arithmetic predicates cannot appear in rule heads or facts
+    // =========================================================================
+
+    #[test]
+    fn test_reject_bind_in_head() {
+        let err = parse_spl("(normally r1 bird (bind ?x 42))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic predicate 'bind'") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for bind in head, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_cmp_eq_in_head() {
+        let err = parse_spl("(normally r1 bird (= ?x ?y))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic predicate '='") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for = in head, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_cmp_gt_in_head() {
+        let err = parse_spl("(normally r1 bird (> ?x 10))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic predicate '>'") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for > in head, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_cmp_le_in_head() {
+        let err = parse_spl("(normally r1 bird (<= ?x 10))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic predicate '<='") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for <= in head, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_cmp_ne_in_head() {
+        let err = parse_spl("(normally r1 bird (!= ?x ?y))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic predicate '!='") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for != in head, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_bind_as_fact() {
+        let err = parse_spl("(given (bind ?x 42))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic predicate 'bind'") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for bind as fact, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_arith_op_in_head() {
+        let err = parse_spl("(normally r1 bird (+ ?x ?y))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic expression '(+ ...)'") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for + in head, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_arith_mul_in_head() {
+        let err = parse_spl("(normally r1 bird (* ?x 2))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic expression '(* ...)'") && msg.contains("REQ-009"),
+            "Expected REQ-009 error for * in head, got: {msg}"
+        );
+    }
+
+    // REQ-009: Arithmetic expressions as arguments in heads/facts
+
+    #[test]
+    fn test_reject_arith_expr_as_head_arg() {
+        let err = parse_spl("(normally r1 bird (result (+ ?x ?y)))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic expressions cannot appear as arguments in rule heads"),
+            "Expected REQ-009 error for arith expr as head arg, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_arith_expr_as_fact_arg() {
+        let err = parse_spl("(given (total (* 3 4)))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Arithmetic expressions cannot appear as arguments in rule heads"),
+            "Expected REQ-009 error for arith expr as fact arg, got: {msg}"
+        );
+    }
+
+    // =========================================================================
+    // REQ-011: Negation of arithmetic predicates
+    // =========================================================================
+
+    #[test]
+    fn test_reject_negated_cmp_gt_in_body() {
+        let err = parse_spl("(normally r1 (and bird (not (> ?x 10))) flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("cannot be negated") && msg.contains("REQ-011"),
+            "Expected REQ-011 error for negated > in body, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_negated_cmp_eq_in_body() {
+        let err = parse_spl("(normally r1 (and bird (not (= ?x ?y))) flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("cannot be negated") && msg.contains("REQ-011"),
+            "Expected REQ-011 error for negated = in body, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_negated_bind_in_body() {
+        let err = parse_spl("(normally r1 (and bird (not (bind ?x 10))) flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("cannot be negated") && msg.contains("REQ-011"),
+            "Expected REQ-011 error for negated bind in body, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_negated_cmp_le_in_body() {
+        let err = parse_spl("(normally r1 (not (<= ?x 10)) flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("cannot be negated") && msg.contains("REQ-011"),
+            "Expected REQ-011 error for negated <= in body, got: {msg}"
+        );
+    }
+
+    // =========================================================================
+    // REQ-008: Reserved keywords as predicate names
+    // =========================================================================
+
+    #[test]
+    fn test_reject_reserved_keyword_bind_as_predicate() {
+        let err = parse_spl("(given bind)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'bind'") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for bind as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_reserved_keyword_plus_as_predicate() {
+        let err = parse_spl("(given +)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword '+'") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for + as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_reserved_keyword_div_as_predicate() {
+        let err = parse_spl("(given div)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'div'") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for div as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_reserved_keyword_in_body() {
+        let err = parse_spl("(normally r1 bind flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'bind'") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for bind in body, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_reserved_keyword_negated_in_head() {
+        let err = parse_spl("(given ~bind)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'bind'") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for ~bind in head, got: {msg}"
+        );
+    }
+
+    // =========================================================================
+    // REQ-008: Future-reserved keywords as predicate names
+    // =========================================================================
+
+    #[test]
+    fn test_reject_future_reserved_sum_as_predicate() {
+        let err = parse_spl("(given sum)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for sum as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_count_as_predicate() {
+        let err = parse_spl("(given count)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for count as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_avg_as_predicate() {
+        let err = parse_spl("(given avg)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for avg as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_round_as_predicate() {
+        let err = parse_spl("(given round)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for round as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_floor_as_predicate() {
+        let err = parse_spl("(given floor)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for floor as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_ceil_as_predicate() {
+        let err = parse_spl("(given ceil)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for ceil as predicate, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_in_body() {
+        let err = parse_spl("(normally r1 sum flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for sum in body, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_as_list_predicate() {
+        let err = parse_spl("(given (sum ?x ?y))").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            "Expected REQ-008 error for (sum ...) as predicate, got: {msg}"
+        );
+    }
+
+    // =========================================================================
+    // REQ-008: Reserved keywords as rule labels
+    // =========================================================================
+
+    #[test]
+    fn test_reject_reserved_keyword_bind_as_label() {
+        let err = parse_spl("(normally bind bird flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'bind'") && msg.contains("rule label"),
+            "Expected REQ-008 error for bind as label, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_reserved_keyword_div_as_label() {
+        let err = parse_spl("(normally div bird flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'div'") && msg.contains("rule label"),
+            "Expected REQ-008 error for div as label, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_sum_as_label() {
+        let err = parse_spl("(normally sum bird flies)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("rule label"),
+            "Expected REQ-008 error for sum as label, got: {msg}"
+        );
+    }
+
+    // =========================================================================
+    // REQ-008: Reserved keywords in prefer declarations
+    // =========================================================================
+
+    #[test]
+    fn test_reject_reserved_keyword_in_prefer() {
+        let err = parse_spl("(prefer bind r1)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword 'bind'") && msg.contains("prefer"),
+            "Expected REQ-008 error for bind in prefer, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_reserved_keyword_eq_in_prefer() {
+        let err = parse_spl("(prefer r1 =)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("Reserved keyword '='") && msg.contains("prefer"),
+            "Expected REQ-008 error for = in prefer, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_reject_future_reserved_in_prefer() {
+        let err = parse_spl("(prefer count r1)").unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("reserved for future use") && msg.contains("prefer"),
+            "Expected REQ-008 error for count in prefer, got: {msg}"
+        );
+    }
+
+    // =========================================================================
+    // Guard: valid inputs still parse correctly (no false positives)
+    // =========================================================================
+
+    #[test]
+    fn test_normal_predicate_still_works() {
+        let theory = parse_spl("(given (bird tweety))").unwrap();
+        assert_eq!(theory.rule_count(), 1);
+    }
+
+    #[test]
+    fn test_arith_in_body_still_works() {
+        let theory =
+            parse_spl("(normally r1 (and (price ?x ?p) (> ?p 100)) (expensive ?x))").unwrap();
+        assert_eq!(theory.rule_count(), 1);
+    }
+
+    #[test]
+    fn test_bind_in_body_still_works() {
+        let theory =
+            parse_spl("(normally r1 (and (price ?x ?p) (bind ?doubled (* ?p 2))) (result ?x))")
+                .unwrap();
+        assert_eq!(theory.rule_count(), 1);
+    }
+
+    #[test]
+    fn test_arith_expr_in_body_arg_still_works() {
+        let theory =
+            parse_spl("(normally r1 (and (price ?x ?p) (bind ?total (* ?p 2))) (result ?x))")
+                .unwrap();
+        assert_eq!(theory.rule_count(), 1);
+    }
+
+    #[test]
+    fn test_prefer_with_valid_labels() {
+        let theory = parse_spl("(prefer r1 r2 r3)").unwrap();
+        assert_eq!(theory.superiorities().len(), 2);
+    }
+
+    // -- P2: Flat and nested fact syntax must produce identical numeric terms --
+
+    #[test]
+    fn flat_and_nested_facts_parse_numeric_args_consistently() {
+        use spindle_core::term::Term;
+
+        let nested = parse_spl("(given (cost item 5))").unwrap();
+        let flat = parse_spl("(given cost item 5)").unwrap();
+
+        let nested_args = nested
+            .rules()
+            .next()
+            .unwrap()
+            .head_literal()
+            .predicate_args();
+        let flat_args = flat.rules().next().unwrap().head_literal().predicate_args();
+
+        assert_eq!(nested_args, flat_args);
+        // Specifically, "5" must parse as Integer in both paths.
+        assert_eq!(flat_args[1], Term::Integer(5));
     }
 }

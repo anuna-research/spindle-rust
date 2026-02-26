@@ -51,6 +51,9 @@ pub(crate) enum Commands {
         /// Show trust weights for conclusions
         #[arg(long)]
         trust: bool,
+        /// Use v2 JSON schema with typed term arguments
+        #[arg(long)]
+        v2: bool,
     },
     /// Validate a theory file
     Validate {

@@ -511,13 +511,18 @@ fn build_trust_tree(
         && let Some(rule) = theory.get_rule(label)
     {
         let mut children = Vec::new();
-        for body_lit in &rule.body {
-            let body_key = body_lit.to_spl();
+        for body_bl in &rule.body {
+            let body_key = body_bl.to_spl();
+            // Only logic body literals participate in trust derivation
+            let body_lit = match body_bl.as_logic() {
+                Some(lit) => lit.to_literal(),
+                None => continue,
+            };
             if let Some(body_conclusions) = positive_conclusions.get(&body_key)
                 && let Some(best) = best_conclusion(body_conclusions)
             {
                 let child = build_trust_tree(
-                    body_lit,
+                    &body_lit,
                     best.rule_label.as_deref(),
                     positive_conclusions,
                     theory,

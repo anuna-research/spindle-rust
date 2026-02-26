@@ -84,7 +84,7 @@ fn test_grounding_end_to_end() {
     let qa_proven = conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == "q"
-            && c.literal.predicates() == vec!["a"]
+            && c.literal.predicates() == vec!["a".to_string()]
     });
 
     assert!(
@@ -168,14 +168,14 @@ fn test_superiority_grounded() {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == "flies"
             && c.literal.negation
-            && c.literal.predicates() == vec!["tweety"]
+            && c.literal.predicates() == vec!["tweety".to_string()]
     });
 
     let flies_pos_proven = conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == "flies"
             && !c.literal.negation
-            && c.literal.predicates() == vec!["tweety"]
+            && c.literal.predicates() == vec!["tweety".to_string()]
     });
 
     assert!(

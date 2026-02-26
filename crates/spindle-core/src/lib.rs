@@ -13,6 +13,8 @@
 //! - Two provability levels: definite (+D/-D) and defeasible (+d/-d)
 //! - Superiority relations for conflict resolution
 //! - Standard DL(d) reasoning mode
+//! - Arithmetic expressions with bind constraints and comparison guards
+//! - Three numeric types (Integer, Decimal, Float) with cross-type matching
 //!
 //! # Example
 //!
@@ -41,6 +43,8 @@
 #![warn(rust_2018_idioms)]
 
 pub mod analysis;
+pub mod arith;
+pub mod body;
 pub mod claims;
 pub mod conclusion;
 pub mod error;
@@ -57,12 +61,17 @@ pub mod reason;
 pub mod rule;
 pub mod superiority;
 pub mod temporal;
+pub mod term;
 pub mod theory;
 pub mod trust;
 pub mod worklist;
 
 /// Prelude module for convenient imports
 pub mod prelude {
+    pub use crate::arith::{
+        ArithConstraint, ArithError, ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
+    };
+    pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};
@@ -78,11 +87,12 @@ pub mod prelude {
     pub use crate::reason::{
         Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
     };
-    pub use crate::rule::{Rule, RuleLabel, RuleType};
+    pub use crate::rule::{IntoRuleBody, Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};
     pub use crate::temporal::{
         AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,
     };
+    pub use crate::term::{FiniteFloat, NumericValue, Term};
     pub use crate::theory::{Meta, MetaValue, Theory};
 }
 

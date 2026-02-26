@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::intern::{SymbolId, intern, resolve};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel};
+use crate::term::Term;
 use crate::theory::Theory;
 
 /// Unique identifier for an atom (predicate + args + mode) within an IndexedTheory.
@@ -71,7 +72,7 @@ impl LitId {
 struct AtomKey {
     functor: SymbolId,
     mode: (SymbolId, bool), // name_id, negated
-    args: Vec<SymbolId>,
+    args: Vec<Term>,
 }
 
 /// An indexed theory for efficient rule lookup.
@@ -117,13 +118,17 @@ impl<'a> IndexedTheory<'a> {
                 idx.literal_set.insert(lit_id);
             }
 
-            for body_lit in &rule.body {
-                let lit_id = idx.intern_literal(body_lit);
-                idx.body_index
-                    .entry(lit_id)
-                    .or_default()
-                    .push(rule.label.clone());
-                idx.literal_set.insert(lit_id);
+            for body_bl in &rule.body {
+                // Only logic body literals are indexed; arithmetic constraints are skipped.
+                if let Some(logic_lit) = body_bl.as_logic() {
+                    let as_lit = logic_lit.to_literal();
+                    let lit_id = idx.intern_literal(&as_lit);
+                    idx.body_index
+                        .entry(lit_id)
+                        .or_default()
+                        .push(rule.label.clone());
+                    idx.literal_set.insert(lit_id);
+                }
             }
         }
 
@@ -141,7 +146,7 @@ impl<'a> IndexedTheory<'a> {
         let key = AtomKey {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
-            args: lit.predicate_ids().to_vec(),
+            args: lit.predicate_args().to_vec(),
         };
 
         let atom_id = if let Some(&id) = self.atom_map.get(&key) {
@@ -167,7 +172,7 @@ impl<'a> IndexedTheory<'a> {
         let key = AtomKey {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
-            args: lit.predicate_ids().to_vec(),
+            args: lit.predicate_args().to_vec(),
         };
 
         self.atom_map

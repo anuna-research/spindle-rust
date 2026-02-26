@@ -42,6 +42,8 @@ Result: Tweety doesn't fly.
 | **Conclusion** | A proven literal with a provability level |
 | **Defeat** | When one rule blocks another's conclusion |
 | **Superiority** | A preference relation between rules |
+| **Bind** | Assigns a computed arithmetic result to a variable |
+| **Guard** | A comparison constraint that filters rule applicability |
 
 ## Chapters
 

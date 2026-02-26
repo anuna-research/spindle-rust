@@ -50,7 +50,7 @@ proptest! {
         prop_assert_ne!(lit.negation, comp.negation, "complement should flip negation");
         prop_assert_eq!(lit.name(), comp.name(), "complement should preserve name");
         prop_assert_eq!(lit.mode.clone(), comp.mode.clone(), "complement should preserve mode");
-        prop_assert_eq!(lit.predicate_ids(), comp.predicate_ids(), "complement should preserve predicates");
+        prop_assert_eq!(lit.predicate_args(), comp.predicate_args(), "complement should preserve predicates");
     }
 }
 

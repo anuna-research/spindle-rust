@@ -26,27 +26,28 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
 use crate::intern::{SymbolId, resolve};
 
 #[cfg(test)]
 use crate::intern::intern;
 use crate::literal::Literal;
 use crate::mode::Mode;
-use crate::rule::{Rule, RuleLabel, RuleType};
+use crate::rule::{Rule, RuleBody, RuleLabel, RuleType};
 use crate::temporal::{
     AllenConstraint, Temporal, TemporalExpr, TemporalStateQuery, TimeExpr, TimePoint,
 };
+use crate::term::Term;
 use crate::theory::Theory;
 
 /// Variable substitution for grounding.
 ///
-/// Contains both term bindings (variable -> interned value) and temporal
-/// bindings (temporal variable -> concrete timepoint). Uses interned
-/// `SymbolId` for O(1) hashing and zero-allocation lookups.
+/// Contains both term bindings (variable -> typed Term value) and temporal
+/// bindings (temporal variable -> concrete timepoint).
 #[derive(Clone, Debug, Default)]
 pub struct Substitution {
-    /// Term variable bindings (e.g., ?x -> alice)
-    pub terms: FxHashMap<SymbolId, SymbolId>,
+    /// Term variable bindings (e.g., ?x -> Term::Symbol(alice), ?n -> Term::Integer(42))
+    pub terms: FxHashMap<SymbolId, Term>,
     /// Temporal variable bindings (e.g., ?t1 -> TimePoint::Moment(100))
     pub temporal: FxHashMap<SymbolId, TimePoint>,
     /// Interval variable bindings (e.g., ?T -> Temporal[0, 10])
@@ -65,12 +66,36 @@ pub fn literal_has_variables(lit: &Literal) -> bool {
         || lit.has_temporal_variables()
 }
 
+/// Check if a body literal contains variables (dispatches on variant).
+fn body_literal_has_variables(bl: &BodyLiteral) -> bool {
+    match bl {
+        BodyLiteral::Logic(lit) => {
+            is_variable(lit.name())
+                || lit.predicate_args().iter().any(|a| match a {
+                    BodyArg::Term(t) => {
+                        if let Term::Symbol(id) = t {
+                            is_variable(resolve(*id))
+                        } else {
+                            false
+                        }
+                    }
+                    // Arithmetic args always need evaluation during grounding,
+                    // even when constant (e.g. `(+ 1 2)`), because unevaluated
+                    // BodyArg::Arith values are dropped by to_literal().
+                    BodyArg::Arith(_) => true,
+                })
+                || lit.has_temporal_variables()
+        }
+        BodyLiteral::Arithmetic(_) => true, // arithmetic constraints always contain variables
+    }
+}
+
 /// Check if a rule contains any variables.
 ///
 /// Allen constraints and state queries are treated as variable-bearing because
 /// they reference interval variables that must be validated during grounding.
 pub fn has_variables(rule: &Rule) -> bool {
-    rule.body.iter().any(literal_has_variables)
+    rule.body.iter().any(body_literal_has_variables)
         || rule.head.iter().any(literal_has_variables)
         || !rule.constraints.is_empty()
         || !rule.state_queries.is_empty()
@@ -100,30 +125,38 @@ pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution
     let pattern_name = resolve(pattern_name_id);
 
     if is_variable(pattern_name) {
-        subst.terms.insert(pattern_name_id, ground_name_id);
+        subst
+            .terms
+            .insert(pattern_name_id, Term::Symbol(ground_name_id));
     } else if pattern_name_id != ground_name_id {
         return None;
     }
 
-    // Match predicates/arguments (using interned symbols)
-    let pattern_pred_ids = pattern.predicate_ids();
-    let ground_pred_ids = ground.predicate_ids();
-    if pattern_pred_ids.len() != ground_pred_ids.len() {
+    // Match predicates/arguments (using Term values)
+    let pattern_args = pattern.predicate_args();
+    let ground_args = ground.predicate_args();
+    if pattern_args.len() != ground_args.len() {
         return None;
     }
 
-    for (parg_id, garg_id) in pattern_pred_ids.iter().zip(ground_pred_ids.iter()) {
-        let parg = resolve(*parg_id);
-        if is_variable(parg) {
-            // Check for conflicting bindings
-            if let Some(existing) = subst.terms.get(parg_id) {
-                if *existing != *garg_id {
-                    return None;
+    for (parg, garg) in pattern_args.iter().zip(ground_args.iter()) {
+        // Variables are always Term::Symbol(id) where resolve(id) starts with '?'
+        if let Term::Symbol(parg_id) = parg {
+            let parg_str = resolve(*parg_id);
+            if is_variable(parg_str) {
+                // Variable binds to the full Term value
+                if let Some(existing) = subst.terms.get(parg_id) {
+                    if *existing != *garg && !existing.numeric_eq(garg) {
+                        return None;
+                    }
+                } else {
+                    subst.terms.insert(*parg_id, garg.clone());
                 }
-            } else {
-                subst.terms.insert(*parg_id, *garg_id);
+                continue;
             }
-        } else if parg_id != garg_id {
+        }
+        // Non-variable: compare terms directly (with cross-type numeric promotion per REQ-010/CON-005)
+        if parg != garg && !parg.numeric_eq(garg) {
             return None;
         }
     }
@@ -206,24 +239,34 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
     let name_id = lit.name_id();
     let name = resolve(name_id);
 
-    // Apply substitution to name (if it's a variable)
+    // Apply substitution to name (if it's a variable).
+    // Literal names must be symbols, so extract SymbolId from Term::Symbol.
     let new_name_id = if is_variable(name) {
-        subst.terms.get(&name_id).copied().unwrap_or(name_id)
+        match subst.terms.get(&name_id) {
+            Some(Term::Symbol(id)) => *id,
+            _ => name_id,
+        }
     } else {
         name_id
     };
 
-    // Apply substitution to predicates
-    let new_pred_ids: Vec<SymbolId> = lit
-        .predicate_ids()
+    // Apply substitution to predicate arguments.
+    // Variables are resolved to their bound Term value directly.
+    let new_pred_args: Vec<Term> = lit
+        .predicate_args()
         .iter()
-        .map(|pid| {
-            let p = resolve(*pid);
-            if is_variable(p) {
-                subst.terms.get(pid).copied().unwrap_or(*pid)
-            } else {
-                *pid
+        .map(|term| {
+            if let Term::Symbol(pid) = term {
+                let p = resolve(*pid);
+                if is_variable(p) {
+                    return subst
+                        .terms
+                        .get(pid)
+                        .cloned()
+                        .unwrap_or_else(|| term.clone());
+                }
             }
+            term.clone()
         })
         .collect();
 
@@ -261,7 +304,7 @@ pub fn apply_substitution_to_literal(lit: &Literal, subst: &Substitution) -> Lit
         lit.negation,
         lit.mode.clone(),
         new_temporal,
-        new_pred_ids,
+        new_pred_args,
     );
     result.temporal_expr = new_temporal_expr;
     result.interval_var = new_interval_var;
@@ -285,13 +328,19 @@ fn resolve_time_expr(
     }
 }
 
-/// Apply a substitution to a rule, creating a ground instance
+/// Apply a substitution to a rule, creating a ground instance.
+///
+/// Arithmetic body literals (`bind`/comparison constraints) are stripped from the
+/// grounded rule because they have already been evaluated during the grounding phase.
+/// The reasoner only understands logic body literals; keeping arithmetic constraints
+/// would prevent the rule from firing.
 fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: usize) -> Rule {
     let new_label = format!("{}_{}", rule.label, instance_num);
-    let new_body: Vec<Literal> = rule
+    let new_body: RuleBody = rule
         .body
         .iter()
-        .map(|lit| apply_substitution_to_literal(lit, subst))
+        .filter(|bl| bl.as_logic().is_some())
+        .map(|bl| apply_substitution_to_body_literal(bl, subst))
         .collect();
     let new_head: Vec<Literal> = rule
         .head
@@ -312,14 +361,14 @@ fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: u
 fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitution> {
     let mut merged = s1.clone();
 
-    // Merge term bindings
+    // Merge term bindings (with cross-type numeric promotion per REQ-010/CON-005)
     for (k, v) in &s2.terms {
         if let Some(existing) = merged.terms.get(k) {
-            if *existing != *v {
+            if *existing != *v && !existing.numeric_eq(v) {
                 return None;
             }
         } else {
-            merged.terms.insert(*k, *v);
+            merged.terms.insert(*k, v.clone());
         }
     }
 
@@ -354,75 +403,252 @@ fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
     (
         lit.name_id(),
         lit.negation,
-        lit.predicate_ids().len(),
+        lit.predicate_args().len(),
         lit.mode.clone(),
     )
 }
 
-/// Create a key for deduplicating literals (using interned IDs, minimal allocation)
+/// Create a key for deduplicating literals (using Term args, minimal allocation)
 ///
 /// Includes temporal so that `p[1,2]` and `p[3,4]` are treated as distinct facts.
 #[inline]
-fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<SymbolId>, Mode, Temporal) {
+fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<crate::term::Term>, Mode, Temporal) {
     (
         lit.name_id(),
         lit.negation,
-        lit.predicate_ids().to_vec(),
+        lit.predicate_args().to_vec(),
         lit.mode.clone(),
         lit.temporal.clone(),
     )
 }
 
-/// Match body literals against facts, returning all valid substitutions
-fn match_body_against_facts(
-    body: &[Literal],
+/// Normalize body literals in a grounded rule to match existing facts exactly.
+///
+/// When `bind` produces a value like `Decimal(8.00)` that is numerically equal
+/// to a fact argument `Integer(8)`, the grounded body literal will contain
+/// `Decimal(8.00)` while the fact has `Integer(8)`. The reasoner uses
+/// structural equality, so these won't match. This function replaces body
+/// literal arguments with the fact's values when they match via `numeric_eq`.
+fn normalize_body_against_facts(
+    rule: &mut Rule,
     fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
-    all_facts: &[Literal],
-) -> Vec<Substitution> {
-    if body.is_empty() {
-        return vec![Substitution::default()];
-    }
-
-    let first_lit = &body[0];
-    let rest = &body[1..];
-
-    // Get candidate facts
-    let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
-        all_facts.iter().collect()
-    } else {
-        fact_index
-            .get(&fact_index_key(first_lit))
-            .map(|v| v.iter().collect())
-            .unwrap_or_default()
-    };
-
-    let mut results = Vec::new();
-
-    for fact in candidates {
-        if let Some(subst) = match_literal(first_lit, fact) {
-            // Apply substitution to rest of body
-            let substituted_rest: Vec<Literal> = rest
-                .iter()
-                .map(|l| apply_substitution_to_literal(l, &subst))
-                .collect();
-
-            // Recursively match rest
-            for rest_subst in match_body_against_facts(&substituted_rest, fact_index, all_facts) {
-                if let Some(merged) = merge_substitutions(&subst, &rest_subst) {
-                    results.push(merged);
+) {
+    let new_body: RuleBody = rule
+        .body
+        .iter()
+        .map(|bl| {
+            let logic = match bl.as_logic() {
+                Some(l) => l,
+                None => return bl.clone(),
+            };
+            let lit = logic.to_literal();
+            let key = fact_index_key(&lit);
+            let facts = match fact_index.get(&key) {
+                Some(f) => f,
+                None => return bl.clone(),
+            };
+            for fact in facts {
+                if lit.name_id() == fact.name_id()
+                    && lit.negation == fact.negation
+                    && lit.mode == fact.mode
+                    && lit.temporal == fact.temporal
+                    && lit.predicate_args().len() == fact.predicate_args().len()
+                    && lit
+                        .predicate_args()
+                        .iter()
+                        .zip(fact.predicate_args().iter())
+                        .all(|(a, b)| a == b || a.numeric_eq(b))
+                {
+                    return BodyLiteral::from(fact.clone());
                 }
+            }
+            bl.clone()
+        })
+        .collect();
+    rule.body = new_body;
+}
+
+/// Apply a substitution to a body literal, returning a new body literal.
+///
+/// For logic literals, `BodyArg::Arith` arguments are evaluated under the
+/// substitution and replaced with concrete `Term` values.  This ensures the
+/// grounded rule's body literal has the correct arity and can be matched by
+/// the reasoner.
+fn apply_substitution_to_body_literal(bl: &BodyLiteral, subst: &Substitution) -> BodyLiteral {
+    match bl {
+        BodyLiteral::Logic(lit) => {
+            // Use resolve_body_logic to evaluate any BodyArg::Arith arguments,
+            // then apply substitution to produce a fully ground literal.
+            match resolve_body_logic(lit, subst) {
+                Some(resolved) => {
+                    BodyLiteral::from(apply_substitution_to_literal(&resolved, subst))
+                }
+                None => {
+                    // Arithmetic evaluation failed — fall back to dropping arith args.
+                    let as_lit = lit.to_literal();
+                    BodyLiteral::from(apply_substitution_to_literal(&as_lit, subst))
+                }
+            }
+        }
+        // Arithmetic constraints are passed through unchanged during body matching.
+        // (Evaluation of arithmetic constraints is handled separately.)
+        BodyLiteral::Arithmetic(_) => bl.clone(),
+    }
+}
+
+/// Resolve a body logic literal into a [`Literal`] suitable for fact-matching.
+///
+/// - `BodyArg::Term` variables are resolved from the substitution.
+/// - `BodyArg::Arith` arguments are evaluated under `subst` (via
+///   [`ArithExpr::eval`]) and replaced with the resulting concrete [`Term`].
+/// - Temporal variables and interval variables are also resolved.
+///
+/// Returns `None` if any arithmetic evaluation fails, signalling that this
+/// substitution path should be discarded.
+fn resolve_body_logic(lit: &BodyLogicLiteral, subst: &Substitution) -> Option<Literal> {
+    let mut terms = Vec::with_capacity(lit.predicate_args().len());
+    for arg in lit.predicate_args() {
+        match arg {
+            BodyArg::Term(t) => {
+                if let Term::Symbol(pid) = t
+                    && is_variable(resolve(*pid))
+                {
+                    terms.push(subst.terms.get(pid).cloned().unwrap_or_else(|| t.clone()));
+                    continue;
+                }
+                terms.push(t.clone());
+            }
+            BodyArg::Arith(expr) => {
+                let val = expr.eval(subst).ok()?;
+                terms.push(Term::try_from(val).ok()?);
             }
         }
     }
 
-    results
+    // Resolve name if variable
+    let name_id = lit.name_id();
+    let resolved_name_id = if is_variable(resolve(name_id)) {
+        match subst.terms.get(&name_id) {
+            Some(Term::Symbol(id)) => *id,
+            _ => name_id,
+        }
+    } else {
+        name_id
+    };
+
+    let mut result = Literal::from_ids(
+        resolved_name_id,
+        lit.negation,
+        lit.mode.clone(),
+        lit.temporal.clone(),
+        terms,
+    );
+
+    // Resolve interval variable (whole-interval binding)
+    if let Some(var_id) = lit.interval_var {
+        if let Some(interval) = subst.intervals.get(&var_id) {
+            result.temporal = interval.clone();
+        } else {
+            result.interval_var = Some(var_id);
+        }
+    } else if let Some(ref texpr) = lit.temporal_expr {
+        let resolved_start = resolve_time_expr(&texpr.start, &subst.temporal);
+        let resolved_end = resolve_time_expr(&texpr.end, &subst.temporal);
+        match (resolved_start, resolved_end) {
+            (TimeExpr::Const(s), TimeExpr::Const(e)) => {
+                result.temporal = Temporal::new(s, e);
+            }
+            (start, end) => {
+                result.temporal_expr = Some(TemporalExpr::new(start, end));
+            }
+        }
+    }
+
+    Some(result)
 }
 
-/// Match body with at least one delta (new) fact
-fn match_body_with_delta(
-    body: &[Literal],
+/// Match body literals against facts, returning all valid substitutions.
+///
+/// Evaluates [`BodyLiteral`] elements in source order, threading
+/// substitutions left-to-right (ADR-001b):
+///
+/// - **Logic** literals have their `BodyArg::Arith` arguments evaluated
+///   under the current substitution, then are matched against facts.
+/// - **Arithmetic** constraints are evaluated under the current
+///   substitution: `Bind` extends it, `Compare` filters it.
+///
+/// On any evaluation failure the substitution path is discarded.
+#[cfg(test)]
+fn match_body_against_facts(
+    body: &[BodyLiteral],
     fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
-    delta_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+    all_facts: &[Literal],
+    current_subst: &Substitution,
+) -> Vec<Substitution> {
+    if body.is_empty() {
+        return vec![current_subst.clone()];
+    }
+
+    let first = &body[0];
+    let rest = &body[1..];
+
+    match first {
+        BodyLiteral::Logic(logic_lit) => {
+            // Resolve BodyArg::Arith arguments and variable terms under current_subst
+            let first_lit = match resolve_body_logic(logic_lit, current_subst) {
+                Some(lit) => lit,
+                None => return Vec::new(), // arith eval failed — discard path
+            };
+
+            // Get candidate facts
+            let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
+                all_facts.iter().collect()
+            } else {
+                fact_index
+                    .get(&fact_index_key(&first_lit))
+                    .map(|v| v.iter().collect())
+                    .unwrap_or_default()
+            };
+
+            let mut results = Vec::new();
+
+            for fact in candidates {
+                if let Some(new_bindings) = match_literal(&first_lit, fact) {
+                    if let Some(merged) = merge_substitutions(current_subst, &new_bindings) {
+                        results.extend(match_body_against_facts(
+                            rest, fact_index, all_facts, &merged,
+                        ));
+                    }
+                }
+            }
+
+            results
+        }
+        BodyLiteral::Arithmetic(constraint) => {
+            // Evaluate the constraint under the current substitution.
+            // Bind extends the substitution; Compare filters it.
+            let mut sub_copy = current_subst.clone();
+            if constraint.eval(&mut sub_copy).is_ok() {
+                match_body_against_facts(rest, fact_index, all_facts, &sub_copy)
+            } else {
+                Vec::new() // evaluation failed — discard path
+            }
+        }
+    }
+}
+
+/// Match body with at least one delta (new) fact.
+///
+/// Evaluates body elements in source order (left-to-right), threading
+/// substitutions and tracking whether at least one delta fact was used.
+/// Only substitutions that involve at least one delta fact are returned.
+///
+/// Logic literals are resolved via [`resolve_body_logic`] and matched
+/// against all available facts. Arithmetic constraints are evaluated
+/// inline under the current substitution.
+fn match_body_with_delta(
+    body: &[BodyLiteral],
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     all_facts: &[Literal],
     delta_facts: &[Literal],
 ) -> Vec<Substitution> {
@@ -430,43 +656,29 @@ fn match_body_with_delta(
         return vec![Substitution::default()];
     }
 
+    // Build a set of delta fact keys for efficient membership testing
+    let delta_keys: FxHashSet<_> = delta_facts.iter().map(literal_key).collect();
+
+    // If body has no logic literals, arithmetic-only bodies are always delta-relevant
+    // (the rule is essentially a ground generator).
+    let has_logic_literals = body.iter().any(|bl| matches!(bl, BodyLiteral::Logic(_)));
+
     let mut results = Vec::new();
     let mut seen: FxHashSet<SubstitutionKey> = FxHashSet::default();
 
-    for (i, delta_lit) in body.iter().enumerate() {
-        let rest: Vec<Literal> = body
-            .iter()
-            .enumerate()
-            .filter(|(j, _)| *j != i)
-            .map(|(_, l)| l.clone())
-            .collect();
-
-        let delta_candidates: Vec<&Literal> = if is_variable(delta_lit.name()) {
-            delta_facts.iter().collect()
-        } else {
-            delta_index
-                .get(&fact_index_key(delta_lit))
-                .map(|v| v.iter().collect())
-                .unwrap_or_default()
-        };
-
-        for fact in delta_candidates {
-            if let Some(subst) = match_literal(delta_lit, fact) {
-                let substituted_rest: Vec<Literal> = rest
-                    .iter()
-                    .map(|l| apply_substitution_to_literal(l, &subst))
-                    .collect();
-
-                for rest_subst in match_body_against_facts(&substituted_rest, fact_index, all_facts)
-                {
-                    if let Some(merged) = merge_substitutions(&subst, &rest_subst) {
-                        let key = substitution_key(&merged);
-                        if !seen.contains(&key) {
-                            seen.insert(key);
-                            results.push(merged);
-                        }
-                    }
-                }
+    for (subst, used_delta) in match_body_ordered_delta(
+        body,
+        fact_index,
+        all_facts,
+        &delta_keys,
+        &Substitution::default(),
+        false,
+    ) {
+        if used_delta || !has_logic_literals {
+            let key = substitution_key(&subst);
+            if !seen.contains(&key) {
+                seen.insert(key);
+                results.push(subst);
             }
         }
     }
@@ -474,16 +686,84 @@ fn match_body_with_delta(
     results
 }
 
+/// Recursive helper for source-order body matching with delta tracking.
+///
+/// Processes body elements left-to-right, accumulating `current_subst` and
+/// tracking whether any matched fact belongs to the delta set.
+fn match_body_ordered_delta(
+    body: &[BodyLiteral],
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+    all_facts: &[Literal],
+    delta_keys: &FxHashSet<(SymbolId, bool, Vec<Term>, Mode, Temporal)>,
+    current_subst: &Substitution,
+    used_delta: bool,
+) -> Vec<(Substitution, bool)> {
+    if body.is_empty() {
+        return vec![(current_subst.clone(), used_delta)];
+    }
+
+    let first = &body[0];
+    let rest = &body[1..];
+
+    match first {
+        BodyLiteral::Logic(logic_lit) => {
+            let first_lit = match resolve_body_logic(logic_lit, current_subst) {
+                Some(lit) => lit,
+                None => return Vec::new(),
+            };
+
+            let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
+                all_facts.iter().collect()
+            } else {
+                fact_index
+                    .get(&fact_index_key(&first_lit))
+                    .map(|v| v.iter().collect())
+                    .unwrap_or_default()
+            };
+
+            let mut results = Vec::new();
+
+            for fact in candidates {
+                if let Some(new_bindings) = match_literal(&first_lit, fact)
+                    && let Some(merged) = merge_substitutions(current_subst, &new_bindings)
+                {
+                    let is_delta = delta_keys.contains(&literal_key(fact));
+                    results.extend(match_body_ordered_delta(
+                        rest,
+                        fact_index,
+                        all_facts,
+                        delta_keys,
+                        &merged,
+                        used_delta || is_delta,
+                    ));
+                }
+            }
+
+            results
+        }
+        BodyLiteral::Arithmetic(constraint) => {
+            let mut sub_copy = current_subst.clone();
+            if constraint.eval(&mut sub_copy).is_ok() {
+                match_body_ordered_delta(
+                    rest, fact_index, all_facts, delta_keys, &sub_copy, used_delta,
+                )
+            } else {
+                Vec::new()
+            }
+        }
+    }
+}
+
 /// A hashable key representing a substitution (term, temporal, and interval bindings).
 type SubstitutionKey = (
-    Vec<(SymbolId, SymbolId)>,
+    Vec<(SymbolId, Term)>,
     Vec<(SymbolId, TimePoint)>,
     Vec<(SymbolId, Temporal)>,
 );
 
 /// Build a hashable key from a substitution for deduplication.
 fn substitution_key(subst: &Substitution) -> SubstitutionKey {
-    let mut term_pairs: Vec<_> = subst.terms.iter().map(|(k, v)| (*k, *v)).collect();
+    let mut term_pairs: Vec<_> = subst.terms.iter().map(|(k, v)| (*k, v.clone())).collect();
     term_pairs.sort_by_key(|(k, _)| k.as_raw());
 
     let mut temporal_pairs: Vec<_> = subst.temporal.iter().map(|(k, v)| (*k, *v)).collect();
@@ -560,8 +840,8 @@ pub fn ground_theory_with_limit(
         return (theory.clone(), false);
     }
 
-    // Track facts using interned types (minimal allocation)
-    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<SymbolId>, Mode, Temporal)> =
+    // Track facts using Term-based keys (minimal allocation)
+    let mut fact_keys: FxHashSet<(SymbolId, bool, Vec<crate::term::Term>, Mode, Temporal)> =
         FxHashSet::default();
     let mut facts_list: Vec<Literal> = Vec::new();
     let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
@@ -600,29 +880,14 @@ pub fn ground_theory_with_limit(
         let mut new_facts_this_round: Vec<Literal> = Vec::new();
         let mut new_rules_this_round: Vec<Rule> = Vec::new();
 
-        // Build delta index (using interned types)
-        let mut delta_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
-            FxHashMap::default();
-        for lit in &facts_new {
-            delta_index
-                .entry(fact_index_key(lit))
-                .or_default()
-                .push(lit.clone());
-        }
-
         // For each rule with variables
         for rule in &var_rules {
             if limit_hit {
                 break;
             }
 
-            let substitutions = match_body_with_delta(
-                &rule.body,
-                &fact_index,
-                &delta_index,
-                &facts_list,
-                &facts_new,
-            );
+            let substitutions =
+                match_body_with_delta(&rule.body, &fact_index, &facts_list, &facts_new);
 
             for subst in substitutions {
                 if instance_counter >= max_instances {
@@ -649,7 +914,9 @@ pub fn ground_theory_with_limit(
                     known_instances.insert(sig);
                     instance_counter += 1;
 
-                    let ground_rule = apply_substitution_to_rule(rule, &subst, instance_counter);
+                    let mut ground_rule =
+                        apply_substitution_to_rule(rule, &subst, instance_counter);
+                    normalize_body_against_facts(&mut ground_rule, &fact_index);
 
                     // Add head literals as new facts (for non-defeaters)
                     if ground_rule.rule_type != RuleType::Defeater {
@@ -729,10 +996,8 @@ mod tests {
         let subst = match_literal(&pattern, &ground).unwrap();
         let x_id = intern("?x");
         let y_id = intern("?y");
-        let alice_id = intern("alice");
-        let bob_id = intern("bob");
-        assert_eq!(subst.terms.get(&x_id), Some(&alice_id));
-        assert_eq!(subst.terms.get(&y_id), Some(&bob_id));
+        assert_eq!(subst.terms.get(&x_id), Some(&Term::Symbol(intern("alice"))));
+        assert_eq!(subst.terms.get(&y_id), Some(&Term::Symbol(intern("bob"))));
     }
 
     #[test]
@@ -765,11 +1030,18 @@ mod tests {
             vec!["?x".to_string(), "?y".to_string()],
         );
         let mut subst = Substitution::default();
-        subst.terms.insert(intern("?x"), intern("alice"));
-        subst.terms.insert(intern("?y"), intern("bob"));
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
+        subst
+            .terms
+            .insert(intern("?y"), Term::Symbol(intern("bob")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates(), vec!["alice", "bob"]);
+        assert_eq!(
+            result.predicates(),
+            vec!["alice".to_string(), "bob".to_string()]
+        );
     }
 
     #[test]
@@ -817,9 +1089,10 @@ mod tests {
         // Check that grounded rule exists
         let has_grounded = grounded.rules().any(|r| {
             r.label.starts_with("r1_")
-                && r.head
-                    .iter()
-                    .any(|h| h.name() == "ancestor" && h.predicates() == vec!["alice", "bob"])
+                && r.head.iter().any(|h| {
+                    h.name() == "ancestor"
+                        && h.predicates() == vec!["alice".to_string(), "bob".to_string()]
+                })
         });
         assert!(has_grounded);
     }
@@ -888,7 +1161,7 @@ mod tests {
             r.label.starts_with("r2_")
                 && r.head
                     .iter()
-                    .any(|h| h.name() == "r" && h.predicates() == vec!["a"])
+                    .any(|h| h.name() == "r" && h.predicates() == vec!["a".to_string()])
         });
         assert!(
             has_r2_grounded,
@@ -1036,10 +1309,10 @@ mod tests {
     #[test]
     fn test_merge_substitutions_conflict() {
         let mut s1 = Substitution::default();
-        s1.terms.insert(intern("?x"), intern("alice"));
+        s1.terms.insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms.insert(intern("?x"), intern("bob")); // Conflict!
+        s2.terms.insert(intern("?x"), Term::Symbol(intern("bob"))); // Conflict!
 
         let merged = merge_substitutions(&s1, &s2);
         assert!(
@@ -1051,10 +1324,10 @@ mod tests {
     #[test]
     fn test_merge_substitutions_compatible() {
         let mut s1 = Substitution::default();
-        s1.terms.insert(intern("?x"), intern("alice"));
+        s1.terms.insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms.insert(intern("?y"), intern("bob"));
+        s2.terms.insert(intern("?y"), Term::Symbol(intern("bob")));
 
         let merged = merge_substitutions(&s1, &s2).unwrap();
         assert_eq!(merged.terms.len(), 2);
@@ -1063,10 +1336,10 @@ mod tests {
     #[test]
     fn test_merge_substitutions_same_value() {
         let mut s1 = Substitution::default();
-        s1.terms.insert(intern("?x"), intern("alice"));
+        s1.terms.insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let mut s2 = Substitution::default();
-        s2.terms.insert(intern("?x"), intern("alice")); // Same value
+        s2.terms.insert(intern("?x"), Term::Symbol(intern("alice"))); // Same value
 
         let merged = merge_substitutions(&s1, &s2).unwrap();
         assert_eq!(merged.terms.len(), 1);
@@ -1091,8 +1364,10 @@ mod tests {
 
         let subst = match_literal(&pattern, &ground).unwrap();
         let rel_id = intern("?rel");
-        let parent_id = intern("parent");
-        assert_eq!(subst.terms.get(&rel_id), Some(&parent_id));
+        assert_eq!(
+            subst.terms.get(&rel_id),
+            Some(&Term::Symbol(intern("parent")))
+        );
     }
 
     #[test]
@@ -1105,12 +1380,16 @@ mod tests {
             vec!["?x".to_string()],
         );
         let mut subst = Substitution::default();
-        subst.terms.insert(intern("?rel"), intern("parent"));
-        subst.terms.insert(intern("?x"), intern("alice"));
+        subst
+            .terms
+            .insert(intern("?rel"), Term::Symbol(intern("parent")));
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
         assert_eq!(result.name(), "parent");
-        assert_eq!(result.predicates(), vec!["alice"]);
+        assert_eq!(result.predicates(), vec!["alice".to_string()]);
     }
 
     #[test]
@@ -1177,9 +1456,10 @@ mod tests {
 
         // Should have grandparent(alice, carol)
         let has_grandparent = grounded.rules().any(|r| {
-            r.head
-                .iter()
-                .any(|h| h.name() == "grandparent" && h.predicates() == vec!["alice", "carol"])
+            r.head.iter().any(|h| {
+                h.name() == "grandparent"
+                    && h.predicates() == vec!["alice".to_string(), "carol".to_string()]
+            })
         });
         assert!(
             has_grandparent,
@@ -1339,12 +1619,12 @@ mod tests {
 
         let mut subst = Substitution::default();
         let x_id = intern("?x");
-        let val_id = intern("value");
-        subst.terms.insert(x_id, val_id);
+        subst.terms.insert(x_id, Term::Symbol(intern("value")));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates()[0], "constant");
-        assert_eq!(result.predicates()[1], "value");
+        let preds = result.predicates();
+        assert_eq!(preds[0], "constant");
+        assert_eq!(preds[1], "value");
     }
 
     #[test]
@@ -1582,10 +1862,8 @@ mod tests {
     fn test_match_body_with_delta_empty_body_returns_identity_substitution() {
         let fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
             FxHashMap::default();
-        let delta_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
-            FxHashMap::default();
 
-        let substitutions = match_body_with_delta(&[], &fact_index, &delta_index, &[], &[]);
+        let substitutions = match_body_with_delta(&[], &fact_index, &[], &[]);
         assert_eq!(
             substitutions.len(),
             1,
@@ -1621,7 +1899,9 @@ mod tests {
                 && r.rule_type == RuleType::Fact
                 && r.body.is_empty()
                 && r.head.iter().any(|h| {
-                    h.name() == "p" && h.predicates() == vec!["a"] && h.temporal_expr.is_some()
+                    h.name() == "p"
+                        && h.predicates() == vec!["a".to_string()]
+                        && h.temporal_expr.is_some()
                 })
         });
 
@@ -1678,8 +1958,7 @@ mod tests {
         assert!(result.is_some(), "[O]pay(?x) should match [O]pay(alice)");
         let subst = result.unwrap();
         let x_id = intern("?x");
-        let alice_id = intern("alice");
-        assert_eq!(subst.terms.get(&x_id), Some(&alice_id));
+        assert_eq!(subst.terms.get(&x_id), Some(&Term::Symbol(intern("alice"))));
     }
 
     #[test]
@@ -1774,7 +2053,7 @@ mod tests {
             r.label.starts_with("r1_")
                 && r.head
                     .iter()
-                    .any(|h| h.name() == "paid" && h.predicates() == vec!["alice"])
+                    .any(|h| h.name() == "paid" && h.predicates() == vec!["alice".to_string()])
         });
         assert!(
             has_grounded_r1,
@@ -1805,7 +2084,10 @@ mod tests {
         );
 
         let subst = match_literal(&pattern, &ground).unwrap();
-        assert_eq!(subst.terms.get(&intern("?x")), Some(&intern("alice")));
+        assert_eq!(
+            subst.terms.get(&intern("?x")),
+            Some(&Term::Symbol(intern("alice")))
+        );
         assert_eq!(
             subst.temporal.get(&intern("?t1")),
             Some(&TimePoint::Moment(100))
@@ -1933,12 +2215,14 @@ mod tests {
         );
 
         let mut subst = Substitution::default();
-        subst.terms.insert(intern("?x"), intern("alice"));
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("alice")));
         subst.temporal.insert(intern("?t1"), TimePoint::Moment(100));
         subst.temporal.insert(intern("?t2"), TimePoint::Moment(200));
 
         let result = apply_substitution_to_literal(&lit, &subst);
-        assert_eq!(result.predicates(), vec!["alice"]);
+        assert_eq!(result.predicates(), vec!["alice".to_string()]);
         assert!(result.temporal_expr.is_none(), "Should be fully resolved");
         assert_eq!(result.temporal.start, TimePoint::Moment(100));
         assert_eq!(result.temporal.end, TimePoint::Moment(200));
@@ -2039,7 +2323,7 @@ mod tests {
             r.label.starts_with("r1_")
                 && r.head.iter().any(|h| {
                     h.name() == "q"
-                        && h.predicates() == vec!["a"]
+                        && h.predicates() == vec!["a".to_string()]
                         && h.temporal.start == TimePoint::Moment(100)
                         && h.temporal.end == TimePoint::Moment(200)
                         && h.temporal_expr.is_none()
@@ -2115,5 +2399,1272 @@ mod tests {
             2,
             "Two temporal facts should produce two groundings"
         );
+    }
+
+    // =====================================================================
+    // Cross-type numeric matching (REQ-010/CON-005)
+    // =====================================================================
+
+    #[test]
+    fn test_match_literal_integer_matches_decimal() {
+        use rust_decimal::Decimal;
+
+        // Pattern has Integer(100), ground has Decimal(100.00)
+        let pattern = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("item")), Term::Integer(100)],
+        );
+        let ground = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Decimal(Decimal::new(10000, 2)),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Integer(100) should match Decimal(100.00)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_integer_matches_float() {
+        use crate::term::FiniteFloat;
+
+        // Pattern has Integer(100), ground has Float(100.0)
+        let pattern = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("item")), Term::Integer(100)],
+        );
+        let ground = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Float(FiniteFloat::new(100.0).unwrap()),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Integer(100) should match Float(100.0)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_decimal_matches_float() {
+        use crate::term::FiniteFloat;
+        use rust_decimal::Decimal;
+
+        // Pattern has Decimal(100.00), ground has Float(100.0)
+        let pattern = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Decimal(Decimal::new(10000, 2)),
+            ],
+        );
+        let ground = Literal::from_ids(
+            intern("price"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![
+                Term::Symbol(intern("item")),
+                Term::Float(FiniteFloat::new(100.0).unwrap()),
+            ],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Decimal(100.00) should match Float(100.0)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_symbol_never_matches_numeric() {
+        // Symbol("100") must NOT match Integer(100)
+        let pattern = Literal::from_ids(
+            intern("val"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("100"))],
+        );
+        let ground = Literal::from_ids(
+            intern("val"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Integer(100)],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_none(),
+            "Symbol(\"100\") must not match Integer(100)"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_cross_type_variable_consistency() {
+        use rust_decimal::Decimal;
+
+        // Variable ?x appears twice. First bound to Integer(100),
+        // second position in ground has Decimal(100.00) — should still match.
+        let pattern = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?x"))],
+        );
+        let ground = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Integer(100), Term::Decimal(Decimal::new(10000, 2))],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_some(),
+            "Variable bound to Integer(100) should accept Decimal(100.00) on re-use"
+        );
+    }
+
+    #[test]
+    fn test_match_literal_cross_type_variable_inconsistency_rejects() {
+        use rust_decimal::Decimal;
+
+        // Variable ?x bound to Integer(100), second position has Decimal(99.00) — must reject.
+        let pattern = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?x"))],
+        );
+        let ground = Literal::from_ids(
+            intern("eq"),
+            false,
+            Default::default(),
+            Default::default(),
+            vec![Term::Integer(100), Term::Decimal(Decimal::new(9900, 2))],
+        );
+
+        assert!(
+            match_literal(&pattern, &ground).is_none(),
+            "Variable bound to Integer(100) should reject Decimal(99.00)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Body eval order tests (ADR-001b)
+    // -----------------------------------------------------------------------
+
+    /// Helper: build a fact index from a slice of literals.
+    fn build_fact_index(
+        facts: &[Literal],
+    ) -> FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> {
+        let mut idx: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> = FxHashMap::default();
+        for lit in facts {
+            idx.entry(fact_index_key(lit))
+                .or_default()
+                .push(lit.clone());
+        }
+        idx
+    }
+
+    #[test]
+    fn body_eval_order_arithmetic_bind_threads_to_later_logic() {
+        // Body: (bind ?y 10), (cost ?y)
+        // Facts: cost(10)
+        // Expected: one substitution with ?y = 10
+        use crate::arith::{ArithConstraint, ArithExpr};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let y_id = intern("?y");
+
+        let bind_y = BodyLiteral::Arithmetic(ArithConstraint::Bind {
+            var: y_id,
+            expr: ArithExpr::Lit(NumericValue::Integer(10)),
+        });
+
+        let cost_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "cost",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![BodyArg::Term(Term::Symbol(y_id))],
+        ));
+
+        let body = vec![bind_y, cost_lit];
+
+        let fact = Literal::from_ids(
+            intern("cost"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Integer(10)],
+        );
+        let facts = vec![fact];
+        let fact_index = build_fact_index(&facts);
+
+        let results =
+            match_body_against_facts(&body, &fact_index, &facts, &Substitution::default());
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].terms.get(&y_id), Some(&Term::Integer(10)));
+    }
+
+    #[test]
+    fn body_eval_order_arithmetic_bind_no_match() {
+        // Body: (bind ?y 99), (cost ?y)
+        // Facts: cost(10)
+        // Expected: no substitutions (99 != 10)
+        use crate::arith::{ArithConstraint, ArithExpr};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let y_id = intern("?y");
+
+        let bind_y = BodyLiteral::Arithmetic(ArithConstraint::Bind {
+            var: y_id,
+            expr: ArithExpr::Lit(NumericValue::Integer(99)),
+        });
+
+        let cost_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "cost",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![BodyArg::Term(Term::Symbol(y_id))],
+        ));
+
+        let body = vec![bind_y, cost_lit];
+
+        let fact = Literal::from_ids(
+            intern("cost"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Integer(10)],
+        );
+        let facts = vec![fact];
+        let fact_index = build_fact_index(&facts);
+
+        let results =
+            match_body_against_facts(&body, &fact_index, &facts, &Substitution::default());
+        assert!(results.is_empty(), "bind ?y=99 should not match cost(10)");
+    }
+
+    #[test]
+    fn body_eval_order_compare_filters_substitution() {
+        // Body: (price ?x ?p), (> ?p 50)
+        // Facts: price(a, 100), price(b, 30)
+        // Expected: only the {?x=a, ?p=100} substitution survives
+        use crate::arith::{ArithConstraint, ArithExpr, CmpOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let p_id = intern("?p");
+
+        let price_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "price",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Term(Term::Symbol(p_id)),
+            ],
+        ));
+
+        let compare = BodyLiteral::Arithmetic(ArithConstraint::Compare {
+            op: CmpOp::Gt,
+            lhs: ArithExpr::Var(p_id),
+            rhs: ArithExpr::Lit(NumericValue::Integer(50)),
+        });
+
+        let body = vec![price_lit, compare];
+
+        let fact_a = Literal::from_ids(
+            intern("price"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(100)],
+        );
+        let fact_b = Literal::from_ids(
+            intern("price"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("b")), Term::Integer(30)],
+        );
+        let facts = vec![fact_a, fact_b];
+        let fact_index = build_fact_index(&facts);
+
+        let results =
+            match_body_against_facts(&body, &fact_index, &facts, &Substitution::default());
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].terms.get(&x_id),
+            Some(&Term::Symbol(intern("a")))
+        );
+        assert_eq!(results[0].terms.get(&p_id), Some(&Term::Integer(100)));
+    }
+
+    #[test]
+    fn body_eval_order_arith_arg_in_logic_literal() {
+        // Body: (val ?x ?n), (result ?x (+ ?n 1))
+        // Facts: val(a, 5), result(a, 6)
+        // Expected: one substitution {?x=a, ?n=5}
+        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let n_id = intern("?n");
+
+        let val_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "val",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Term(Term::Symbol(n_id)),
+            ],
+        ));
+
+        let result_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "result",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Arith(ArithExpr::NaryOp {
+                    op: NaryArithOp::Add,
+                    args: vec![
+                        ArithExpr::Var(n_id),
+                        ArithExpr::Lit(NumericValue::Integer(1)),
+                    ],
+                }),
+            ],
+        ));
+
+        let body = vec![val_lit, result_lit];
+
+        let fact1 = Literal::from_ids(
+            intern("val"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(5)],
+        );
+        let fact2 = Literal::from_ids(
+            intern("result"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(6)],
+        );
+        let facts = vec![fact1, fact2];
+        let fact_index = build_fact_index(&facts);
+
+        let results =
+            match_body_against_facts(&body, &fact_index, &facts, &Substitution::default());
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].terms.get(&x_id),
+            Some(&Term::Symbol(intern("a")))
+        );
+        assert_eq!(results[0].terms.get(&n_id), Some(&Term::Integer(5)));
+    }
+
+    #[test]
+    fn body_eval_order_arith_arg_eval_fail_discards_path() {
+        // Body: (result ?x (+ ?unbound 1))
+        // Facts: result(a, 6)
+        // Expected: no substitutions (arith eval fails due to unbound ?unbound)
+        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let unbound_id = intern("?unbound");
+
+        let result_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "result",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Arith(ArithExpr::NaryOp {
+                    op: NaryArithOp::Add,
+                    args: vec![
+                        ArithExpr::Var(unbound_id),
+                        ArithExpr::Lit(NumericValue::Integer(1)),
+                    ],
+                }),
+            ],
+        ));
+
+        let body = vec![result_lit];
+
+        let fact = Literal::from_ids(
+            intern("result"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(6)],
+        );
+        let facts = vec![fact];
+        let fact_index = build_fact_index(&facts);
+
+        let results =
+            match_body_against_facts(&body, &fact_index, &facts, &Substitution::default());
+        assert!(
+            results.is_empty(),
+            "unbound arith var should discard substitution path"
+        );
+    }
+
+    #[test]
+    fn body_eval_order_bind_then_arith_arg() {
+        // Body: (val ?x ?n), (bind ?total (+ ?n 100)), (budget ?x ?total)
+        // Facts: val(a, 5), budget(a, 105)
+        // Tests that bind result threads into subsequent arith arg
+        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let n_id = intern("?n");
+        let total_id = intern("?total");
+
+        let val_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "val",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Term(Term::Symbol(n_id)),
+            ],
+        ));
+
+        let bind_total = BodyLiteral::Arithmetic(ArithConstraint::Bind {
+            var: total_id,
+            expr: ArithExpr::NaryOp {
+                op: NaryArithOp::Add,
+                args: vec![
+                    ArithExpr::Var(n_id),
+                    ArithExpr::Lit(NumericValue::Integer(100)),
+                ],
+            },
+        });
+
+        let budget_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "budget",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Term(Term::Symbol(total_id)),
+            ],
+        ));
+
+        let body = vec![val_lit, bind_total, budget_lit];
+
+        let fact1 = Literal::from_ids(
+            intern("val"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(5)],
+        );
+        let fact2 = Literal::from_ids(
+            intern("budget"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(105)],
+        );
+        let facts = vec![fact1, fact2];
+        let fact_index = build_fact_index(&facts);
+
+        let results =
+            match_body_against_facts(&body, &fact_index, &facts, &Substitution::default());
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].terms.get(&x_id),
+            Some(&Term::Symbol(intern("a")))
+        );
+        assert_eq!(results[0].terms.get(&n_id), Some(&Term::Integer(5)));
+        assert_eq!(results[0].terms.get(&total_id), Some(&Term::Integer(105)));
+    }
+
+    #[test]
+    fn body_eval_order_delta_with_arithmetic() {
+        // Test that match_body_with_delta handles arithmetic in source order
+        // Body: (price ?x ?p), (> ?p 50)
+        // Delta facts: price(a, 100)
+        // All facts: price(a, 100)
+        use crate::arith::{ArithConstraint, ArithExpr, CmpOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let p_id = intern("?p");
+
+        let price_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "price",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(x_id)),
+                BodyArg::Term(Term::Symbol(p_id)),
+            ],
+        ));
+
+        let compare = BodyLiteral::Arithmetic(ArithConstraint::Compare {
+            op: CmpOp::Gt,
+            lhs: ArithExpr::Var(p_id),
+            rhs: ArithExpr::Lit(NumericValue::Integer(50)),
+        });
+
+        let body = vec![price_lit, compare];
+
+        let fact = Literal::from_ids(
+            intern("price"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("a")), Term::Integer(100)],
+        );
+        let facts = vec![fact.clone()];
+        let delta_facts = vec![fact];
+        let fact_index = build_fact_index(&facts);
+
+        let results = match_body_with_delta(&body, &fact_index, &facts, &delta_facts);
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].terms.get(&x_id),
+            Some(&Term::Symbol(intern("a")))
+        );
+        assert_eq!(results[0].terms.get(&p_id), Some(&Term::Integer(100)));
+    }
+
+    #[test]
+    fn body_eval_order_end_to_end_grounding() {
+        // End-to-end: rule with bind and compare in body
+        // cost(widget, 10) >>
+        // cost(?item, ?price), (bind ?tax (* ?price 2)), (> ?tax 15)
+        //   => expensive(?item)
+        use crate::arith::{ArithConstraint, ArithExpr, CmpOp, NaryArithOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        let item_id = intern("?item");
+        let price_id = intern("?price");
+        let tax_id = intern("?tax");
+
+        let mut theory = Theory::new();
+
+        // Fact: cost(widget, 10)
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("cost"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("widget")), Term::Integer(10)],
+            ),
+        ));
+
+        // Fact: cost(pen, 5)
+        theory.add_rule(Rule::fact(
+            "f2",
+            Literal::from_ids(
+                intern("cost"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("pen")), Term::Integer(5)],
+            ),
+        ));
+
+        // Rule: cost(?item, ?price), (bind ?tax (* ?price 2)), (> ?tax 15)
+        //       => expensive(?item)
+        let body: RuleBody = smallvec::smallvec![
+            BodyLiteral::Logic(BodyLogicLiteral::new(
+                "cost",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(item_id)),
+                    BodyArg::Term(Term::Symbol(price_id)),
+                ],
+            )),
+            BodyLiteral::Arithmetic(ArithConstraint::Bind {
+                var: tax_id,
+                expr: ArithExpr::NaryOp {
+                    op: NaryArithOp::Mul,
+                    args: vec![
+                        ArithExpr::Var(price_id),
+                        ArithExpr::Lit(NumericValue::Integer(2)),
+                    ],
+                },
+            }),
+            BodyLiteral::Arithmetic(ArithConstraint::Compare {
+                op: CmpOp::Gt,
+                lhs: ArithExpr::Var(tax_id),
+                rhs: ArithExpr::Lit(NumericValue::Integer(15)),
+            }),
+        ];
+
+        let head = vec![Literal::from_ids(
+            intern("expensive"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(item_id)],
+        )];
+
+        theory.add_rule(Rule::new("r1", RuleType::Strict, body, head));
+
+        let grounded = ground_theory(&theory);
+
+        // widget: tax = 10*2 = 20 > 15 → expensive(widget) should be derived
+        // pen:    tax = 5*2  = 10 ≤ 15 → no derivation
+        let expensive_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "expensive"))
+            .collect();
+
+        assert_eq!(
+            expensive_rules.len(),
+            1,
+            "only widget should produce expensive"
+        );
+        assert_eq!(
+            expensive_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("widget"))]
+        );
+    }
+
+    // =====================================================================
+    // Term propagation tests — Integer, Decimal, Float through heads
+    // =====================================================================
+
+    #[test]
+    fn apply_subst_propagates_integer_to_head() {
+        let lit = Literal::from_ids(
+            intern("result"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("widget")));
+        subst.terms.insert(intern("?n"), Term::Integer(42));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[Term::Symbol(intern("widget")), Term::Integer(42)]
+        );
+    }
+
+    #[test]
+    fn apply_subst_propagates_decimal_to_head() {
+        use rust_decimal::Decimal;
+
+        let lit = Literal::from_ids(
+            intern("price"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?item")), Term::Symbol(intern("?p"))],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?item"), Term::Symbol(intern("coffee")));
+        subst
+            .terms
+            .insert(intern("?p"), Term::Decimal(Decimal::new(399, 2)));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Symbol(intern("coffee")),
+                Term::Decimal(Decimal::new(399, 2))
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_subst_propagates_float_to_head() {
+        use crate::term::FiniteFloat;
+
+        let lit = Literal::from_ids(
+            intern("measurement"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?sensor")), Term::Symbol(intern("?v"))],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?sensor"), Term::Symbol(intern("temp1")));
+        subst
+            .terms
+            .insert(intern("?v"), Term::Float(FiniteFloat::new(98.6).unwrap()));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Symbol(intern("temp1")),
+                Term::Float(FiniteFloat::new(98.6).unwrap())
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_subst_preserves_concrete_numeric_args() {
+        // Non-variable numeric args in the literal should pass through unchanged.
+        use rust_decimal::Decimal;
+
+        let lit = Literal::from_ids(
+            intern("fixed"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Integer(100),
+                Term::Decimal(Decimal::new(50, 1)),
+                Term::Symbol(intern("?x")),
+            ],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("val")));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Integer(100),
+                Term::Decimal(Decimal::new(50, 1)),
+                Term::Symbol(intern("val")),
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_subst_to_rule_propagates_numeric_to_head() {
+        // Rule: data(?x, ?n) => result(?x, ?n)
+        // Substitution: ?x = "sensor", ?n = Integer(42)
+        // Head should get result(sensor, 42)
+        use crate::body::BodyLogicLiteral;
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "data",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?x"))),
+                BodyArg::Term(Term::Symbol(intern("?n"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("result"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
+        );
+        let rule = Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        );
+
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?x"), Term::Symbol(intern("sensor")));
+        subst.terms.insert(intern("?n"), Term::Integer(42));
+
+        let ground = apply_substitution_to_rule(&rule, &subst, 1);
+        assert_eq!(
+            ground.head[0].predicate_args(),
+            &[Term::Symbol(intern("sensor")), Term::Integer(42)]
+        );
+    }
+
+    #[test]
+    fn grounding_propagates_integer_to_derived_fact() {
+        // Fact: sensor(temp, 42) with Integer(42)
+        // Rule: sensor(?name, ?val) => reading(?name, ?val)
+        // After grounding: reading(temp, 42) should have Term::Integer(42)
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("sensor"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("temp")), Term::Integer(42)],
+            ),
+        ));
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "sensor",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?name"))),
+                BodyArg::Term(Term::Symbol(intern("?val"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("reading"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?name")), Term::Symbol(intern("?val"))],
+        );
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        let reading_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "reading"))
+            .collect();
+        assert_eq!(reading_rules.len(), 1);
+        assert_eq!(
+            reading_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("temp")), Term::Integer(42)],
+            "Integer(42) must propagate through head"
+        );
+    }
+
+    #[test]
+    fn grounding_propagates_decimal_to_derived_fact() {
+        use rust_decimal::Decimal;
+
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("price"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    Term::Symbol(intern("coffee")),
+                    Term::Decimal(Decimal::new(399, 2)),
+                ],
+            ),
+        ));
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "price",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?item"))),
+                BodyArg::Term(Term::Symbol(intern("?p"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("listed"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?item")), Term::Symbol(intern("?p"))],
+        );
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        let listed_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "listed"))
+            .collect();
+        assert_eq!(listed_rules.len(), 1);
+        assert_eq!(
+            listed_rules[0].head[0].predicate_args(),
+            &[
+                Term::Symbol(intern("coffee")),
+                Term::Decimal(Decimal::new(399, 2))
+            ],
+            "Decimal(3.99) must propagate through head"
+        );
+    }
+
+    #[test]
+    fn grounding_propagates_float_to_derived_fact() {
+        use crate::term::FiniteFloat;
+
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("measure"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    Term::Symbol(intern("weight")),
+                    Term::Float(FiniteFloat::new(72.5).unwrap()),
+                ],
+            ),
+        ));
+
+        let body_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
+            "measure",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                BodyArg::Term(Term::Symbol(intern("?kind"))),
+                BodyArg::Term(Term::Symbol(intern("?v"))),
+            ],
+        ));
+        let head = Literal::from_ids(
+            intern("recorded"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?kind")), Term::Symbol(intern("?v"))],
+        );
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![body_lit],
+            vec![head],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        let recorded_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "recorded"))
+            .collect();
+        assert_eq!(recorded_rules.len(), 1);
+        assert_eq!(
+            recorded_rules[0].head[0].predicate_args(),
+            &[
+                Term::Symbol(intern("weight")),
+                Term::Float(FiniteFloat::new(72.5).unwrap())
+            ],
+            "Float(72.5) must propagate through head"
+        );
+    }
+
+    #[test]
+    fn grounding_numeric_derived_fact_chains_to_next_rule() {
+        // Fact: data(a, 10)
+        // Rule r1: data(?x, ?n) => processed(?x, ?n)
+        // Rule r2: processed(?x, ?n) => final(?x, ?n)
+        // After grounding: final(a, 10) with Term::Integer(10)
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("data"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("a")), Term::Integer(10)],
+            ),
+        ));
+
+        // r1: data(?x, ?n) => processed(?x, ?n)
+        theory.add_rule(Rule::new(
+            "r1",
+            RuleType::Defeasible,
+            smallvec::smallvec![BodyLiteral::Logic(BodyLogicLiteral::new(
+                "data",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(intern("?x"))),
+                    BodyArg::Term(Term::Symbol(intern("?n"))),
+                ],
+            ))],
+            vec![Literal::from_ids(
+                intern("processed"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
+            )],
+        ));
+
+        // r2: processed(?x, ?n) => final(?x, ?n)
+        theory.add_rule(Rule::new(
+            "r2",
+            RuleType::Defeasible,
+            smallvec::smallvec![BodyLiteral::Logic(BodyLogicLiteral::new(
+                "processed",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(intern("?x"))),
+                    BodyArg::Term(Term::Symbol(intern("?n"))),
+                ],
+            ))],
+            vec![Literal::from_ids(
+                intern("final"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("?x")), Term::Symbol(intern("?n"))],
+            )],
+        ));
+
+        let grounded = ground_theory(&theory);
+
+        // The derived fact final(a, 10) must have Term::Integer(10)
+        let final_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "final"))
+            .collect();
+        assert_eq!(final_rules.len(), 1);
+        assert_eq!(
+            final_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("a")), Term::Integer(10)],
+            "Integer(10) must chain through processed to final"
+        );
+    }
+
+    #[test]
+    fn grounding_arith_bind_result_propagates_to_head() {
+        // Fact: base(item, 10)
+        // Rule: base(?x, ?n), (bind ?total (+ ?n 5)) => total(?x, ?total)
+        // After grounding: total(item, 15) with Term::Integer(15)
+        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::term::NumericValue;
+
+        let x_id = intern("?x");
+        let n_id = intern("?n");
+        let total_id = intern("?total");
+
+        let mut theory = Theory::new();
+
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::from_ids(
+                intern("base"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern("item")), Term::Integer(10)],
+            ),
+        ));
+
+        let body: RuleBody = smallvec::smallvec![
+            BodyLiteral::Logic(BodyLogicLiteral::new(
+                "base",
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![
+                    BodyArg::Term(Term::Symbol(x_id)),
+                    BodyArg::Term(Term::Symbol(n_id)),
+                ],
+            )),
+            BodyLiteral::Arithmetic(ArithConstraint::Bind {
+                var: total_id,
+                expr: ArithExpr::NaryOp {
+                    op: NaryArithOp::Add,
+                    args: vec![
+                        ArithExpr::Var(n_id),
+                        ArithExpr::Lit(NumericValue::Integer(5)),
+                    ],
+                },
+            }),
+        ];
+
+        let head = vec![Literal::from_ids(
+            intern("total"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(x_id), Term::Symbol(total_id)],
+        )];
+
+        theory.add_rule(Rule::new("r1", RuleType::Defeasible, body, head));
+
+        let grounded = ground_theory(&theory);
+
+        let total_rules: Vec<_> = grounded
+            .rules()
+            .filter(|r| r.head.iter().any(|h| h.name() == "total"))
+            .collect();
+        assert_eq!(total_rules.len(), 1);
+        assert_eq!(
+            total_rules[0].head[0].predicate_args(),
+            &[Term::Symbol(intern("item")), Term::Integer(15)],
+            "Arithmetic result Integer(15) must propagate to head"
+        );
+    }
+
+    #[test]
+    fn grounding_mixed_numeric_types_in_head() {
+        // Verify that a head can contain a mix of Symbol, Integer, Decimal, Float
+        use crate::term::FiniteFloat;
+        use rust_decimal::Decimal;
+
+        let lit = Literal::from_ids(
+            intern("multi"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![
+                Term::Symbol(intern("?a")),
+                Term::Symbol(intern("?b")),
+                Term::Symbol(intern("?c")),
+                Term::Symbol(intern("?d")),
+            ],
+        );
+        let mut subst = Substitution::default();
+        subst
+            .terms
+            .insert(intern("?a"), Term::Symbol(intern("name")));
+        subst.terms.insert(intern("?b"), Term::Integer(42));
+        subst
+            .terms
+            .insert(intern("?c"), Term::Decimal(Decimal::new(314, 2)));
+        subst
+            .terms
+            .insert(intern("?d"), Term::Float(FiniteFloat::new(2.718).unwrap()));
+
+        let result = apply_substitution_to_literal(&lit, &subst);
+        assert_eq!(
+            result.predicate_args(),
+            &[
+                Term::Symbol(intern("name")),
+                Term::Integer(42),
+                Term::Decimal(Decimal::new(314, 2)),
+                Term::Float(FiniteFloat::new(2.718).unwrap()),
+            ]
+        );
+    }
+
+    // -- P1: normalize_body_against_facts must preserve temporal bounds --------
+
+    #[test]
+    fn normalize_body_preserves_temporal() {
+        let t1 = Temporal::new(TimePoint::Moment(1), TimePoint::Moment(2));
+        let t2 = Temporal::new(TimePoint::Moment(3), TimePoint::Moment(4));
+
+        // Two facts with the same predicate/args but different temporal bounds.
+        let fact_t1 = Literal::new("p", false, Mode::empty(), t1.clone(), vec![]);
+        let fact_t2 = Literal::new("p", false, Mode::empty(), t2.clone(), vec![]);
+
+        let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
+            FxHashMap::default();
+        let key = fact_index_key(&fact_t1);
+        let key2 = fact_index_key(&fact_t2);
+        fact_index.entry(key).or_default().push(fact_t1.clone());
+        fact_index.entry(key2).or_default().push(fact_t2.clone());
+
+        // Build a rule whose body literal has temporal t1.
+        let body_lit = Literal::new("p", false, Mode::empty(), t1.clone(), vec![]);
+        let head = Literal::new("q", false, Mode::empty(), Temporal::empty(), vec![]);
+        let mut rule = Rule::defeasible("r1", vec![body_lit], head);
+
+        normalize_body_against_facts(&mut rule, &fact_index);
+
+        // The normalized body literal must still have temporal t1, not t2.
+        let normalized = rule.body[0].as_logic().unwrap().to_literal();
+        assert_eq!(normalized.temporal, t1);
+    }
+
+    // -- P1b: Constant arithmetic body args must trigger grounding ------------
+
+    #[test]
+    fn has_variables_true_for_constant_arith_body_arg() {
+        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::body::{BodyArg, BodyLogicLiteral};
+        use crate::term::NumericValue;
+
+        // Build a body literal: target((+ 1 2))
+        let arith = ArithExpr::NaryOp {
+            op: NaryArithOp::Add,
+            args: vec![
+                ArithExpr::Lit(NumericValue::Integer(1)),
+                ArithExpr::Lit(NumericValue::Integer(2)),
+            ],
+        };
+        let body_lit = BodyLogicLiteral::new(
+            "target",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![BodyArg::Arith(arith)],
+        );
+        let bl = BodyLiteral::Logic(body_lit);
+
+        // Must report as variable-bearing so grounding evaluates the arithmetic.
+        assert!(body_literal_has_variables(&bl));
     }
 }

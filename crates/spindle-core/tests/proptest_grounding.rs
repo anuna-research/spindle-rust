@@ -215,12 +215,15 @@ proptest! {
                 "Grounded rule '{}' still has variables: {:?}",
                 rule.label, rule
             );
-            for lit in &rule.body {
-                prop_assert!(
-                    !literal_has_variables(lit),
-                    "Body literal '{}' in rule '{}' has variables",
-                    lit, rule.label
-                );
+            for bl in &rule.body {
+                if let Some(logic) = bl.as_logic() {
+                    let lit = logic.to_literal();
+                    prop_assert!(
+                        !literal_has_variables(&lit),
+                        "Body literal '{}' in rule '{}' has variables",
+                        lit, rule.label
+                    );
+                }
             }
             for lit in &rule.head {
                 prop_assert!(
@@ -447,8 +450,10 @@ proptest! {
             if !rule.label.starts_with("r_var_") {
                 continue;
             }
-            let head_arg = rule.head[0].predicates()[0];
-            let body_arg = rule.body[0].predicates()[0];
+            let head_preds = rule.head[0].predicates();
+            let body_preds = rule.body[0].predicates();
+            let head_arg = &head_preds[0];
+            let body_arg = &body_preds[0];
             prop_assert_eq!(
                 head_arg, body_arg,
                 "In rule '{}', head arg '{}' != body arg '{}' (same ?x should bind to same value)",
@@ -581,12 +586,12 @@ proptest! {
         let head_preds = instance.head[0].predicates();
         prop_assert_eq!(head_preds.len(), 2, "chain should have 2 args");
         prop_assert_eq!(
-            head_preds[0], "a_val",
+            &head_preds[0], "a_val",
             "chain first arg should be a_val (bound from ?x), got {}",
             head_preds[0]
         );
         prop_assert_eq!(
-            head_preds[1], "c_val",
+            &head_preds[1], "c_val",
             "chain second arg should be c_val (bound from ?z), got {}",
             head_preds[1]
         );
@@ -595,7 +600,7 @@ proptest! {
         let body1_preds = instance.body[0].predicates();
         let body2_preds = instance.body[1].predicates();
         prop_assert_eq!(
-            body1_preds[1], body2_preds[0],
+            &body1_preds[1], &body2_preds[0],
             "?y should bind consistently: body1 arg2='{}' != body2 arg1='{}'",
             body1_preds[1], body2_preds[0]
         );

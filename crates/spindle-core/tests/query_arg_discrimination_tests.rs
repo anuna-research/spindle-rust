@@ -76,7 +76,7 @@ fn test_why_not_missing_body_uses_full_literal_identity() {
     assert!(
         missing
             .iter()
-            .any(|lit| lit.name() == "p" && lit.predicates() == vec!["b"]),
+            .any(|lit| lit.name() == "p" && lit.predicates() == vec!["b".to_string()]),
         "Expected p(b) to be reported as missing, not satisfied by p(a)"
     );
 }

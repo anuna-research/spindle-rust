@@ -129,8 +129,13 @@ fn explain_inner(
 
         // Recursively build proofs for body, applying substitution
         let mut body_proofs = Vec::new();
-        for body_lit in &rule.body {
-            let ground_body_lit = apply_substitution_to_literal(body_lit, &subst);
+        for body_bl in &rule.body {
+            // Only logic body literals participate in proof trees
+            let body_lit = match body_bl.as_logic() {
+                Some(lit) => lit.to_literal(),
+                None => continue, // skip arithmetic constraints
+            };
+            let ground_body_lit = apply_substitution_to_literal(&body_lit, &subst);
 
             if let Some(body_expl) = explain_inner(theory, &ground_body_lit, visited)? {
                 if let Some(body_tree) = body_expl.proof_tree {
@@ -142,7 +147,7 @@ fn explain_inner(
                 // We need to iterate carefully to propagate errors from explain_inner
                 for c in &conclusions {
                     if c.conclusion_type.is_positive()
-                        && match_literal(body_lit, &c.literal).is_some()
+                        && match_literal(&body_lit, &c.literal).is_some()
                         && let Some(body_expl) = explain_inner(theory, &c.literal, visited)?
                         && let Some(body_tree) = body_expl.proof_tree
                     {

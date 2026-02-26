@@ -46,11 +46,25 @@ literal     = atom | "(" atom arg* ")" | "(not" literal ")"
             | during | modal
 modal       = "(" modal-op literal ")"
 modal-op    = "must" | "may" | "forbidden"
-body        = literal | "(and" literal+ ")"
+body        = literal | "(and" body-elem+ ")"
+body-elem   = literal | arith-constraint
 atom        = identifier | variable
 variable    = "?" identifier
 source      = atom
 number      = float in [0.0, 1.0]
+
+; Arithmetic (body only)
+arith-constraint = bind | compare
+bind        = "(bind" variable arith-expr ")"
+compare     = "(" cmp-op arith-expr arith-expr ")"
+cmp-op      = "=" | "!=" | "<" | ">" | "<=" | ">="
+arith-expr  = number | variable
+            | "(" nary-op arith-expr+ ")"
+            | "(" bin-op arith-expr arith-expr ")"
+            | "(" unary-op arith-expr ")"
+nary-op     = "+" | "-" | "*" | "/" | "min" | "max"
+bin-op      = "div" | "rem" | "**"
+unary-op    = "abs"
 ```
 
 ## Facts
@@ -299,6 +313,108 @@ giving 6 symmetric pairs plus `equals`:
 | `during` | `contains` | X is fully enclosed within Y |
 | `finishes` | `finished-by` | Both end together, X starts later |
 | `equals` | `equals` | Identical start and end |
+
+## Arithmetic Expressions
+
+Arithmetic expressions can appear in rule bodies as `bind` constraints, comparison guards, or as arguments to predicates.
+
+### Numeric Literals
+
+```lisp
+42          ; Integer
+3.14        ; Decimal (arbitrary precision)
+```
+
+### Operators
+
+| Operator | Arity | Description |
+|----------|-------|-------------|
+| `+` | N-ary | Addition |
+| `-` | N-ary | Subtraction (left fold) |
+| `*` | N-ary | Multiplication |
+| `/` | N-ary | Division (left fold) |
+| `div` | Binary | Integer division (floor) |
+| `rem` | Binary | Remainder |
+| `**` | Binary | Exponentiation |
+| `abs` | Unary | Absolute value |
+| `min` | N-ary | Minimum |
+| `max` | N-ary | Maximum |
+
+```lisp
+(+ 1 2)           ; => 3
+(* 2 3 4)         ; => 24
+(- 10 3 2)        ; => 5 (left fold: 10-3-2)
+(div 7 2)         ; => 3
+(rem 7 2)         ; => 1
+(** 2 10)         ; => 1024
+(abs (- 3 10))    ; => 7
+(min 5 3 8)       ; => 3
+```
+
+### Bind Constraints
+
+Bind a variable to the result of an arithmetic expression:
+
+```lisp
+(normally r1
+  (and (price ?p) (tax-rate ?r)
+       (bind ?total (+ ?p (* ?p ?r))))
+  (total ?total))
+```
+
+### Comparison Guards
+
+Compare two arithmetic expressions:
+
+```lisp
+(normally r1
+  (and (age ?x ?a) (> ?a 18))
+  (adult ?x))
+
+(normally r2
+  (and (score ?x ?s) (<= ?s 50))
+  (failing ?x))
+```
+
+Available operators: `=`, `!=`, `<`, `>`, `<=`, `>=`
+
+### Arithmetic in Predicate Arguments
+
+Arithmetic expressions can appear as predicate arguments in rule bodies:
+
+```lisp
+(normally r1
+  (and (price ?item ?p) (tax-rate ?r))
+  (invoice ?item (+ ?p (* ?p ?r))))
+```
+
+### Type Promotion
+
+Numeric types are promoted during arithmetic: Integer → Decimal → Float.
+
+- Integer + Integer = Integer
+- Integer + Decimal = Decimal
+- Any + Float = Float
+- `div` and `rem` require integer operands
+
+Cross-type matching: `Integer(2)` matches `Decimal(2.0)` matches `Float(2.0)`.
+
+### Reserved Keywords (REQ-008)
+
+The following cannot be used as predicate names or rule labels:
+
+```
++  -  *  /  div  rem  abs  min  max  **
+bind  =  !=  <  >  <=  >=
+```
+
+Future reserved: `sum`, `count`, `avg`, `round`, `floor`, `ceil`
+
+### Restrictions
+
+- Arithmetic constraints cannot appear in rule heads or facts (REQ-009)
+- Arithmetic constraints cannot be negated with `not` or `~` (REQ-011)
+- Temporal variables cannot be used as arithmetic operands (REQ-006)
 
 ## Claims
 
