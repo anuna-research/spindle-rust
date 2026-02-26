@@ -53,6 +53,7 @@ fn build_schema_registry() -> HashMap<String, Value> {
         ("reason", "spindle.reason.v1.schema.json"),
         ("query", "spindle.query.v1.schema.json"),
         ("requires", "spindle.requires.v1.schema.json"),
+        ("requires_v2", "spindle.requires.v2.schema.json"),
         ("explain", "spindle.explain.v1.schema.json"),
         ("why_not", "spindle.why_not.v1.schema.json"),
         ("capabilities", "spindle.capabilities.v1.schema.json"),

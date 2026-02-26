@@ -52,7 +52,7 @@ pub(crate) fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
             schemas: SchemasInfo {
                 reason: "spindle.reason.v1".to_string(),
                 query: "spindle.query.v1".to_string(),
-                requires: "spindle.requires.v1".to_string(),
+                requires: "spindle.requires.v2".to_string(),
                 explain: "spindle.explain.v1".to_string(),
                 why_not: "spindle.why_not.v1".to_string(),
             },
@@ -71,7 +71,7 @@ pub(crate) fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
         text.push_str("Schema versions:\n");
         text.push_str("  reason: spindle.reason.v1\n");
         text.push_str("  query: spindle.query.v1\n");
-        text.push_str("  requires: spindle.requires.v1\n");
+        text.push_str("  requires: spindle.requires.v2\n");
         text.push_str("  explain: spindle.explain.v1\n");
         text.push_str("  why-not: spindle.why_not.v1");
         Ok(CommandOutput::text(text))

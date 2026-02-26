@@ -64,7 +64,7 @@ fn main() {
         Commands::Query { json, .. } => (Some("spindle.query.v1"), *json || cli.json),
         Commands::Explain { json, .. } => (Some("spindle.explain.v1"), *json || cli.json),
         Commands::WhyNot { json, .. } => (Some("spindle.why_not.v1"), *json || cli.json),
-        Commands::Requires { json, .. } => (Some("spindle.requires.v1"), *json || cli.json),
+        Commands::Requires { json, .. } => (Some("spindle.requires.v2"), *json || cli.json),
         Commands::Capabilities { json, .. } => (Some("spindle.capabilities.v1"), *json || cli.json),
         Commands::ExplainCode { .. } => (None, false),
         Commands::Validate { .. } | Commands::Stats { .. } => (None, cli.json),

@@ -60,9 +60,9 @@
 				"query": {
 					"const": "spindle.query.v1"
 				},
-				"requires": {
-					"const": "spindle.requires.v1"
-				},
+					"requires": {
+						"const": "spindle.requires.v2"
+					},
 				"explain": {
 					"const": "spindle.explain.v1"
 				},
