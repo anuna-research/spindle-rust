@@ -106,10 +106,6 @@ else
   sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" Cargo.toml
 fi
 
-# Regenerate Cargo.lock with version change only
-info "Updating Cargo.lock..."
-cargo check --quiet
-
 # Run tests
 info "Running tests..."
 cargo test --all
@@ -120,7 +116,7 @@ cargo clippy --all -- -D warnings
 
 # Commit version bump
 info "Committing version bump..."
-git add Cargo.toml Cargo.lock
+git add Cargo.toml
 git commit -m "chore: bump version to $VERSION"
 
 # Create and push tag
