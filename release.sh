@@ -17,6 +17,16 @@ info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
+# Must run from repo root
+if [[ ! -f Cargo.toml ]] || ! grep -q '^\[workspace\]' Cargo.toml; then
+  error "Must be run from the workspace root (where Cargo.toml has [workspace])"
+fi
+
+# Required tools
+for cmd in cargo git sed; do
+  command -v "$cmd" >/dev/null 2>&1 || error "'$cmd' not found on PATH"
+done
+
 # Must be on main
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [[ "$BRANCH" != "main" ]]; then
@@ -45,6 +55,15 @@ fi
 
 TAG="v$VERSION"
 
+# Ensure local main is up-to-date with remote
+info "Fetching origin..."
+git fetch origin main --quiet
+LOCAL=$(git rev-parse main)
+REMOTE=$(git rev-parse origin/main)
+if [[ "$LOCAL" != "$REMOTE" ]]; then
+  error "Local main ($LOCAL) is out of sync with origin/main ($REMOTE). Pull or push first."
+fi
+
 # Check for uncommitted changes
 if ! git diff --quiet || ! git diff --cached --quiet; then
   error "You have uncommitted changes. Commit or stash them first."
@@ -53,6 +72,15 @@ fi
 # Check if tag already exists
 if git rev-parse "$TAG" >/dev/null 2>&1; then
   error "Tag $TAG already exists"
+fi
+
+# Check version is newer than the latest tag
+LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
+if [[ -n "$LATEST_TAG" ]]; then
+  LATEST_VER="${LATEST_TAG#v}"
+  if [[ "$(printf '%s\n%s\n' "$LATEST_VER" "$VERSION" | sort -V | tail -1)" == "$LATEST_VER" ]]; then
+    error "Version $VERSION is not newer than latest release $LATEST_VER"
+  fi
 fi
 
 # Confirmation prompt
