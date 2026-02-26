@@ -91,8 +91,15 @@ fn verify_candidate(
 ) -> Result<bool> {
     let mut modified = theory.clone();
     for (fact_index, fact_lit) in candidate.facts.iter().enumerate() {
-        let label = format!("__requires_verify_{candidate_index}_{fact_index}");
-        modified.add_rule(Rule::fact(label, fact_lit.clone()));
+        let mut label_nonce = 0_usize;
+        loop {
+            let label = format!("__requires_verify_{candidate_index}_{fact_index}_{label_nonce}");
+            if modified.get_rule(&label).is_none() {
+                modified.add_rule(Rule::fact(label, fact_lit.clone()));
+                break;
+            }
+            label_nonce = label_nonce.saturating_add(1);
+        }
     }
 
     let conclusions = reason(&modified)?;
@@ -177,7 +184,7 @@ pub fn requires_with_options(
 
     let search_status = if accepted.len() >= options.max_solutions {
         RequiresSearchStatus::BoundedComplete
-    } else if raw_budget_exceeded && verification.raw_examined >= options.max_raw_candidates {
+    } else if raw_budget_exceeded {
         RequiresSearchStatus::BudgetExhausted
     } else {
         RequiresSearchStatus::BoundedComplete

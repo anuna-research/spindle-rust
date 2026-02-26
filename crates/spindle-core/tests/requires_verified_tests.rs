@@ -56,6 +56,26 @@ fn test_requires_with_options_reports_budget_exhausted() {
 }
 
 #[test]
+fn test_requires_with_options_reports_budget_exhausted_with_duplicate_candidates() {
+    let mut theory = Theory::new();
+    theory.add_defeasible_rule(&["a"], "goal");
+    theory.add_defeasible_rule(&["a"], "goal");
+
+    let result = requires_with_options(
+        &theory,
+        &Literal::simple("goal"),
+        RequiresOptions {
+            max_solutions: 5,
+            max_raw_candidates: 1,
+        },
+    )
+    .unwrap();
+
+    assert!(!result.already_provable);
+    assert_eq!(result.search_status, RequiresSearchStatus::BudgetExhausted);
+}
+
+#[test]
 fn test_requires_with_options_deduplicates_and_orders_solutions() {
     let mut theory = Theory::new();
     theory.add_defeasible_rule(&["a"], "goal");
