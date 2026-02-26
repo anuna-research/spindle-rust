@@ -291,15 +291,16 @@ impl fmt::Display for NumericValue {
 
 // NumericValue ↔ Term conversions ─────────────────────────────────────────
 
-impl From<NumericValue> for Term {
-    fn from(nv: NumericValue) -> Self {
+impl TryFrom<NumericValue> for Term {
+    type Error = &'static str;
+
+    fn try_from(nv: NumericValue) -> Result<Self, Self::Error> {
         match nv {
-            NumericValue::Integer(n) => Term::Integer(n),
-            NumericValue::Decimal(d) => Term::Decimal(d),
-            NumericValue::Float(f) => {
-                // If the float is non-finite after arithmetic, fall back to 0.0.
-                Term::Float(FiniteFloat::new(f).unwrap_or(FiniteFloat(0.0)))
-            }
+            NumericValue::Integer(n) => Ok(Term::Integer(n)),
+            NumericValue::Decimal(d) => Ok(Term::Decimal(d)),
+            NumericValue::Float(f) => FiniteFloat::new(f)
+                .map(Term::Float)
+                .ok_or("non-finite float in numeric conversion"),
         }
     }
 }
@@ -488,16 +489,21 @@ mod tests {
     #[test]
     fn numeric_value_to_term() {
         let nv = NumericValue::Integer(42);
-        let t: Term = nv.into();
+        let t: Term = nv.try_into().unwrap();
         assert_eq!(t, Term::Integer(42));
 
         let nv = NumericValue::Decimal(Decimal::new(10, 0));
-        let t: Term = nv.into();
+        let t: Term = nv.try_into().unwrap();
         assert_eq!(t, Term::Decimal(Decimal::new(10, 0)));
 
         let nv = NumericValue::Float(3.14);
-        let t: Term = nv.into();
+        let t: Term = nv.try_into().unwrap();
         assert!(matches!(t, Term::Float(_)));
+
+        // Non-finite floats must be rejected
+        assert!(Term::try_from(NumericValue::Float(f64::NAN)).is_err());
+        assert!(Term::try_from(NumericValue::Float(f64::INFINITY)).is_err());
+        assert!(Term::try_from(NumericValue::Float(f64::NEG_INFINITY)).is_err());
     }
 
     // -- From impls --------------------------------------------------------

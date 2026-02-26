@@ -520,7 +520,7 @@ fn resolve_body_logic(lit: &BodyLogicLiteral, subst: &Substitution) -> Option<Li
             }
             BodyArg::Arith(expr) => {
                 let val = expr.eval(subst).ok()?;
-                terms.push(Term::from(val));
+                terms.push(Term::try_from(val).ok()?);
             }
         }
     }
