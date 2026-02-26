@@ -183,6 +183,77 @@ Tips:
 - Use specific predicates to reduce matching
 - Add explicit superiority where grounded conflicts should resolve to one side
 
+## Arithmetic in Grounded Rules
+
+Arithmetic expressions are evaluated during grounding after variables are substituted.
+
+### Bind Constraints
+
+```lisp
+(given (item widget 25))
+(given (item gadget 10))
+(given (tax-rate 0.1))
+
+(normally r1
+  (and (item ?name ?price) (tax-rate ?rate)
+       (bind ?total (+ ?price (* ?price ?rate))))
+  (total-cost ?name ?total))
+```
+
+Grounding:
+1. Match `(item widget 25)` and `(tax-rate 0.1)` → `{?name→widget, ?price→25, ?rate→0.1}`
+2. Evaluate `(+ 25 (* 25 0.1))` → `27.5`
+3. Bind `?total → 27.5`
+4. Produce `(total-cost widget 27.5)`
+
+### Comparison Guards
+
+Guards filter substitutions that don't satisfy the comparison:
+
+```lisp
+(given (score alice 85))
+(given (score bob 42))
+
+(normally r1
+  (and (score ?name ?s) (>= ?s 50))
+  (passing ?name))
+```
+
+Only `{?name→alice, ?s→85}` satisfies `(>= 85 50)`, so only `(passing alice)` is derived.
+
+### Evaluation Order
+
+Body literals are evaluated left-to-right. Variables must be bound before they are used in arithmetic:
+
+```lisp
+; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
+(normally r1
+  (and (item ?name ?price)
+       (bind ?discounted (* ?price 0.9)))
+  (sale-price ?name ?discounted))
+
+; INCORRECT: ?price is not yet bound when (bind ...) tries to use it
+(normally r-bad
+  (and (bind ?discounted (* ?price 0.9))
+       (item ?name ?price))
+  (sale-price ?name ?discounted))
+```
+
+### Cross-Type Matching
+
+Numeric terms match across types when values are equal:
+
+```lisp
+(given (threshold 100))        ; Integer 100
+(given (score alice 100.0))    ; Decimal 100.0
+
+(normally r1
+  (and (score ?name ?s) (threshold ?t) (>= ?s ?t))
+  (above-threshold ?name))
+```
+
+`Integer(100)` matches `Decimal(100.0)` in comparisons, so this works as expected.
+
 ## Variables vs. Manual Enumeration
 
 SPL supports variables, so you can write a single rule:

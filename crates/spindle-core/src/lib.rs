@@ -13,6 +13,8 @@
 //! - Two provability levels: definite (+D/-D) and defeasible (+d/-d)
 //! - Superiority relations for conflict resolution
 //! - Standard DL(d) reasoning mode
+//! - Arithmetic expressions with bind constraints and comparison guards
+//! - Three numeric types (Integer, Decimal, Float) with cross-type matching
 //!
 //! # Example
 //!
