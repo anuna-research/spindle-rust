@@ -40,8 +40,20 @@ use crate::intern::{SymbolId, resolve};
 /// These invariants guarantee that `==` is reflexive and `Hash` is consistent
 /// with `Eq`, making `FiniteFloat` safe for use as a hash-map key.
 #[derive(Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct FiniteFloat(f64);
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for FiniteFloat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let v = f64::deserialize(deserializer)?;
+        FiniteFloat::new(v)
+            .ok_or_else(|| serde::de::Error::custom(format!("expected finite float, got {v}")))
+    }
+}
 
 impl FiniteFloat {
     /// Create a new `FiniteFloat`, returning `None` if the value is NaN or infinite.

@@ -166,7 +166,7 @@ impl fmt::Display for BinArithOp {
         match self {
             BinArithOp::IDiv => write!(f, "div"),
             BinArithOp::Rem => write!(f, "rem"),
-            BinArithOp::Pow => write!(f, "pow"),
+            BinArithOp::Pow => write!(f, "**"),
         }
     }
 }

@@ -287,7 +287,10 @@ impl BodyLogicLiteral {
         let mut parts = Vec::with_capacity(1 + self.predicate_args.len());
         parts.push(render_spl_atom(self.name()));
         for arg in &self.predicate_args {
-            parts.push(render_spl_atom(&arg.to_string()));
+            match arg {
+                BodyArg::Arith(expr) => parts.push(expr.to_string()),
+                BodyArg::Term(term) => parts.push(render_spl_atom(&term.to_string())),
+            }
         }
 
         let mut expr = format!("({})", parts.join(" "));
