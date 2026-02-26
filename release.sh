@@ -37,9 +37,10 @@ if [[ -z "$VERSION" ]]; then
   error "Version is required"
 fi
 
-# Validate version format
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  error "Invalid version format. Use semver: X.Y.Z"
+# Validate semver format (X.Y.Z with optional pre-release and build metadata)
+SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+if ! [[ "$VERSION" =~ $SEMVER_RE ]]; then
+  error "Invalid semver format. Examples: 0.2.0, 1.0.0-alpha.1, 1.0.0-rc.1+build.42"
 fi
 
 TAG="v$VERSION"
