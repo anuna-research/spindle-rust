@@ -20,7 +20,9 @@ mod fixtures;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
-use spindle_core::query::{BlockingType, abduce, why_not};
+use spindle_core::query::{
+    BlockingType, RequiresOptions, RequiresSearchStatus, abduce, requires_with_options, why_not,
+};
 use spindle_core::reason::reason;
 use spindle_core::rule::{Rule, RuleType};
 use spindle_core::theory::Theory;
@@ -364,61 +366,81 @@ fn test_why_not_reports_defeater_blocking_with_fixture() {
 // =============================================================================
 
 #[test]
-fn test_abduce_solutions_are_valid() {
-    // Setup: q requires p, but there is also a defeater: p ~> ~q.
-    // abduce should find that adding p WOULD satisfy the body of q,
-    // but adding p also activates the defeater that blocks q.
-    // A truly valid abduction should either report no solutions or
-    // verify that the proposed solution actually produces the goal.
+fn test_requires_verified_rejects_defeater_blocked_candidate() {
+    // Setup: q requires p, but p also activates a defeater for ~q.
+    // Verified requires should reject {p} because q is still not provable.
     let mut theory = Theory::new();
     theory.add_defeasible_rule(&["p"], "q");
-    theory.add_defeater(&["p"], "~q"); // Adding p also activates this defeater!
+    theory.add_defeater(&["p"], "~q");
+
+    let result = requires_with_options(
+        &theory,
+        &Literal::simple("q"),
+        RequiresOptions {
+            max_solutions: 10,
+            max_raw_candidates: 10,
+        },
+    )
+    .unwrap();
+
+    assert!(!result.already_provable, "q should not be already provable");
+    assert!(
+        result.solutions.is_empty(),
+        "Verified requires should not return defeater-blocked candidates"
+    );
+    assert!(
+        result.verification.raw_examined >= 1,
+        "At least one raw candidate should be examined"
+    );
+    assert_eq!(
+        result.verification.accepted, 0,
+        "Defeater-blocked candidate should not be accepted"
+    );
+    assert_eq!(
+        result.verification.raw_examined, result.verification.rejected,
+        "All examined candidates should be rejected in this scenario"
+    );
+    assert_eq!(result.search_status, RequiresSearchStatus::BoundedComplete);
+}
+
+#[test]
+fn test_abduce_may_return_unverified_candidate_documented() {
+    // Raw abduce behavior remains unchanged: it may return body-satisfying
+    // candidates that fail under full defeasible reasoning.
+    let mut theory = Theory::new();
+    theory.add_defeasible_rule(&["p"], "q");
+    theory.add_defeater(&["p"], "~q");
 
     let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
+    assert!(
+        result.has_solutions(),
+        "Raw abduce should still return body-level candidates"
+    );
 
-    if result.has_solutions() {
-        // Verify each proposed solution by actually testing it.
-        for (i, solution) in result.solutions.iter().enumerate() {
-            if solution.is_already_provable() {
-                continue;
-            }
+    for (i, solution) in result.solutions.iter().enumerate() {
+        if solution.is_already_provable() {
+            continue;
+        }
 
-            // Add the abduced facts to the theory and re-reason
-            let mut modified = theory.clone();
-            for fact_lit in &solution.facts {
-                let label = format!("__abduce_test_{i}_{}", fact_lit.name());
-                modified.add_rule(Rule::fact(&label, fact_lit.clone()));
-            }
+        let mut modified = theory.clone();
+        for fact_lit in &solution.facts {
+            let label = format!("__abduce_test_{i}_{}", fact_lit.name());
+            modified.add_rule(Rule::fact(&label, fact_lit.clone()));
+        }
 
-            let modified_conclusions = reason(&modified).unwrap();
-            let goal_achieved = modified_conclusions.iter().any(|c| {
-                c.conclusion_type == ConclusionType::DefeasiblyProvable
-                    && c.literal.name() == "q"
-                    && !c.literal.negation
-            });
+        let modified_conclusions = reason(&modified).unwrap();
+        let goal_achieved = modified_conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "q"
+                && !c.literal.negation
+        });
 
-            // KNOWN BUG: abduce proposes {p} as a solution, but adding p
-            // activates the defeater p ~> ~q, so q is NOT actually provable.
-            if !goal_achieved {
-                eprintln!(
-                    "KNOWN BUG (abduce unverified): Solution {} proposes facts \
-                     {{{}}} but adding them does NOT actually make 'q' provable \
-                     (defeater blocks it).",
-                    i + 1,
-                    solution
-                        .facts
-                        .iter()
-                        .map(|l| l.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
+        if !goal_achieved {
+            return;
         }
     }
-    // The test passes either way -- it documents the bug without failing.
-    // When the bug is fixed, abduce should either:
-    // (a) return no solutions for this case, or
-    // (b) mark solutions as unverified / include a verification step.
+
+    panic!("Expected at least one raw abduce candidate to fail verification");
 }
 
 #[test]

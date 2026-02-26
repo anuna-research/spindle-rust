@@ -575,7 +575,13 @@ fn test_requires_json() {
     assert!(output.status.success(), "requires --json should succeed");
     let json: Value =
         serde_json::from_slice(&output.stdout).expect("requires --json should emit valid JSON");
+    assert_eq!(json["schema_version"], "spindle.requires.v2");
     assert_eq!(json["satisfied"], false);
+    assert_eq!(json["verification_mode"], "verified");
+    assert!(
+        json["verification"]["raw_examined"].is_number(),
+        "requires --json should include verification counters"
+    );
     assert!(
         json["solutions"].as_array().is_some_and(|s| !s.is_empty()),
         "requires unsatisfied should produce solutions"
@@ -611,6 +617,7 @@ fn test_capabilities_json() {
     let json: Value =
         serde_json::from_slice(&output.stdout).expect("capabilities --json should emit valid JSON");
     assert_eq!(json["features"]["stdin"], true);
+    assert_eq!(json["schemas"]["requires"], "spindle.requires.v2");
 }
 
 // ============================================================================

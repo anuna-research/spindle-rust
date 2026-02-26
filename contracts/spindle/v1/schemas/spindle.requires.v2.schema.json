@@ -1,0 +1,153 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://spindle.local/specs/schemas/spindle.requires.v2.schema.json",
+	"title": "spindle.requires.v2",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [
+		"schema_version",
+		"query",
+		"satisfied",
+		"solutions",
+		"verification_mode",
+		"search_status",
+		"verification",
+		"trust",
+		"evaluated_at",
+		"diagnostics"
+	],
+	"properties": {
+		"schema_version": {
+			"const": "spindle.requires.v2"
+		},
+		"query": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["goal_spl", "goal_struct"],
+			"properties": {
+				"goal_spl": {
+					"type": "string",
+					"minLength": 1
+				},
+				"goal_struct": {
+					"$ref": "spindle.common.v1.schema.json#/$defs/literalStruct"
+				}
+			}
+		},
+		"satisfied": {
+			"type": "boolean"
+		},
+		"solutions": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/requiresV2Solution"
+			}
+		},
+		"verification_mode": {
+			"const": "verified"
+		},
+		"search_status": {
+			"type": "string",
+			"enum": ["BoundedComplete", "BudgetExhausted"]
+		},
+		"verification": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["raw_examined", "accepted", "rejected"],
+			"properties": {
+				"raw_examined": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"accepted": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"rejected": {
+					"type": "integer",
+					"minimum": 0
+				}
+			}
+		},
+		"trust": {
+			"oneOf": [
+				{
+					"$ref": "spindle.common.v1.schema.json#/$defs/trust"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"truncated": {
+			"$ref": "spindle.common.v1.schema.json#/$defs/truncated"
+		},
+		"evaluated_at": {
+			"oneOf": [
+				{
+					"type": "string",
+					"format": "date-time"
+				},
+				{
+					"type": "null"
+				}
+			]
+		},
+		"diagnostics": {
+			"type": "array",
+			"items": {
+				"$ref": "spindle.common.v1.schema.json#/$defs/diagnostic"
+			}
+		}
+	},
+	"allOf": [
+		{
+			"if": {
+				"properties": {
+					"satisfied": {
+						"const": true
+					}
+				},
+				"required": ["satisfied"]
+			},
+			"then": {
+				"properties": {
+					"solutions": {
+						"maxItems": 0
+					}
+				}
+			}
+		}
+	],
+	"$defs": {
+		"requiresV2Solution": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["facts", "score"],
+			"properties": {
+				"facts": {
+					"oneOf": [
+						{
+							"type": "array",
+							"minItems": 1,
+							"items": {
+								"type": "string",
+								"minLength": 1
+							}
+						},
+						{
+							"type": "array",
+							"minItems": 1,
+							"items": {
+								"$ref": "spindle.common.v1.schema.json#/$defs/literalStruct"
+							}
+						}
+					]
+				},
+				"score": {
+					"const": 1.0
+				}
+			}
+		}
+	}
+}

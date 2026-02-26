@@ -38,7 +38,10 @@ pub mod abduce;
 pub use abduce::{AbductionResult, AbductionSolution, abduce};
 
 pub mod requires;
-pub use requires::requires;
+pub use requires::{
+    DEFAULT_MAX_RAW_CANDIDATES, RequiresOptions, RequiresResult, RequiresSearchStatus,
+    RequiresVerificationStats, requires, requires_with_options,
+};
 
 pub mod what_if;
 pub use what_if::{HypotheticalClaim, WhatIfResult, what_if, what_if_provable};

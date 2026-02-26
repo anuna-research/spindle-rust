@@ -170,11 +170,23 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
             stdin: Some("(given a)"),
             expected_exit: 0,
             expected_output: ExpectedOutput::JsonSuccess {
-                schema: "requires",
+                schema: "requires_v2",
                 custom_check: Some(|json| {
                     assert_eq!(
                         json["satisfied"], false,
                         "Unsatisfied goal should have satisfied=false"
+                    );
+                    assert_eq!(
+                        json["verification_mode"], "verified",
+                        "Requires v2 must report verification_mode=verified"
+                    );
+                    assert!(
+                        json["verification"]["raw_examined"].is_number(),
+                        "Requires v2 must include verification counters"
+                    );
+                    assert!(
+                        json["search_status"].is_string(),
+                        "Requires v2 must include search_status"
                     );
                     let solutions = json["solutions"]
                         .as_array()
@@ -422,6 +434,10 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                 expect_schema_version: true, // Schema command
                 expected_error_code: Some("INVALID_ARGUMENT"),
                 custom_check: Some(|json| {
+                    assert_eq!(
+                        json["schema_version"], "spindle.requires.v2",
+                        "Requires error envelope should use v2 schema version"
+                    );
                     // ProblemDetails should contain the error details
                     let problem = &json["error"]["details"]["problem"];
                     assert_eq!(

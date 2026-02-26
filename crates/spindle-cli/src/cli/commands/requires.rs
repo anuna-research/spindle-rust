@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 
 use spindle_core::pipeline::{PrepareOptions, prepare};
-use spindle_core::query::abduce;
+use spindle_core::query::{
+    DEFAULT_MAX_RAW_CANDIDATES, RequiresOptions, RequiresSearchStatus, requires_with_options,
+};
 use spindle_core::temporal::TimePoint;
 
 use crate::cli::error::{CliError, Diagnostic};
@@ -13,15 +15,23 @@ use crate::cli::output::{CommandOutput, LiteralStructJson, TrustPayload};
 #[derive(serde::Serialize)]
 struct RequiresOutput {
     schema_version: String,
-    goal_spl: String,
-    goal_struct: LiteralStructJson,
+    query: RequiresQuery,
     satisfied: bool,
     solutions: Vec<RequiresSolution>,
+    verification_mode: String,
+    search_status: String,
+    verification: RequiresVerification,
     evaluated_at: Option<String>,
     trust: Option<TrustPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
     truncated: Option<TruncatedInfo>,
     diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(serde::Serialize)]
+struct RequiresQuery {
+    goal_spl: String,
+    goal_struct: LiteralStructJson,
 }
 
 #[derive(serde::Serialize)]
@@ -31,8 +41,41 @@ struct RequiresSolution {
 }
 
 #[derive(serde::Serialize)]
+struct RequiresVerification {
+    raw_examined: usize,
+    accepted: usize,
+    rejected: usize,
+}
+
+#[derive(serde::Serialize)]
 struct TruncatedInfo {
     solutions: bool,
+}
+
+fn search_status_name(status: RequiresSearchStatus) -> &'static str {
+    match status {
+        RequiresSearchStatus::BoundedComplete => "BoundedComplete",
+        RequiresSearchStatus::BudgetExhausted => "BudgetExhausted",
+    }
+}
+
+fn render_requires_text(goal_spl: &str, solutions: &[RequiresSolution], satisfied: bool) -> String {
+    if satisfied {
+        return format!("Already provable: {goal_spl}");
+    }
+    if solutions.is_empty() {
+        return format!("No verified requirements found for {goal_spl}");
+    }
+
+    let mut out = format!("Verified requirements for {goal_spl}:\n");
+    for (i, solution) in solutions.iter().enumerate() {
+        out.push_str(&format!(
+            "  {}. Add facts: {{{}}}\n",
+            i + 1,
+            solution.facts.join(", ")
+        ));
+    }
+    out.trim_end().to_string()
 }
 
 pub(crate) fn run_requires(
@@ -71,67 +114,65 @@ pub(crate) fn run_requires(
     })?;
 
     let lit = parse_literal_arg(literal)?;
-    let abduce_limit = if json { max.saturating_add(1) } else { max };
-    let result = abduce(&prepared.theory, &lit, abduce_limit).map_err(|e| {
-        CliError::execution(
-            "ABDUCTION_ERROR",
-            format!("Error finding requirements: {e}"),
-        )
+    let options = RequiresOptions {
+        // Keep a +1 sentinel in JSON mode to preserve SOLUTIONS_LIMIT_HIT behavior.
+        max_solutions: if json { max.saturating_add(1) } else { max },
+        max_raw_candidates: DEFAULT_MAX_RAW_CANDIDATES,
+    };
+
+    let result = requires_with_options(&prepared.theory, &lit, options).map_err(|e| {
+        CliError::execution("REQUIRES_ERROR", format!("Error finding requirements: {e}"))
     })?;
 
+    let mut solutions: Vec<_> = result
+        .solutions
+        .iter()
+        .map(|s| {
+            let mut facts: Vec<_> = s.facts.iter().map(|l| l.to_spl()).collect();
+            facts.sort();
+            RequiresSolution { facts, score: 1.0 }
+        })
+        .collect();
+    solutions.sort_by(|a, b| match a.facts.len().cmp(&b.facts.len()) {
+        std::cmp::Ordering::Equal => a.facts.cmp(&b.facts),
+        other => other,
+    });
+
     if json {
-        // Per contract §6.3: satisfied=true => solutions=[], satisfied=false => solutions non-empty
-        let satisfied = result.is_already_provable();
+        let satisfied = result.already_provable;
 
         let mut diagnostics = vec![];
         let mut truncated = None;
 
-        // Check if we hit the limit
-        let solutions_limit_hit = result.solutions.len() > max;
-        let solutions_to_show: Vec<_> = if solutions_limit_hit {
+        // Check if we hit the max-solutions display limit.
+        if solutions.len() > max {
             diagnostics.push(Diagnostic::warning(
                 "SOLUTIONS_LIMIT_HIT",
                 format!("Results limited to {max} solutions"),
             ));
             truncated = Some(TruncatedInfo { solutions: true });
-            result.solutions.iter().take(max).collect()
-        } else {
-            result.solutions.iter().collect()
-        };
+            solutions.truncate(max);
+        }
 
-        // Build solutions - only include if not satisfied
-        let solutions: Vec<_> = if satisfied {
-            vec![]
-        } else {
-            solutions_to_show
-                .iter()
-                .map(|s| {
-                    let facts: Vec<_> = s.facts.iter().map(|l| l.to_spl()).collect();
-                    // Sort facts lexically for determinism (per spec §7)
-                    let mut facts = facts;
-                    facts.sort();
-
-                    RequiresSolution {
-                        facts,
-                        score: s.confidence,
-                    }
-                })
-                .collect()
-        };
-
-        // Sort solutions by set size then lexical order (per spec §7)
-        let mut solutions = solutions;
-        solutions.sort_by(|a, b| match a.facts.len().cmp(&b.facts.len()) {
-            std::cmp::Ordering::Equal => a.facts.cmp(&b.facts),
-            other => other,
-        });
+        if satisfied {
+            solutions.clear();
+        }
 
         let output = RequiresOutput {
-            schema_version: "spindle.requires.v1".to_string(),
-            goal_spl: result.goal.to_spl(),
-            goal_struct: LiteralStructJson::from(&result.goal),
+            schema_version: "spindle.requires.v2".to_string(),
+            query: RequiresQuery {
+                goal_spl: lit.to_spl(),
+                goal_struct: LiteralStructJson::from(&lit),
+            },
             satisfied,
             solutions,
+            verification_mode: "verified".to_string(),
+            search_status: search_status_name(result.search_status).to_string(),
+            verification: RequiresVerification {
+                raw_examined: result.verification.raw_examined,
+                accepted: result.verification.accepted,
+                rejected: result.verification.rejected,
+            },
             evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
             trust: None,
             truncated,
@@ -140,6 +181,7 @@ pub(crate) fn run_requires(
 
         CommandOutput::json(output)
     } else {
-        Ok(CommandOutput::text(format!("{result}")))
+        let text = render_requires_text(&lit.to_spl(), &solutions, result.already_provable);
+        Ok(CommandOutput::text(text))
     }
 }
