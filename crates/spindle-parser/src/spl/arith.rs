@@ -112,19 +112,20 @@ pub(crate) fn parse_arith_expr(expr: &SExpr, line: usize) -> Result<ArithExpr, P
                 source_line: None,
             })?;
 
+            let arg_exprs = &items[1..];
+
+            // Unknown operators become extension function Call nodes,
+            // validated later against the function registry.
             if !is_arith_op(op_name) {
-                return Err(ParseError::ParserError {
-                    line,
-                    message: format!(
-                        "Unknown arithmetic operator: '{op_name}'. \
-                         Expected one of: +, -, *, /, div, rem, abs, min, max, **"
-                    ),
-                    format: ParserFormat::Spl,
-                    source_line: None,
+                let args = arg_exprs
+                    .iter()
+                    .map(|e| parse_arith_expr(e, line))
+                    .collect::<Result<Vec<_>, _>>()?;
+                return Ok(ArithExpr::Call {
+                    name: intern(op_name),
+                    args,
                 });
             }
-
-            let arg_exprs = &items[1..];
 
             match op_name {
                 // N-ary operators
@@ -296,8 +297,8 @@ fn parse_unary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spindle_core::arith::{BinArithOp, NaryArithOp, UnaryArithOp};
-    use spindle_core::intern::intern;
+    use spindle_core::arith::{ArithExpr, BinArithOp, NaryArithOp, UnaryArithOp};
+    use spindle_core::intern::{intern, resolve};
     use spindle_core::term::NumericValue;
 
     /// Helper: build an SExpr atom.
@@ -419,10 +420,15 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_unknown_operator() {
-        let err = parse_arith_expr(&list(vec![atom("mod"), atom("5"), atom("3")]), 1).unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.contains("Unknown arithmetic operator"), "got: {msg}");
+    fn test_parse_unknown_operator_becomes_call() {
+        let expr = parse_arith_expr(&list(vec![atom("mod"), atom("5"), atom("3")]), 1).unwrap();
+        match expr {
+            ArithExpr::Call { name, args } => {
+                assert_eq!(resolve(name), "mod");
+                assert_eq!(args.len(), 2);
+            }
+            other => panic!("expected Call, got: {other:?}"),
+        }
     }
 
     // =====================================================================

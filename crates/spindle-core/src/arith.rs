@@ -23,6 +23,7 @@ use std::fmt;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
+use crate::function_registry::EvalContext;
 use crate::grounding::Substitution;
 use crate::intern::{SymbolId, resolve};
 use crate::term::{FiniteFloat, NumericValue, Term};
@@ -117,6 +118,13 @@ pub enum ArithExpr {
         /// The operand.
         expr: Box<ArithExpr>,
     },
+    /// A call to a named extension function.
+    Call {
+        /// The interned function name.
+        name: SymbolId,
+        /// The argument expressions.
+        args: Vec<ArithExpr>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +218,13 @@ impl fmt::Display for ArithExpr {
             ArithExpr::UnaryOp { op, expr } => {
                 write!(f, "({op} {expr})")
             }
+            ArithExpr::Call { name, args } => {
+                write!(f, "({}", resolve(*name))?;
+                for arg in args {
+                    write!(f, " {arg}")?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -263,6 +278,13 @@ pub enum ArithError {
     ReciprocalOfZero,
     /// Comparison predicate did not hold.
     ComparisonFailed,
+    /// Extension function not found in registry.
+    UnknownFunction {
+        /// The function name.
+        name: SymbolId,
+    },
+    /// Extension function returned an error.
+    FunctionError(String),
 }
 
 impl fmt::Display for ArithError {
@@ -280,6 +302,10 @@ impl fmt::Display for ArithError {
             Self::NonFiniteFloat => write!(f, "non-finite float result"),
             Self::ReciprocalOfZero => write!(f, "reciprocal of zero"),
             Self::ComparisonFailed => write!(f, "comparison failed"),
+            Self::UnknownFunction { name } => {
+                write!(f, "unknown function: {}", resolve(*name))
+            }
+            Self::FunctionError(msg) => write!(f, "function error: {msg}"),
         }
     }
 }
@@ -712,7 +738,9 @@ impl ArithExpr {
         match self {
             ArithExpr::Var(_) => true,
             ArithExpr::Lit(_) => false,
-            ArithExpr::NaryOp { args, .. } => args.iter().any(|a| a.has_variables()),
+            ArithExpr::NaryOp { args, .. } | ArithExpr::Call { args, .. } => {
+                args.iter().any(|a| a.has_variables())
+            }
             ArithExpr::BinOp { lhs, rhs, .. } => lhs.has_variables() || rhs.has_variables(),
             ArithExpr::UnaryOp { expr, .. } => expr.has_variables(),
         }
@@ -722,21 +750,58 @@ impl ArithExpr {
     ///
     /// Returns the resulting numeric value, or an error if evaluation fails
     /// (overflow, unbound variable, type mismatch, etc.).
+    ///
+    /// Equivalent to `eval_with_context(subst, &EvalContext::empty())`.
     pub fn eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> {
+        self.eval_with_context(subst, &EvalContext::empty())
+    }
+
+    /// Evaluate this expression under the given substitution and context.
+    ///
+    /// The context provides access to extension functions registered in
+    /// a [`FunctionRegistry`](crate::function_registry::FunctionRegistry).
+    pub fn eval_with_context(
+        &self,
+        subst: &Substitution,
+        ctx: &EvalContext<'_>,
+    ) -> Result<NumericValue, ArithError> {
         match self {
             ArithExpr::Lit(v) => Ok(v.clone()),
             ArithExpr::Var(name) => resolve_var(subst, *name),
-            ArithExpr::NaryOp { op, args } => eval_nary(op, args, subst),
+            ArithExpr::NaryOp { op, args } => eval_nary(op, args, subst, ctx),
             ArithExpr::BinOp { op, lhs, rhs } => {
-                let l = lhs.eval(subst)?;
-                let r = rhs.eval(subst)?;
+                let l = lhs.eval_with_context(subst, ctx)?;
+                let r = rhs.eval_with_context(subst, ctx)?;
                 eval_bin(op, l, r)
             }
             ArithExpr::UnaryOp { op, expr } => {
-                let v = expr.eval(subst)?;
+                let v = expr.eval_with_context(subst, ctx)?;
                 match op {
                     UnaryArithOp::Abs => abs_value(v),
                 }
+            }
+            ArithExpr::Call { name, args } => {
+                let registry = ctx
+                    .registry
+                    .ok_or(ArithError::UnknownFunction { name: *name })?;
+                let func = registry
+                    .get(*name)
+                    .ok_or(ArithError::UnknownFunction { name: *name })?;
+                let term_args: Vec<Term> = args
+                    .iter()
+                    .map(|a| {
+                        let nv = a.eval_with_context(subst, ctx)?;
+                        Term::try_from(nv).map_err(|_| ArithError::NonFiniteFloat)
+                    })
+                    .collect::<Result<_, _>>()?;
+                let result = func
+                    .eval(&term_args)
+                    .map_err(|e| ArithError::FunctionError(format!("{e}")))?;
+                result.to_numeric_value().ok_or(ArithError::TypeMismatch {
+                    op: "call",
+                    expected: "numeric",
+                    got: "symbol",
+                })
             }
         }
     }
@@ -746,15 +811,16 @@ fn eval_nary(
     op: &NaryArithOp,
     args: &[ArithExpr],
     subst: &Substitution,
+    ctx: &EvalContext<'_>,
 ) -> Result<NumericValue, ArithError> {
     match op {
         NaryArithOp::Add => {
             if args.is_empty() {
                 return Ok(NumericValue::Integer(0));
             }
-            let mut acc = args[0].eval(subst)?;
+            let mut acc = args[0].eval_with_context(subst, ctx)?;
             for arg in &args[1..] {
-                acc = add_values(acc, arg.eval(subst)?)?;
+                acc = add_values(acc, arg.eval_with_context(subst, ctx)?)?;
             }
             Ok(acc)
         }
@@ -766,13 +832,13 @@ fn eval_nary(
                     got: "0 arguments",
                 });
             }
-            let first = args[0].eval(subst)?;
+            let first = args[0].eval_with_context(subst, ctx)?;
             if args.len() == 1 {
                 return negate(first);
             }
             let mut acc = first;
             for arg in &args[1..] {
-                acc = sub_values(acc, arg.eval(subst)?)?;
+                acc = sub_values(acc, arg.eval_with_context(subst, ctx)?)?;
             }
             Ok(acc)
         }
@@ -780,9 +846,9 @@ fn eval_nary(
             if args.is_empty() {
                 return Ok(NumericValue::Integer(1));
             }
-            let mut acc = args[0].eval(subst)?;
+            let mut acc = args[0].eval_with_context(subst, ctx)?;
             for arg in &args[1..] {
-                acc = mul_values(acc, arg.eval(subst)?)?;
+                acc = mul_values(acc, arg.eval_with_context(subst, ctx)?)?;
             }
             Ok(acc)
         }
@@ -794,13 +860,13 @@ fn eval_nary(
                     got: "0 arguments",
                 });
             }
-            let first = args[0].eval(subst)?;
+            let first = args[0].eval_with_context(subst, ctx)?;
             if args.len() == 1 {
                 return reciprocal(first);
             }
             let mut acc = first;
             for arg in &args[1..] {
-                acc = div_values(acc, arg.eval(subst)?)?;
+                acc = div_values(acc, arg.eval_with_context(subst, ctx)?)?;
             }
             Ok(acc)
         }
@@ -812,9 +878,9 @@ fn eval_nary(
                     got: "0 arguments",
                 });
             }
-            let mut acc = args[0].eval(subst)?;
+            let mut acc = args[0].eval_with_context(subst, ctx)?;
             for arg in &args[1..] {
-                let val = arg.eval(subst)?;
+                let val = arg.eval_with_context(subst, ctx)?;
                 let (ord, pa, pb) = numeric_cmp(acc, val)?;
                 acc = if ord.is_le() { pa } else { pb };
             }
@@ -828,9 +894,9 @@ fn eval_nary(
                     got: "0 arguments",
                 });
             }
-            let mut acc = args[0].eval(subst)?;
+            let mut acc = args[0].eval_with_context(subst, ctx)?;
             for arg in &args[1..] {
-                let val = arg.eval(subst)?;
+                let val = arg.eval_with_context(subst, ctx)?;
                 let (ord, pa, pb) = numeric_cmp(acc, val)?;
                 acc = if ord.is_ge() { pa } else { pb };
             }
@@ -892,14 +958,25 @@ fn eval_bin(
 impl ArithConstraint {
     /// Evaluate this constraint under the given substitution.
     ///
+    /// Equivalent to `eval_with_context(subst, &EvalContext::empty())`.
+    pub fn eval(&self, subst: &mut Substitution) -> Result<(), ArithError> {
+        self.eval_with_context(subst, &EvalContext::empty())
+    }
+
+    /// Evaluate this constraint under the given substitution and context.
+    ///
     /// - `Bind`: evaluates the expression and binds the variable in the substitution.
     /// - `Compare`: evaluates both sides and checks the comparison.
     ///
     /// Returns `Ok(())` on success, or an appropriate `ArithError` on failure.
-    pub fn eval(&self, subst: &mut Substitution) -> Result<(), ArithError> {
+    pub fn eval_with_context(
+        &self,
+        subst: &mut Substitution,
+        ctx: &EvalContext<'_>,
+    ) -> Result<(), ArithError> {
         match self {
             ArithConstraint::Bind { var, expr } => {
-                let val = expr.eval(subst)?;
+                let val = expr.eval_with_context(subst, ctx)?;
                 // Bind the variable directly as a typed Term value.
                 let term = match val {
                     NumericValue::Integer(n) => Term::Integer(n),
@@ -922,8 +999,8 @@ impl ArithConstraint {
                 Ok(())
             }
             ArithConstraint::Compare { op, lhs, rhs } => {
-                let l = lhs.eval(subst)?;
-                let r = rhs.eval(subst)?;
+                let l = lhs.eval_with_context(subst, ctx)?;
+                let r = rhs.eval_with_context(subst, ctx)?;
                 let (ord, _, _) = numeric_cmp(l, r)?;
                 let holds = match op {
                     CmpOp::Eq => ord == Ordering::Equal,
@@ -2014,5 +2091,125 @@ mod tests {
             constraint.eval(&mut subst).unwrap_err(),
             ArithError::ComparisonFailed
         );
+    }
+
+    // -- ArithExpr::Call unit tests -----------------------------------------
+
+    mod call_tests {
+        use super::*;
+        use crate::function_registry::{
+            Arity, EvalContext, EvalError, ExtensionFunction, FunctionRegistry, FunctionSignature,
+        };
+
+        struct DoubleFunction(FunctionSignature);
+
+        impl DoubleFunction {
+            fn new() -> Self {
+                Self(FunctionSignature {
+                    name: intern("double"),
+                    arity: Arity::Fixed(1),
+                    description: "doubles an integer",
+                })
+            }
+        }
+
+        impl ExtensionFunction for DoubleFunction {
+            fn signature(&self) -> &FunctionSignature {
+                &self.0
+            }
+
+            fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+                match &args[0] {
+                    Term::Integer(n) => Ok(Term::Integer(n * 2)),
+                    other => Err(EvalError::TypeError(format!(
+                        "double: expected integer, got {other:?}"
+                    ))),
+                }
+            }
+        }
+
+        struct FailingFunction(FunctionSignature);
+
+        impl FailingFunction {
+            fn new() -> Self {
+                Self(FunctionSignature {
+                    name: intern("fail_fn"),
+                    arity: Arity::Fixed(1),
+                    description: "always fails",
+                })
+            }
+        }
+
+        impl ExtensionFunction for FailingFunction {
+            fn signature(&self) -> &FunctionSignature {
+                &self.0
+            }
+
+            fn eval(&self, _args: &[Term]) -> Result<Term, EvalError> {
+                Err(EvalError::EvalFailed("intentional failure".into()))
+            }
+        }
+
+        #[test]
+        fn call_success_with_registry() {
+            let mut reg = FunctionRegistry::new();
+            reg.register(Box::new(DoubleFunction::new()));
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let expr = ArithExpr::Call {
+                name: intern("double"),
+                args: vec![lit_int(5)],
+            };
+            let result = expr.eval_with_context(&subst, &ctx).unwrap();
+            assert_eq!(result, NumericValue::Integer(10));
+        }
+
+        #[test]
+        fn call_no_registry_returns_unknown_function() {
+            let ctx = EvalContext::empty();
+            let subst = Substitution::default();
+
+            let name = intern("double");
+            let expr = ArithExpr::Call {
+                name,
+                args: vec![lit_int(5)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert_eq!(err, ArithError::UnknownFunction { name });
+        }
+
+        #[test]
+        fn call_unknown_name_returns_unknown_function() {
+            let reg = FunctionRegistry::new(); // empty registry
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let name = intern("nonexistent");
+            let expr = ArithExpr::Call {
+                name,
+                args: vec![lit_int(5)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert_eq!(err, ArithError::UnknownFunction { name });
+        }
+
+        #[test]
+        fn call_function_error_returns_function_error() {
+            let mut reg = FunctionRegistry::new();
+            reg.register(Box::new(FailingFunction::new()));
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let expr = ArithExpr::Call {
+                name: intern("fail_fn"),
+                args: vec![lit_int(5)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ArithError::FunctionError(_)),
+                "expected FunctionError, got: {err:?}"
+            );
+        }
     }
 }

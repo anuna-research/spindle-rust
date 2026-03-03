@@ -54,7 +54,7 @@ pub use what_if::{HypotheticalClaim, WhatIfResult, what_if, what_if_provable};
 ///
 /// Bundles pipeline options and operator-specific limits into a single
 /// value that can be threaded through [`QueryOperator::execute`].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QueryArgs {
     /// Pipeline options for reasoning (temporal filtering, grounding, etc.)
     pub prepare_options: PrepareOptions,
@@ -99,7 +99,7 @@ impl Default for QueryArgs {
 ///         reasoner: &dyn Reasoner,
 ///         args: &QueryArgs,
 ///     ) -> spindle_core::error::Result<bool> {
-///         let prepared = spindle_core::pipeline::prepare(theory, args.prepare_options.clone())?;
+///         let prepared = spindle_core::pipeline::prepare(theory, Default::default())?;
 ///         let mut indexed = spindle_core::index::IndexedTheory::build(&prepared.theory);
 ///         let conclusions = reasoner.reason(&mut indexed)?;
 ///         Ok(conclusions.iter().any(|c| c.is_positive()))
@@ -133,7 +133,17 @@ pub(crate) fn run_reasoning(
     reasoner: &dyn Reasoner,
     args: &QueryArgs,
 ) -> Result<Vec<Conclusion>> {
-    let prepared = prepare(theory, args.prepare_options.clone())?;
+    let opts = PrepareOptions {
+        reference_time: args.prepare_options.reference_time,
+        grounding: args.prepare_options.grounding.clone(),
+        validation: args.prepare_options.validation.clone(),
+        trust_policy: args.prepare_options.trust_policy.clone(),
+        // TODO: thread function_registry through QueryArgs when query-time
+        // extension functions are needed (currently queries operate on
+        // already-grounded theories, so this is not required).
+        function_registry: None,
+    };
+    let prepared = prepare(theory, opts)?;
     let mut indexed = IndexedTheory::build(&prepared.theory);
     reasoner.reason(&mut indexed)
 }

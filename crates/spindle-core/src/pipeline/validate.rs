@@ -1,9 +1,10 @@
 //! Validate pipeline stage -- checks wildcard placement and range restriction.
 
 use super::{Diagnostic, PipelineContext, PipelineStage, Severity};
-use crate::arith::ArithConstraint;
+use crate::arith::{ArithConstraint, ArithExpr};
 use crate::body::BodyLiteral;
 use crate::error::{Result, SpindleError};
+use crate::function_registry::FunctionRegistry;
 use crate::grounding::is_variable;
 use crate::intern::resolve;
 use crate::theory::Theory;
@@ -39,6 +40,7 @@ impl PipelineStage for Validate {
         if self.enforce_range_restricted {
             validate_range_restriction(&theory)?;
         }
+        validate_extension_calls(&theory, ctx.function_registry.as_ref())?;
         ctx.diagnostics.push(Diagnostic {
             severity: Severity::Info,
             stage: self.name(),
@@ -107,6 +109,98 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Validate extension function calls in arithmetic expressions.
+///
+/// Walks all `ArithExpr::Call` nodes in the theory and checks:
+/// 1. A function registry is provided if any Call nodes exist
+/// 2. Each called function exists in the registry
+/// 3. Each call has the correct number of arguments
+fn validate_extension_calls(theory: &Theory, registry: Option<&FunctionRegistry>) -> Result<()> {
+    for rule in theory.rules() {
+        for lit in &rule.body {
+            match lit {
+                BodyLiteral::Arithmetic(constraint) => match constraint {
+                    ArithConstraint::Bind { expr, .. } => {
+                        validate_expr_calls(expr, registry)?;
+                    }
+                    ArithConstraint::Compare { lhs, rhs, .. } => {
+                        validate_expr_calls(lhs, registry)?;
+                        validate_expr_calls(rhs, registry)?;
+                    }
+                },
+                BodyLiteral::Logic(logic_lit) => {
+                    for arg in logic_lit.predicate_args() {
+                        if let crate::body::BodyArg::Arith(expr) = arg {
+                            validate_expr_calls(expr, registry)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Recursively validate Call nodes in an expression tree.
+fn validate_expr_calls(expr: &ArithExpr, registry: Option<&FunctionRegistry>) -> Result<()> {
+    match expr {
+        ArithExpr::Call { name, args } => {
+            let func_name = resolve(*name);
+            match registry {
+                None => {
+                    return Err(SpindleError::Validation {
+                        message: format!(
+                            "Extension function '{func_name}' used but no function registry provided"
+                        ),
+                    });
+                }
+                Some(reg) => {
+                    if !reg.contains(*name) {
+                        return Err(SpindleError::Validation {
+                            message: format!(
+                                "Unknown extension function '{func_name}' in expression"
+                            ),
+                        });
+                    }
+                    let func = reg.get(*name).unwrap();
+                    let sig = func.signature();
+                    if !sig.arity.accepts(args.len()) {
+                        return Err(SpindleError::Validation {
+                            message: format!(
+                                "Extension function '{}' expects {} argument(s), got {}",
+                                func_name,
+                                sig.arity,
+                                args.len()
+                            ),
+                        });
+                    }
+                }
+            }
+            // Validate arguments recursively
+            for arg in args {
+                validate_expr_calls(arg, registry)?;
+            }
+            Ok(())
+        }
+        ArithExpr::NaryOp { args, .. } => {
+            for arg in args {
+                validate_expr_calls(arg, registry)?;
+            }
+            Ok(())
+        }
+        ArithExpr::BinOp { lhs, rhs, .. } => {
+            validate_expr_calls(lhs, registry)?;
+            validate_expr_calls(rhs, registry)?;
+            Ok(())
+        }
+        ArithExpr::UnaryOp { expr, .. } => {
+            validate_expr_calls(expr, registry)?;
+            Ok(())
+        }
+        ArithExpr::Lit(_) | ArithExpr::Var(_) => Ok(()),
+    }
 }
 
 #[cfg(test)]

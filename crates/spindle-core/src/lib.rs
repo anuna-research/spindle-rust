@@ -49,6 +49,7 @@ pub mod claims;
 pub mod conclusion;
 pub mod error;
 pub mod explanation;
+pub mod function_registry;
 pub mod grounding;
 pub mod index;
 pub mod intern;
@@ -75,6 +76,9 @@ pub mod prelude {
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};
+    pub use crate::function_registry::{
+        Arity, EvalContext, EvalError, ExtensionFunction, FunctionRegistry, FunctionSignature,
+    };
     pub use crate::intern::{
         LiteralId, SymbolId, intern, intern_literal, resolve, resolve_literal,
     };

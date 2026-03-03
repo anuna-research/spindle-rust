@@ -138,11 +138,10 @@ fn nfr_001_grounding_performance_regression() {
 
     // Measure grounding time for non-arithmetic theory
     let theory_no_arith = parse_spl(&spl_no_arith).expect("parse no-arith");
-    let opts = PrepareOptions::default();
 
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = prepare(&theory_no_arith, opts.clone());
+        let _ = prepare(&theory_no_arith, PrepareOptions::default());
     }
     let baseline = start.elapsed() / 5;
 
@@ -151,7 +150,7 @@ fn nfr_001_grounding_performance_regression() {
 
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = prepare(&theory_arith, opts.clone());
+        let _ = prepare(&theory_arith, PrepareOptions::default());
     }
     let with_arith = start.elapsed() / 5;
 
@@ -168,7 +167,7 @@ fn nfr_001_grounding_performance_regression() {
     }
 
     // The real assertion: both complete without panic or error
-    let result = prepare(&theory_arith, opts);
+    let result = prepare(&theory_arith, PrepareOptions::default());
     assert!(
         result.is_ok(),
         "Arithmetic theory should prepare successfully"

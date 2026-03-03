@@ -34,6 +34,7 @@ pub use wildcard::WildcardRewrite;
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
+use crate::function_registry::FunctionRegistry;
 use crate::literal::Literal;
 use crate::temporal::TimePoint;
 use crate::theory::{MetaValue, Theory};
@@ -99,6 +100,8 @@ pub struct PipelineContext {
     pub diagnostics: Vec<Diagnostic>,
     /// Arbitrary key-value metadata that stages can read/write.
     pub metadata: HashMap<String, MetadataVal>,
+    /// Optional function registry for extension function dispatch.
+    pub function_registry: Option<FunctionRegistry>,
 }
 
 /// A single, self-contained transformation over a [`Theory`].
@@ -157,7 +160,15 @@ impl Pipeline {
 
     /// Run all stages in order, returning the final theory and context.
     pub fn run(&self, theory: Theory) -> Result<(Theory, PipelineContext)> {
-        let mut ctx = PipelineContext::default();
+        self.run_with_context(theory, PipelineContext::default())
+    }
+
+    /// Run all stages with a pre-configured context.
+    pub fn run_with_context(
+        &self,
+        theory: Theory,
+        mut ctx: PipelineContext,
+    ) -> Result<(Theory, PipelineContext)> {
         let mut current = theory;
 
         for stage in &self.stages {
@@ -207,7 +218,7 @@ pub fn default_pipeline() -> Pipeline {
 }
 
 /// Options for the prepare pipeline
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct PrepareOptions {
     /// Reference time for "as-of" reasoning.
     /// If Some, only facts/rules active at this time are included.
@@ -219,6 +230,10 @@ pub struct PrepareOptions {
     /// Optional trust policy for computing weighted conclusions.
     /// If None, the policy from the parsed theory is used.
     pub trust_policy: Option<TrustPolicy>,
+    /// Optional function registry for extension function dispatch.
+    /// If provided, extension functions referenced in `bind` expressions
+    /// are validated and can be called during grounding.
+    pub function_registry: Option<FunctionRegistry>,
 }
 
 /// Options for grounding
@@ -331,7 +346,11 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
     }
 
     let pipeline = builder.build();
-    let (mut theory, ctx) = pipeline.run(theory.clone())?;
+    let init_ctx = PipelineContext {
+        function_registry: opts.function_registry,
+        ..Default::default()
+    };
+    let (mut theory, ctx) = pipeline.run_with_context(theory.clone(), init_ctx)?;
 
     // Apply explicit trust policy from options, overriding the parsed one
     if let Some(tp) = opts.trust_policy {
