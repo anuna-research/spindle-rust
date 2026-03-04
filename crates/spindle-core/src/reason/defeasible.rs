@@ -839,7 +839,7 @@ mod tests {
 
         let (state, _) = run_all_phases(&theory);
 
-        let q_windows: Vec<_> = state
+        let mut q_windows: Vec<_> = state
             .conclusions
             .iter()
             .filter(|c| {
@@ -849,6 +849,7 @@ mod tests {
             })
             .map(|c| c.literal.temporal.clone())
             .collect();
+        q_windows.sort_by(|a, b| a.start.cmp(&b.start).then(a.end.cmp(&b.end)));
 
         assert_eq!(
             q_windows,

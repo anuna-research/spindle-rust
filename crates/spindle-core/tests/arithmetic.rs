@@ -425,17 +425,20 @@ fn test_006_1_temporal_arithmetic_salary_bands() {
     );
 
     // The 95000 period should NOT produce senior-earner (95000 < 100000).
-    // We verify there is exactly one senior-earner conclusion (the 110000 one).
-    let senior_count = conclusions
+    // Count only *temporal* senior-earner conclusions (the TemporalBridge may
+    // additionally produce an atemporal base conclusion bridged from the
+    // temporal one, which is expected and correct).
+    let senior_temporal_count = conclusions
         .iter()
         .filter(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && c.literal.name() == "senior-earner"
+                && !c.literal.temporal.is_empty()
         })
         .count();
     assert_eq!(
-        senior_count, 1,
-        "Expected exactly one senior-earner conclusion (only 110000 qualifies), got {senior_count}"
+        senior_temporal_count, 1,
+        "Expected exactly one temporal senior-earner conclusion (only 110000 qualifies), got {senior_temporal_count}"
     );
 }
 

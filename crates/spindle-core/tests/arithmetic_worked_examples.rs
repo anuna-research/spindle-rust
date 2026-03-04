@@ -172,19 +172,22 @@ fn section_9_3_temporal_arithmetic_salary_bands() {
     "#;
     let conclusions = reason_spl(spl);
 
-    // Only the 110000 period [100, 200] qualifies
+    // Only the 110000 period [100, 200] qualifies. Filter to temporal
+    // conclusions only — the TemporalBridge may produce an additional
+    // atemporal base conclusion, which is expected.
     let senior_conclusions: Vec<_> = conclusions
         .iter()
         .filter(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && c.literal.name() == "senior-earner"
+                && !c.literal.temporal.is_empty()
         })
         .collect();
 
     assert_eq!(
         senior_conclusions.len(),
         1,
-        "Expected exactly one senior-earner conclusion (only 110000 qualifies), got {}",
+        "Expected exactly one temporal senior-earner conclusion (only 110000 qualifies), got {}",
         senior_conclusions.len()
     );
 
