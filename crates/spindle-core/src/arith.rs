@@ -185,6 +185,15 @@ pub enum ArithError {
         /// The function name.
         name: SymbolId,
     },
+    /// Extension function called with wrong number of arguments.
+    ArityMismatch {
+        /// The function name.
+        name: SymbolId,
+        /// The expected arity (as display string, e.g. "2" or "1..3").
+        expected: String,
+        /// The actual argument count.
+        got: usize,
+    },
     /// Extension function returned an error.
     FunctionError(String),
 }
@@ -206,6 +215,17 @@ impl fmt::Display for ArithError {
             Self::ComparisonFailed => write!(f, "comparison failed"),
             Self::UnknownFunction { name } => {
                 write!(f, "unknown function: {}", resolve(*name))
+            }
+            Self::ArityMismatch {
+                name,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "arity mismatch for {}: expected {expected}, got {got}",
+                    resolve(*name)
+                )
             }
             Self::FunctionError(msg) => write!(f, "function error: {msg}"),
         }
@@ -683,6 +703,14 @@ impl ArithExpr {
                         Term::try_from(nv).map_err(|_| ArithError::NonFiniteFloat)
                     })
                     .collect::<Result<_, _>>()?;
+                let sig = func.signature();
+                if !sig.arity.accepts(term_args.len()) {
+                    return Err(ArithError::ArityMismatch {
+                        name: *name,
+                        expected: sig.arity.to_string(),
+                        got: term_args.len(),
+                    });
+                }
                 let result = func.eval(&term_args).map_err(|e| match e {
                     crate::function_registry::EvalError::ArithError(ae) => ae,
                     other => ArithError::FunctionError(format!("{other}")),
@@ -1915,6 +1943,36 @@ mod tests {
             assert!(
                 matches!(err, ArithError::FunctionError(_)),
                 "expected FunctionError, got: {err:?}"
+            );
+        }
+
+        #[test]
+        fn call_arity_mismatch_returns_error() {
+            // DoubleFunction has Fixed(1) arity — call with 0 and 2 args
+            let mut reg = FunctionRegistry::new();
+            reg.register(Box::new(DoubleFunction::new()));
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let name = intern("double");
+
+            // 0 args
+            let expr = ArithExpr::Call { name, args: vec![] };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ArithError::ArityMismatch { got: 0, .. }),
+                "expected ArityMismatch with got=0, got: {err:?}"
+            );
+
+            // 2 args
+            let expr = ArithExpr::Call {
+                name,
+                args: vec![lit_int(1), lit_int(2)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ArithError::ArityMismatch { got: 2, .. }),
+                "expected ArityMismatch with got=2, got: {err:?}"
             );
         }
     }
