@@ -75,8 +75,7 @@ fn test_005_no_double_decrement_with_two_temporal_facts() {
     let q_positive: Vec<_> = conclusions
         .iter()
         .filter(|c| {
-            c.literal.name() == "q"
-                && c.conclusion_type == ConclusionType::DefeasiblyProvable
+            c.literal.name() == "q" && c.conclusion_type == ConclusionType::DefeasiblyProvable
         })
         .collect();
     assert_eq!(
@@ -114,9 +113,9 @@ fn test_006_cross_window_satisfaction_blocked() {
     let conclusions = reason_prepared(&result.theory).unwrap();
 
     // q must NOT be derived: p[1,10] ≠ p[20,30]
-    let q_positive = conclusions.iter().any(|c| {
-        c.literal.name() == "q" && c.conclusion_type.is_positive()
-    });
+    let q_positive = conclusions
+        .iter()
+        .any(|c| c.literal.name() == "q" && c.conclusion_type.is_positive());
     assert!(
         !q_positive,
         "q should NOT be derived from wrong temporal window"
@@ -143,8 +142,7 @@ fn test_011_temporal_fact_proves_base_via_bridging() {
 
     // q should be +d (defeasibly provable via temporal bridging)
     let q_proved = conclusions.iter().any(|c| {
-        c.literal.name() == "q"
-            && c.conclusion_type == ConclusionType::DefeasiblyProvable
+        c.literal.name() == "q" && c.conclusion_type == ConclusionType::DefeasiblyProvable
     });
     assert!(
         q_proved,
@@ -236,12 +234,10 @@ fn test_017_non_temporal_theory_unchanged() {
 
     // republican and quaker should be +D (definite facts)
     let republican_definite = conclusions.iter().any(|c| {
-        c.literal.name() == "republican"
-            && c.conclusion_type == ConclusionType::DefinitelyProvable
+        c.literal.name() == "republican" && c.conclusion_type == ConclusionType::DefinitelyProvable
     });
     let quaker_definite = conclusions.iter().any(|c| {
-        c.literal.name() == "quaker"
-            && c.conclusion_type == ConclusionType::DefinitelyProvable
+        c.literal.name() == "quaker" && c.conclusion_type == ConclusionType::DefinitelyProvable
     });
     assert!(republican_definite, "republican should be +D");
     assert!(quaker_definite, "quaker should be +D");
@@ -256,9 +252,7 @@ fn test_017_non_temporal_theory_unchanged() {
 /// TemporalBridge stage is in the pipeline, for a non-temporal theory.
 #[test]
 fn test_017b_non_temporal_reasoning_identical_with_and_without_bridge() {
-    use spindle_core::pipeline::{
-        Ground, Validate, WildcardRewrite,
-    };
+    use spindle_core::pipeline::{Ground, Validate, WildcardRewrite};
     use std::collections::BTreeSet;
 
     let theory = fixtures::nixon_diamond();
@@ -273,9 +267,7 @@ fn test_017b_non_temporal_reasoning_identical_with_and_without_bridge() {
     let conclusions_a = reason_prepared(&theory_a).unwrap();
 
     // Path B: default pipeline (WITH TemporalBridge)
-    let (theory_b, _) = Pipeline::default_pipeline()
-        .run(theory)
-        .unwrap();
+    let (theory_b, _) = Pipeline::default_pipeline().run(theory).unwrap();
     let conclusions_b = reason_prepared(&theory_b).unwrap();
 
     let norm_a: BTreeSet<String> = conclusions_a.iter().map(|c| format!("{c}")).collect();

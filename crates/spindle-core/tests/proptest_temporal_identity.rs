@@ -14,7 +14,7 @@ use spindle_core::index::IndexedTheory;
 use spindle_core::literal::Literal;
 use spindle_core::theory::Theory;
 
-use proptest_helpers::{arb_mode, arb_temporal, ATOMS};
+use proptest_helpers::{ATOMS, arb_mode, arb_temporal};
 
 /// Generate a full `Literal` with temporal bounds, mode, and predicate args.
 fn arb_literal_with_temporal() -> impl Strategy<Value = Literal> {

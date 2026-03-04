@@ -325,11 +325,7 @@ mod tests {
             Temporal::empty(),
             vec![],
         );
-        theory.add_rule(Rule::strict(
-            pos_label,
-            smallvec![],
-            dummy_head.clone(),
-        ));
+        theory.add_rule(Rule::strict(pos_label, smallvec![], dummy_head.clone()));
         let neg_label = format!("__bridge::neg::{spl_key}");
         let neg_head = Literal::from_ids(
             crate::literal::InternedLiteralName::intern("p"),
@@ -427,7 +423,10 @@ mod tests {
             .expect("Expected negation bridging rule ~p[1,10] → ~p");
 
         assert_eq!(neg_bridge.rule_type, RuleType::Strict);
-        assert!(neg_bridge.head[0].negation, "Negation bridge head must be negated");
+        assert!(
+            neg_bridge.head[0].negation,
+            "Negation bridge head must be negated"
+        );
         assert!(
             neg_bridge.head[0].temporal.is_empty(),
             "Negation bridge head must be atemporal"

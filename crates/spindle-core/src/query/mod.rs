@@ -1705,7 +1705,10 @@ mod tests {
         let c_base = Literal::simple("p");
 
         assert!(matches_query_temporal(&query.temporal, &c_match.temporal));
-        assert!(!matches_query_temporal(&query.temporal, &c_different.temporal));
+        assert!(!matches_query_temporal(
+            &query.temporal,
+            &c_different.temporal
+        ));
         assert!(!matches_query_temporal(&query.temporal, &c_base.temporal));
     }
 }
