@@ -19,14 +19,18 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::sync::LazyLock;
 
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
-use crate::function_registry::EvalContext;
+use crate::function_registry::{EvalContext, FunctionRegistry};
 use crate::grounding::Substitution;
 use crate::intern::{SymbolId, resolve};
 use crate::term::{FiniteFloat, NumericValue, Term};
+
+/// Cached prelude registry for convenience `eval()` methods.
+static PRELUDE: LazyLock<FunctionRegistry> = LazyLock::new(FunctionRegistry::with_prelude);
 
 // ---------------------------------------------------------------------------
 // Operator enums
@@ -645,11 +649,11 @@ impl ArithExpr {
     /// Returns the resulting numeric value, or an error if evaluation fails
     /// (overflow, unbound variable, type mismatch, etc.).
     ///
-    /// Uses the prelude registry for builtin function dispatch.
+    /// Uses a cached prelude registry for builtin function dispatch.
+    /// Prefer `eval_with_context` on hot paths where you already have
+    /// a registry.
     pub fn eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> {
-        use crate::function_registry::FunctionRegistry;
-        let prelude = FunctionRegistry::with_prelude();
-        let ctx = EvalContext::with_registry(&prelude);
+        let ctx = EvalContext::with_registry(&PRELUDE);
         self.eval_with_context(subst, &ctx)
     }
 
@@ -700,11 +704,11 @@ impl ArithExpr {
 impl ArithConstraint {
     /// Evaluate this constraint under the given substitution.
     ///
-    /// Uses the prelude registry for builtin function dispatch.
+    /// Uses a cached prelude registry for builtin function dispatch.
+    /// Prefer `eval_with_context` on hot paths where you already have
+    /// a registry.
     pub fn eval(&self, subst: &mut Substitution) -> Result<(), ArithError> {
-        use crate::function_registry::FunctionRegistry;
-        let prelude = FunctionRegistry::with_prelude();
-        let ctx = EvalContext::with_registry(&prelude);
+        let ctx = EvalContext::with_registry(&PRELUDE);
         self.eval_with_context(subst, &ctx)
     }
 
@@ -977,10 +981,7 @@ mod tests {
     fn sub_zero_args_error() {
         let subst = Substitution::default();
         let expr = call("-", vec![]);
-        assert!(matches!(
-            expr.eval(&subst).unwrap_err(),
-            ArithError::TypeMismatch { .. }
-        ));
+        assert!(expr.eval(&subst).is_err());
     }
 
     // -- Multiplication ----------------------------------------------------

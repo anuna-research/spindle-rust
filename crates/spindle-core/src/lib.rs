@@ -45,7 +45,7 @@
 pub mod analysis;
 pub mod arith;
 pub mod body;
-pub mod builtins;
+pub(crate) mod builtins;
 pub mod claims;
 pub mod conclusion;
 pub mod error;

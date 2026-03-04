@@ -91,6 +91,12 @@ impl fmt::Display for EvalError {
 
 impl std::error::Error for EvalError {}
 
+impl From<crate::arith::ArithError> for EvalError {
+    fn from(e: crate::arith::ArithError) -> Self {
+        EvalError::ArithError(e)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ExtensionFunction trait
 // ---------------------------------------------------------------------------
@@ -356,5 +362,104 @@ mod tests {
         let debug = format!("{reg:?}");
         assert!(debug.contains("FunctionRegistry"));
         assert!(debug.contains("double"));
+    }
+
+    /// A test function that triples an integer (same name as DoubleFunction
+    /// for override testing).
+    struct TripleFunction {
+        sig: FunctionSignature,
+    }
+
+    impl TripleFunction {
+        fn new() -> Self {
+            Self {
+                sig: FunctionSignature {
+                    name: intern("double"), // intentionally same name
+                    arity: Arity::Fixed(1),
+                    description: "triples an integer",
+                },
+            }
+        }
+    }
+
+    impl ExtensionFunction for TripleFunction {
+        fn signature(&self) -> &FunctionSignature {
+            &self.sig
+        }
+
+        fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+            match &args[0] {
+                Term::Integer(n) => Ok(Term::Integer(n * 3)),
+                other => Err(EvalError::TypeError(format!(
+                    "expected integer, got {other:?}"
+                ))),
+            }
+        }
+    }
+
+    /// A function with a distinct name for merge disjoint-key testing.
+    struct IncrementFunction {
+        sig: FunctionSignature,
+    }
+
+    impl IncrementFunction {
+        fn new() -> Self {
+            Self {
+                sig: FunctionSignature {
+                    name: intern("increment"),
+                    arity: Arity::Fixed(1),
+                    description: "adds one",
+                },
+            }
+        }
+    }
+
+    impl ExtensionFunction for IncrementFunction {
+        fn signature(&self) -> &FunctionSignature {
+            &self.sig
+        }
+
+        fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+            match &args[0] {
+                Term::Integer(n) => Ok(Term::Integer(n + 1)),
+                other => Err(EvalError::TypeError(format!(
+                    "expected integer, got {other:?}"
+                ))),
+            }
+        }
+    }
+
+    #[test]
+    fn registry_merge_disjoint() {
+        let mut reg_a = FunctionRegistry::new();
+        reg_a.register(Box::new(DoubleFunction::new()));
+
+        let mut reg_b = FunctionRegistry::new();
+        reg_b.register(Box::new(IncrementFunction::new()));
+
+        reg_a.merge(reg_b);
+        assert_eq!(reg_a.names().count(), 2);
+        assert!(reg_a.contains(intern("double")));
+        assert!(reg_a.contains(intern("increment")));
+    }
+
+    #[test]
+    fn registry_merge_override_on_collision() {
+        let mut reg_a = FunctionRegistry::new();
+        reg_a.register(Box::new(DoubleFunction::new()));
+
+        let mut reg_b = FunctionRegistry::new();
+        reg_b.register(Box::new(TripleFunction::new()));
+
+        // Before merge: double(5) = 10
+        let func_before = reg_a.get(intern("double")).unwrap();
+        assert_eq!(func_before.eval(&[Term::Integer(5)]).unwrap(), Term::Integer(10));
+
+        reg_a.merge(reg_b);
+
+        // After merge: "double" is overridden by TripleFunction, so double(5) = 15
+        assert_eq!(reg_a.names().count(), 1);
+        let func_after = reg_a.get(intern("double")).unwrap();
+        assert_eq!(func_after.eval(&[Term::Integer(5)]).unwrap(), Term::Integer(15));
     }
 }

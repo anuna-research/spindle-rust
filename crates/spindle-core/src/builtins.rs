@@ -29,10 +29,6 @@ fn nv_to_term(nv: NumericValue) -> Result<Term, EvalError> {
     Term::try_from(nv).map_err(|e| EvalError::EvalFailed(e.to_string()))
 }
 
-fn arith_err(e: ArithError) -> EvalError {
-    EvalError::ArithError(e)
-}
-
 // ---------------------------------------------------------------------------
 // AddFn (+)
 // ---------------------------------------------------------------------------
@@ -64,7 +60,7 @@ impl ExtensionFunction for AddFn {
         }
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
-            acc = add_values(acc, to_nv(arg)?).map_err(arith_err)?;
+            acc = add_values(acc, to_nv(arg)?)?;
         }
         nv_to_term(acc)
     }
@@ -96,20 +92,15 @@ impl ExtensionFunction for SubFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
-        if args.is_empty() {
-            return Err(arith_err(ArithError::TypeMismatch {
-                op: "-",
-                expected: "1+ arguments",
-                got: "0 arguments",
-            }));
-        }
-        let first = to_nv(&args[0])?;
+        let first = to_nv(args.first().ok_or_else(|| {
+            EvalError::TypeError("subtraction requires at least 1 argument".into())
+        })?)?;
         if args.len() == 1 {
-            return nv_to_term(negate(first).map_err(arith_err)?);
+            return nv_to_term(negate(first)?);
         }
         let mut acc = first;
         for arg in &args[1..] {
-            acc = sub_values(acc, to_nv(arg)?).map_err(arith_err)?;
+            acc = sub_values(acc, to_nv(arg)?)?;
         }
         nv_to_term(acc)
     }
@@ -146,7 +137,7 @@ impl ExtensionFunction for MulFn {
         }
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
-            acc = mul_values(acc, to_nv(arg)?).map_err(arith_err)?;
+            acc = mul_values(acc, to_nv(arg)?)?;
         }
         nv_to_term(acc)
     }
@@ -178,20 +169,15 @@ impl ExtensionFunction for DivFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
-        if args.is_empty() {
-            return Err(arith_err(ArithError::TypeMismatch {
-                op: "/",
-                expected: "1+ arguments",
-                got: "0 arguments",
-            }));
-        }
-        let first = to_nv(&args[0])?;
+        let first = to_nv(args.first().ok_or_else(|| {
+            EvalError::TypeError("division requires at least 1 argument".into())
+        })?)?;
         if args.len() == 1 {
-            return nv_to_term(reciprocal(first).map_err(arith_err)?);
+            return nv_to_term(reciprocal(first)?);
         }
         let mut acc = first;
         for arg in &args[1..] {
-            acc = div_values(acc, to_nv(arg)?).map_err(arith_err)?;
+            acc = div_values(acc, to_nv(arg)?)?;
         }
         nv_to_term(acc)
     }
@@ -223,17 +209,12 @@ impl ExtensionFunction for MinFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
-        if args.is_empty() {
-            return Err(arith_err(ArithError::TypeMismatch {
-                op: "min",
-                expected: "1+ arguments",
-                got: "0 arguments",
-            }));
-        }
-        let mut acc = to_nv(&args[0])?;
+        let mut acc = to_nv(args.first().ok_or_else(|| {
+            EvalError::TypeError("min requires at least 1 argument".into())
+        })?)?;
         for arg in &args[1..] {
             let val = to_nv(arg)?;
-            let (ord, pa, pb) = numeric_cmp(acc, val).map_err(arith_err)?;
+            let (ord, pa, pb) = numeric_cmp(acc, val)?;
             acc = if ord.is_le() { pa } else { pb };
         }
         nv_to_term(acc)
@@ -266,17 +247,12 @@ impl ExtensionFunction for MaxFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
-        if args.is_empty() {
-            return Err(arith_err(ArithError::TypeMismatch {
-                op: "max",
-                expected: "1+ arguments",
-                got: "0 arguments",
-            }));
-        }
-        let mut acc = to_nv(&args[0])?;
+        let mut acc = to_nv(args.first().ok_or_else(|| {
+            EvalError::TypeError("max requires at least 1 argument".into())
+        })?)?;
         for arg in &args[1..] {
             let val = to_nv(arg)?;
-            let (ord, pa, pb) = numeric_cmp(acc, val).map_err(arith_err)?;
+            let (ord, pa, pb) = numeric_cmp(acc, val)?;
             acc = if ord.is_ge() { pa } else { pb };
         }
         nv_to_term(acc)
@@ -315,13 +291,12 @@ impl ExtensionFunction for IDivFn {
         match (&lhs, &rhs) {
             (NumericValue::Integer(a), NumericValue::Integer(b)) => {
                 if *b == 0 {
-                    Err(arith_err(ArithError::DivisionByZero))
+                    Err(ArithError::DivisionByZero.into())
                 } else {
-                    let result = floor_div_i64(*a, *b).map_err(arith_err)?;
-                    Ok(Term::Integer(result))
+                    Ok(Term::Integer(floor_div_i64(*a, *b)?))
                 }
             }
-            _ => Err(arith_err(ArithError::TypeMismatch {
+            _ => Err(ArithError::TypeMismatch {
                 op: "div",
                 expected: "Integer",
                 got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
@@ -329,7 +304,8 @@ impl ExtensionFunction for IDivFn {
                 } else {
                     &rhs
                 }),
-            })),
+            }
+            .into()),
         }
     }
 }
@@ -366,13 +342,12 @@ impl ExtensionFunction for RemFn {
         match (&lhs, &rhs) {
             (NumericValue::Integer(a), NumericValue::Integer(b)) => {
                 if *b == 0 {
-                    Err(arith_err(ArithError::DivisionByZero))
+                    Err(ArithError::DivisionByZero.into())
                 } else {
-                    let result = floor_rem_i64(*a, *b).map_err(arith_err)?;
-                    Ok(Term::Integer(result))
+                    Ok(Term::Integer(floor_rem_i64(*a, *b)?))
                 }
             }
-            _ => Err(arith_err(ArithError::TypeMismatch {
+            _ => Err(ArithError::TypeMismatch {
                 op: "rem",
                 expected: "Integer",
                 got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
@@ -380,7 +355,8 @@ impl ExtensionFunction for RemFn {
                 } else {
                     &rhs
                 }),
-            })),
+            }
+            .into()),
         }
     }
 }
@@ -413,7 +389,7 @@ impl ExtensionFunction for PowFn {
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         let base = to_nv(&args[0])?;
         let exp = to_nv(&args[1])?;
-        nv_to_term(eval_pow(base, exp).map_err(arith_err)?)
+        nv_to_term(eval_pow(base, exp)?)
     }
 }
 
@@ -444,7 +420,7 @@ impl ExtensionFunction for AbsFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         let v = to_nv(&args[0])?;
-        nv_to_term(abs_value(v).map_err(arith_err)?)
+        nv_to_term(abs_value(v)?)
     }
 }
 
@@ -483,20 +459,22 @@ impl ExtensionFunction for RoundFn {
         let dp = match &dp_nv {
             NumericValue::Integer(n) => {
                 if *n < 0 {
-                    return Err(arith_err(ArithError::TypeMismatch {
+                    return Err(ArithError::TypeMismatch {
                         op: "round",
                         expected: "non-negative integer dp",
                         got: "negative integer",
-                    }));
+                    }
+                    .into());
                 }
                 *n as u32
             }
             _ => {
-                return Err(arith_err(ArithError::TypeMismatch {
+                return Err(ArithError::TypeMismatch {
                     op: "round",
                     expected: "Integer dp",
                     got: type_name(&dp_nv),
-                }));
+                }
+                .into());
             }
         };
 
@@ -504,9 +482,8 @@ impl ExtensionFunction for RoundFn {
         let dec = match &value {
             NumericValue::Integer(n) => Decimal::from(*n),
             NumericValue::Decimal(d) => *d,
-            NumericValue::Float(f) => {
-                Decimal::try_from(*f).map_err(|_| arith_err(ArithError::NonFiniteFloat))?
-            }
+            NumericValue::Float(f) => Decimal::try_from(*f)
+                .map_err(|_| EvalError::from(ArithError::NonFiniteFloat))?,
         };
 
         let rounded = dec.round_dp_with_strategy(dp, RoundingStrategy::MidpointNearestEven);
@@ -549,18 +526,17 @@ impl ExtensionFunction for FloorFn {
                 let floored = d.floor();
                 let n = floored
                     .to_i64()
-                    .ok_or_else(|| arith_err(ArithError::IntegerOverflow))?;
+                    .ok_or(ArithError::IntegerOverflow)?;
                 Ok(Term::Integer(n))
             }
             NumericValue::Float(f) => {
                 let floored = f.floor();
                 if !floored.is_finite() {
-                    return Err(arith_err(ArithError::NonFiniteFloat));
+                    return Err(ArithError::NonFiniteFloat.into());
                 }
                 let n = floored as i64;
-                // Check round-trip
                 if (n as f64) != floored {
-                    return Err(arith_err(ArithError::IntegerOverflow));
+                    return Err(ArithError::IntegerOverflow.into());
                 }
                 Ok(Term::Integer(n))
             }
@@ -603,18 +579,17 @@ impl ExtensionFunction for CeilFn {
                 let ceiled = d.ceil();
                 let n = ceiled
                     .to_i64()
-                    .ok_or_else(|| arith_err(ArithError::IntegerOverflow))?;
+                    .ok_or(ArithError::IntegerOverflow)?;
                 Ok(Term::Integer(n))
             }
             NumericValue::Float(f) => {
-                let floored = f.ceil();
-                if !floored.is_finite() {
-                    return Err(arith_err(ArithError::NonFiniteFloat));
+                let ceiled = f.ceil();
+                if !ceiled.is_finite() {
+                    return Err(ArithError::NonFiniteFloat.into());
                 }
-                let n = floored as i64;
-                // Check round-trip
-                if (n as f64) != floored {
-                    return Err(arith_err(ArithError::IntegerOverflow));
+                let n = ceiled as i64;
+                if (n as f64) != ceiled {
+                    return Err(ArithError::IntegerOverflow.into());
                 }
                 Ok(Term::Integer(n))
             }
@@ -650,7 +625,6 @@ pub(crate) fn register_builtins(registry: &mut FunctionRegistry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::term::NumericValue;
     use rust_decimal::Decimal;
 
     fn eval_builtin(name: &str, args: &[Term]) -> Result<Term, EvalError> {
