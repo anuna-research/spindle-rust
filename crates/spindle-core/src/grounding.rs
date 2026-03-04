@@ -599,7 +599,8 @@ fn match_body_against_facts(
     all_facts: &[Literal],
     current_subst: &Substitution,
 ) -> Vec<Substitution> {
-    let ctx = EvalContext::empty();
+    let prelude = crate::function_registry::FunctionRegistry::with_prelude();
+    let ctx = EvalContext::with_registry(&prelude);
     match_body_against_facts_ctx(body, fact_index, all_facts, current_subst, &ctx)
 }
 
@@ -851,7 +852,9 @@ fn evaluate_state_queries(queries: &[TemporalStateQuery], subst: &Substitution) 
 
 /// Ground a theory by instantiating rules with variables
 pub fn ground_theory(theory: &Theory) -> Theory {
-    ground_theory_with_limit(theory, 100, usize::MAX, &EvalContext::empty()).0
+    let prelude = crate::function_registry::FunctionRegistry::with_prelude();
+    let ctx = EvalContext::with_registry(&prelude);
+    ground_theory_with_limit(theory, 100, usize::MAX, &ctx).0
 }
 
 /// Ground a theory with a maximum iteration limit and instance limit
@@ -2768,7 +2771,7 @@ mod tests {
         // Body: (val ?x ?n), (result ?x (+ ?n 1))
         // Facts: val(a, 5), result(a, 6)
         // Expected: one substitution {?x=a, ?n=5}
-        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::arith::ArithExpr;
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -2793,8 +2796,8 @@ mod tests {
             Temporal::empty(),
             vec![
                 BodyArg::Term(Term::Symbol(x_id)),
-                BodyArg::Arith(ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
+                BodyArg::Arith(ArithExpr::Call {
+                    name: intern("+"),
                     args: vec![
                         ArithExpr::Var(n_id),
                         ArithExpr::Lit(NumericValue::Integer(1)),
@@ -2837,7 +2840,7 @@ mod tests {
         // Body: (result ?x (+ ?unbound 1))
         // Facts: result(a, 6)
         // Expected: no substitutions (arith eval fails due to unbound ?unbound)
-        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::arith::ArithExpr;
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -2851,8 +2854,8 @@ mod tests {
             Temporal::empty(),
             vec![
                 BodyArg::Term(Term::Symbol(x_id)),
-                BodyArg::Arith(ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
+                BodyArg::Arith(ArithExpr::Call {
+                    name: intern("+"),
                     args: vec![
                         ArithExpr::Var(unbound_id),
                         ArithExpr::Lit(NumericValue::Integer(1)),
@@ -2886,7 +2889,7 @@ mod tests {
         // Body: (val ?x ?n), (bind ?total (+ ?n 100)), (budget ?x ?total)
         // Facts: val(a, 5), budget(a, 105)
         // Tests that bind result threads into subsequent arith arg
-        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::arith::{ArithConstraint, ArithExpr};
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -2907,8 +2910,8 @@ mod tests {
 
         let bind_total = BodyLiteral::Arithmetic(ArithConstraint::Bind {
             var: total_id,
-            expr: ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
+            expr: ArithExpr::Call {
+                name: intern("+"),
                 args: vec![
                     ArithExpr::Var(n_id),
                     ArithExpr::Lit(NumericValue::Integer(100)),
@@ -3021,7 +3024,7 @@ mod tests {
         // cost(widget, 10) >>
         // cost(?item, ?price), (bind ?tax (* ?price 2)), (> ?tax 15)
         //   => expensive(?item)
-        use crate::arith::{ArithConstraint, ArithExpr, CmpOp, NaryArithOp};
+        use crate::arith::{ArithConstraint, ArithExpr, CmpOp};
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -3070,8 +3073,8 @@ mod tests {
             )),
             BodyLiteral::Arithmetic(ArithConstraint::Bind {
                 var: tax_id,
-                expr: ArithExpr::NaryOp {
-                    op: NaryArithOp::Mul,
+                expr: ArithExpr::Call {
+                    name: intern("*"),
                     args: vec![
                         ArithExpr::Var(price_id),
                         ArithExpr::Lit(NumericValue::Integer(2)),
@@ -3538,7 +3541,7 @@ mod tests {
         // Fact: base(item, 10)
         // Rule: base(?x, ?n), (bind ?total (+ ?n 5)) => total(?x, ?total)
         // After grounding: total(item, 15) with Term::Integer(15)
-        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::arith::{ArithConstraint, ArithExpr};
         use crate::term::NumericValue;
 
         let x_id = intern("?x");
@@ -3571,8 +3574,8 @@ mod tests {
             )),
             BodyLiteral::Arithmetic(ArithConstraint::Bind {
                 var: total_id,
-                expr: ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
+                expr: ArithExpr::Call {
+                    name: intern("+"),
                     args: vec![
                         ArithExpr::Var(n_id),
                         ArithExpr::Lit(NumericValue::Integer(5)),
@@ -3681,13 +3684,13 @@ mod tests {
 
     #[test]
     fn has_variables_true_for_constant_arith_body_arg() {
-        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::arith::ArithExpr;
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
         // Build a body literal: target((+ 1 2))
-        let arith = ArithExpr::NaryOp {
-            op: NaryArithOp::Add,
+        let arith = ArithExpr::Call {
+            name: intern("+"),
             args: vec![
                 ArithExpr::Lit(NumericValue::Integer(1)),
                 ArithExpr::Lit(NumericValue::Integer(2)),

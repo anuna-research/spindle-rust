@@ -304,7 +304,7 @@ fn multi_arg_function() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn validation_error_no_registry() {
+fn validation_error_unknown_function_no_user_registry() {
     let spl = r#"
         (given (val 5))
         (normally r1
@@ -313,17 +313,17 @@ fn validation_error_no_registry() {
     "#;
     let theory = parse_spl(spl).expect("parse");
 
-    // No function registry provided
+    // No user registry provided (prelude is auto-injected but lacks 'double')
     let opts = PrepareOptions::default();
     let result = prepare(&theory, opts);
 
     match result {
-        Ok(_) => panic!("should fail validation without registry"),
+        Ok(_) => panic!("should fail validation for unknown function"),
         Err(err) => {
             let msg = format!("{err}");
             assert!(
-                msg.contains("no function registry provided"),
-                "error should mention missing registry, got: {msg}"
+                msg.contains("Unknown extension function") && msg.contains("double"),
+                "error should mention unknown function 'double', got: {msg}"
             );
         }
     }

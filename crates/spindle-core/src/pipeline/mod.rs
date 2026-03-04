@@ -346,8 +346,12 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
     }
 
     let pipeline = builder.build();
+    let mut prelude = FunctionRegistry::with_prelude();
+    if let Some(user_reg) = opts.function_registry {
+        prelude.merge(user_reg);
+    }
     let init_ctx = PipelineContext {
-        function_registry: opts.function_registry,
+        function_registry: Some(prelude),
         ..Default::default()
     };
     let (mut theory, ctx) = pipeline.run_with_context(theory.clone(), init_ctx)?;

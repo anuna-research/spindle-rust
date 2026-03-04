@@ -993,8 +993,8 @@ pub(crate) fn parse_timepoint_with_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spindle_core::arith::{ArithExpr, CmpOp, NaryArithOp};
-    use spindle_core::intern::intern;
+    use spindle_core::arith::{ArithExpr, CmpOp};
+    use spindle_core::intern::{intern, resolve};
     use spindle_core::term::NumericValue;
 
     /// Helper: build an SExpr atom.
@@ -1043,10 +1043,7 @@ mod tests {
                 assert_eq!(*var, intern("?total"));
                 assert!(matches!(
                     expr,
-                    ArithExpr::NaryOp {
-                        op: NaryArithOp::Add,
-                        ..
-                    }
+                    ArithExpr::Call { name, .. } if resolve(*name) == "+"
                 ));
             }
             other => panic!("Expected Arithmetic(Bind), got: {other:?}"),
@@ -1215,17 +1212,11 @@ mod tests {
                 assert_eq!(*op, CmpOp::Lt);
                 assert!(matches!(
                     lhs,
-                    ArithExpr::NaryOp {
-                        op: NaryArithOp::Add,
-                        ..
-                    }
+                    ArithExpr::Call { name, .. } if resolve(*name) == "+"
                 ));
                 assert!(matches!(
                     rhs,
-                    ArithExpr::NaryOp {
-                        op: NaryArithOp::Mul,
-                        ..
-                    }
+                    ArithExpr::Call { name, .. } if resolve(*name) == "*"
                 ));
             }
             other => panic!("Expected Arithmetic(Compare), got: {other:?}"),
@@ -1324,13 +1315,12 @@ mod tests {
             BodyArg::Term(Term::Symbol(intern("?i")))
         );
         match &lit.predicate_args()[1] {
-            BodyArg::Arith(ArithExpr::NaryOp { op, args }) => {
-                assert_eq!(*op, NaryArithOp::Mul);
+            BodyArg::Arith(ArithExpr::Call { name, args }) if resolve(*name) == "*" => {
                 assert_eq!(args.len(), 2);
                 assert_eq!(args[0], ArithExpr::Var(intern("?p")));
                 assert_eq!(args[1], ArithExpr::Lit(NumericValue::Integer(2)));
             }
-            other => panic!("Expected BodyArg::Arith(NaryOp::Mul), got: {other:?}"),
+            other => panic!("Expected BodyArg::Arith(Call(*)), got: {other:?}"),
         }
     }
 
@@ -1347,10 +1337,7 @@ mod tests {
         assert!(lit.has_arith_args());
         assert!(matches!(
             &lit.predicate_args()[1],
-            BodyArg::Arith(ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
-                ..
-            })
+            BodyArg::Arith(ArithExpr::Call { name, .. }) if resolve(*name) == "+"
         ));
     }
 
@@ -1365,16 +1352,10 @@ mod tests {
         let lit = body[0].as_logic().unwrap();
         assert_eq!(lit.name(), "result");
         match &lit.predicate_args()[1] {
-            BodyArg::Arith(ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
-                args,
-            }) => {
+            BodyArg::Arith(ArithExpr::Call { name, args }) if resolve(*name) == "+" => {
                 assert!(matches!(
                     &args[0],
-                    ArithExpr::NaryOp {
-                        op: NaryArithOp::Mul,
-                        ..
-                    }
+                    ArithExpr::Call { name, .. } if resolve(*name) == "*"
                 ));
                 assert_eq!(args[1], ArithExpr::Var(intern("?c")));
             }
@@ -1395,17 +1376,11 @@ mod tests {
         assert!(matches!(&lit.predicate_args()[0], BodyArg::Term(_)));
         assert!(matches!(
             &lit.predicate_args()[1],
-            BodyArg::Arith(ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
-                ..
-            })
+            BodyArg::Arith(ArithExpr::Call { name, .. }) if resolve(*name) == "+"
         ));
         assert!(matches!(
             &lit.predicate_args()[2],
-            BodyArg::Arith(ArithExpr::NaryOp {
-                op: NaryArithOp::Sub,
-                ..
-            })
+            BodyArg::Arith(ArithExpr::Call { name, .. }) if resolve(*name) == "-"
         ));
     }
 
@@ -1447,10 +1422,10 @@ mod tests {
     fn test_body_arith_arg_all_operators() {
         // Test /, div, rem, **, abs in arg positions
         for (op_str, expected_check) in [
-            ("/", "NaryOp"),
-            ("div", "BinOp"),
-            ("rem", "BinOp"),
-            ("**", "BinOp"),
+            ("/", "Call"),
+            ("div", "Call"),
+            ("rem", "Call"),
+            ("**", "Call"),
         ] {
             let arith = list(vec![atom(op_str), atom("?x"), atom("2")]);
             let expr = list(vec![atom("f"), arith]);

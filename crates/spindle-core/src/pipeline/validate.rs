@@ -184,21 +184,6 @@ fn validate_expr_calls(expr: &ArithExpr, registry: Option<&FunctionRegistry>) ->
             }
             Ok(())
         }
-        ArithExpr::NaryOp { args, .. } => {
-            for arg in args {
-                validate_expr_calls(arg, registry)?;
-            }
-            Ok(())
-        }
-        ArithExpr::BinOp { lhs, rhs, .. } => {
-            validate_expr_calls(lhs, registry)?;
-            validate_expr_calls(rhs, registry)?;
-            Ok(())
-        }
-        ArithExpr::UnaryOp { expr, .. } => {
-            validate_expr_calls(expr, registry)?;
-            Ok(())
-        }
         ArithExpr::Lit(_) | ArithExpr::Var(_) => Ok(()),
     }
 }

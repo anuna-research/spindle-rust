@@ -1410,31 +1410,31 @@ mod tests {
     }
 
     #[test]
-    fn test_reject_future_reserved_round_as_predicate() {
+    fn test_reject_reserved_round_as_predicate() {
         let err = parse_spl("(given round)").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            msg.contains("Reserved keyword") && msg.contains("REQ-008"),
             "Expected REQ-008 error for round as predicate, got: {msg}"
         );
     }
 
     #[test]
-    fn test_reject_future_reserved_floor_as_predicate() {
+    fn test_reject_reserved_floor_as_predicate() {
         let err = parse_spl("(given floor)").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            msg.contains("Reserved keyword") && msg.contains("REQ-008"),
             "Expected REQ-008 error for floor as predicate, got: {msg}"
         );
     }
 
     #[test]
-    fn test_reject_future_reserved_ceil_as_predicate() {
+    fn test_reject_reserved_ceil_as_predicate() {
         let err = parse_spl("(given ceil)").unwrap_err();
         let msg = format!("{err}");
         assert!(
-            msg.contains("reserved for future use") && msg.contains("REQ-008"),
+            msg.contains("Reserved keyword") && msg.contains("REQ-008"),
             "Expected REQ-008 error for ceil as predicate, got: {msg}"
         );
     }

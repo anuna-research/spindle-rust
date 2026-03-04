@@ -8,15 +8,15 @@
 //!
 //! | Operator     | Min args | Max args | AST variant       |
 //! |--------------|----------|----------|--------------------|
-//! | `+`, `*`     | 0        | ∞        | `NaryOp`           |
-//! | `-`, `/`     | 1        | ∞        | `NaryOp`           |
-//! | `min`, `max` | 1        | ∞        | `NaryOp`           |
-//! | `div`, `rem` | 2        | 2        | `BinOp`            |
-//! | `**`         | 2        | 2        | `BinOp`            |
-//! | `abs`        | 1        | 1        | `UnaryOp`          |
+//! | `+`, `*`     | 0        | ∞        | `Call`             |
+//! | `-`, `/`     | 1        | ∞        | `Call`             |
+//! | `min`, `max` | 1        | ∞        | `Call`             |
+//! | `div`, `rem` | 2        | 2        | `Call`             |
+//! | `**`         | 2        | 2        | `Call`             |
+//! | `abs`        | 1        | 1        | `Call`             |
 
 use rust_decimal::Decimal;
-use spindle_core::arith::{ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp};
+use spindle_core::arith::{ArithExpr, CmpOp};
 use spindle_core::intern::intern;
 use spindle_core::term::NumericValue;
 
@@ -26,7 +26,9 @@ use crate::error::ParserFormat;
 use super::lexer::SExpr;
 
 /// Reserved arithmetic operator names.
-const ARITH_OPS: &[&str] = &["+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**"];
+const ARITH_OPS: &[&str] = &[
+    "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "round", "floor", "ceil",
+];
 
 /// Reserved comparison operator names.
 const CMP_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">="];
@@ -35,14 +37,14 @@ const CMP_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">="];
 ///
 /// This includes arithmetic operators, comparison operators, and the `bind` keyword.
 const RESERVED_KEYWORDS: &[&str] = &[
-    "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "bind", "=", "!=", "<", ">", "<=",
-    ">=",
+    "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "round", "floor", "ceil", "bind",
+    "=", "!=", "<", ">", "<=", ">=",
 ];
 
 /// Future-reserved keywords that cannot be used as predicate names or rule labels (REQ-008).
 ///
 /// These are aggregate/math functions reserved for future use.
-const FUTURE_RESERVED_KEYWORDS: &[&str] = &["sum", "count", "avg", "round", "floor", "ceil"];
+const FUTURE_RESERVED_KEYWORDS: &[&str] = &["sum", "count", "avg"];
 
 /// Returns `true` if `name` is a reserved arithmetic operator.
 pub(crate) fn is_arith_op(name: &str) -> bool {
@@ -114,37 +116,29 @@ pub(crate) fn parse_arith_expr(expr: &SExpr, line: usize) -> Result<ArithExpr, P
 
             let arg_exprs = &items[1..];
 
-            // Unknown operators become extension function Call nodes,
-            // validated later against the function registry.
-            if !is_arith_op(op_name) {
+            // All operators (built-in and unknown) emit Call nodes.
+            // Built-in operators get parse-time arity checking for good error messages.
+            if is_arith_op(op_name) {
+                match op_name {
+                    "+" | "*" => parse_known_call(op_name, arg_exprs, 0, line),
+                    "-" | "/" | "min" | "max" => parse_known_call(op_name, arg_exprs, 1, line),
+                    "div" | "rem" | "**" | "round" => {
+                        parse_known_call_exact(op_name, arg_exprs, 2, line)
+                    }
+                    "abs" | "floor" | "ceil" => parse_known_call_exact(op_name, arg_exprs, 1, line),
+                    _ => unreachable!("is_arith_op guard above"),
+                }
+            } else {
+                // Unknown operators become extension function Call nodes,
+                // validated later against the function registry.
                 let args = arg_exprs
                     .iter()
                     .map(|e| parse_arith_expr(e, line))
                     .collect::<Result<Vec<_>, _>>()?;
-                return Ok(ArithExpr::Call {
+                Ok(ArithExpr::Call {
                     name: intern(op_name),
                     args,
-                });
-            }
-
-            match op_name {
-                // N-ary operators
-                "+" => parse_nary(NaryArithOp::Add, arg_exprs, 0, op_name, line),
-                "-" => parse_nary(NaryArithOp::Sub, arg_exprs, 1, op_name, line),
-                "*" => parse_nary(NaryArithOp::Mul, arg_exprs, 0, op_name, line),
-                "/" => parse_nary(NaryArithOp::Div, arg_exprs, 1, op_name, line),
-                "min" => parse_nary(NaryArithOp::Min, arg_exprs, 1, op_name, line),
-                "max" => parse_nary(NaryArithOp::Max, arg_exprs, 1, op_name, line),
-
-                // Binary-only operators
-                "div" => parse_binop(BinArithOp::IDiv, arg_exprs, op_name, line),
-                "rem" => parse_binop(BinArithOp::Rem, arg_exprs, op_name, line),
-                "**" => parse_binop(BinArithOp::Pow, arg_exprs, op_name, line),
-
-                // Unary-only operator
-                "abs" => parse_unary(UnaryArithOp::Abs, arg_exprs, op_name, line),
-
-                _ => unreachable!("is_arith_op guard above"),
+                })
             }
         }
     }
@@ -200,12 +194,11 @@ fn parse_arith_atom(name: &str, line: usize) -> Result<ArithExpr, ParseError> {
     })
 }
 
-/// Parse an n-ary operator with a minimum arity constraint.
-fn parse_nary(
-    op: NaryArithOp,
+/// Parse a known operator as a Call node with minimum-arity checking.
+fn parse_known_call(
+    op_name: &str,
     args: &[SExpr],
     min_arity: usize,
-    op_name: &str,
     line: usize,
 ) -> Result<ArithExpr, ParseError> {
     if args.len() < min_arity {
@@ -231,50 +224,29 @@ fn parse_nary(
         .map(|a| parse_arith_expr(a, line))
         .collect::<Result<_, _>>()?;
 
-    Ok(ArithExpr::NaryOp { op, args: parsed })
-}
-
-/// Parse a binary-only operator (exactly 2 arguments required).
-fn parse_binop(
-    op: BinArithOp,
-    args: &[SExpr],
-    op_name: &str,
-    line: usize,
-) -> Result<ArithExpr, ParseError> {
-    if args.len() != 2 {
-        return Err(ParseError::ParserError {
-            line,
-            message: format!(
-                "Arithmetic operator '{op_name}' requires exactly 2 arguments, got {}",
-                args.len()
-            ),
-            format: ParserFormat::Spl,
-            source_line: None,
-        });
-    }
-
-    let lhs = parse_arith_expr(&args[0], line)?;
-    let rhs = parse_arith_expr(&args[1], line)?;
-
-    Ok(ArithExpr::BinOp {
-        op,
-        lhs: Box::new(lhs),
-        rhs: Box::new(rhs),
+    Ok(ArithExpr::Call {
+        name: intern(op_name),
+        args: parsed,
     })
 }
 
-/// Parse a unary-only operator (exactly 1 argument required).
-fn parse_unary(
-    op: UnaryArithOp,
-    args: &[SExpr],
+/// Parse a known operator as a Call node with exact-arity checking.
+fn parse_known_call_exact(
     op_name: &str,
+    args: &[SExpr],
+    exact_arity: usize,
     line: usize,
 ) -> Result<ArithExpr, ParseError> {
-    if args.len() != 1 {
+    if args.len() != exact_arity {
+        let noun = if exact_arity == 1 {
+            "argument"
+        } else {
+            "arguments"
+        };
         return Err(ParseError::ParserError {
             line,
             message: format!(
-                "Arithmetic operator '{op_name}' requires exactly 1 argument, got {}",
+                "Arithmetic operator '{op_name}' requires exactly {exact_arity} {noun}, got {}",
                 args.len()
             ),
             format: ParserFormat::Spl,
@@ -282,11 +254,14 @@ fn parse_unary(
         });
     }
 
-    let inner = parse_arith_expr(&args[0], line)?;
+    let parsed: Vec<ArithExpr> = args
+        .iter()
+        .map(|a| parse_arith_expr(a, line))
+        .collect::<Result<_, _>>()?;
 
-    Ok(ArithExpr::UnaryOp {
-        op,
-        expr: Box::new(inner),
+    Ok(ArithExpr::Call {
+        name: intern(op_name),
+        args: parsed,
     })
 }
 
@@ -297,7 +272,7 @@ fn parse_unary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spindle_core::arith::{ArithExpr, BinArithOp, NaryArithOp, UnaryArithOp};
+    use spindle_core::arith::ArithExpr;
     use spindle_core::intern::{intern, resolve};
     use spindle_core::term::NumericValue;
 
@@ -440,8 +415,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("+")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
+            ArithExpr::Call {
+                name: intern("+"),
                 args: vec![]
             }
         );
@@ -452,8 +427,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("+"), atom("5")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
+            ArithExpr::Call {
+                name: intern("+"),
                 args: vec![ArithExpr::Lit(NumericValue::Integer(5))]
             }
         );
@@ -464,8 +439,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("+"), atom("1"), atom("2")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
+            ArithExpr::Call {
+                name: intern("+"),
                 args: vec![
                     ArithExpr::Lit(NumericValue::Integer(1)),
                     ArithExpr::Lit(NumericValue::Integer(2)),
@@ -481,11 +456,11 @@ mod tests {
             1,
         )
         .unwrap();
-        if let ArithExpr::NaryOp { op, args } = &expr {
-            assert_eq!(*op, NaryArithOp::Add);
+        if let ArithExpr::Call { name, args } = &expr {
+            assert_eq!(resolve(*name), "+");
             assert_eq!(args.len(), 4);
         } else {
-            panic!("Expected NaryOp, got: {expr:?}");
+            panic!("Expected Call, got: {expr:?}");
         }
     }
 
@@ -498,8 +473,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("*")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Mul,
+            ArithExpr::Call {
+                name: intern("*"),
                 args: vec![]
             }
         );
@@ -510,8 +485,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("*"), atom("3"), atom("4")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Mul,
+            ArithExpr::Call {
+                name: intern("*"),
                 args: vec![
                     ArithExpr::Lit(NumericValue::Integer(3)),
                     ArithExpr::Lit(NumericValue::Integer(4)),
@@ -529,8 +504,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("-"), atom("5")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Sub,
+            ArithExpr::Call {
+                name: intern("-"),
                 args: vec![ArithExpr::Lit(NumericValue::Integer(5))]
             }
         );
@@ -541,8 +516,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("-"), atom("10"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Sub,
+            ArithExpr::Call {
+                name: intern("-"),
                 args: vec![
                     ArithExpr::Lit(NumericValue::Integer(10)),
                     ArithExpr::Lit(NumericValue::Integer(3)),
@@ -567,8 +542,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("/"), atom("2")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Div,
+            ArithExpr::Call {
+                name: intern("/"),
                 args: vec![ArithExpr::Lit(NumericValue::Integer(2))]
             }
         );
@@ -590,8 +565,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("min"), atom("5")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Min,
+            ArithExpr::Call {
+                name: intern("min"),
                 args: vec![ArithExpr::Lit(NumericValue::Integer(5))]
             }
         );
@@ -601,11 +576,11 @@ mod tests {
     fn test_min_three_args() {
         let expr =
             parse_arith_expr(&list(vec![atom("min"), atom("5"), atom("3"), atom("7")]), 1).unwrap();
-        if let ArithExpr::NaryOp { op, args } = &expr {
-            assert_eq!(*op, NaryArithOp::Min);
+        if let ArithExpr::Call { name, args } = &expr {
+            assert_eq!(resolve(*name), "min");
             assert_eq!(args.len(), 3);
         } else {
-            panic!("Expected NaryOp");
+            panic!("Expected Call");
         }
     }
 
@@ -621,8 +596,8 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("max"), atom("1"), atom("9")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Max,
+            ArithExpr::Call {
+                name: intern("max"),
                 args: vec![
                     ArithExpr::Lit(NumericValue::Integer(1)),
                     ArithExpr::Lit(NumericValue::Integer(9)),
@@ -647,10 +622,12 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("div"), atom("10"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::BinOp {
-                op: BinArithOp::IDiv,
-                lhs: Box::new(ArithExpr::Lit(NumericValue::Integer(10))),
-                rhs: Box::new(ArithExpr::Lit(NumericValue::Integer(3))),
+            ArithExpr::Call {
+                name: intern("div"),
+                args: vec![
+                    ArithExpr::Lit(NumericValue::Integer(10)),
+                    ArithExpr::Lit(NumericValue::Integer(3)),
+                ]
             }
         );
     }
@@ -678,10 +655,12 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("rem"), atom("10"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::BinOp {
-                op: BinArithOp::Rem,
-                lhs: Box::new(ArithExpr::Lit(NumericValue::Integer(10))),
-                rhs: Box::new(ArithExpr::Lit(NumericValue::Integer(3))),
+            ArithExpr::Call {
+                name: intern("rem"),
+                args: vec![
+                    ArithExpr::Lit(NumericValue::Integer(10)),
+                    ArithExpr::Lit(NumericValue::Integer(3)),
+                ]
             }
         );
     }
@@ -698,10 +677,12 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("**"), atom("2"), atom("3")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::BinOp {
-                op: BinArithOp::Pow,
-                lhs: Box::new(ArithExpr::Lit(NumericValue::Integer(2))),
-                rhs: Box::new(ArithExpr::Lit(NumericValue::Integer(3))),
+            ArithExpr::Call {
+                name: intern("**"),
+                args: vec![
+                    ArithExpr::Lit(NumericValue::Integer(2)),
+                    ArithExpr::Lit(NumericValue::Integer(3)),
+                ]
             }
         );
     }
@@ -722,9 +703,9 @@ mod tests {
         let expr = parse_arith_expr(&list(vec![atom("abs"), atom("-5")]), 1).unwrap();
         assert_eq!(
             expr,
-            ArithExpr::UnaryOp {
-                op: UnaryArithOp::Abs,
-                expr: Box::new(ArithExpr::Lit(NumericValue::Integer(-5))),
+            ArithExpr::Call {
+                name: intern("abs"),
+                args: vec![ArithExpr::Lit(NumericValue::Integer(-5))],
             }
         );
     }
@@ -755,11 +736,11 @@ mod tests {
 
         assert_eq!(
             expr,
-            ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
+            ArithExpr::Call {
+                name: intern("+"),
                 args: vec![
-                    ArithExpr::NaryOp {
-                        op: NaryArithOp::Mul,
+                    ArithExpr::Call {
+                        name: intern("*"),
                         args: vec![
                             ArithExpr::Lit(NumericValue::Integer(2)),
                             ArithExpr::Lit(NumericValue::Integer(3)),
@@ -777,18 +758,19 @@ mod tests {
         let inner = list(vec![atom("abs"), atom("-3")]);
         let expr = parse_arith_expr(&list(vec![atom("+"), inner, atom("1")]), 1).unwrap();
 
-        if let ArithExpr::NaryOp { op, args } = &expr {
-            assert_eq!(*op, NaryArithOp::Add);
+        if let ArithExpr::Call { name, args } = &expr {
+            assert_eq!(resolve(*name), "+");
             assert_eq!(args.len(), 2);
-            assert!(matches!(
-                &args[0],
-                ArithExpr::UnaryOp {
-                    op: UnaryArithOp::Abs,
-                    ..
-                }
-            ));
+            if let ArithExpr::Call {
+                name: inner_name, ..
+            } = &args[0]
+            {
+                assert_eq!(resolve(*inner_name), "abs");
+            } else {
+                panic!("Expected Call for abs");
+            }
         } else {
-            panic!("Expected NaryOp");
+            panic!("Expected Call");
         }
     }
 
@@ -801,28 +783,21 @@ mod tests {
         let abs = list(vec![atom("abs"), atom("?z")]);
         let expr = parse_arith_expr(&list(vec![atom("+"), sub, abs]), 1).unwrap();
 
-        if let ArithExpr::NaryOp {
-            op: NaryArithOp::Add,
-            args,
-        } = &expr
-        {
+        if let ArithExpr::Call { name, args } = &expr {
+            assert_eq!(resolve(*name), "+");
             assert_eq!(args.len(), 2);
-            assert!(matches!(
-                &args[0],
-                ArithExpr::NaryOp {
-                    op: NaryArithOp::Sub,
-                    ..
-                }
-            ));
-            assert!(matches!(
-                &args[1],
-                ArithExpr::UnaryOp {
-                    op: UnaryArithOp::Abs,
-                    ..
-                }
-            ));
+            if let ArithExpr::Call { name: sub_name, .. } = &args[0] {
+                assert_eq!(resolve(*sub_name), "-");
+            } else {
+                panic!("Expected Call for -");
+            }
+            if let ArithExpr::Call { name: abs_name, .. } = &args[1] {
+                assert_eq!(resolve(*abs_name), "abs");
+            } else {
+                panic!("Expected Call for abs");
+            }
         } else {
-            panic!("Expected NaryOp::Add, got: {expr:?}");
+            panic!("Expected Call for +, got: {expr:?}");
         }
     }
 
@@ -848,14 +823,14 @@ mod tests {
         )
         .unwrap();
 
-        if let ArithExpr::NaryOp { op, args } = &expr {
-            assert_eq!(*op, NaryArithOp::Add);
+        if let ArithExpr::Call { name, args } = &expr {
+            assert_eq!(resolve(*name), "+");
             assert_eq!(args.len(), 3);
             assert!(matches!(args[0], ArithExpr::Lit(NumericValue::Integer(1))));
             assert!(matches!(args[1], ArithExpr::Lit(NumericValue::Decimal(_))));
             assert!(matches!(args[2], ArithExpr::Var(_)));
         } else {
-            panic!("Expected NaryOp");
+            panic!("Expected Call");
         }
     }
 

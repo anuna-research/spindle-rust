@@ -45,6 +45,7 @@
 pub mod analysis;
 pub mod arith;
 pub mod body;
+pub mod builtins;
 pub mod claims;
 pub mod conclusion;
 pub mod error;
@@ -69,9 +70,7 @@ pub mod worklist;
 
 /// Prelude module for convenient imports
 pub mod prelude {
-    pub use crate::arith::{
-        ArithConstraint, ArithError, ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
-    };
+    pub use crate::arith::{ArithConstraint, ArithError, ArithExpr, CmpOp};
     pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};

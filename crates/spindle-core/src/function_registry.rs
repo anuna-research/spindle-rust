@@ -74,6 +74,9 @@ pub enum EvalError {
     TypeError(String),
     /// Evaluation failed for a domain-specific reason.
     EvalFailed(String),
+    /// Wraps an [`ArithError`](crate::arith::ArithError) from builtin arithmetic functions
+    /// so the original error variant is preserved through the Call dispatch path.
+    ArithError(crate::arith::ArithError),
 }
 
 impl fmt::Display for EvalError {
@@ -81,6 +84,7 @@ impl fmt::Display for EvalError {
         match self {
             EvalError::TypeError(msg) => write!(f, "type error: {msg}"),
             EvalError::EvalFailed(msg) => write!(f, "eval failed: {msg}"),
+            EvalError::ArithError(e) => write!(f, "{e}"),
         }
     }
 }
@@ -135,6 +139,21 @@ impl FunctionRegistry {
     pub fn register(&mut self, f: Box<dyn ExtensionFunction>) {
         let name = f.signature().name;
         self.functions.insert(name, f);
+    }
+
+    /// Create a registry pre-loaded with all built-in arithmetic functions.
+    pub fn with_prelude() -> Self {
+        let mut reg = Self::new();
+        crate::builtins::register_builtins(&mut reg);
+        reg
+    }
+
+    /// Merge another registry into this one. Entries from `other` override
+    /// existing entries with the same name.
+    pub fn merge(&mut self, other: FunctionRegistry) {
+        for (name, func) in other.functions {
+            self.functions.insert(name, func);
+        }
     }
 
     /// Look up a function by its interned name.
