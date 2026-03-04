@@ -316,6 +316,28 @@ impl TrustFilter {
     }
 }
 
+/// Check whether a candidate temporal matches a query temporal.
+///
+/// - If the query temporal is empty (unbounded), it acts as a **wildcard** and
+///   matches any candidate temporal.
+/// - If the query temporal is non-empty, the candidate must **exactly** equal
+///   the query temporal.
+///
+/// This is the standard matching semantics for temporal queries: an unadorned
+/// query like `?- bird` should match `bird`, `bird[1,10]`, etc., while a
+/// temporally-qualified query like `?- bird[1,10]` should only match
+/// `bird[1,10]`.
+pub fn matches_query_temporal(
+    query_temporal: &crate::temporal::Temporal,
+    candidate_temporal: &crate::temporal::Temporal,
+) -> bool {
+    if query_temporal.is_empty() {
+        true
+    } else {
+        query_temporal == candidate_temporal
+    }
+}
+
 /// Query a literal against a theory
 pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
     query_with_options(theory, literal, PrepareOptions::default())
@@ -1562,5 +1584,45 @@ mod tests {
             !filter.passes(c_derived, &conclusions, &theory, None),
             "Derived conclusion should fail filter because weakest-link degree (0.3) < min (0.5)"
         );
+    }
+
+    // ==========================================================================
+    // matches_query_temporal tests
+    // ==========================================================================
+
+    #[test]
+    fn test_matches_query_temporal_empty_query_matches_anything() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let empty = Temporal::empty();
+        let bounded = Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10));
+        let another = Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30));
+
+        assert!(matches_query_temporal(&empty, &empty));
+        assert!(matches_query_temporal(&empty, &bounded));
+        assert!(matches_query_temporal(&empty, &another));
+    }
+
+    #[test]
+    fn test_matches_query_temporal_nonempty_requires_exact() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let t1 = Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10));
+        let t2 = Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30));
+        let t1_dup = Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10));
+
+        assert!(matches_query_temporal(&t1, &t1_dup));
+        assert!(!matches_query_temporal(&t1, &t2));
+    }
+
+    #[test]
+    fn test_matches_query_temporal_nonempty_vs_empty_candidate() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let bounded = Temporal::new(TimePoint::Moment(5), TimePoint::Moment(15));
+        let empty = Temporal::empty();
+
+        // Non-empty query should NOT match empty candidate (they differ)
+        assert!(!matches_query_temporal(&bounded, &empty));
     }
 }

@@ -1,12 +1,12 @@
 {
-  "task_id": "integration-tests",
-  "token_budget": 10000,
-  "tokens_used": 215,
+  "task_id": "matches-query-temporal",
+  "token_budget": 4000,
+  "tokens_used": 227,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Write integration tests TEST-005, TEST-006, TEST-011, TEST-012, TEST-017 verifying end-to-end temporal bridging, cross-window blocking, defeasible defeat through bridge, and non-temporal backward compatibility",
-      "token_cost": 52,
+      "content": "Implement matches_query_temporal public function in query/mod.rs: temporal wildcard when query has empty temporal, exact match when non-empty",
+      "token_cost": 35,
       "priority": "PlanMeta"
     },
     {
@@ -62,8 +62,14 @@
       "content": "Modified 1 files (+24, -7): .hence/context-manifest.json",
       "token_cost": 14,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-integration-tests-changes",
+      "content": "Modified 2 files (+298, -16): .hence/context-manifest.json, crates/spindle-core/tests/temporal_bridge_integration.rs",
+      "token_cost": 29,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-04T06:54:55Z"
+  "constructed_at": "2026-03-04T07:10:23Z"
 }
