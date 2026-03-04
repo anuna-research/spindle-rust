@@ -3,24 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 1,
-    "insertions": 210,
-    "deletions": 0,
+    "files_changed": 2,
+    "insertions": 161,
+    "deletions": 4,
     "file_list": [
-      "crates/spindle-core/tests/proptest_temporal_identity.rs"
+      ".hence/context-manifest.json",
+      "crates/spindle-core/tests/proptest_non_temporal_equivalence.rs"
     ],
-    "dirty_files": 1
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-pbt-temporal-identity-changes",
-      "content": "Modified 1 files (+210, -0): crates/spindle-core/tests/proptest_temporal_identity.rs",
+      "key": "task-pbt-non-temporal-equivalence-changes",
+      "content": "Modified 2 files (+161, -4): .hence/context-manifest.json, crates/spindle-core/tests/proptest_non_temporal_equivalence.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/pbt-temporal-identity-v1",
-  "evaluated_at": "2026-03-04T07:25:12Z",
+  "branch_name": "hence/pbt-non-temporal-equivalence-v1",
+  "evaluated_at": "2026-03-04T07:27:22Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
