@@ -40,6 +40,15 @@ pub(crate) fn resolve_defeasible(
     let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
 
     // --- Seed +d from +D (subsumption), but respect condition (2) ---
+    // Build index of +D conclusions by LitId to avoid O(n²) scan
+    let definite_index: FxHashMap<LitId, usize> = state
+        .conclusions
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.conclusion_type == ConclusionType::DefinitelyProvable)
+        .filter_map(|(i, c)| indexed.get_lit_id(&c.literal).map(|id| (id, i)))
+        .collect();
+
     let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
     for &lit_id in &all_ids {
         if state.definite_proven.contains(lit_id) {
@@ -48,17 +57,11 @@ pub(crate) fn resolve_defeasible(
                 // Normal case: +D q and -D ~q → +d q
                 state.defeasible_proven.insert(lit_id);
                 // Reuse the +D conclusion's literal (preserves temporal) and rule label
-                let (lit, definite_label) = state
-                    .conclusions
-                    .iter()
-                    .find_map(|c| {
-                        if c.conclusion_type == ConclusionType::DefinitelyProvable
-                            && indexed.get_lit_id(&c.literal) == Some(lit_id)
-                        {
-                            Some((c.literal.clone(), c.rule_label.as_deref().map(String::from)))
-                        } else {
-                            None
-                        }
+                let (lit, definite_label) = definite_index
+                    .get(&lit_id)
+                    .map(|&idx| {
+                        let c = &state.conclusions[idx];
+                        (c.literal.clone(), c.rule_label.as_deref().map(String::from))
                     })
                     .unwrap_or_else(|| (indexed.resolve_literal(lit_id), None));
                 let mut conclusion = Conclusion::defeasibly_provable(lit);
