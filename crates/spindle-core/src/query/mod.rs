@@ -1631,4 +1631,81 @@ mod tests {
         // Non-empty query should NOT match empty candidate (they differ)
         assert!(!matches_query_temporal(&bounded, &empty));
     }
+
+    // ==========================================================================
+    // TEST-014: Query wildcard matches all temporal variants
+    // Trace: REQ-007
+    // ==========================================================================
+
+    /// An undecorated query (empty temporal) should act as a wildcard,
+    /// matching the base literal and all temporal variants.
+    #[test]
+    fn test_014_query_wildcard_matches_all_temporal_variants() {
+        use crate::literal::Literal;
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Query p (no temporal) should match p, p[1,10], p[20,30]
+        let query = Literal::simple("p");
+        let c_base = Literal::simple("p");
+        let c_t1 = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let c_t2 = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+
+        assert!(matches_query_temporal(&query.temporal, &c_base.temporal));
+        assert!(matches_query_temporal(&query.temporal, &c_t1.temporal));
+        assert!(matches_query_temporal(&query.temporal, &c_t2.temporal));
+    }
+
+    // ==========================================================================
+    // TEST-015: Query with specific temporal matches only exact
+    // Trace: REQ-007
+    // ==========================================================================
+
+    /// A query with specific temporal bounds should only match a candidate
+    /// with identical temporal bounds — not different windows or the base.
+    #[test]
+    fn test_015_query_with_specific_temporal_matches_only_exact() {
+        use crate::literal::Literal;
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let query = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let c_match = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let c_different = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+        let c_base = Literal::simple("p");
+
+        assert!(matches_query_temporal(&query.temporal, &c_match.temporal));
+        assert!(!matches_query_temporal(&query.temporal, &c_different.temporal));
+        assert!(!matches_query_temporal(&query.temporal, &c_base.temporal));
+    }
 }
