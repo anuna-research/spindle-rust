@@ -23,10 +23,12 @@
 //!     .build();
 //! ```
 
+pub mod bridge;
 pub mod ground;
 pub mod temporal;
 pub mod validate;
 pub mod wildcard;
+pub use bridge::TemporalBridge;
 pub use ground::Ground;
 pub use temporal::{TemporalFilter, TemporalVarValidation};
 pub use validate::Validate;
@@ -142,6 +144,7 @@ impl Pipeline {
     ///     .stage(Validate::default())
     ///     .stage(WildcardRewrite)
     ///     .stage(Ground::default())
+    ///     .stage(TemporalBridge)
     ///     .build();
     /// ```
     ///
@@ -152,6 +155,7 @@ impl Pipeline {
             .stage(Validate::default())
             .stage(WildcardRewrite)
             .stage(Ground::default())
+            .stage(TemporalBridge)
             .build()
     }
 
@@ -321,10 +325,13 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
         });
     }
 
-    // 5. Temporal variable validation (rejects unresolved temporal vars after grounding)
+    // 5. Temporal bridge (generate strict bridging rules for temporal heads)
+    builder = builder.stage(TemporalBridge);
+
+    // 6. Temporal variable validation (rejects unresolved temporal vars after grounding)
     builder = builder.stage(TemporalVarValidation::default());
 
-    // 6. Post-grounding temporal re-filter (grounding may have resolved temporal vars
+    // 7. Post-grounding temporal re-filter (grounding may have resolved temporal vars
     //    to concrete intervals that are now filterable by reference_time)
     if let Some(t) = opts.reference_time {
         builder = builder.stage(TemporalFilter { reference_time: t });
