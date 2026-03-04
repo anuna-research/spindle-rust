@@ -3,25 +3,26 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 74,
-    "deletions": 6,
+    "files_changed": 3,
+    "insertions": 25,
+    "deletions": 9,
     "file_list": [
-      ".hence/context-manifest.json",
-      "crates/spindle-core/src/query/mod.rs"
+      "crates/spindle-core/src/query/abduce.rs",
+      "crates/spindle-core/src/query/mod.rs",
+      "crates/spindle-core/src/query/why_not.rs"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-matches-query-temporal-changes",
-      "content": "Modified 2 files (+74, -6): .hence/context-manifest.json, crates/spindle-core/src/query/mod.rs",
+      "key": "task-query-operator-updates-changes",
+      "content": "Modified 3 files (+25, -9): crates/spindle-core/src/query/abduce.rs, crates/spindle-core/src/query/mod.rs, crates/spindle-core/src/query/why_not.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/matches-query-temporal-v1",
-  "evaluated_at": "2026-03-04T07:12:30Z",
+  "branch_name": "hence/query-operator-updates-v1",
+  "evaluated_at": "2026-03-04T07:16:13Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
