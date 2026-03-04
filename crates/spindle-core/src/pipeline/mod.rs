@@ -304,6 +304,13 @@ pub struct PipelineResult {
     pub weighted_conclusions: Vec<WeightedConclusion>,
     /// Stratum info (populated when folds require multi-stratum evaluation).
     pub stratum_info: Option<StratumInfo>,
+    /// Merged function registry (prelude + user extensions), forwarded from
+    /// the pipeline context so that stratified reasoning can use user-defined
+    /// reducer functions.
+    pub function_registry: Option<FunctionRegistry>,
+    /// Grounding options forwarded from [`PrepareOptions`] so that stratified
+    /// reasoning can use the same limits as non-stratified grounding.
+    pub grounding: GroundingOptions,
 }
 
 /// Prepare a theory for reasoning.
@@ -346,9 +353,7 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
 
     // Check if multi-stratum: if so, skip normal grounding (it will be done per-stratum)
     let stratum_info = ctx_after_phase1.stratum_info.clone();
-    let is_multi_stratum = stratum_info
-        .as_ref()
-        .is_some_and(|s| s.num_strata > 1);
+    let is_multi_stratum = stratum_info.as_ref().is_some_and(|s| s.num_strata > 1);
 
     // Phase 2: Grounding + post-grounding stages (skipped for multi-stratum)
     let mut phase2 = Pipeline::builder();
@@ -367,8 +372,9 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
         }
     }
 
-    let (mut theory_final, ctx) =
-        phase2.build().run_with_context(theory_after_phase1, ctx_after_phase1)?;
+    let (mut theory_final, ctx) = phase2
+        .build()
+        .run_with_context(theory_after_phase1, ctx_after_phase1)?;
 
     // Apply explicit trust policy from options, overriding the parsed one
     if let Some(tp) = opts.trust_policy {
@@ -437,6 +443,8 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
         grounding_report,
         weighted_conclusions: Vec::new(),
         stratum_info,
+        function_registry: ctx.function_registry,
+        grounding: opts.grounding,
     })
 }
 

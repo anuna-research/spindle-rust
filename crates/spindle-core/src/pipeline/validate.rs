@@ -308,7 +308,30 @@ fn validate_fold(
         });
     }
 
-    // 3. Reducer must exist in the function registry and accept arity 2
+    // 3. result_var must not collide with pattern variables
+    {
+        let mut pattern_vars: Vec<SymbolId> = Vec::new();
+        if is_variable(fold.pattern.name()) {
+            pattern_vars.push(fold.pattern.name_id());
+        }
+        for arg in fold.pattern.predicate_args() {
+            if let crate::body::BodyArg::Term(crate::term::Term::Symbol(id)) = arg
+                && is_variable(resolve(*id))
+            {
+                pattern_vars.push(*id);
+            }
+        }
+        if pattern_vars.contains(&fold.result_var) {
+            return Err(crate::error::SpindleError::Validation {
+                message: format!(
+                    "Fold result variable '{result_var_name}' also appears in the fold pattern — \
+                     this creates an ambiguity between the accumulated result and the per-match binding"
+                ),
+            });
+        }
+    }
+
+    // 4. Reducer must exist in the function registry and accept arity 2
     let reducer_name = crate::intern::resolve(fold.reducer);
     match registry {
         None => {
@@ -337,13 +360,13 @@ fn validate_fold(
         }
     }
 
-    // 4. Validate extension function calls in extract and identity expressions
+    // 5. Validate extension function calls in extract and identity expressions
     validate_expr_calls(&fold.extract, registry)?;
     if let Some(ref identity) = fold.identity {
         validate_expr_calls(identity, registry)?;
     }
 
-    // 5. Validate arith args in fold pattern
+    // 6. Validate arith args in fold pattern
     validate_body_logic_arith_args(&fold.pattern, registry)?;
 
     Ok(())

@@ -39,7 +39,7 @@ use crate::function_registry::{EvalContext, FunctionRegistry};
 use crate::grounding::ground_theory_with_limit;
 use crate::index::IndexedTheory;
 use crate::literal::Literal;
-use crate::pipeline::{PrepareOptions, StratumInfo, prepare};
+use crate::pipeline::{GroundingOptions, PrepareOptions, StratumInfo, prepare};
 use crate::rule::Rule;
 use crate::theory::Theory;
 
@@ -151,9 +151,16 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 
     match prepared.stratum_info {
         Some(ref strata) if strata.num_strata > 1 => {
-            let registry = FunctionRegistry::with_prelude();
-            let ctx = EvalContext::with_registry(&registry);
-            reason_stratified(&prepared.theory, strata, &ctx)
+            let fallback;
+            let registry = match prepared.function_registry {
+                Some(ref reg) => reg,
+                None => {
+                    fallback = FunctionRegistry::with_prelude();
+                    &fallback
+                }
+            };
+            let ctx = EvalContext::with_registry(registry);
+            reason_stratified(&prepared.theory, strata, &ctx, &prepared.grounding)
         }
         _ => reason_prepared(&prepared.theory),
     }
@@ -168,17 +175,22 @@ fn reason_stratified(
     unground_theory: &Theory,
     strata: &StratumInfo,
     ctx: &EvalContext<'_>,
+    grounding: &GroundingOptions,
 ) -> Result<Vec<Conclusion>> {
     let mut accumulated_facts: Vec<Literal> = Vec::new();
     let mut all_conclusions: Vec<Conclusion> = Vec::new();
 
     for stratum in 0..strata.num_strata {
         // Build sub-theory: this stratum's rules + accumulated facts
-        let sub_theory =
-            build_stratum_theory(unground_theory, strata, stratum, &accumulated_facts);
+        let sub_theory = build_stratum_theory(unground_theory, strata, stratum, &accumulated_facts);
 
-        // Ground the sub-theory (folds evaluate during grounding)
-        let (grounded, _) = ground_theory_with_limit(&sub_theory, 100, 10000, ctx);
+        // Ground the sub-theory using caller-provided limits (folds evaluate during grounding)
+        let (grounded, _) = ground_theory_with_limit(
+            &sub_theory,
+            grounding.max_iterations,
+            grounding.max_instances,
+            ctx,
+        );
 
         // Reason
         let conclusions = reason_prepared(&grounded)?;
@@ -220,7 +232,12 @@ fn build_stratum_theory(
         sub.add_rule(Rule::fact(label, fact.clone()));
     }
 
-    // Add rules from this stratum and all prior strata
+    // Include rules from this stratum AND all prior strata. Lower-stratum
+    // rules must be re-included because stratification only tracks fold
+    // dependencies, not all inter-rule dependencies. A stratum-1 rule can
+    // have non-fold body literals that depend on relations derived by
+    // stratum-0 rules, so those stratum-0 rules must be present for
+    // grounding to produce the necessary intermediate facts.
     let mut included_labels = std::collections::HashSet::new();
     for rule in original.rules() {
         let rule_stratum = strata.rule_strata.get(&rule.label).copied().unwrap_or(0);
@@ -230,9 +247,11 @@ fn build_stratum_theory(
         }
     }
 
-    // Copy superiority relations for included rules
+    // Copy superiority relations only when both participants are present.
+    // A superiority with one missing participant is semantically meaningless
+    // and could interact incorrectly with synthetic stratum labels.
     for sup in original.superiorities() {
-        if included_labels.contains(&sup.superior) || included_labels.contains(&sup.inferior) {
+        if included_labels.contains(&sup.superior) && included_labels.contains(&sup.inferior) {
             sub.add_superiority(&sup.superior, &sup.inferior);
         }
     }
@@ -244,6 +263,11 @@ fn build_stratum_theory(
 }
 
 /// Remove duplicate conclusions, preferring definite over defeasible.
+///
+/// Because stratified reasoning re-includes lower-stratum rules, conclusions
+/// from earlier strata are re-derived in later strata. This deduplication
+/// ensures each (literal, polarity) pair appears at most once, keeping the
+/// stronger conclusion type (definite > defeasible).
 fn deduplicate_conclusions(conclusions: &mut Vec<Conclusion>) {
     use std::collections::HashMap;
 

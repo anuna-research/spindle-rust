@@ -218,19 +218,15 @@ fn assign_stratum(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::body::{BodyLogicLiteral, FoldLiteral};
     use crate::arith::ArithExpr;
+    use crate::body::{BodyLogicLiteral, FoldLiteral};
     use crate::intern::intern;
     use crate::literal::Literal;
     use crate::rule::{Rule, RuleBody};
     use crate::term::NumericValue;
     use smallvec::smallvec;
 
-    fn make_fold_rule(
-        label: &str,
-        fold_over: &str,
-        head_name: &str,
-    ) -> Rule {
+    fn make_fold_rule(label: &str, fold_over: &str, head_name: &str) -> Rule {
         let fold = FoldLiteral {
             result_var: intern("?total"),
             identity: Some(ArithExpr::Lit(NumericValue::Integer(0))),
@@ -241,7 +237,9 @@ mod tests {
                 false,
                 crate::mode::Mode::empty(),
                 crate::temporal::Temporal::empty(),
-                vec![crate::body::BodyArg::Term(crate::term::Term::Symbol(intern("?x")))],
+                vec![crate::body::BodyArg::Term(crate::term::Term::Symbol(
+                    intern("?x"),
+                ))],
             ),
             grouping_vars: Vec::new(),
         };

@@ -88,7 +88,7 @@ fn body_literal_has_variables(bl: &BodyLiteral) -> bool {
                 || lit.has_temporal_variables()
         }
         BodyLiteral::Arithmetic(_) => true, // arithmetic constraints always contain variables
-        BodyLiteral::Fold(_) => true, // folds always need grounding context
+        BodyLiteral::Fold(_) => true,       // folds always need grounding context
     }
 }
 
@@ -665,30 +665,31 @@ fn match_body_against_facts_ctx(
                 Vec::new() // evaluation failed — discard path
             }
         }
-        BodyLiteral::Fold(fold) => {
-            eval_fold_and_continue(
-                fold,
-                rest,
-                fact_index,
-                all_facts,
-                current_subst,
-                ctx,
-                |rest, fi, af, subst, ctx| {
-                    match_body_against_facts_ctx(rest, fi, af, subst, ctx)
-                        .into_iter()
-                        .map(|s| (s, false))
-                        .collect()
-                },
-            )
-            .into_iter()
-            .map(|(s, _)| s)
-            .collect()
-        }
+        BodyLiteral::Fold(fold) => eval_fold_and_continue(
+            fold,
+            rest,
+            fact_index,
+            all_facts,
+            current_subst,
+            ctx,
+            |rest, fi, af, subst, ctx| {
+                match_body_against_facts_ctx(rest, fi, af, subst, ctx)
+                    .into_iter()
+                    .map(|s| (s, false))
+                    .collect()
+            },
+        )
+        .into_iter()
+        .map(|(s, _)| s)
+        .collect(),
     }
 }
 
 /// A fold group: grouping variable bindings paired with extracted values.
-type FoldGroup = (Vec<(SymbolId, Term)>, Vec<Term>);
+struct FoldGroup {
+    key_bindings: Vec<(SymbolId, Term)>,
+    values: Vec<Term>,
+}
 
 /// Evaluate a fold literal against the current fact set and continue matching.
 ///
@@ -767,8 +768,8 @@ where
 
     // Group matches by unbound grouping variable values.
     // Key: vector of Term values for grouping vars (in order of unbound_grouping)
-    // Value: vector of extracted Terms
-    let mut groups: Vec<FoldGroup> = Vec::new();
+    // Value: FoldGroup with key bindings and extracted Terms
+    let mut groups: FxHashMap<Vec<Term>, FoldGroup> = FxHashMap::default();
 
     for fact in &candidates {
         if let Some(local_bindings) = match_literal(&resolved, fact)
@@ -789,16 +790,15 @@ where
             if let Ok(val) = fold.extract.eval_with_context(&merged, ctx)
                 && let Ok(t) = Term::try_from(val)
             {
-                // Find or create group
                 let key_vals: Vec<Term> = key.iter().map(|(_, t)| t.clone()).collect();
-                if let Some(group) = groups.iter_mut().find(|(k, _)| {
-                    k.iter().map(|(_, t)| t).collect::<Vec<_>>()
-                        == key_vals.iter().collect::<Vec<_>>()
-                }) {
-                    group.1.push(t);
-                } else {
-                    groups.push((key, vec![t]));
-                }
+                groups
+                    .entry(key_vals)
+                    .or_insert_with(|| FoldGroup {
+                        key_bindings: key.clone(),
+                        values: Vec::new(),
+                    })
+                    .values
+                    .push(t);
             }
         }
     }
@@ -817,15 +817,15 @@ where
 
     // For each group, compute the fold result and continue
     let mut all_results = Vec::new();
-    for (group_key, values) in &groups {
-        let result = match compute_fold_result(fold, values, current_subst, ctx, reducer) {
+    for group in groups.values() {
+        let result = match compute_fold_result(fold, &group.values, current_subst, ctx, reducer) {
             Some(r) => r,
             None => continue,
         };
 
         let mut new_subst = current_subst.clone();
         // Bind grouping variable values
-        for (var, val) in group_key {
+        for (var, val) in &group.key_bindings {
             new_subst.terms.insert(*var, val.clone());
         }
         // Bind fold result
@@ -1014,19 +1014,17 @@ fn match_body_ordered_delta(
                 Vec::new()
             }
         }
-        BodyLiteral::Fold(fold) => {
-            eval_fold_and_continue(
-                fold,
-                rest,
-                fact_index,
-                all_facts,
-                current_subst,
-                ctx,
-                |rest, fi, af, subst, ctx| {
-                    match_body_ordered_delta(rest, fi, af, delta_keys, subst, used_delta, ctx)
-                },
-            )
-        }
+        BodyLiteral::Fold(fold) => eval_fold_and_continue(
+            fold,
+            rest,
+            fact_index,
+            all_facts,
+            current_subst,
+            ctx,
+            |rest, fi, af, subst, ctx| {
+                match_body_ordered_delta(rest, fi, af, delta_keys, subst, used_delta, ctx)
+            },
+        ),
     }
 }
 
