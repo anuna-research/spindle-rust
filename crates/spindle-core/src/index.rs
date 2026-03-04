@@ -390,4 +390,135 @@ mod tests {
         // p(a) is NOT a rule body
         assert!(indexed.rules_with_body_id(id_a).is_empty());
     }
+
+    /// TEST-001: p[1,10] and p[20,30] must produce different AtomIds.
+    /// Trace: REQ-001
+    #[test]
+    fn test_001_distinct_atomkey_for_temporal_variants() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let theory = Theory::new();
+        let mut indexed = IndexedTheory::build(&theory);
+
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let p_20_30 = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+
+        let id1 = indexed.intern_literal(&p_1_10);
+        let id2 = indexed.intern_literal(&p_20_30);
+        assert_ne!(id1, id2, "p[1,10] and p[20,30] must have different LitIds");
+    }
+
+    /// TEST-002: p (base) and p[1,10] must produce different AtomIds.
+    /// Trace: REQ-001
+    #[test]
+    fn test_002_temporal_and_nontemporal_atoms_distinct() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let theory = Theory::new();
+        let mut indexed = IndexedTheory::build(&theory);
+
+        let p_base = Literal::simple("p");
+        let p_temporal = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+
+        let id_base = indexed.intern_literal(&p_base);
+        let id_temporal = indexed.intern_literal(&p_temporal);
+        assert_ne!(
+            id_base, id_temporal,
+            "p (base) and p[1,10] must have different LitIds"
+        );
+    }
+
+    /// TEST-003: resolve_literal must preserve temporal bounds.
+    /// Trace: REQ-002, REQ-009
+    #[test]
+    fn test_003_resolve_literal_preserves_temporal() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let theory = Theory::new();
+        let mut indexed = IndexedTheory::build(&theory);
+
+        let lit = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(5), TimePoint::Moment(15)),
+            vec![],
+        );
+        let lit_id = indexed.intern_literal(&lit);
+        let resolved = indexed.resolve_literal(lit_id);
+        assert_eq!(
+            resolved.temporal,
+            Temporal::new(TimePoint::Moment(5), TimePoint::Moment(15)),
+            "resolve_literal must preserve temporal bounds"
+        );
+    }
+
+    /// TEST-004: resolve_literal roundtrip for base (non-temporal) atoms.
+    /// Trace: REQ-002, REQ-009
+    #[test]
+    fn test_004_resolve_literal_roundtrip_base() {
+        let theory = Theory::new();
+        let mut indexed = IndexedTheory::build(&theory);
+
+        let lit = Literal::simple("q");
+        let lit_id = indexed.intern_literal(&lit);
+        let resolved = indexed.resolve_literal(lit_id);
+        assert!(
+            resolved.temporal.is_empty(),
+            "resolve_literal of a base atom must have empty temporal"
+        );
+    }
+
+    /// TEST-013: Complement preserves temporal identity.
+    /// Trace: REQ-006
+    #[test]
+    fn test_013_complement_preserves_temporal() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let theory = Theory::new();
+        let mut indexed = IndexedTheory::build(&theory);
+
+        let p_temporal = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let lit_id = indexed.intern_literal(&p_temporal);
+        let comp_id = lit_id.complement();
+
+        assert_ne!(lit_id, comp_id, "complement must differ from original");
+        assert_eq!(
+            lit_id,
+            comp_id.complement(),
+            "double complement must return original"
+        );
+
+        let comp_lit = indexed.resolve_literal(comp_id);
+        assert!(comp_lit.negation, "complement must be negated");
+        assert_eq!(
+            comp_lit.temporal,
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            "complement must preserve temporal bounds"
+        );
+    }
 }
