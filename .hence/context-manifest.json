@@ -1,12 +1,12 @@
 {
-  "task_id": "intern-literal-temporal",
+  "task_id": "resolve-literal-temporal",
   "token_budget": 4000,
-  "tokens_used": 42,
+  "tokens_used": 52,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Update intern_literal and get_lit_id in index.rs to include lit.temporal.clone() in the AtomKey construction",
-      "token_cost": 27,
+      "content": "Update resolve_literal in index.rs to return key.temporal.clone() instead of Temporal::empty()",
+      "token_cost": 23,
       "priority": "PlanMeta"
     },
     {
@@ -14,8 +14,14 @@
       "content": "Modified 1 files (+59, -1): crates/spindle-core/src/index.rs",
       "token_cost": 15,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-intern-literal-temporal-changes",
+      "content": "Modified 1 files (+12, -6): .hence/context-manifest.json",
+      "token_cost": 14,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-04T06:32:22Z"
+  "constructed_at": "2026-03-04T06:33:34Z"
 }
