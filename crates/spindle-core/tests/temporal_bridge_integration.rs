@@ -10,7 +10,8 @@ use spindle_core::conclusion::ConclusionType;
 use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
 use spindle_core::pipeline::{Pipeline, PrepareOptions, prepare};
-use spindle_core::reason::reason_prepared;
+use spindle_core::query::{QueryStatus, matches_query_temporal, query};
+use spindle_core::reason::{reason_prepared, reason_with_options};
 use spindle_core::rule::Rule;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::theory::Theory;
@@ -283,5 +284,99 @@ fn test_017b_non_temporal_reasoning_identical_with_and_without_bridge() {
     assert_eq!(
         norm_a, norm_b,
         "Non-temporal theory should produce identical conclusions with and without bridge stage"
+    );
+}
+
+// ===========================================================================
+// TEST-016: matches_query_temporal filters conclusion list correctly
+// Trace: REQ-007
+// ===========================================================================
+
+/// Wildcard query (empty temporal) combined with `matches_query_temporal`
+/// should match all temporal variants of a literal in the conclusion list.
+/// The scalar `query()` API returns Provable for the base literal via
+/// bridging, while manual filtering over conclusions picks up all variants.
+#[test]
+fn test_016_matches_query_temporal_filters_conclusion_list() {
+    // >> p [1, 10]. >> p [20, 30]. p => q.
+    let mut theory = Theory::new();
+    theory.add_rule(temporal_fact("f1", "p", 1, 10));
+    theory.add_rule(temporal_fact("f2", "p", 20, 30));
+    theory.add_defeasible_rule(&["p"], "q");
+
+    // Scalar query: p (base) is provable via bridging
+    let result = query(&theory, &Literal::simple("p")).unwrap();
+    assert_eq!(result.status, QueryStatus::Provable);
+
+    // Full conclusion list filtering via matches_query_temporal
+    let conclusions = reason_with_options(&theory, PrepareOptions::default()).unwrap();
+    let query_lit = Literal::simple("p"); // wildcard temporal
+    let p_matches: Vec<_> = conclusions
+        .iter()
+        .filter(|c| {
+            c.literal == query_lit
+                && matches_query_temporal(&query_lit.temporal, &c.literal.temporal)
+                && c.is_positive()
+        })
+        .collect();
+    // Should match p[1,10], p[20,30], and p (base)
+    assert!(
+        p_matches.len() >= 3,
+        "Temporal wildcard should match all variants, got {}",
+        p_matches.len()
+    );
+}
+
+// ===========================================================================
+// TEST-016b: Bounded query rejects wrong temporal window
+// Trace: REQ-007
+// ===========================================================================
+
+/// A temporally-qualified query must only match conclusions with the exact
+/// same temporal window. This tests the critical false-positive bug:
+/// querying `p[1,10]` when only `p[20,30]` exists must return Unknown,
+/// not Provable.
+#[test]
+fn test_016b_bounded_query_rejects_wrong_temporal_window() {
+    // >> p [20, 30].
+    let mut theory = Theory::new();
+    theory.add_rule(temporal_fact("f1", "p", 20, 30));
+
+    // Query for p[1,10] — should be Unknown (no fact for that window)
+    let query_lit = Literal::new(
+        "p",
+        false,
+        Mode::empty(),
+        Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+        vec![],
+    );
+    let result = query(&theory, &query_lit).unwrap();
+    assert_eq!(
+        result.status,
+        QueryStatus::Unknown,
+        "p[1,10] should be Unknown when only p[20,30] exists"
+    );
+
+    // Query for p[20,30] — should be Provable
+    let query_lit2 = Literal::new(
+        "p",
+        false,
+        Mode::empty(),
+        Temporal::new(TimePoint::from_millis(20), TimePoint::from_millis(30)),
+        vec![],
+    );
+    let result2 = query(&theory, &query_lit2).unwrap();
+    assert_eq!(
+        result2.status,
+        QueryStatus::Provable,
+        "p[20,30] should be Provable"
+    );
+
+    // Query for p (base, wildcard) — should be Provable via bridge
+    let result3 = query(&theory, &Literal::simple("p")).unwrap();
+    assert_eq!(
+        result3.status,
+        QueryStatus::Provable,
+        "p (base) should be Provable via bridging"
     );
 }
