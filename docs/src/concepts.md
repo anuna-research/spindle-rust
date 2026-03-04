@@ -44,6 +44,9 @@ Result: Tweety doesn't fly.
 | **Superiority** | A preference relation between rules |
 | **Bind** | Assigns a computed arithmetic result to a variable |
 | **Guard** | A comparison constraint that filters rule applicability |
+| **Fold** | Aggregates values across all matching facts using a reducer function |
+| **Stratum** | An ordered partition of rules; evaluated sequentially so fold inputs are complete |
+| **Extension function** | A registered pure function callable from `bind` expressions |
 
 ## Chapters
 

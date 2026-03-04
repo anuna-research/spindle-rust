@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -277,10 +277,10 @@ spindle explain "-flies" examples/penguin.spl --json
 <p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
 <p>Output:</p>
 <pre><code>Explanation for -flies:
-  -flies ← [defeasible] r3: penguin =&gt; -flies
+  -flies ← [defeasible] r3: penguin -&gt; -flies
     penguin ← [fact]
   Blocked alternatives:
-    r1: bird =&gt; flies (defeated by r3 via superiority)
+    r1: bird -&gt; flies (defeated by r3 via superiority)
   Conflict resolutions:
     r3 &gt; r1 (superiority)
 </code></pre>
@@ -293,9 +293,9 @@ spindle why-not flies examples/penguin.spl --json
 <p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes <code>is_provable: true</code> and <code>blocked_by</code> will be empty.</p>
 <p>Output:</p>
 <pre><code>Why not flies?
-  Rule r1: bird =&gt; flies
+  Rule r1: bird -&gt; flies
     Status: Defeated
-    Defeated by: r3 (penguin =&gt; -flies) via superiority r3 &gt; r1
+    Defeated by: r3 (penguin -&gt; -flies) via superiority r3 &gt; r1
 </code></pre>
 <p>Possible blocking reasons:</p>
 <div class="table-wrapper">

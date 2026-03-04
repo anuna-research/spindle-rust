@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>SPL Format - Spindle-Rust</title>
+        <title>Arithmetic Expressions - Spindle-Rust</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://codeberg.org/anuna/spindle-rust" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/reference/spl.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/arithmetic.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,444 +180,209 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="spl-format-reference"><a class="header" href="#spl-format-reference">SPL Format Reference</a></h1>
-<p>SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DFL syntax with a LISP-based DSL whose s-expression structure makes it straightforward to add new constructs (temporal operators, trust directives, claims blocks, etc.) without grammar ambiguity.</p>
-<h2 id="file-extension"><a class="header" href="#file-extension">File Extension</a></h2>
-<p><code>.spl</code></p>
-<h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
-<p>Semicolon to end of line:</p>
-<pre><code class="language-lisp">; This is a comment
-(given bird)  ; Inline comment
-</code></pre>
-<h2 id="grammar-overview"><a class="header" href="#grammar-overview">Grammar Overview</a></h2>
-<pre><code class="language-ebnf">theory      = statement*
-statement   = fact | rule | prefer | meta
-            | claims | trusts | decays | threshold
-
-; Core
-fact        = "(given" literal ")"
-rule        = "(" keyword label? body head ")"
-keyword     = "always" | "normally" | "except"
-prefer      = "(prefer" label+ ")"
-meta        = "(meta" label property* ")"
-
-; Trust
-claims      = "(claims" source claims-meta* statement* ")"
-claims-meta = ":at" atom | ":sig" atom | ":id" atom | ":note" atom
-trusts      = "(trusts" source number ")"
-decays      = "(decays" source decay-model number ")"
-decay-model = "exponential" | "linear" | "step"
-threshold   = "(threshold" name number ")"
-
-; Temporal
-time-expr   = "(moment" rfc3339-string ")" | integer | "inf" | "-inf"
-during      = "(during" literal time-expr time-expr ")"
-
-; Literals
-literal     = atom | "(" atom arg* ")" | "(not" literal ")"
-            | during | modal
-modal       = "(" modal-op literal ")"
-modal-op    = "must" | "may" | "forbidden"
-body        = literal | "(and" body-elem+ ")"
-body-elem   = literal | arith-constraint | fold
-atom        = identifier | variable
-variable    = "?" identifier
-source      = atom
-number      = float in [0.0, 1.0]
-
-; Arithmetic (body only)
-arith-constraint = bind | compare
-bind        = "(bind" variable arith-expr ")"
-compare     = "(" cmp-op arith-expr arith-expr ")"
-cmp-op      = "=" | "!=" | "&lt;" | "&gt;" | "&lt;=" | "&gt;="
-arith-expr  = number | variable
-            | "(" nary-op arith-expr+ ")"
-            | "(" bin-op arith-expr arith-expr ")"
-            | "(" unary-op arith-expr ")"
-nary-op     = "+" | "-" | "*" | "/" | "min" | "max"
-bin-op      = "div" | "rem" | "**"
-unary-op    = "abs" | "floor" | "ceil"
-round-op    = "round"
-
-; Aggregation (body only)
-fold        = "(fold" variable identity reducer extract pattern ")"
-identity    = arith-expr | "required"
-reducer     = atom
-extract     = arith-expr
-pattern     = literal
-</code></pre>
-<h2 id="facts"><a class="header" href="#facts">Facts</a></h2>
-<h3 id="simple-facts"><a class="header" href="#simple-facts">Simple Facts</a></h3>
-<pre><code class="language-lisp">(given bird)
-(given penguin)
-(given (not guilty))
-</code></pre>
-<h3 id="predicate-facts"><a class="header" href="#predicate-facts">Predicate Facts</a></h3>
-<pre><code class="language-lisp">(given (parent alice bob))
-(given (employed alice acme))
-</code></pre>
-<h3 id="flat-predicate-syntax"><a class="header" href="#flat-predicate-syntax">Flat Predicate Syntax</a></h3>
-<pre><code class="language-lisp">(given parent alice bob)     ; Same as (given (parent alice bob))
-(given employed alice acme)
-</code></pre>
-<h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
-<h3 id="strict-rules-always"><a class="header" href="#strict-rules-always">Strict Rules (<code>always</code>)</a></h3>
-<pre><code class="language-lisp">(always r1 penguin bird)
-(always r2 (and human mortal) dies)
-</code></pre>
-<h3 id="defeasible-rules-normally"><a class="header" href="#defeasible-rules-normally">Defeasible Rules (<code>normally</code>)</a></h3>
-<pre><code class="language-lisp">(normally r1 bird flies)
-(normally r2 penguin (not flies))
-</code></pre>
-<h3 id="defeaters-except"><a class="header" href="#defeaters-except">Defeaters (<code>except</code>)</a></h3>
-<pre><code class="language-lisp">(except d1 broken-wing flies)
-</code></pre>
-<h3 id="unlabeled-rules"><a class="header" href="#unlabeled-rules">Unlabeled Rules</a></h3>
-<p>Labels are optional (auto-generated):</p>
-<pre><code class="language-lisp">(normally bird flies)        ; Gets label like "r1"
-(always penguin bird)        ; Gets label like "s1"
-</code></pre>
-<h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
-<h3 id="simple"><a class="header" href="#simple">Simple</a></h3>
-<pre><code class="language-lisp">bird
-flies
-has-feathers
-</code></pre>
-<h3 id="negated"><a class="header" href="#negated">Negated</a></h3>
-<pre><code class="language-lisp">(not flies)
-(not (parent alice bob))
-</code></pre>
-<p>Or with prefix:</p>
-<pre><code class="language-lisp">~flies
-</code></pre>
-<h3 id="predicates-with-arguments"><a class="header" href="#predicates-with-arguments">Predicates with Arguments</a></h3>
-<pre><code class="language-lisp">(parent alice bob)
-(employed ?x acme)
-(ancestor ?x ?z)
-</code></pre>
-<h2 id="conjunction"><a class="header" href="#conjunction">Conjunction</a></h2>
-<p>Use <code>and</code> for multiple conditions:</p>
-<pre><code class="language-lisp">(normally r1 (and bird healthy) flies)
-(normally r2 (and student employed) busy)
-</code></pre>
-<h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
-<p>Variables start with <code>?</code>:</p>
-<pre><code class="language-lisp">(given (parent alice bob))
-(given (parent bob charlie))
-
-; Transitive closure
-(normally r1 (parent ?x ?y) (ancestor ?x ?y))
-(normally r2 (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
-</code></pre>
-<h3 id="wildcard"><a class="header" href="#wildcard">Wildcard</a></h3>
-<p>Use <code>_</code> to match anything:</p>
-<pre><code class="language-lisp">(normally r1 (parent _ ?y) (has-parent ?y))
-</code></pre>
-<h2 id="superiority"><a class="header" href="#superiority">Superiority</a></h2>
-<h3 id="two-rules"><a class="header" href="#two-rules">Two Rules</a></h3>
-<pre><code class="language-lisp">(prefer r2 r1)    ; r2 &gt; r1
-</code></pre>
-<h3 id="chain"><a class="header" href="#chain">Chain</a></h3>
-<pre><code class="language-lisp">(prefer r3 r2 r1)  ; r3 &gt; r2 &gt; r1
-</code></pre>
-<p>Expands to:</p>
-<pre><code class="language-lisp">(prefer r3 r2)
-(prefer r2 r1)
-</code></pre>
-<h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
-<p>Attach metadata to rules:</p>
-<pre><code class="language-lisp">(meta r1
-  (description "Birds normally fly")
-  (confidence 0.9)
-  (source "ornithology-handbook"))
-</code></pre>
-<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
-<pre><code class="language-lisp">(meta rule-label
-  (key "string value")
-  (key2 ("list" "of" "values")))
-</code></pre>
-<h2 id="modal-operators"><a class="header" href="#modal-operators">Modal Operators</a></h2>
-<h3 id="obligation-must"><a class="header" href="#obligation-must">Obligation (<code>must</code>)</a></h3>
-<pre><code class="language-lisp">(normally signed-contract (must pay))
-</code></pre>
-<h3 id="permission-may"><a class="header" href="#permission-may">Permission (<code>may</code>)</a></h3>
-<pre><code class="language-lisp">(normally member (may access))
-</code></pre>
-<h3 id="forbidden-forbidden"><a class="header" href="#forbidden-forbidden">Forbidden (<code>forbidden</code>)</a></h3>
-<pre><code class="language-lisp">(normally unauthorized (forbidden enter))
-</code></pre>
-<h2 id="temporal-reasoning"><a class="header" href="#temporal-reasoning">Temporal Reasoning</a></h2>
-<h3 id="time-points"><a class="header" href="#time-points">Time Points</a></h3>
-<p>Supported time formats:</p>
-<pre><code class="language-lisp">(moment "2024-06-15T14:30:00Z")  ; RFC3339 / ISO 8601
-1718461800000                    ; Epoch milliseconds
-inf                              ; Positive infinity
--inf                             ; Negative infinity
-</code></pre>
-<blockquote>
-<p>Note: Multi-arity forms like <code>(moment 2024 6 15)</code> are reserved for future extensions.</p>
-</blockquote>
-<h3 id="during"><a class="header" href="#during">During</a></h3>
-<pre><code class="language-lisp">(given (during bird 1 10))
-(given (during (employed alice acme)
-  (moment "2020-01-01T00:00:00Z")
-  (moment "2023-01-01T00:00:00Z")))
-</code></pre>
-<h3 id="allen-relations"><a class="header" href="#allen-relations">Allen Relations</a></h3>
-<blockquote>
-<p><strong>SPL status:</strong> Allen relations are implemented in the core Rust API but are not yet
-usable as SPL predicates. Exposing them requires interval variables (e.g.,
-<code>(during p ?t)</code>), planned for a future release. The Allen <code>during</code> relation
-(interval containment) is distinct from the <a href="#during"><code>during</code> SPL operator</a>
-described above.</p>
-</blockquote>
-<p>Allen’s interval algebra defines exactly 13 mutually exclusive relations between
-two time intervals <strong>X</strong> and <strong>Y</strong>. Every pair of intervals satisfies exactly one.</p>
-<pre><code class="language-text">Relation          X              Y           Inverse
-─────────────────────────────────────────────────────────
-before            ██████                     after
-                              ██████
-
-meets             ██████                     met-by
-                        ██████
-
-overlaps          ██████                     overlapped-by
-                     ██████
-
-starts            ████                       started-by
-                  ██████████
-
-during              ████                     contains
-                  ██████████
-
-finishes              ████                   finished-by
-                  ██████████
-
-equals            ██████████
-                  ██████████                 (self-inverse)
-</code></pre>
-<p>Each relation has a strict inverse (reading the diagram with X and Y swapped),
-giving 6 symmetric pairs plus <code>equals</code>:</p>
+                        <h1 id="arithmetic-expressions"><a class="header" href="#arithmetic-expressions">Arithmetic Expressions</a></h1>
+<p>Spindle supports arithmetic expressions in rule bodies for numeric computation, variable binding, and comparison guards.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Arithmetic adds three capabilities to SPL rules:</p>
+<ol>
+<li><strong>Expressions</strong> — compute numeric values from operators and variables</li>
+<li><strong>Bind constraints</strong> — assign computed results to new variables</li>
+<li><strong>Comparison guards</strong> — filter substitutions based on numeric conditions</li>
+</ol>
+<p>All arithmetic is restricted to rule bodies. Arithmetic cannot appear in facts, rule heads, or as standalone statements.</p>
+<h2 id="numeric-types"><a class="header" href="#numeric-types">Numeric Types</a></h2>
+<p>Spindle has three numeric types with automatic promotion:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Relation</th><th>Inverse</th><th>Condition</th></tr>
+<tr><th>Type</th><th>Examples</th><th>Precision</th></tr>
 </thead>
 <tbody>
-<tr><td><code>before</code></td><td><code>after</code></td><td>X ends before Y starts (with gap)</td></tr>
-<tr><td><code>meets</code></td><td><code>met-by</code></td><td>X ends exactly where Y starts</td></tr>
-<tr><td><code>overlaps</code></td><td><code>overlapped-by</code></td><td>X starts first, they share some time, Y ends last</td></tr>
-<tr><td><code>starts</code></td><td><code>started-by</code></td><td>Both start together, X ends first</td></tr>
-<tr><td><code>during</code></td><td><code>contains</code></td><td>X is fully enclosed within Y</td></tr>
-<tr><td><code>finishes</code></td><td><code>finished-by</code></td><td>Both end together, X starts later</td></tr>
-<tr><td><code>equals</code></td><td><code>equals</code></td><td>Identical start and end</td></tr>
+<tr><td>Integer</td><td><code>42</code>, <code>-7</code>, <code>0</code></td><td>Exact (64-bit signed)</td></tr>
+<tr><td>Decimal</td><td><code>3.14</code>, <code>0.001</code></td><td>Exact (arbitrary precision)</td></tr>
+<tr><td>Float</td><td>IEEE 754 double</td><td>Approximate</td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="arithmetic-expressions"><a class="header" href="#arithmetic-expressions">Arithmetic Expressions</a></h2>
-<p>Arithmetic expressions can appear in rule bodies as <code>bind</code> constraints, comparison guards, or as arguments to predicates.</p>
-<h3 id="numeric-literals"><a class="header" href="#numeric-literals">Numeric Literals</a></h3>
-<pre><code class="language-lisp">42          ; Integer
-3.14        ; Decimal (arbitrary precision)
+<h3 id="promotion-rules"><a class="header" href="#promotion-rules">Promotion Rules</a></h3>
+<p>When mixing types in an operation, values are promoted along the chain:</p>
+<pre><code>Integer → Decimal → Float
 </code></pre>
-<h3 id="operators"><a class="header" href="#operators">Operators</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Operator</th><th>Arity</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>+</code></td><td>N-ary</td><td>Addition</td></tr>
-<tr><td><code>-</code></td><td>N-ary</td><td>Subtraction (left fold)</td></tr>
-<tr><td><code>*</code></td><td>N-ary</td><td>Multiplication</td></tr>
-<tr><td><code>/</code></td><td>N-ary</td><td>Division (left fold)</td></tr>
-<tr><td><code>div</code></td><td>Binary</td><td>Integer division (floor)</td></tr>
-<tr><td><code>rem</code></td><td>Binary</td><td>Remainder</td></tr>
-<tr><td><code>**</code></td><td>Binary</td><td>Exponentiation</td></tr>
-<tr><td><code>abs</code></td><td>Unary</td><td>Absolute value</td></tr>
-<tr><td><code>min</code></td><td>N-ary</td><td>Minimum</td></tr>
-<tr><td><code>max</code></td><td>N-ary</td><td>Maximum</td></tr>
-<tr><td><code>round</code></td><td>Binary</td><td>Banker’s rounding (half-to-even) to <em>dp</em> decimal places</td></tr>
-<tr><td><code>floor</code></td><td>Unary</td><td>Floor to integer</td></tr>
-<tr><td><code>ceil</code></td><td>Unary</td><td>Ceiling to integer</td></tr>
-</tbody>
-</table>
-</div>
-<pre><code class="language-lisp">(+ 1 2)           ; =&gt; 3
-(* 2 3 4)         ; =&gt; 24
-(- 10 3 2)        ; =&gt; 5 (left fold: 10-3-2)
-(div 7 2)         ; =&gt; 3
-(rem 7 2)         ; =&gt; 1
-(** 2 10)         ; =&gt; 1024
-(abs (- 3 10))    ; =&gt; 7
-(min 5 3 8)       ; =&gt; 3
-(round 2.55 1)    ; =&gt; 2.6 (banker's rounding)
-(floor 3.7)       ; =&gt; 3
-(ceil 3.2)        ; =&gt; 4
-</code></pre>
-<h3 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h3>
-<p>Bind a variable to the result of an arithmetic expression:</p>
-<pre><code class="language-lisp">(normally r1
-  (and (price ?p) (tax-rate ?r)
-       (bind ?total (+ ?p (* ?p ?r))))
-  (total ?total))
-</code></pre>
-<h3 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h3>
-<p>Compare two arithmetic expressions:</p>
-<pre><code class="language-lisp">(normally r1
-  (and (age ?x ?a) (&gt; ?a 18))
-  (adult ?x))
-
-(normally r2
-  (and (score ?x ?s) (&lt;= ?s 50))
-  (failing ?x))
-</code></pre>
-<p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
-<h3 id="arithmetic-in-predicate-arguments"><a class="header" href="#arithmetic-in-predicate-arguments">Arithmetic in Predicate Arguments</a></h3>
-<p>Arithmetic expressions can appear as predicate arguments in rule bodies:</p>
-<pre><code class="language-lisp">(normally r1
-  (and (price ?item ?p) (tax-rate ?r))
-  (invoice ?item (+ ?p (* ?p ?r))))
-</code></pre>
-<h3 id="type-promotion"><a class="header" href="#type-promotion">Type Promotion</a></h3>
-<p>Numeric types are promoted during arithmetic: Integer → Decimal → Float.</p>
 <ul>
 <li>Integer + Integer = Integer</li>
 <li>Integer + Decimal = Decimal</li>
-<li>Any + Float = Float</li>
-<li><code>div</code> and <code>rem</code> require integer operands</li>
+<li>Anything + Float = Float</li>
 </ul>
-<p>Cross-type matching: <code>Integer(2)</code> matches <code>Decimal(2.0)</code> matches <code>Float(2.0)</code>.</p>
+<h3 id="cross-type-matching"><a class="header" href="#cross-type-matching">Cross-Type Matching</a></h3>
+<p>During grounding, numeric values match across types when equal:</p>
+<pre><code class="language-lisp">(given (limit 100))          ; Integer
+(given (score alice 100.0))  ; Decimal
+
+; ?s (Decimal 100.0) matches ?limit (Integer 100) in the comparison
+(normally r1
+  (and (score ?name ?s) (limit ?limit) (&gt;= ?s ?limit))
+  (at-limit ?name))
+</code></pre>
+<h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
+<h3 id="n-ary-operators"><a class="header" href="#n-ary-operators">N-ary Operators</a></h3>
+<p>These accept two or more arguments:</p>
+<pre><code class="language-lisp">(+ 1 2 3)       ; =&gt; 6
+(- 10 3 2)      ; =&gt; 5  (left fold: (10-3)-2)
+(* 2 3 4)       ; =&gt; 24
+(/ 100 5 2)     ; =&gt; 10 (left fold: (100/5)/2)
+(min 5 3 8 1)   ; =&gt; 1
+(max 5 3 8 1)   ; =&gt; 8
+</code></pre>
+<p>Subtraction and division use <strong>left fold</strong> semantics: <code>(- a b c)</code> = <code>((a - b) - c)</code>.</p>
+<h3 id="binary-operators"><a class="header" href="#binary-operators">Binary Operators</a></h3>
+<p>These require exactly two arguments:</p>
+<pre><code class="language-lisp">(div 7 2)    ; =&gt; 3   (integer division, floor toward -inf)
+(rem 7 2)    ; =&gt; 1   (remainder)
+(** 2 10)    ; =&gt; 1024 (exponentiation)
+</code></pre>
+<p><code>div</code> and <code>rem</code> require integer operands.</p>
+<h3 id="unary-operator"><a class="header" href="#unary-operator">Unary Operator</a></h3>
+<pre><code class="language-lisp">(abs -5)            ; =&gt; 5
+(abs (- 3 10))      ; =&gt; 7
+</code></pre>
+<h3 id="rounding-functions"><a class="header" href="#rounding-functions">Rounding Functions</a></h3>
+<p>Three functions handle rounding:</p>
+<pre><code class="language-lisp">(round 2.55 1)      ; =&gt; 2.6  (1 decimal place, banker's rounding)
+(round 2.45 1)      ; =&gt; 2.4  (rounds to even on half)
+(round 3.14159 2)   ; =&gt; 3.14
+(floor 3.7)         ; =&gt; 3
+(floor -2.3)        ; =&gt; -3
+(ceil 3.2)          ; =&gt; 4
+(ceil -2.7)         ; =&gt; -2
+</code></pre>
+<p><code>round</code> takes two arguments: the value and the number of decimal places (<em>dp</em>). It uses <strong>banker’s rounding</strong> (half-to-even): when the value is exactly halfway, it rounds to the nearest even digit. This avoids systematic bias in large datasets.</p>
+<p><code>floor</code> and <code>ceil</code> each take one argument and return an Integer. <code>floor</code> returns the largest integer less than or equal to the value; <code>ceil</code> returns the smallest integer greater than or equal to it.</p>
+<h3 id="nesting"><a class="header" href="#nesting">Nesting</a></h3>
+<p>Expressions can be arbitrarily nested:</p>
+<pre><code class="language-lisp">(+ (* ?base ?rate) (abs (- ?adjustment ?threshold)))
+</code></pre>
+<h2 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h2>
+<p><code>bind</code> assigns the result of an expression to a variable:</p>
+<pre><code class="language-lisp">(bind ?total (+ ?price ?tax))
+</code></pre>
+<p>The variable must be unbound (not previously assigned in this rule). If it is already bound, the bind succeeds only if the existing value equals the computed result.</p>
+<h3 id="example-computing-derived-values"><a class="header" href="#example-computing-derived-values">Example: Computing Derived Values</a></h3>
+<pre><code class="language-lisp">(given (item widget 25))
+(given (item gadget 10))
+(given (discount 0.15))
+
+(normally calc-price
+  (and (item ?name ?price) (discount ?rate)
+       (bind ?savings (* ?price ?rate))
+       (bind ?final (- ?price ?savings)))
+  (final-price ?name ?final))
+</code></pre>
+<p>Results: <code>(final-price widget 21.25)</code>, <code>(final-price gadget 8.50)</code></p>
+<h3 id="example-rounding-computed-values"><a class="header" href="#example-rounding-computed-values">Example: Rounding Computed Values</a></h3>
+<pre><code class="language-lisp">(given (hours alice 37.5))
+(given (rate alice 23.333))
+
+(normally calc-pay
+  (and (hours ?name ?h) (rate ?name ?r)
+       (bind ?raw (* ?h ?r))
+       (bind ?pay (round ?raw 2)))
+  (weekly-pay ?name ?pay))
+</code></pre>
+<p>Result: <code>(weekly-pay alice 874.99)</code> — the raw product is rounded to 2 decimal places.</p>
+<h2 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h2>
+<p>Comparisons filter substitutions:</p>
+<pre><code class="language-lisp">(&gt; ?age 18)
+(&lt;= ?score 100)
+(= ?x ?y)
+(!= ?status 0)
+</code></pre>
+<p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
+<h3 id="example-filtering-by-condition"><a class="header" href="#example-filtering-by-condition">Example: Filtering by Condition</a></h3>
+<pre><code class="language-lisp">(given (employee alice 95000))
+(given (employee bob 45000))
+(given (employee carol 120000))
+
+(normally high-earner
+  (and (employee ?name ?salary) (&gt; ?salary 90000))
+  (senior-band ?name))
+</code></pre>
+<p>Only <code>alice</code> and <code>carol</code> satisfy <code>(&gt; ?salary 90000)</code>.</p>
+<h3 id="comparisons-with-expressions"><a class="header" href="#comparisons-with-expressions">Comparisons with Expressions</a></h3>
+<p>Both sides can be expressions:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (budget ?b) (cost ?item ?c) (tax-rate ?r)
+       (&gt; ?b (+ ?c (* ?c ?r))))
+  (affordable ?item))
+</code></pre>
+<h2 id="evaluation-order"><a class="header" href="#evaluation-order">Evaluation Order</a></h2>
+<p>Body elements are evaluated <strong>left to right</strong>. Variables must be bound by a preceding literal or bind before they can be used in arithmetic:</p>
+<pre><code class="language-lisp">; CORRECT: ?price is bound before bind uses it
+(normally r1
+  (and (item ?name ?price)
+       (bind ?discounted (* ?price 0.9)))
+  (sale-price ?name ?discounted))
+</code></pre>
+<p>If an arithmetic expression references an unbound variable, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
+<h2 id="arithmetic-in-predicate-arguments"><a class="header" href="#arithmetic-in-predicate-arguments">Arithmetic in Predicate Arguments</a></h2>
+<p>Arithmetic expressions can appear directly as predicate arguments in the body:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (base ?x ?b) (offset ?x ?o))
+  (result ?x (+ ?b ?o)))
+</code></pre>
+<p>The expression <code>(+ ?b ?o)</code> is evaluated during grounding and the result becomes a concrete term in the head literal.</p>
+<h2 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h2>
+<h3 id="no-arithmetic-in-heads-or-facts-req-009"><a class="header" href="#no-arithmetic-in-heads-or-facts-req-009">No Arithmetic in Heads or Facts (REQ-009)</a></h3>
+<pre><code class="language-lisp">; INVALID — arithmetic in head
+(normally r1 (price ?p) (bind ?total (* ?p 1.1)))
+
+; INVALID — bind in a fact
+(given (bind ?x 42))
+</code></pre>
+<h3 id="no-negated-arithmetic-req-011"><a class="header" href="#no-negated-arithmetic-req-011">No Negated Arithmetic (REQ-011)</a></h3>
+<pre><code class="language-lisp">; INVALID — cannot negate arithmetic constraints
+(normally r1 (and (val ?x) (not (&gt; ?x 100))) (low ?x))
+</code></pre>
+<p>Use the complementary comparison instead:</p>
+<pre><code class="language-lisp">; CORRECT
+(normally r1 (and (val ?x) (&lt;= ?x 100)) (low ?x))
+</code></pre>
+<h3 id="no-temporal-variables-in-arithmetic-req-006"><a class="header" href="#no-temporal-variables-in-arithmetic-req-006">No Temporal Variables in Arithmetic (REQ-006)</a></h3>
+<p>Temporal variables (from <code>during</code> expressions) cannot be used as arithmetic operands.</p>
 <h3 id="reserved-keywords-req-008"><a class="header" href="#reserved-keywords-req-008">Reserved Keywords (REQ-008)</a></h3>
-<p>The following cannot be used as predicate names or rule labels:</p>
+<p>Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels:</p>
 <pre><code>+  -  *  /  div  rem  abs  min  max  **
 round  floor  ceil  bind  fold
 =  !=  &lt;  &gt;  &lt;=  &gt;=
 </code></pre>
-<p>Future reserved: <code>sum</code>, <code>count</code>, <code>avg</code></p>
-<h3 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h3>
-<ul>
-<li>Arithmetic constraints cannot appear in rule heads or facts (REQ-009)</li>
-<li>Arithmetic constraints cannot be negated with <code>not</code> or <code>~</code> (REQ-011)</li>
-<li>Temporal variables cannot be used as arithmetic operands (REQ-006)</li>
-</ul>
-<h2 id="fold-aggregation"><a class="header" href="#fold-aggregation">Fold Aggregation</a></h2>
-<p>The <code>fold</code> construct aggregates values across all facts matching a pattern. It appears in rule bodies alongside other literals and constraints.</p>
-<h3 id="syntax"><a class="header" href="#syntax">Syntax</a></h3>
-<pre><code class="language-lisp">(fold ?result identity reducer extract pattern)
-</code></pre>
+<p>This also applies to tilde-negated forms (e.g., <code>~&gt;</code> is rejected because <code>&gt;</code> is reserved).</p>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Component</th><th>Description</th></tr>
+<tr><th>Error</th><th>Cause</th></tr>
 </thead>
 <tbody>
-<tr><td><code>?result</code></td><td>Variable that receives the aggregated value</td></tr>
-<tr><td><code>identity</code></td><td>Starting value (an arithmetic expression) or <code>required</code></td></tr>
-<tr><td><code>reducer</code></td><td>Binary function applied to combine values (e.g., <code>+</code>, <code>min</code>, <code>max</code>)</td></tr>
-<tr><td><code>extract</code></td><td>Arithmetic expression evaluated per matching fact</td></tr>
-<tr><td><code>pattern</code></td><td>A literal to match against (must be positive — no <code>not</code>)</td></tr>
+<tr><td>Division by zero</td><td><code>(/ ?x 0)</code> or <code>(div ?x 0)</code></td></tr>
+<tr><td>Non-integer operand</td><td><code>(div 3.5 2)</code> or <code>(rem 1.5 1)</code></td></tr>
+<tr><td>Negative base with fractional exponent</td><td><code>(** -2 0.5)</code></td></tr>
+<tr><td>Non-finite result</td><td>Overflow producing infinity or NaN</td></tr>
+<tr><td>Unbound variable</td><td>Variable not yet assigned when expression is evaluated</td></tr>
+<tr><td>Negative decimal places</td><td><code>(round ?x -1)</code> — <em>dp</em> must be non-negative</td></tr>
+<tr><td>Non-integer decimal places</td><td><code>(round ?x 1.5)</code> — <em>dp</em> must be an integer</td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
-<p><strong>Sum of values:</strong></p>
-<pre><code class="language-lisp">(normally r-total
-    (fold ?total 0 + ?pay (pay-line ?emp ?pay))
-    (total-pay ?emp ?total))
-</code></pre>
-<p>For each <code>?emp</code>, sums all <code>?pay</code> values from matching <code>pay-line</code> facts. The identity <code>0</code> means the rule still fires (with result <code>0</code>) if no facts match.</p>
-<p><strong>Count:</strong></p>
-<pre><code class="language-lisp">(normally r-count
-    (fold ?n 0 + 1 (shift ?emp ?d))
-    (shift-count ?emp ?n))
-</code></pre>
-<p>The extract <code>1</code> contributes a constant per match; summing counts them.</p>
-<p><strong>Minimum with required:</strong></p>
-<pre><code class="language-lisp">(normally r-min
-    (fold ?m required min ?rate (rate ?emp ?rate))
-    (min-rate ?emp ?m))
-</code></pre>
-<p>The keyword <code>required</code> means the rule does not fire when no facts match (there is no sensible minimum of an empty set).</p>
-<p><strong>Computed extract:</strong></p>
-<pre><code class="language-lisp">(normally r-total
-    (fold ?total 0 + (* ?hours ?rate) (work ?emp ?hours ?rate))
-    (daily-pay ?emp ?total))
-</code></pre>
-<p>The extract <code>(* ?hours ?rate)</code> is evaluated per match before folding.</p>
-<h3 id="identity-vs-required"><a class="header" href="#identity-vs-required">Identity vs. Required</a></h3>
-<ul>
-<li><strong>Identity value</strong> (e.g., <code>0</code>, <code>1</code>): The fold returns this value when no facts match the pattern. The rule fires normally.</li>
-<li><strong><code>required</code></strong>: The fold fails when no facts match. The substitution is discarded and the rule does not fire for that binding.</li>
-</ul>
-<p>Use <code>required</code> for aggregates where an empty set is meaningless (min, max). Use an identity for aggregates where zero matches should produce a result (sum → <code>0</code>, count → <code>0</code>, product → <code>1</code>).</p>
-<h3 id="restrictions-1"><a class="header" href="#restrictions-1">Restrictions</a></h3>
-<ul>
-<li>Fold can only appear in rule bodies, not in heads or facts</li>
-<li>The pattern must be positive (no <code>not</code> or <code>~</code>)</li>
-<li>The result variable must not collide with any variable bound in the fold pattern</li>
-<li>The reducer must be a binary function (built-in operator or registered extension function)</li>
-<li>Temporal features cannot be combined with multi-stratum fold programs</li>
-</ul>
-<p>See the <a href="../guides/aggregation.html">Aggregation guide</a> for variable scoping, stratification, and advanced patterns.</p>
-<h2 id="claims"><a class="header" href="#claims">Claims</a></h2>
-<p>The <code>claims</code> block attributes statements to a named source, with optional metadata.</p>
-<pre><code class="language-lisp">(claims agent:alice
-  :at "2024-06-15T12:00:00Z"
-  :sig "abc123"
-  :id "claim-001"
-  :note "sensor reading"
-  (given sunny)
-  (normally r1 sunny (not umbrella)))
-</code></pre>
-<h3 id="syntax-1"><a class="header" href="#syntax-1">Syntax</a></h3>
-<pre><code>(claims source [:at timestamp] [:sig signature] [:id block-id] [:note annotation]
-  statement ...)
-</code></pre>
-<ul>
-<li><strong>source</strong> — an atom identifying the claiming agent (e.g., <code>agent:alice</code>).</li>
-<li><strong>:at</strong> — optional RFC3339 timestamp for when the claim was made.</li>
-<li><strong>:sig</strong> — optional signature string for verification.</li>
-<li><strong>:id</strong> — optional block identifier.</li>
-<li><strong>:note</strong> — optional free-text annotation.</li>
-</ul>
-<p>Statements inside a <code>claims</code> block are ordinary SPL expressions (<code>given</code>, <code>always</code>, <code>normally</code>, <code>except</code>, <code>prefer</code>) that automatically receive source metadata. See the <a href="../guides/trust.html">Trust &amp; Multi-Agent guide</a> for details.</p>
-<h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
-<pre><code class="language-lisp">; The Penguin Example
-
-; Facts
-(given bird)
-(given penguin)
-
-; Strict rule
-(always s1 penguin bird)
-
-; Defeasible rules
-(normally r1 bird flies)
-(normally r2 bird has-feathers)
-(normally r3 penguin (not flies))
-(normally r4 penguin swims)
-
-; Superiority
-(prefer r3 r1)
-
-; Defeater
-(except d1 broken-wing flies)
-
-; Metadata
-(meta r1 (description "Birds typically fly"))
-(meta r3 (description "Penguins are an exception"))
-</code></pre>
+<p>When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../concepts/negation.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/grounding.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/cli.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guides/aggregation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -627,11 +392,11 @@ round  floor  ceil  bind  fold
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../concepts/negation.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/grounding.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/cli.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guides/aggregation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -85,36 +85,147 @@ let spl = r#"
 let theory = parse_spl(spl)?;
 ```
 
-### Parsing SPL
+## Extension Functions
+
+Spindle supports extension functions — pure, deterministic functions that can be called from `bind` expressions and arithmetic positions in SPL rules.
+
+### Built-in Functions
+
+`FunctionRegistry::with_prelude()` creates a registry pre-loaded with all built-in arithmetic operators (`+`, `-`, `*`, `/`, `min`, `max`, `div`, `rem`, `**`, `abs`, `round`, `floor`, `ceil`). This is used automatically by the pipeline, so built-in functions are always available.
+
+### Defining Custom Functions
+
+Implement the `ExtensionFunction` trait:
 
 ```rust
+use spindle_core::prelude::*;
+use spindle_core::term::Term;
+use spindle_core::symbol::intern;
+
+struct DoubleFunction(FunctionSignature);
+
+impl DoubleFunction {
+    fn new() -> Self {
+        Self(FunctionSignature {
+            name: intern("double"),
+            arity: Arity::Fixed(1),
+            description: "doubles an integer",
+        })
+    }
+}
+
+impl ExtensionFunction for DoubleFunction {
+    fn signature(&self) -> &FunctionSignature {
+        &self.0
+    }
+
+    fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        match &args[0] {
+            Term::Integer(n) => Ok(Term::Integer(n * 2)),
+            other => Err(EvalError::TypeError(
+                format!("double: expected integer, got {other:?}")
+            )),
+        }
+    }
+}
+```
+
+Requirements:
+- **Pure** — no side effects or I/O
+- **Deterministic** — same inputs always produce the same output
+- **Send + Sync** — safe to share across threads
+- **Silent failure** — when `eval` returns `Err`, the substitution is silently discarded (the rule does not fire for that binding)
+
+### Arity
+
+The `Arity` enum controls argument count validation:
+
+```rust
+Arity::Fixed(1)      // exactly 1 argument
+Arity::Fixed(2)      // exactly 2 arguments
+Arity::Range(1, 3)   // 1 to 3 arguments (inclusive)
+```
+
+Arity mismatches produce a validation error before reasoning begins.
+
+### Registering Functions
+
+Create a `FunctionRegistry`, register your functions, and pass it through `PrepareOptions`:
+
+```rust
+use spindle_core::prelude::*;
 use spindle_parser::parse_spl;
 
-let spl = r#"
-    (given bird)
-    (given penguin)
-    (normally r1 bird flies)
-    (normally r2 penguin (not flies))
-    (prefer r2 r1)
-"#;
+let theory = parse_spl(r#"
+    (given (val 5))
+    (normally r1
+        (and (val ?x) (bind ?y (double ?x)))
+        (result ?y))
+"#)?;
 
-let theory = parse_spl(spl)?;
+let mut reg = FunctionRegistry::new();
+reg.register(Box::new(DoubleFunction::new()));
+
+let opts = PrepareOptions {
+    function_registry: Some(reg),
+    ..Default::default()
+};
+
+let conclusions = reason_with_options(&theory, opts)?;
 ```
+
+User-registered functions are merged with the built-in prelude. User functions override built-ins on name collision.
+
+### Custom Fold Reducers
+
+Extension functions can serve as fold reducers. The function must accept exactly 2 arguments (binary):
+
+```lisp
+(fold ?product 1 mul ?v (value ?emp ?v))
+```
+
+See the [Aggregation guide](../guides/aggregation.md) for fold details.
 
 ## Reasoning
 
-### Reasoning API
+### Basic Reasoning
 
 ```rust
 use spindle_core::reason::reason;
 
-let conclusions = reason(&theory);
+let conclusions = reason(&theory)?;
+```
+
+### With Options
+
+Use `reason_with_options` when you need extension functions, custom grounding limits, or trust policies:
+
+```rust
+use spindle_core::prelude::*;
+
+let opts = PrepareOptions {
+    function_registry: Some(reg),
+    ..Default::default()
+};
+
+let conclusions = reason_with_options(&theory, opts)?;
+```
+
+### Two-Step Alternative
+
+For advanced use, separate preparation from reasoning. This is useful when you want to inspect the pipeline result or reuse the prepared theory:
+
+```rust
+use spindle_core::pipeline::prepare;
+use spindle_core::reason::reason_from_prepared;
+
+let result = prepare(&theory, PrepareOptions::default())?;
+let conclusions = reason_from_prepared(&result)?;
 ```
 
 ### Convenience Method
 
 ```rust
-// Uses standard algorithm
 let conclusions = theory.reason();
 ```
 

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -820,10 +820,10 @@ for lr in &amp;learned {
 <h3 id="petri-net-mining-with-metrics"><a class="header" href="#petri-net-mining-with-metrics">Petri Net Mining with Metrics</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use spindle_core::mining::petri_net_to_dfl;
+</span>use spindle_core::mining::petri_net_to_rules;
 
 // Mine rules with minimum support=3, confidence=0.7
-let learned_rules = petri_net_to_dfl(&amp;event_log, 3, 0.7);
+let learned_rules = petri_net_to_rules(&amp;event_log, 3, 0.7);
 
 for lr in &amp;learned_rules {
     println!("{}: support={}, confidence={:.2}, source={}",

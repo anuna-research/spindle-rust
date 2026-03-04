@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,7 +193,7 @@
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operator</th><th>SPL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
+<tr><th>Operator</th><th>Display</th><th>SPL Syntax</th><th>Meaning</th></tr>
 </thead>
 <tbody>
 <tr><td>Obligation</td><td><code>[O]</code></td><td><code>(must ...)</code></td><td>The proposition <strong>must</strong> hold</td></tr>
@@ -202,31 +202,14 @@
 </tbody>
 </table>
 </div>
-<h3 id="obligation-o"><a class="header" href="#obligation-o">Obligation (<code>[O]</code>)</a></h3>
-<p>An obligation states that something is required. If <code>[O]pay</code> is concluded, then there is an obligation to pay.</p>
-<h3 id="permission-p"><a class="header" href="#permission-p">Permission (<code>[P]</code>)</a></h3>
-<p>A permission states that something is allowed. If <code>[P]access</code> is concluded, then access is permitted.</p>
-<h3 id="forbidden-f"><a class="header" href="#forbidden-f">Forbidden (<code>[F]</code>)</a></h3>
-<p>A prohibition states that something is not allowed. If <code>[F]enter</code> is concluded, then entering is forbidden.</p>
+<h3 id="obligation-must"><a class="header" href="#obligation-must">Obligation (<code>must</code>)</a></h3>
+<p>An obligation states that something is required. If <code>(must pay)</code> is concluded, then there is an obligation to pay.</p>
+<h3 id="permission-may"><a class="header" href="#permission-may">Permission (<code>may</code>)</a></h3>
+<p>A permission states that something is allowed. If <code>(may access)</code> is concluded, then access is permitted.</p>
+<h3 id="forbidden-forbidden"><a class="header" href="#forbidden-forbidden">Forbidden (<code>forbidden</code>)</a></h3>
+<p>A prohibition states that something is not allowed. If <code>(forbidden enter)</code> is concluded, then entering is forbidden.</p>
 <h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
-<p>In SPL, modal operators are written as square-bracketed prefixes on literals:</p>
-<pre><code class="language-lisp"># Modal facts
-f1: &gt;&gt; [O]pay
-f2: &gt;&gt; [P]access
-f3: &gt;&gt; [F]enter
-
-# Modal literals in rules
-r1: signed_contract =&gt; [O]pay
-r2: member =&gt; [P]access
-r3: unauthorized =&gt; [F]enter
-</code></pre>
-<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary SPL literals:</p>
-<pre><code class="language-lisp"># Negated modal literals
-r4: exemption =&gt; -[O]pay
-r5: revoked =&gt; -[P]access
-</code></pre>
-<h2 id="spl-syntax-1"><a class="header" href="#spl-syntax-1">SPL Syntax</a></h2>
-<p>In SPL, modal operators use keyword wrappers:</p>
+<p>Modal operators use keyword wrappers:</p>
 <pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
 (given (must pay))
 (normally r1 signed-contract (must pay))
@@ -252,27 +235,7 @@ r5: revoked =&gt; -[P]access
 </code></pre>
 <h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
 <p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
-<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
-<pre><code class="language-lisp"># If you signed a contract, you are obligated to pay
-r1: signed_contract =&gt; [O]pay
-
-# If you are obligated to pay and fail to pay, you are in violation
-r2: [O]pay, -paid =&gt; violation
-
-# Members may access resources
-r3: member =&gt; [P]access
-
-# Unauthorized users are forbidden from entering
-r4: unauthorized =&gt; [F]enter
-
-# An exemption defeats the obligation to pay
-r5: exemption =&gt; -[O]pay
-r5 &gt; r1
-
-# A defeater: pending review blocks the permission
-d1: pending_review ~&gt; [P]access
-</code></pre>
-<h3 id="spl-examples-1"><a class="header" href="#spl-examples-1">SPL Examples</a></h3>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
 <pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
 (normally r1 signed-contract (must pay))
 
@@ -430,7 +393,7 @@ assert_eq!(format!("{}", forbidden_enter), "[F]enter(restricted_area)");
 </span>use spindle_core::prelude::*;
 use smallvec::smallvec;
 
-// r1: signed_contract =&gt; [O]pay
+// (normally r1 signed-contract (must pay))
 let body = smallvec![Literal::simple("signed_contract")];
 let head = smallvec![Literal::new(
     "pay",
@@ -441,7 +404,7 @@ let head = smallvec![Literal::new(
 )];
 let rule = Rule::new("r1", RuleType::Defeasible, body, head);
 
-// r2: [O]pay, ~paid =&gt; violation
+// (normally r2 (and (must pay) (not paid)) violation)
 let body = smallvec![
     Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]),
     Literal::negated("paid"),

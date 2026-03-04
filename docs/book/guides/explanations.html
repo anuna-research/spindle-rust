@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,10 +222,10 @@
 </ul>
 <h3 id="navigating-proof-trees"><a class="header" href="#navigating-proof-trees">Navigating Proof Trees</a></h3>
 <p>A proof tree reads from conclusion down to facts. At each node, the <code>proof_step</code> tells you which rule was used, and the <code>body_proofs</code> within that step give you the sub-trees for each premise.</p>
-<p>For example, given a theory where <code>penguin</code> is a fact, <code>penguin -&gt; bird</code> is strict, and <code>bird =&gt; flies</code> is defeasible, the proof tree for <code>flies</code> would look like:</p>
-<pre><code>flies [defeasible, r1: bird =&gt; flies]
+<p>For example, given a theory where <code>penguin</code> is a fact, <code>(always s1 penguin bird)</code> is strict, and <code>(normally r1 bird flies)</code> is defeasible, the proof tree for <code>flies</code> would look like:</p>
+<pre><code>flies [defeasible, r1: bird -&gt; flies]
   bird [definite, s1: penguin -&gt; bird]
-    penguin [definite, f1: &gt;&gt; penguin]
+    penguin [definite, f1: penguin]
 </code></pre>
 <p>Each level corresponds to a <code>ProofNode</code> whose <code>proof_step.body_proofs</code> contains the children.</p>
 <h2 id="blocked-alternatives-and-conflict-resolutions"><a class="header" href="#blocked-alternatives-and-conflict-resolutions">Blocked Alternatives and Conflict Resolutions</a></h2>
@@ -300,7 +300,7 @@ Conflict Resolutions:
     "proof_step": {
       "rule_label": "r2",
       "rule_type": "defeasible",
-      "rule_text": "penguin =&gt; ~flies",
+      "rule_text": "penguin -&gt; ~flies",
       "body_proofs": [
         {
           "literal": "penguin",
@@ -308,7 +308,7 @@ Conflict Resolutions:
           "proof_step": {
             "rule_label": "f1",
             "rule_type": "fact",
-            "rule_text": "&gt;&gt; penguin",
+            "rule_text": "penguin",
             "body_proofs": []
           }
         }
@@ -437,7 +437,7 @@ let annots = Annotations::with_entries(vec![
     ("confidence", "0.85"),
 ]);
 
-let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom =&gt; diagnosis")
+let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom -&gt; diagnosis")
     .with_annotations(annots);
 <span class="boring">}</span></code></pre>
 <p>Annotations are preserved across all output formats. In natural language, <code>description</code> and <code>source</code> are printed inline. In JSON-LD, they are mapped to <code>rdfs:comment</code>, <code>prov:wasAttributedTo</code>, and <code>spindle:confidence</code> respectively.</p>
@@ -512,11 +512,11 @@ use spindle_core::literal::Literal;
 use spindle_core::rule::RuleType;
 
 // Build a proof tree bottom-up
-let fact_step = ProofStep::new("f1", RuleType::Fact, "&gt;&gt; penguin");
+let fact_step = ProofStep::new("f1", RuleType::Fact, "penguin");
 let fact_node = ProofNode::new(Literal::simple("penguin"), DerivationType::Definite)
     .with_proof_step(fact_step);
 
-let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin =&gt; ~flies")
+let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin -&gt; ~flies")
     .with_body_proofs(vec![fact_node]);
 let conclusion_node = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
     .with_proof_step(rule_step);

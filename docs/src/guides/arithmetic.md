@@ -84,6 +84,24 @@ These require exactly two arguments:
 (abs (- 3 10))      ; => 7
 ```
 
+### Rounding Functions
+
+Three functions handle rounding:
+
+```lisp
+(round 2.55 1)      ; => 2.6  (1 decimal place, banker's rounding)
+(round 2.45 1)      ; => 2.4  (rounds to even on half)
+(round 3.14159 2)   ; => 3.14
+(floor 3.7)         ; => 3
+(floor -2.3)        ; => -3
+(ceil 3.2)          ; => 4
+(ceil -2.7)         ; => -2
+```
+
+`round` takes two arguments: the value and the number of decimal places (*dp*). It uses **banker's rounding** (half-to-even): when the value is exactly halfway, it rounds to the nearest even digit. This avoids systematic bias in large datasets.
+
+`floor` and `ceil` each take one argument and return an Integer. `floor` returns the largest integer less than or equal to the value; `ceil` returns the smallest integer greater than or equal to it.
+
 ### Nesting
 
 Expressions can be arbitrarily nested:
@@ -117,6 +135,21 @@ The variable must be unbound (not previously assigned in this rule). If it is al
 ```
 
 Results: `(final-price widget 21.25)`, `(final-price gadget 8.50)`
+
+### Example: Rounding Computed Values
+
+```lisp
+(given (hours alice 37.5))
+(given (rate alice 23.333))
+
+(normally calc-pay
+  (and (hours ?name ?h) (rate ?name ?r)
+       (bind ?raw (* ?h ?r))
+       (bind ?pay (round ?raw 2)))
+  (weekly-pay ?name ?pay))
+```
+
+Result: `(weekly-pay alice 874.99)` — the raw product is rounded to 2 decimal places.
 
 ## Comparison Guards
 
@@ -218,7 +251,8 @@ Arithmetic operators and comparison symbols cannot be used as predicate names or
 
 ```
 +  -  *  /  div  rem  abs  min  max  **
-bind  =  !=  <  >  <=  >=
+round  floor  ceil  bind  fold
+=  !=  <  >  <=  >=
 ```
 
 This also applies to tilde-negated forms (e.g., `~>` is rejected because `>` is reserved).
@@ -232,5 +266,7 @@ This also applies to tilde-negated forms (e.g., `~>` is rejected because `>` is 
 | Negative base with fractional exponent | `(** -2 0.5)` |
 | Non-finite result | Overflow producing infinity or NaN |
 | Unbound variable | Variable not yet assigned when expression is evaluated |
+| Negative decimal places | `(round ?x -1)` — *dp* must be non-negative |
+| Non-integer decimal places | `(round ?x 1.5)` — *dp* must be an integer |
 
 When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance.

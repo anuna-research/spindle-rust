@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -206,7 +206,7 @@
 </code></pre>
 <p>Strict rules add both <code>+D</code> and <code>+d</code>.<br>Defeasible rules add <code>+d</code> only if not blocked.</p>
 <h2 id="conflict-handling"><a class="header" href="#conflict-handling">Conflict Handling</a></h2>
-<p>For a defeasible rule <code>r: body =&gt; q</code>, attackers are rules for <code>~q</code>.</p>
+<p>For a defeasible rule <code>(normally r body q)</code>, attackers are rules for <code>(not q)</code>.</p>
 <p><code>r</code> is blocked when:</p>
 <ol>
 <li>An applicable <strong>defeater</strong> for <code>~q</code> exists, and <code>r</code> is not superior to it.</li>

@@ -47,7 +47,7 @@ literal     = atom | "(" atom arg* ")" | "(not" literal ")"
 modal       = "(" modal-op literal ")"
 modal-op    = "must" | "may" | "forbidden"
 body        = literal | "(and" body-elem+ ")"
-body-elem   = literal | arith-constraint
+body-elem   = literal | arith-constraint | fold
 atom        = identifier | variable
 variable    = "?" identifier
 source      = atom
@@ -64,7 +64,15 @@ arith-expr  = number | variable
             | "(" unary-op arith-expr ")"
 nary-op     = "+" | "-" | "*" | "/" | "min" | "max"
 bin-op      = "div" | "rem" | "**"
-unary-op    = "abs"
+unary-op    = "abs" | "floor" | "ceil"
+round-op    = "round"
+
+; Aggregation (body only)
+fold        = "(fold" variable identity reducer extract pattern ")"
+identity    = arith-expr | "required"
+reducer     = atom
+extract     = arith-expr
+pattern     = literal
 ```
 
 ## Facts
@@ -339,6 +347,9 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 | `abs` | Unary | Absolute value |
 | `min` | N-ary | Minimum |
 | `max` | N-ary | Maximum |
+| `round` | Binary | Banker's rounding (half-to-even) to *dp* decimal places |
+| `floor` | Unary | Floor to integer |
+| `ceil` | Unary | Ceiling to integer |
 
 ```lisp
 (+ 1 2)           ; => 3
@@ -349,6 +360,9 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 (** 2 10)         ; => 1024
 (abs (- 3 10))    ; => 7
 (min 5 3 8)       ; => 3
+(round 2.55 1)    ; => 2.6 (banker's rounding)
+(floor 3.7)       ; => 3
+(ceil 3.2)        ; => 4
 ```
 
 ### Bind Constraints
@@ -405,16 +419,94 @@ The following cannot be used as predicate names or rule labels:
 
 ```
 +  -  *  /  div  rem  abs  min  max  **
-bind  =  !=  <  >  <=  >=
+round  floor  ceil  bind  fold
+=  !=  <  >  <=  >=
 ```
 
-Future reserved: `sum`, `count`, `avg`, `round`, `floor`, `ceil`
+Future reserved: `sum`, `count`, `avg`
 
 ### Restrictions
 
 - Arithmetic constraints cannot appear in rule heads or facts (REQ-009)
 - Arithmetic constraints cannot be negated with `not` or `~` (REQ-011)
 - Temporal variables cannot be used as arithmetic operands (REQ-006)
+
+## Fold Aggregation
+
+The `fold` construct aggregates values across all facts matching a pattern. It appears in rule bodies alongside other literals and constraints.
+
+### Syntax
+
+```lisp
+(fold ?result identity reducer extract pattern)
+```
+
+| Component | Description |
+|-----------|-------------|
+| `?result` | Variable that receives the aggregated value |
+| `identity` | Starting value (an arithmetic expression) or `required` |
+| `reducer` | Binary function applied to combine values (e.g., `+`, `min`, `max`) |
+| `extract` | Arithmetic expression evaluated per matching fact |
+| `pattern` | A literal to match against (must be positive — no `not`) |
+
+### Examples
+
+**Sum of values:**
+
+```lisp
+(normally r-total
+    (fold ?total 0 + ?pay (pay-line ?emp ?pay))
+    (total-pay ?emp ?total))
+```
+
+For each `?emp`, sums all `?pay` values from matching `pay-line` facts. The identity `0` means the rule still fires (with result `0`) if no facts match.
+
+**Count:**
+
+```lisp
+(normally r-count
+    (fold ?n 0 + 1 (shift ?emp ?d))
+    (shift-count ?emp ?n))
+```
+
+The extract `1` contributes a constant per match; summing counts them.
+
+**Minimum with required:**
+
+```lisp
+(normally r-min
+    (fold ?m required min ?rate (rate ?emp ?rate))
+    (min-rate ?emp ?m))
+```
+
+The keyword `required` means the rule does not fire when no facts match (there is no sensible minimum of an empty set).
+
+**Computed extract:**
+
+```lisp
+(normally r-total
+    (fold ?total 0 + (* ?hours ?rate) (work ?emp ?hours ?rate))
+    (daily-pay ?emp ?total))
+```
+
+The extract `(* ?hours ?rate)` is evaluated per match before folding.
+
+### Identity vs. Required
+
+- **Identity value** (e.g., `0`, `1`): The fold returns this value when no facts match the pattern. The rule fires normally.
+- **`required`**: The fold fails when no facts match. The substitution is discarded and the rule does not fire for that binding.
+
+Use `required` for aggregates where an empty set is meaningless (min, max). Use an identity for aggregates where zero matches should produce a result (sum → `0`, count → `0`, product → `1`).
+
+### Restrictions
+
+- Fold can only appear in rule bodies, not in heads or facts
+- The pattern must be positive (no `not` or `~`)
+- The result variable must not collide with any variable bound in the fold pattern
+- The reducer must be a binary function (built-in operator or registered extension function)
+- Temporal features cannot be combined with multi-stratum fold programs
+
+See the [Aggregation guide](../guides/aggregation.md) for variable scoping, stratification, and advanced patterns.
 
 ## Claims
 

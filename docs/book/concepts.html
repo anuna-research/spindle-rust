@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-78568b9e.js"></script>
+        <script src="toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,11 +201,11 @@
 <p>Tweety is a bird. Tweety is a penguin. Birds fly. Penguins don’t fly. Does Tweety fly?</p>
 </blockquote>
 <p>Classical logic produces a contradiction. Defeasible logic resolves it by recognizing that “penguins don’t fly” is a more specific rule that should override “birds fly.”</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
-r1: bird =&gt; flies
-r2: penguin =&gt; -flies
-r2 &gt; r1
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 </code></pre>
 <p>Result: Tweety doesn’t fly.</p>
 <h2 id="key-terminology"><a class="header" href="#key-terminology">Key Terminology</a></h2>
@@ -221,6 +221,11 @@ r2 &gt; r1
 <tr><td><strong>Conclusion</strong></td><td>A proven literal with a provability level</td></tr>
 <tr><td><strong>Defeat</strong></td><td>When one rule blocks another’s conclusion</td></tr>
 <tr><td><strong>Superiority</strong></td><td>A preference relation between rules</td></tr>
+<tr><td><strong>Bind</strong></td><td>Assigns a computed arithmetic result to a variable</td></tr>
+<tr><td><strong>Guard</strong></td><td>A comparison constraint that filters rule applicability</td></tr>
+<tr><td><strong>Fold</strong></td><td>Aggregates values across all matching facts using a reducer function</td></tr>
+<tr><td><strong>Stratum</strong></td><td>An ordered partition of rules; evaluated sequentially so fold inputs are complete</td></tr>
+<tr><td><strong>Extension function</strong></td><td>A registered pure function callable from <code>bind</code> expressions</td></tr>
 </tbody>
 </table>
 </div>

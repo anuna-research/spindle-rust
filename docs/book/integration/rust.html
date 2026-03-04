@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -245,21 +245,6 @@ theory.add_superiority(&amp;r2, &amp;r1);
 </span>use spindle_parser::parse_spl;
 
 let spl = r#"
-    f1: &gt;&gt; bird
-    f2: &gt;&gt; penguin
-    r1: bird =&gt; flies
-    r2: penguin =&gt; ~flies
-    r2 &gt; r1
-"#;
-
-let theory = parse_spl(spl)?;
-<span class="boring">}</span></code></pre>
-<h3 id="parsing-spl-1"><a class="header" href="#parsing-spl-1">Parsing SPL</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use spindle_parser::parse_spl;
-
-let spl = r#"
     (given bird)
     (given penguin)
     (normally r1 bird flies)
@@ -269,19 +254,126 @@ let spl = r#"
 
 let theory = parse_spl(spl)?;
 <span class="boring">}</span></code></pre>
+<h2 id="extension-functions"><a class="header" href="#extension-functions">Extension Functions</a></h2>
+<p>Spindle supports extension functions — pure, deterministic functions that can be called from <code>bind</code> expressions and arithmetic positions in SPL rules.</p>
+<h3 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in Functions</a></h3>
+<p><code>FunctionRegistry::with_prelude()</code> creates a registry pre-loaded with all built-in arithmetic operators (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>min</code>, <code>max</code>, <code>div</code>, <code>rem</code>, <code>**</code>, <code>abs</code>, <code>round</code>, <code>floor</code>, <code>ceil</code>). This is used automatically by the pipeline, so built-in functions are always available.</p>
+<h3 id="defining-custom-functions"><a class="header" href="#defining-custom-functions">Defining Custom Functions</a></h3>
+<p>Implement the <code>ExtensionFunction</code> trait:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+use spindle_core::term::Term;
+use spindle_core::symbol::intern;
+
+struct DoubleFunction(FunctionSignature);
+
+impl DoubleFunction {
+    fn new() -&gt; Self {
+        Self(FunctionSignature {
+            name: intern("double"),
+            arity: Arity::Fixed(1),
+            description: "doubles an integer",
+        })
+    }
+}
+
+impl ExtensionFunction for DoubleFunction {
+    fn signature(&amp;self) -&gt; &amp;FunctionSignature {
+        &amp;self.0
+    }
+
+    fn eval(&amp;self, args: &amp;[Term]) -&gt; Result&lt;Term, EvalError&gt; {
+        match &amp;args[0] {
+            Term::Integer(n) =&gt; Ok(Term::Integer(n * 2)),
+            other =&gt; Err(EvalError::TypeError(
+                format!("double: expected integer, got {other:?}")
+            )),
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>Requirements:</p>
+<ul>
+<li><strong>Pure</strong> — no side effects or I/O</li>
+<li><strong>Deterministic</strong> — same inputs always produce the same output</li>
+<li><strong>Send + Sync</strong> — safe to share across threads</li>
+<li><strong>Silent failure</strong> — when <code>eval</code> returns <code>Err</code>, the substitution is silently discarded (the rule does not fire for that binding)</li>
+</ul>
+<h3 id="arity"><a class="header" href="#arity">Arity</a></h3>
+<p>The <code>Arity</code> enum controls argument count validation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>Arity::Fixed(1)      // exactly 1 argument
+Arity::Fixed(2)      // exactly 2 arguments
+Arity::Range(1, 3)   // 1 to 3 arguments (inclusive)
+<span class="boring">}</span></code></pre>
+<p>Arity mismatches produce a validation error before reasoning begins.</p>
+<h3 id="registering-functions"><a class="header" href="#registering-functions">Registering Functions</a></h3>
+<p>Create a <code>FunctionRegistry</code>, register your functions, and pass it through <code>PrepareOptions</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+use spindle_parser::parse_spl;
+
+let theory = parse_spl(r#"
+    (given (val 5))
+    (normally r1
+        (and (val ?x) (bind ?y (double ?x)))
+        (result ?y))
+"#)?;
+
+let mut reg = FunctionRegistry::new();
+reg.register(Box::new(DoubleFunction::new()));
+
+let opts = PrepareOptions {
+    function_registry: Some(reg),
+    ..Default::default()
+};
+
+let conclusions = reason_with_options(&amp;theory, opts)?;
+<span class="boring">}</span></code></pre>
+<p>User-registered functions are merged with the built-in prelude. User functions override built-ins on name collision.</p>
+<h3 id="custom-fold-reducers"><a class="header" href="#custom-fold-reducers">Custom Fold Reducers</a></h3>
+<p>Extension functions can serve as fold reducers. The function must accept exactly 2 arguments (binary):</p>
+<pre><code class="language-lisp">(fold ?product 1 mul ?v (value ?emp ?v))
+</code></pre>
+<p>See the <a href="../guides/aggregation.html">Aggregation guide</a> for fold details.</p>
 <h2 id="reasoning"><a class="header" href="#reasoning">Reasoning</a></h2>
-<h3 id="reasoning-api"><a class="header" href="#reasoning-api">Reasoning API</a></h3>
+<h3 id="basic-reasoning"><a class="header" href="#basic-reasoning">Basic Reasoning</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_core::reason::reason;
 
-let conclusions = reason(&amp;theory);
+let conclusions = reason(&amp;theory)?;
+<span class="boring">}</span></code></pre>
+<h3 id="with-options"><a class="header" href="#with-options">With Options</a></h3>
+<p>Use <code>reason_with_options</code> when you need extension functions, custom grounding limits, or trust policies:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::prelude::*;
+
+let opts = PrepareOptions {
+    function_registry: Some(reg),
+    ..Default::default()
+};
+
+let conclusions = reason_with_options(&amp;theory, opts)?;
+<span class="boring">}</span></code></pre>
+<h3 id="two-step-alternative"><a class="header" href="#two-step-alternative">Two-Step Alternative</a></h3>
+<p>For advanced use, separate preparation from reasoning. This is useful when you want to inspect the pipeline result or reuse the prepared theory:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::prepare;
+use spindle_core::reason::reason_from_prepared;
+
+let result = prepare(&amp;theory, PrepareOptions::default())?;
+let conclusions = reason_from_prepared(&amp;result)?;
 <span class="boring">}</span></code></pre>
 <h3 id="convenience-method"><a class="header" href="#convenience-method">Convenience Method</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>// Uses standard algorithm
-let conclusions = theory.reason();
+</span>let conclusions = theory.reason();
 <span class="boring">}</span></code></pre>
 <h2 id="working-with-conclusions"><a class="header" href="#working-with-conclusions">Working with Conclusions</a></h2>
 <h3 id="conclusion-types"><a class="header" href="#conclusion-types">Conclusion Types</a></h3>

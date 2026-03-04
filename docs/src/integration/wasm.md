@@ -354,6 +354,15 @@ function ReasoningComponent() {
 }
 ```
 
+## Fold and Extension Functions
+
+Fold aggregation syntax is fully supported when using `parseSpl()`. Stratification
+is handled automatically. All built-in functions (including `round`, `floor`, `ceil`)
+are available.
+
+Custom extension functions (registered via `FunctionRegistry` in the Rust API) are
+not currently available through the WASM bindings.
+
 ## Performance Notes
 
 1. **Initialize once**: Call `init()` once at startup

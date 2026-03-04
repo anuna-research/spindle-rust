@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-a7fb0bbf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,17 +192,11 @@
 <h3 id="strong-negation"><a class="header" href="#strong-negation">Strong Negation</a></h3>
 <p>Used in Spindle:</p>
 <ul>
-<li><code>-P</code> (or <code>~P</code>) is a separate proposition</li>
+<li><code>(not P)</code> is a separate proposition</li>
 <li>Must be explicitly proven</li>
-<li>Absence of <code>P</code> does not imply <code>-P</code></li>
+<li>Absence of <code>P</code> does not imply <code>(not P)</code></li>
 </ul>
 <h2 id="syntax"><a class="header" href="#syntax">Syntax</a></h2>
-<p>Both <code>-</code> and <code>~</code> denote negation:</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">f1: &gt;&gt; -guilty       # Explicitly not guilty
-r1: penguin =&gt; ~flies
-</code></pre>
-<p><strong>SPL:</strong></p>
 <pre><code class="language-lisp">(given (not guilty))
 (normally r1 penguin (not flies))
 </code></pre>
@@ -215,15 +209,15 @@ r1: penguin =&gt; ~flies
 </thead>
 <tbody>
 <tr><td>True</td><td>P is provable</td><td><code>+d P</code></td></tr>
-<tr><td>False</td><td>-P is provable</td><td><code>+d -P</code></td></tr>
+<tr><td>False</td><td>(not P) is provable</td><td><code>+d -P</code></td></tr>
 <tr><td>Unknown</td><td>Neither provable</td><td><code>-d P</code> and <code>-d -P</code></td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="example-unknown-state"><a class="header" href="#example-unknown-state">Example: Unknown State</a></h2>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-r1: bird =&gt; flies
-# No information about grounded
+<pre><code class="language-lisp">(given bird)
+(normally r1 bird flies)
+; No information about grounded
 </code></pre>
 <p>Conclusions:</p>
 <ul>
@@ -233,36 +227,29 @@ r1: bird =&gt; flies
 </ul>
 <p>The <code>grounded</code> literal is in an <strong>unknown</strong> state.</p>
 <h2 id="complementary-literals"><a class="header" href="#complementary-literals">Complementary Literals</a></h2>
-<p><code>P</code> and <code>-P</code> are <strong>complements</strong>. They interact in specific ways:</p>
+<p><code>P</code> and <code>(not P)</code> are <strong>complements</strong>. They interact in specific ways:</p>
 <h3 id="conflict"><a class="header" href="#conflict">Conflict</a></h3>
-<p>If rules prove both <code>P</code> and <code>-P</code>:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; a
-r1: a =&gt; p
-r2: a =&gt; -p
+<p>If rules prove both <code>P</code> and <code>(not P)</code>:</p>
+<pre><code class="language-lisp">(given a)
+(normally r1 a p)
+(normally r2 a (not p))
 </code></pre>
 <p>Without superiority, neither is provable (ambiguity).</p>
 <h3 id="definite-blocking"><a class="header" href="#definite-blocking">Definite Blocking</a></h3>
-<p>If <code>-P</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; -p        # Definite fact: -p
-r1: a =&gt; p       # Tries to prove p
+<p>If <code>(not P)</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
+<pre><code class="language-lisp">(given (not p))              ; Definite fact: (not p)
+(normally r1 a p)            ; Tries to prove p
 </code></pre>
 <p>Even if r1’s body is satisfied, <code>+d p</code> is blocked because <code>+D -p</code>.</p>
 <h2 id="negation-in-rule-bodies"><a class="header" href="#negation-in-rule-bodies">Negation in Rule Bodies</a></h2>
 <p>Negated literals can appear in rule bodies:</p>
-<pre><code class="language-lisp">r1: bird, -penguin =&gt; flies    # Non-penguin birds fly
-r2: student, -employed =&gt; needs_loan
-</code></pre>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)
-</code></pre>
-<h2 id="double-negation"><a class="header" href="#double-negation">Double Negation</a></h2>
-<p><code>--P</code> is equivalent to <code>P</code>:</p>
-<pre><code class="language-lisp">r1: a =&gt; --flies    # Same as: a =&gt; flies
+<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
+(normally r2 (and student (not employed)) needs-loan)
 </code></pre>
 <h2 id="consistency"><a class="header" href="#consistency">Consistency</a></h2>
-<p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>-P</code>:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; p
-f2: &gt;&gt; -p
+<p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>(not P)</code>:</p>
+<pre><code class="language-lisp">(given p)
+(given (not p))
 </code></pre>
 <p>Result:</p>
 <ul>
@@ -274,10 +261,10 @@ f2: &gt;&gt; -p
 <p>To detect inconsistency, check for literals where both <code>+D P</code> and <code>+D -P</code> (or <code>+d P</code> and <code>+d -P</code>) are concluded.</p>
 <h2 id="closed-world-assumption"><a class="header" href="#closed-world-assumption">Closed World Assumption</a></h2>
 <p>Spindle does <strong>not</strong> use the Closed World Assumption by default. If you need it, add explicit rules:</p>
-<pre><code class="language-lisp"># CWA for 'guilty': if not proven guilty, then not guilty
-d1: &gt;&gt; -guilty           # Default: not guilty
-r1: evidence =&gt; guilty   # Can be overridden by evidence
-r1 &gt; d1
+<pre><code class="language-lisp">; CWA for 'guilty': if not proven guilty, then not guilty
+(given (not guilty))                    ; Default: not guilty
+(normally r1 evidence guilty)           ; Can be overridden by evidence
+(prefer r1 f1)
 </code></pre>
 <p>This pattern uses a defeatable default.</p>
 
