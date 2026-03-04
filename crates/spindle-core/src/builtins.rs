@@ -209,9 +209,10 @@ impl ExtensionFunction for MinFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
-        let mut acc = to_nv(args.first().ok_or_else(|| {
-            EvalError::TypeError("min requires at least 1 argument".into())
-        })?)?;
+        let mut acc = to_nv(
+            args.first()
+                .ok_or_else(|| EvalError::TypeError("min requires at least 1 argument".into()))?,
+        )?;
         for arg in &args[1..] {
             let val = to_nv(arg)?;
             let (ord, pa, pb) = numeric_cmp(acc, val)?;
@@ -247,9 +248,10 @@ impl ExtensionFunction for MaxFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
-        let mut acc = to_nv(args.first().ok_or_else(|| {
-            EvalError::TypeError("max requires at least 1 argument".into())
-        })?)?;
+        let mut acc = to_nv(
+            args.first()
+                .ok_or_else(|| EvalError::TypeError("max requires at least 1 argument".into()))?,
+        )?;
         for arg in &args[1..] {
             let val = to_nv(arg)?;
             let (ord, pa, pb) = numeric_cmp(acc, val)?;
@@ -482,8 +484,9 @@ impl ExtensionFunction for RoundFn {
         let dec = match &value {
             NumericValue::Integer(n) => Decimal::from(*n),
             NumericValue::Decimal(d) => *d,
-            NumericValue::Float(f) => Decimal::try_from(*f)
-                .map_err(|_| EvalError::from(ArithError::NonFiniteFloat))?,
+            NumericValue::Float(f) => {
+                Decimal::try_from(*f).map_err(|_| EvalError::from(ArithError::NonFiniteFloat))?
+            }
         };
 
         let rounded = dec.round_dp_with_strategy(dp, RoundingStrategy::MidpointNearestEven);
@@ -524,9 +527,7 @@ impl ExtensionFunction for FloorFn {
             NumericValue::Integer(n) => Ok(Term::Integer(*n)),
             NumericValue::Decimal(d) => {
                 let floored = d.floor();
-                let n = floored
-                    .to_i64()
-                    .ok_or(ArithError::IntegerOverflow)?;
+                let n = floored.to_i64().ok_or(ArithError::IntegerOverflow)?;
                 Ok(Term::Integer(n))
             }
             NumericValue::Float(f) => {
@@ -577,9 +578,7 @@ impl ExtensionFunction for CeilFn {
             NumericValue::Integer(n) => Ok(Term::Integer(*n)),
             NumericValue::Decimal(d) => {
                 let ceiled = d.ceil();
-                let n = ceiled
-                    .to_i64()
-                    .ok_or(ArithError::IntegerOverflow)?;
+                let n = ceiled.to_i64().ok_or(ArithError::IntegerOverflow)?;
                 Ok(Term::Integer(n))
             }
             NumericValue::Float(f) => {

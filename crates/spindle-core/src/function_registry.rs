@@ -453,13 +453,19 @@ mod tests {
 
         // Before merge: double(5) = 10
         let func_before = reg_a.get(intern("double")).unwrap();
-        assert_eq!(func_before.eval(&[Term::Integer(5)]).unwrap(), Term::Integer(10));
+        assert_eq!(
+            func_before.eval(&[Term::Integer(5)]).unwrap(),
+            Term::Integer(10)
+        );
 
         reg_a.merge(reg_b);
 
         // After merge: "double" is overridden by TripleFunction, so double(5) = 15
         assert_eq!(reg_a.names().count(), 1);
         let func_after = reg_a.get(intern("double")).unwrap();
-        assert_eq!(func_after.eval(&[Term::Integer(5)]).unwrap(), Term::Integer(15));
+        assert_eq!(
+            func_after.eval(&[Term::Integer(5)]).unwrap(),
+            Term::Integer(15)
+        );
     }
 }
