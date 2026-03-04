@@ -191,24 +191,19 @@ Validate → WildcardRewrite → Ground → TemporalBridge → TemporalVarValida
 
 **Trace:** TEST-013
 
-### REQ-007: Query Temporal Wildcard Matching
+### REQ-007: Query Temporal Matching
 
-**Statement:** The existing `Literal::PartialEq` (used by `query`, `what_if`, `why_not`, `abduce` for conclusion matching) excludes temporal bounds (ADR-005). After the identity fix, this means a query for `p` (base) will match conclusions for `p` (base) — which is already correct because bridging ensures `p` (base) is derived when any `p[s,e]` is derived. No change to the scalar `QueryResult` return type is required.
-
-A new public utility function `matches_query_temporal` is introduced for callers that need explicit temporal wildcard matching against a full conclusion list (e.g., CLI tools, WASM frontends that display all temporal variants). This function is **not** wired into the existing query operators — it is a standalone filter.
+**Statement:** Query operators (`query`, `what_if`, `why_not`, `abduce`) must use temporal-aware matching when comparing the query literal against conclusions. The matching function `matches_query_temporal` replaces the existing `Literal::PartialEq` comparisons at all conclusion-scanning points in the query operators. No change to the scalar `QueryResult` return type is required.
 
 **Matching function:**
 
 ```rust
-/// Temporal-aware matching for filtering conclusion lists.
+/// Temporal-aware matching for query operators and conclusion filtering.
 ///
-/// When `query.temporal` is empty, matches any temporal variant.
+/// When `query.temporal` is empty (wildcard), matches any temporal variant.
 /// When `query.temporal` is non-empty, requires exact temporal match.
-/// All other fields (functor, negation, mode, args) require exact match.
-///
-/// This is NOT used by the core query operators (which use Literal::PartialEq
-/// and operate on scalar QueryResult). It is a utility for downstream consumers
-/// that need to filter or display temporal variants from a conclusion list.
+/// All other fields (functor, negation, mode, args) use Literal::PartialEq
+/// semantics (exact match).
 pub fn matches_query_temporal(query: &Literal, conclusion: &Literal) -> bool {
     query.name_id() == conclusion.name_id()
         && query.negation == conclusion.negation
@@ -218,18 +213,17 @@ pub fn matches_query_temporal(query: &Literal, conclusion: &Literal) -> bool {
 }
 ```
 
-**Rationale:** The existing query API returns a scalar `QueryResult` with a `QueryStatus` (Provable/Refuted/Unknown), not a collection of conclusions. Changing this to return multiple results would be a breaking API change outside the scope of this spec. Instead:
+**Rationale:** `Literal::PartialEq` excludes temporal bounds (ADR-005), which means querying `p[1,10]` when only `p[20,30]` exists would incorrectly return "Provable" — a false positive. The `matches_query_temporal` function preserves backward compatibility for base queries (empty temporal acts as wildcard, matching any temporal variant) while fixing bounded queries (non-empty temporal requires exact match).
 
-- The core query operators work correctly as-is because bridging ensures base literals are derived.
-- The `matches_query_temporal` utility enables downstream code to filter conclusion lists for display.
-- A future spec may introduce a multi-result query API; this spec does not.
+**Specific code points changed:**
+- `query/mod.rs:355` — `conc.literal == *literal` → `matches_query_temporal(literal, &conc.literal)`. Fixes false-positive provability for interval-specific queries.
+- `query/mod.rs:363` — `conc.literal == complement` → `matches_query_temporal(&complement, &conc.literal)`. Fixes false-positive refutation for interval-specific queries.
+- `query/why_not.rs:183` — `c.literal == *literal` → `matches_query_temporal(literal, &c.literal)`. Same fix for why-not provability check.
+- `query/abduce.rs:122` — `c.literal == *goal` → `matches_query_temporal(goal, &c.literal)`. Same fix for abduction provability check.
 
-**Specific code points unchanged:**
-- `query/mod.rs:355` — `conc.literal == *literal` uses `Literal::PartialEq` (temporal-agnostic), correct for base matching.
-- `query/why_not.rs:183` — `c.literal == *literal`, same.
-- `query/abduce.rs:122` — `c.literal == *goal`, same.
+**Backward compatibility:** When the query literal has `temporal = Temporal::empty()` (the common case for non-temporal queries), `matches_query_temporal` degrades to the same behaviour as `Literal::PartialEq` — it matches any temporal variant. This means all existing non-temporal queries produce identical results.
 
-**Note:** This matching is used ONLY in the standalone utility, NOT in rule body satisfaction (which uses exact `LitId` equality via the index) or core query operators (which use `Literal::PartialEq`).
+**Note:** This matching is used in query operators and as a public utility for downstream consumers. It is NOT used in rule body satisfaction (which uses exact `LitId` equality via the index).
 
 **Trace:** TEST-014, TEST-015, TEST-016
 
@@ -369,7 +363,7 @@ The `Term::Display` implementation renders all term variants unambiguously (symb
 - `Literal::PartialEq` is used in many contexts (rule body matching, theory manipulation, test assertions) where temporal-agnostic equality is correct.
 - Temporal identity is handled exclusively via `AtomKey`/`LitId` in the indexer, which is the single point of truth for reasoning identity.
 - The branch demonstrated that changing `Literal::PartialEq` creates cascading failures across the codebase (see BUG-001 §Cycle 3).
-- Query temporal matching uses the explicit `matches_query_temporal` utility (REQ-007) rather than `PartialEq`.
+- Query operators use the explicit `matches_query_temporal` function (REQ-007) for conclusion matching, which adds temporal awareness without changing `PartialEq` itself.
 
 ---
 
@@ -415,16 +409,17 @@ impl PipelineStage for TemporalBridge {
 }
 ```
 
-### CON-003: Temporal Query Matching Utility
+### CON-003: Temporal Query Matching Function
 
 ```rust
-/// Temporal-aware matching for filtering conclusion lists.
+/// Temporal-aware matching for query operators and conclusion filtering.
 ///
 /// Temporal wildcard: if query has empty temporal, matches any temporal.
 /// Otherwise requires exact temporal match.
 ///
-/// This is a standalone utility for downstream consumers (CLI, WASM),
-/// NOT wired into the core query operators which use Literal::PartialEq.
+/// Used by core query operators (query, what_if, why_not, abduce) to
+/// replace Literal::PartialEq at conclusion-scanning points, and as a
+/// public utility for downstream consumers (CLI, WASM).
 pub fn matches_query_temporal(query: &Literal, conclusion: &Literal) -> bool {
     query.name_id() == conclusion.name_id()
         && query.negation == conclusion.negation
@@ -750,6 +745,39 @@ assert!(p_matches.len() >= 3,
 
 ---
 
+**TEST-016b: Bounded query rejects wrong temporal window**
+
+```rust
+// >> p [20, 30].
+// Querying p[1,10] must return Unknown, NOT Provable.
+// This is the false-positive bug that occurs if query operators use
+// Literal::PartialEq (which ignores temporal) instead of matches_query_temporal.
+let theory = parse_spl_to_theory(">> p [20, 30].");
+
+// Query for p[1,10] — should be Unknown (no fact for that window)
+let query_lit = Literal::new("p", false, Mode::empty(),
+    Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)), vec![]);
+let result = query(&theory, &query_lit)?;
+assert_eq!(result.status, QueryStatus::Unknown,
+    "p[1,10] should be Unknown when only p[20,30] exists");
+
+// Query for p[20,30] — should be Provable
+let query_lit2 = Literal::new("p", false, Mode::empty(),
+    Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)), vec![]);
+let result2 = query(&theory, &query_lit2)?;
+assert_eq!(result2.status, QueryStatus::Provable,
+    "p[20,30] should be Provable");
+
+// Query for p (base, wildcard) — should be Provable via bridge
+let result3 = query(&theory, &Literal::simple("p"))?;
+assert_eq!(result3.status, QueryStatus::Provable,
+    "p (base) should be Provable via bridging");
+```
+
+**Trace:** REQ-007
+
+---
+
 **TEST-017: Non-temporal theory unchanged**
 
 ```rust
@@ -882,16 +910,21 @@ Strategy: Generate random non-temporal theories using the existing proptest gene
 
 **Risk:** Low — the stage is additive and the reasoner is unchanged.
 
-### Phase 4: Query Matching Utility (~20 lines)
+### Phase 4: Query Matching (~40 lines)
 
-**Files:** `crates/spindle-core/src/query/mod.rs`
+**Files:**
+- `crates/spindle-core/src/query/mod.rs` (add function + update `query_with_options`)
+- `crates/spindle-core/src/query/why_not.rs` (update comparison)
+- `crates/spindle-core/src/query/abduce.rs` (update comparison)
 
-1. Implement `matches_query_temporal` as a public utility function.
-2. No changes to existing query operators (`query`, `what_if`, `why_not`, `abduce`) — they already work correctly via `Literal::PartialEq` + bridging.
+1. Implement `matches_query_temporal` as a public function in `query/mod.rs`.
+2. Replace `conc.literal == *literal` with `matches_query_temporal(literal, &conc.literal)` in `query_with_options` (two sites: provable check and refuted check).
+3. Replace `c.literal == *literal` with `matches_query_temporal(literal, &c.literal)` in `why_not`.
+4. Replace `c.literal == *goal` with `matches_query_temporal(goal, &c.literal)` in `abduce`.
 
-**Tests:** TEST-014, TEST-015, TEST-016
+**Tests:** TEST-014, TEST-015, TEST-016, TEST-016b
 
-**Risk:** Low — additive utility function, no modifications to existing APIs.
+**Risk:** Low — `matches_query_temporal` with empty temporal degrades to `Literal::PartialEq` semantics, so non-temporal queries are unchanged.
 
 ---
 
@@ -934,12 +967,12 @@ The subsequent reasoning phases (definite closure, defeasible fixed-point) are u
 | **New code** | ~1,100 lines in defeasible.rs | ~100 lines in pipeline stage |
 | **Retraction cascades** | 9 modifications, circular fixes | Not applicable |
 | **Self-defeating cycles** | 5 iterations of detection | Impossible |
-| **Query changes** | 3-level matching, partial rollback | Standalone `matches_query_temporal` utility; core operators unchanged |
+| **Query changes** | 3-level matching, partial rollback | Single `matches_query_temporal` function in all 4 operators (REQ-007) |
 | **Literal::PartialEq** | Changed then partially reverted | Unchanged (ADR-005) |
 | **Soundness argument** | Not provided | Provided (§8) |
 | **Termination argument** | Not provided | Provided (§8) |
 | **Circular fix patterns** | 3 observed | None expected |
-| **Test count** | 30+ (1,139 lines) | 18 + 2 PBT (structured, traced) |
+| **Test count** | 30+ (1,139 lines) | 19 + 2 PBT (structured, traced) |
 
 ---
 
@@ -953,7 +986,7 @@ The subsequent reasoning phases (definite closure, defeasible fixed-point) are u
 | REQ-004 (TemporalBridge stage) | TEST-007, TEST-008, TEST-009, TEST-010 | ADR-001, ADR-003, ADR-004 |
 | REQ-005 (Bridge in SDL) | TEST-011, TEST-012 | ADR-001 |
 | REQ-006 (Negation complement) | TEST-013 | — |
-| REQ-007 (Query wildcard) | TEST-014, TEST-015, TEST-016 | ADR-005 |
+| REQ-007 (Query matching) | TEST-014, TEST-015, TEST-016, TEST-016b | ADR-005 |
 | REQ-008 (Backward compat) | TEST-017, TEST-PBT-002 | — |
 | REQ-009 (Conclusion temporal) | TEST-003, TEST-004 | — |
 | REQ-010 (Label determinism) | TEST-018 | — |
