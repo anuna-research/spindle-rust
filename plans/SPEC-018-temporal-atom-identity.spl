@@ -1,0 +1,766 @@
+;; SPEC-018: Temporal Atom Identity and Proof Lift via Synthetic Bridging
+;; Implementation plan for fixing temporal atom identity collapse (BUG-001)
+
+(meta plan
+  (id "IMPL-018")
+  (title "Temporal Atom Identity and Proof Lift via Synthetic Bridging")
+  (version "1.0.0")
+  (status "active")
+  (created "2026-03-04")
+  (author "agent:architect")
+  (spec "SPEC-018")
+  (description "Fix temporal atom identity collapse in AtomKey, add synthetic bridging pipeline stage for temporal subsumption, and implement temporal-aware query matching"))
+
+;; Agents
+(given agent-coder-available)
+(given agent-reviewer-available)
+
+;; ============================================================
+;; Phase 1: Identity Fix — AtomKey temporal inclusion
+;; ============================================================
+
+(given task-atomkey-temporal)
+(given no-deps-atomkey-temporal)
+
+(meta task-atomkey-temporal
+  (description "Add temporal: Temporal field to AtomKey struct in index.rs so that p[1,10] and p[20,30] produce distinct AtomId/LitId values")
+  (acceptance "TEST-001 and TEST-002 pass: distinct temporal variants produce different AtomIds")
+  (context-files "crates/spindle-core/src/index.rs")
+  (token-budget "6000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-intern-literal-temporal)
+
+(meta task-intern-literal-temporal
+  (description "Update intern_literal and get_lit_id in index.rs to include lit.temporal.clone() in the AtomKey construction")
+  (acceptance "Interning includes temporal bounds; existing non-temporal interning unchanged")
+  (context-files "crates/spindle-core/src/index.rs")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-resolve-literal-temporal)
+
+(meta task-resolve-literal-temporal
+  (description "Update resolve_literal in index.rs to return key.temporal.clone() instead of Temporal::empty()")
+  (acceptance "TEST-003 and TEST-004 pass: resolve_literal roundtrips temporal bounds correctly")
+  (context-files "crates/spindle-core/src/index.rs")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-phase1-tests)
+
+(meta task-phase1-tests
+  (description "Write unit tests TEST-001 through TEST-004 and TEST-013 for temporal atom identity and resolve_literal preservation")
+  (acceptance "All 5 tests pass: distinct AtomIds for temporal variants, resolve_literal roundtrip, complement preserves temporal")
+  (context-files "crates/spindle-core/src/index.rs" "crates/spindle-core/tests/")
+  (token-budget "8000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+;; Phase 1 dependency chain
+(normally r-ready-atomkey-temporal
+  (and task-atomkey-temporal no-deps-atomkey-temporal)
+  ready-atomkey-temporal)
+
+(normally r-ready-intern-literal-temporal
+  (and task-intern-literal-temporal completed-atomkey-temporal)
+  ready-intern-literal-temporal)
+
+(normally r-ready-resolve-literal-temporal
+  (and task-resolve-literal-temporal completed-intern-literal-temporal)
+  ready-resolve-literal-temporal)
+
+(normally r-ready-phase1-tests
+  (and task-phase1-tests completed-resolve-literal-temporal)
+  ready-phase1-tests)
+
+;; ============================================================
+;; Phase 2: Pipeline Stage — TemporalBridge
+;; ============================================================
+
+(given task-bridge-stage-impl)
+
+(meta task-bridge-stage-impl
+  (description "Implement TemporalBridge as a PipelineStage in new file temporal_bridge.rs: scan temporal heads, generate strict bridging rules q[s,e] -> base(q) and coupled negation bridges ~q[s,e] -> ~base(q)")
+  (acceptance "TEST-007 through TEST-010 pass: bridge rules generated for temporal facts, negation bridges generated, no-op for non-temporal theories")
+  (context-files "crates/spindle-core/src/pipeline/temporal_bridge.rs" "crates/spindle-core/src/pipeline/mod.rs")
+  (token-budget "10000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-bridge-label-determinism)
+
+(meta task-bridge-label-determinism
+  (description "Ensure bridge labels use format __bridge::<to_spl()> and __bridge::neg::<to_spl()> with idempotency guard checking for pre-existing labels")
+  (acceptance "TEST-018 passes: bridge labels are deterministic and collision-free across repeated applications")
+  (context-files "crates/spindle-core/src/pipeline/temporal_bridge.rs")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-bridge-deduplication)
+
+(meta task-bridge-deduplication
+  (description "Implement deduplication by bridge label so that multiple rules sharing the same temporal head produce only one bridge; check for pre-existing __bridge:: labels before generation")
+  (acceptance "Duplicate temporal heads produce exactly one bridge rule per distinct temporal literal")
+  (context-files "crates/spindle-core/src/pipeline/temporal_bridge.rs")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-phase2-tests)
+
+(meta task-phase2-tests
+  (description "Write unit tests TEST-007 through TEST-010 and TEST-018 for TemporalBridge pipeline stage")
+  (acceptance "All 5 tests pass: bridge generation, unconditional generation, negation bridge, no-op for non-temporal, label determinism")
+  (context-files "crates/spindle-core/tests/")
+  (token-budget "8000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+;; Phase 2 dependencies: requires Phase 1 complete, tasks within phase are partially parallel
+(normally r-ready-bridge-stage-impl
+  (and task-bridge-stage-impl completed-phase1-tests)
+  ready-bridge-stage-impl)
+
+(normally r-ready-bridge-label-determinism
+  (and task-bridge-label-determinism completed-bridge-stage-impl)
+  ready-bridge-label-determinism)
+
+(normally r-ready-bridge-deduplication
+  (and task-bridge-deduplication completed-bridge-stage-impl)
+  ready-bridge-deduplication)
+
+(normally r-ready-phase2-tests
+  (and task-phase2-tests completed-bridge-label-determinism completed-bridge-deduplication)
+  ready-phase2-tests)
+
+;; ============================================================
+;; Phase 3: Integration — Wire bridge into pipeline
+;; ============================================================
+
+(given task-pipeline-integration)
+
+(meta task-pipeline-integration
+  (description "Wire TemporalBridge into prepare() pipeline after Ground and before TemporalVarValidation; also add to Pipeline::default_pipeline()")
+  (acceptance "Bridge stage runs in pipeline order: Validate -> WildcardRewrite -> Ground -> TemporalBridge -> TemporalVarValidation -> [TemporalFilter]")
+  (context-files "crates/spindle-core/src/pipeline/mod.rs" "crates/spindle-core/src/pipeline.rs")
+  (token-budget "6000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-integration-tests)
+
+(meta task-integration-tests
+  (description "Write integration tests TEST-005, TEST-006, TEST-011, TEST-012, TEST-017 verifying end-to-end temporal bridging, cross-window blocking, defeasible defeat through bridge, and non-temporal backward compatibility")
+  (acceptance "All 5 integration tests pass; existing test suite remains green")
+  (context-files "crates/spindle-core/tests/")
+  (token-budget "10000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-backward-compat-validation)
+
+(meta task-backward-compat-validation
+  (description "Run full existing test suite to verify non-temporal theories produce identical results; verify TemporalBridge is no-op for non-temporal theories")
+  (acceptance "All pre-existing tests pass without modification; TEST-017 Nixon diamond unchanged")
+  (context-files "crates/spindle-core/tests/")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test" "test:cargo test -p spindle-parser"))
+
+;; Phase 3 dependencies
+(normally r-ready-pipeline-integration
+  (and task-pipeline-integration completed-phase2-tests)
+  ready-pipeline-integration)
+
+(normally r-ready-integration-tests
+  (and task-integration-tests completed-pipeline-integration)
+  ready-integration-tests)
+
+(normally r-ready-backward-compat-validation
+  (and task-backward-compat-validation completed-integration-tests)
+  ready-backward-compat-validation)
+
+;; ============================================================
+;; Phase 4: Query Matching — temporal-aware query operators
+;; ============================================================
+
+(given task-matches-query-temporal)
+
+(meta task-matches-query-temporal
+  (description "Implement matches_query_temporal public function in query/mod.rs: temporal wildcard when query has empty temporal, exact match when non-empty")
+  (acceptance "TEST-014 and TEST-015 pass: wildcard matches all variants, specific temporal matches only exact")
+  (context-files "crates/spindle-core/src/query/mod.rs")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-query-operator-updates)
+
+(meta task-query-operator-updates
+  (description "Replace Literal::PartialEq comparisons with matches_query_temporal in query/mod.rs (2 sites), query/why_not.rs (1 site), and query/abduce.rs (1 site)")
+  (acceptance "TEST-016 and TEST-016b pass: bounded queries reject wrong temporal windows, wildcard queries match all variants")
+  (context-files "crates/spindle-core/src/query/mod.rs" "crates/spindle-core/src/query/why_not.rs" "crates/spindle-core/src/query/abduce.rs")
+  (token-budget "6000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+(given task-phase4-tests)
+
+(meta task-phase4-tests
+  (description "Write unit tests TEST-014 through TEST-016b for temporal query matching")
+  (acceptance "All 4 tests pass: wildcard matching, exact matching, conclusion list filtering, bounded query false-positive prevention")
+  (context-files "crates/spindle-core/tests/")
+  (token-budget "8000")
+  (evaluate-checks "test:cargo test -p spindle-core"))
+
+;; Phase 4 dependencies
+(normally r-ready-matches-query-temporal
+  (and task-matches-query-temporal completed-backward-compat-validation)
+  ready-matches-query-temporal)
+
+(normally r-ready-query-operator-updates
+  (and task-query-operator-updates completed-matches-query-temporal)
+  ready-query-operator-updates)
+
+(normally r-ready-phase4-tests
+  (and task-phase4-tests completed-query-operator-updates)
+  ready-phase4-tests)
+
+;; ============================================================
+;; Final: Property-based tests and full validation
+;; ============================================================
+
+(given task-pbt-temporal-identity)
+
+(meta task-pbt-temporal-identity
+  (description "Implement TEST-PBT-001: proptest that verifies temporal identity bijection — intern(p)==intern(q) iff all fields including temporal match")
+  (acceptance "PBT passes 500+ cases with random theories containing 1-10 temporal and non-temporal facts")
+  (context-files "crates/spindle-core/tests/")
+  (token-budget "8000")
+  (evaluate-checks "test:cargo test -p spindle-core pbt"))
+
+(given task-pbt-non-temporal-equivalence)
+
+(meta task-pbt-non-temporal-equivalence
+  (description "Implement TEST-PBT-002: proptest that verifies non-temporal theories produce identical conclusions with and without TemporalBridge stage")
+  (acceptance "PBT passes 500+ cases using existing proptest generators from difftest.rs")
+  (context-files "crates/spindle-core/tests/difftest.rs" "crates/spindle-core/tests/")
+  (token-budget "8000")
+  (evaluate-checks "test:cargo test -p spindle-core pbt"))
+
+(given task-final-validation)
+
+(meta task-final-validation
+  (description "Run complete test suite across all workspace crates, verify zero defeasible.rs modifications, verify all 19 unit tests and 2 PBTs pass")
+  (acceptance "cargo test passes for all crates; defeasible.rs is byte-identical to pre-implementation state; no regressions")
+  (context-files "crates/")
+  (token-budget "4000")
+  (evaluate-checks "test:cargo test" "lint:cargo clippy -- -D warnings"))
+
+;; Final phase dependencies
+(normally r-ready-pbt-temporal-identity
+  (and task-pbt-temporal-identity completed-phase4-tests)
+  ready-pbt-temporal-identity)
+
+(normally r-ready-pbt-non-temporal-equivalence
+  (and task-pbt-non-temporal-equivalence completed-phase4-tests)
+  ready-pbt-non-temporal-equivalence)
+
+(normally r-ready-final-validation
+  (and task-final-validation completed-pbt-temporal-identity completed-pbt-non-temporal-equivalence)
+  ready-final-validation)
+
+;; ============================================================
+;; Assignment rules
+;; ============================================================
+
+;; Phase 1 assignments — core index changes to coder
+(normally r-assign-atomkey-temporal
+  (and ready-atomkey-temporal agent-coder-available)
+  assign-to-atomkey-temporal-coder)
+(normally r-assign-intern-literal-temporal
+  (and ready-intern-literal-temporal agent-coder-available)
+  assign-to-intern-literal-temporal-coder)
+(normally r-assign-resolve-literal-temporal
+  (and ready-resolve-literal-temporal agent-coder-available)
+  assign-to-resolve-literal-temporal-coder)
+(normally r-assign-phase1-tests
+  (and ready-phase1-tests agent-coder-available)
+  assign-to-phase1-tests-coder)
+
+;; Phase 2 assignments — pipeline stage to coder
+(normally r-assign-bridge-stage-impl
+  (and ready-bridge-stage-impl agent-coder-available)
+  assign-to-bridge-stage-impl-coder)
+(normally r-assign-bridge-label-determinism
+  (and ready-bridge-label-determinism agent-coder-available)
+  assign-to-bridge-label-determinism-coder)
+(normally r-assign-bridge-deduplication
+  (and ready-bridge-deduplication agent-coder-available)
+  assign-to-bridge-deduplication-coder)
+(normally r-assign-phase2-tests
+  (and ready-phase2-tests agent-coder-available)
+  assign-to-phase2-tests-coder)
+
+;; Phase 3 assignments — integration to coder
+(normally r-assign-pipeline-integration
+  (and ready-pipeline-integration agent-coder-available)
+  assign-to-pipeline-integration-coder)
+(normally r-assign-integration-tests
+  (and ready-integration-tests agent-coder-available)
+  assign-to-integration-tests-coder)
+(normally r-assign-backward-compat-validation
+  (and ready-backward-compat-validation agent-coder-available)
+  assign-to-backward-compat-validation-coder)
+
+;; Phase 4 assignments — query matching to coder
+(normally r-assign-matches-query-temporal
+  (and ready-matches-query-temporal agent-coder-available)
+  assign-to-matches-query-temporal-coder)
+(normally r-assign-query-operator-updates
+  (and ready-query-operator-updates agent-coder-available)
+  assign-to-query-operator-updates-coder)
+(normally r-assign-phase4-tests
+  (and ready-phase4-tests agent-coder-available)
+  assign-to-phase4-tests-coder)
+
+;; Final phase assignments — PBTs to coder, final validation to reviewer
+(normally r-assign-pbt-temporal-identity
+  (and ready-pbt-temporal-identity agent-coder-available)
+  assign-to-pbt-temporal-identity-coder)
+(normally r-assign-pbt-non-temporal-equivalence
+  (and ready-pbt-non-temporal-equivalence agent-coder-available)
+  assign-to-pbt-non-temporal-equivalence-coder)
+
+(normally r-assign-final-validation-coder
+  (and ready-final-validation agent-coder-available)
+  assign-to-final-validation-coder)
+(normally r-assign-final-validation-reviewer
+  (and ready-final-validation agent-reviewer-available)
+  assign-to-final-validation-reviewer)
+
+;; Superiority: reviewer should handle final validation (sign-off)
+(prefer r-assign-final-validation-reviewer r-assign-final-validation-coder)
+
+(meta r-assign-final-validation-reviewer
+  (description "Final validation and sign-off assigned to reviewer")
+  (justification "Reviewer verifies zero defeasible.rs modifications and full backward compatibility"))
+
+;; ============================================================
+;; Safety constraints / defeaters
+;; ============================================================
+
+;; Block integration if Phase 1 tests fail
+(except d-block-integration-on-phase1-failure
+  failed-phase1-tests
+  (not ready-pipeline-integration))
+
+;; Block final validation if any integration test fails
+(except d-block-final-on-integration-failure
+  failed-integration-tests
+  (not ready-final-validation))
+
+;; Block final validation if defeasible.rs was modified (invariant from REQ-005)
+(except d-block-final-on-defeasible-modified
+  defeasible-rs-modified
+  (not ready-final-validation))
+
+;; Block query operator updates if backward compat fails
+(except d-block-query-on-compat-failure
+  failed-backward-compat-validation
+  (not ready-matches-query-temporal))
+
+(meta d-block-final-on-defeasible-modified
+  (description "Final validation blocked if defeasible.rs was modified")
+  (justification "REQ-005 invariant: zero modifications to the defeasible reasoning module"))
+
+(meta d-block-integration-on-phase1-failure
+  (description "Pipeline integration blocked if Phase 1 identity tests fail")
+  (justification "Correct AtomKey identity is prerequisite for all downstream phases"))
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:28:59Z"
+  (given delegated-v1-atomkey-temporal-to-agent:claude)
+  (given (during (leased-v1-atomkey-temporal) (moment "2026-03-04T06:28:59Z") (moment "2026-03-04T06:58:59Z")))
+  (given claim-v1-atomkey-temporal-by-claude)
+  (normally r-cl-state-v1-atomkey-temporal-by-claude claim-v1-atomkey-temporal-by-claude state-claimed-v1-atomkey-temporal-by-claude)
+  (normally r-cl-chain-v1-atomkey-temporal-by-claude state-claimed-v1-atomkey-temporal-by-claude claimed-atomkey-temporal)
+)
+
+;; Propagation rules: failures in 'atomkey-temporal' block downstream tasks
+(normally r-propagate-intern-literal-temporal-from-atomkey-temporal-failed failed-atomkey-temporal upstream-blocked-intern-literal-temporal)
+(normally r-propagate-intern-literal-temporal-from-atomkey-temporal-permanently-failed permanently-failed-atomkey-temporal upstream-blocked-intern-literal-temporal)
+(normally r-propagate-intern-literal-temporal-from-atomkey-temporal-stale-v1 stale-v1-atomkey-temporal upstream-blocked-intern-literal-temporal)
+(normally r-propagate-intern-literal-temporal-from-atomkey-temporal-timeout-v1 timeout-v1-atomkey-temporal upstream-blocked-intern-literal-temporal)
+(normally r-propagate-intern-literal-temporal-from-atomkey-temporal-blocked upstream-blocked-atomkey-temporal upstream-blocked-intern-literal-temporal)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-resolve-literal-temporal-from-intern-literal-temporal-blocked upstream-blocked-intern-literal-temporal upstream-blocked-resolve-literal-temporal)
+(normally r-propagate-phase1-tests-from-resolve-literal-temporal-blocked upstream-blocked-resolve-literal-temporal upstream-blocked-phase1-tests)
+(normally r-propagate-bridge-stage-impl-from-phase1-tests-blocked upstream-blocked-phase1-tests upstream-blocked-bridge-stage-impl)
+(normally r-propagate-bridge-deduplication-from-bridge-stage-impl-blocked upstream-blocked-bridge-stage-impl upstream-blocked-bridge-deduplication)
+(normally r-propagate-bridge-label-determinism-from-bridge-stage-impl-blocked upstream-blocked-bridge-stage-impl upstream-blocked-bridge-label-determinism)
+(normally r-propagate-phase2-tests-from-bridge-deduplication-blocked upstream-blocked-bridge-deduplication upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-label-determinism-blocked upstream-blocked-bridge-label-determinism upstream-blocked-phase2-tests)
+(normally r-propagate-pipeline-integration-from-phase2-tests-blocked upstream-blocked-phase2-tests upstream-blocked-pipeline-integration)
+(normally r-propagate-integration-tests-from-pipeline-integration-blocked upstream-blocked-pipeline-integration upstream-blocked-integration-tests)
+(normally r-propagate-backward-compat-validation-from-integration-tests-blocked upstream-blocked-integration-tests upstream-blocked-backward-compat-validation)
+(normally r-propagate-matches-query-temporal-from-backward-compat-validation-blocked upstream-blocked-backward-compat-validation upstream-blocked-matches-query-temporal)
+(normally r-propagate-query-operator-updates-from-matches-query-temporal-blocked upstream-blocked-matches-query-temporal upstream-blocked-query-operator-updates)
+(normally r-propagate-phase4-tests-from-query-operator-updates-blocked upstream-blocked-query-operator-updates upstream-blocked-phase4-tests)
+(normally r-propagate-pbt-non-temporal-equivalence-from-phase4-tests-blocked upstream-blocked-phase4-tests upstream-blocked-pbt-non-temporal-equivalence)
+(normally r-propagate-pbt-temporal-identity-from-phase4-tests-blocked upstream-blocked-phase4-tests upstream-blocked-pbt-temporal-identity)
+(normally r-propagate-final-validation-from-pbt-non-temporal-equivalence-blocked upstream-blocked-pbt-non-temporal-equivalence upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-temporal-identity-blocked upstream-blocked-pbt-temporal-identity upstream-blocked-final-validation)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:32:16Z"
+  (given completed-atomkey-temporal)
+  (given eval-result-v1-atomkey-temporal-by-claude)
+  (given eval-confidence-v1-atomkey-temporal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:32:22Z"
+  (given delegated-v1-intern-literal-temporal-to-agent:claude)
+  (given (during (leased-v1-intern-literal-temporal) (moment "2026-03-04T06:32:22Z") (moment "2026-03-04T07:02:22Z")))
+  (given claim-v1-intern-literal-temporal-by-claude)
+  (normally r-cl-state-v1-intern-literal-temporal-by-claude claim-v1-intern-literal-temporal-by-claude state-claimed-v1-intern-literal-temporal-by-claude)
+  (normally r-cl-chain-v1-intern-literal-temporal-by-claude state-claimed-v1-intern-literal-temporal-by-claude claimed-intern-literal-temporal)
+)
+
+;; Propagation rules: failures in 'intern-literal-temporal' block downstream tasks
+(normally r-propagate-resolve-literal-temporal-from-intern-literal-temporal-failed failed-intern-literal-temporal upstream-blocked-resolve-literal-temporal)
+(normally r-propagate-resolve-literal-temporal-from-intern-literal-temporal-permanently-failed permanently-failed-intern-literal-temporal upstream-blocked-resolve-literal-temporal)
+(normally r-propagate-resolve-literal-temporal-from-intern-literal-temporal-stale-v1 stale-v1-intern-literal-temporal upstream-blocked-resolve-literal-temporal)
+(normally r-propagate-resolve-literal-temporal-from-intern-literal-temporal-timeout-v1 timeout-v1-intern-literal-temporal upstream-blocked-resolve-literal-temporal)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:33:29Z"
+  (given completed-intern-literal-temporal)
+  (given eval-result-v1-intern-literal-temporal-by-claude)
+  (given eval-confidence-v1-intern-literal-temporal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:33:34Z"
+  (given delegated-v1-resolve-literal-temporal-to-agent:claude)
+  (given (during (leased-v1-resolve-literal-temporal) (moment "2026-03-04T06:33:34Z") (moment "2026-03-04T07:03:34Z")))
+  (given claim-v1-resolve-literal-temporal-by-claude)
+  (normally r-cl-state-v1-resolve-literal-temporal-by-claude claim-v1-resolve-literal-temporal-by-claude state-claimed-v1-resolve-literal-temporal-by-claude)
+  (normally r-cl-chain-v1-resolve-literal-temporal-by-claude state-claimed-v1-resolve-literal-temporal-by-claude claimed-resolve-literal-temporal)
+)
+
+;; Propagation rules: failures in 'resolve-literal-temporal' block downstream tasks
+(normally r-propagate-phase1-tests-from-resolve-literal-temporal-failed failed-resolve-literal-temporal upstream-blocked-phase1-tests)
+(normally r-propagate-phase1-tests-from-resolve-literal-temporal-permanently-failed permanently-failed-resolve-literal-temporal upstream-blocked-phase1-tests)
+(normally r-propagate-phase1-tests-from-resolve-literal-temporal-stale-v1 stale-v1-resolve-literal-temporal upstream-blocked-phase1-tests)
+(normally r-propagate-phase1-tests-from-resolve-literal-temporal-timeout-v1 timeout-v1-resolve-literal-temporal upstream-blocked-phase1-tests)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:34:28Z"
+  (given completed-resolve-literal-temporal)
+  (given eval-result-v1-resolve-literal-temporal-by-claude)
+  (given eval-confidence-v1-resolve-literal-temporal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:34:33Z"
+  (given delegated-v1-phase1-tests-to-agent:claude)
+  (given (during (leased-v1-phase1-tests) (moment "2026-03-04T06:34:33Z") (moment "2026-03-04T07:04:33Z")))
+  (given claim-v1-phase1-tests-by-claude)
+  (normally r-cl-state-v1-phase1-tests-by-claude claim-v1-phase1-tests-by-claude state-claimed-v1-phase1-tests-by-claude)
+  (normally r-cl-chain-v1-phase1-tests-by-claude state-claimed-v1-phase1-tests-by-claude claimed-phase1-tests)
+)
+
+;; Propagation rules: failures in 'phase1-tests' block downstream tasks
+(normally r-propagate-bridge-stage-impl-from-phase1-tests-failed failed-phase1-tests upstream-blocked-bridge-stage-impl)
+(normally r-propagate-bridge-stage-impl-from-phase1-tests-permanently-failed permanently-failed-phase1-tests upstream-blocked-bridge-stage-impl)
+(normally r-propagate-bridge-stage-impl-from-phase1-tests-stale-v1 stale-v1-phase1-tests upstream-blocked-bridge-stage-impl)
+(normally r-propagate-bridge-stage-impl-from-phase1-tests-timeout-v1 timeout-v1-phase1-tests upstream-blocked-bridge-stage-impl)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:37:01Z"
+  (given completed-phase1-tests)
+  (given eval-result-v1-phase1-tests-by-claude)
+  (given eval-confidence-v1-phase1-tests-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:37:06Z"
+  (given delegated-v1-bridge-stage-impl-to-agent:claude)
+  (given (during (leased-v1-bridge-stage-impl) (moment "2026-03-04T06:37:06Z") (moment "2026-03-04T07:07:06Z")))
+  (given claim-v1-bridge-stage-impl-by-claude)
+  (normally r-cl-state-v1-bridge-stage-impl-by-claude claim-v1-bridge-stage-impl-by-claude state-claimed-v1-bridge-stage-impl-by-claude)
+  (normally r-cl-chain-v1-bridge-stage-impl-by-claude state-claimed-v1-bridge-stage-impl-by-claude claimed-bridge-stage-impl)
+)
+
+;; Propagation rules: failures in 'bridge-stage-impl' block downstream tasks
+(normally r-propagate-bridge-deduplication-from-bridge-stage-impl-failed failed-bridge-stage-impl upstream-blocked-bridge-deduplication)
+(normally r-propagate-bridge-deduplication-from-bridge-stage-impl-permanently-failed permanently-failed-bridge-stage-impl upstream-blocked-bridge-deduplication)
+(normally r-propagate-bridge-deduplication-from-bridge-stage-impl-stale-v1 stale-v1-bridge-stage-impl upstream-blocked-bridge-deduplication)
+(normally r-propagate-bridge-deduplication-from-bridge-stage-impl-timeout-v1 timeout-v1-bridge-stage-impl upstream-blocked-bridge-deduplication)
+(normally r-propagate-bridge-label-determinism-from-bridge-stage-impl-failed failed-bridge-stage-impl upstream-blocked-bridge-label-determinism)
+(normally r-propagate-bridge-label-determinism-from-bridge-stage-impl-permanently-failed permanently-failed-bridge-stage-impl upstream-blocked-bridge-label-determinism)
+(normally r-propagate-bridge-label-determinism-from-bridge-stage-impl-stale-v1 stale-v1-bridge-stage-impl upstream-blocked-bridge-label-determinism)
+(normally r-propagate-bridge-label-determinism-from-bridge-stage-impl-timeout-v1 timeout-v1-bridge-stage-impl upstream-blocked-bridge-label-determinism)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:43:12Z"
+  (given completed-bridge-stage-impl)
+  (given eval-result-v1-bridge-stage-impl-by-claude)
+  (given eval-confidence-v1-bridge-stage-impl-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:43:18Z"
+  (given delegated-v1-bridge-deduplication-to-agent:claude)
+  (given (during (leased-v1-bridge-deduplication) (moment "2026-03-04T06:43:18Z") (moment "2026-03-04T07:13:18Z")))
+  (given claim-v1-bridge-deduplication-by-claude)
+  (normally r-cl-state-v1-bridge-deduplication-by-claude claim-v1-bridge-deduplication-by-claude state-claimed-v1-bridge-deduplication-by-claude)
+  (normally r-cl-chain-v1-bridge-deduplication-by-claude state-claimed-v1-bridge-deduplication-by-claude claimed-bridge-deduplication)
+)
+
+;; Propagation rules: failures in 'bridge-deduplication' block downstream tasks
+(normally r-propagate-phase2-tests-from-bridge-deduplication-failed failed-bridge-deduplication upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-deduplication-permanently-failed permanently-failed-bridge-deduplication upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-deduplication-stale-v1 stale-v1-bridge-deduplication upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-deduplication-timeout-v1 timeout-v1-bridge-deduplication upstream-blocked-phase2-tests)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:45:21Z"
+  (given completed-bridge-deduplication)
+  (given eval-result-v1-bridge-deduplication-by-claude)
+  (given eval-confidence-v1-bridge-deduplication-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:45:27Z"
+  (given delegated-v1-bridge-label-determinism-to-agent:claude)
+  (given (during (leased-v1-bridge-label-determinism) (moment "2026-03-04T06:45:27Z") (moment "2026-03-04T07:15:27Z")))
+  (given claim-v1-bridge-label-determinism-by-claude)
+  (normally r-cl-state-v1-bridge-label-determinism-by-claude claim-v1-bridge-label-determinism-by-claude state-claimed-v1-bridge-label-determinism-by-claude)
+  (normally r-cl-chain-v1-bridge-label-determinism-by-claude state-claimed-v1-bridge-label-determinism-by-claude claimed-bridge-label-determinism)
+)
+
+;; Propagation rules: failures in 'bridge-label-determinism' block downstream tasks
+(normally r-propagate-phase2-tests-from-bridge-label-determinism-failed failed-bridge-label-determinism upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-label-determinism-permanently-failed permanently-failed-bridge-label-determinism upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-label-determinism-stale-v1 stale-v1-bridge-label-determinism upstream-blocked-phase2-tests)
+(normally r-propagate-phase2-tests-from-bridge-label-determinism-timeout-v1 timeout-v1-bridge-label-determinism upstream-blocked-phase2-tests)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:47:36Z"
+  (given completed-bridge-label-determinism)
+  (given eval-result-v1-bridge-label-determinism-by-claude)
+  (given eval-confidence-v1-bridge-label-determinism-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:47:41Z"
+  (given delegated-v1-phase2-tests-to-agent:claude)
+  (given (during (leased-v1-phase2-tests) (moment "2026-03-04T06:47:41Z") (moment "2026-03-04T07:17:41Z")))
+  (given claim-v1-phase2-tests-by-claude)
+  (normally r-cl-state-v1-phase2-tests-by-claude claim-v1-phase2-tests-by-claude state-claimed-v1-phase2-tests-by-claude)
+  (normally r-cl-chain-v1-phase2-tests-by-claude state-claimed-v1-phase2-tests-by-claude claimed-phase2-tests)
+)
+
+;; Propagation rules: failures in 'phase2-tests' block downstream tasks
+(normally r-propagate-pipeline-integration-from-phase2-tests-failed failed-phase2-tests upstream-blocked-pipeline-integration)
+(normally r-propagate-pipeline-integration-from-phase2-tests-permanently-failed permanently-failed-phase2-tests upstream-blocked-pipeline-integration)
+(normally r-propagate-pipeline-integration-from-phase2-tests-stale-v1 stale-v1-phase2-tests upstream-blocked-pipeline-integration)
+(normally r-propagate-pipeline-integration-from-phase2-tests-timeout-v1 timeout-v1-phase2-tests upstream-blocked-pipeline-integration)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:53:13Z"
+  (given completed-phase2-tests)
+  (given eval-result-v1-phase2-tests-by-claude)
+  (given eval-confidence-v1-phase2-tests-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:53:18Z"
+  (given delegated-v1-pipeline-integration-to-agent:claude)
+  (given (during (leased-v1-pipeline-integration) (moment "2026-03-04T06:53:18Z") (moment "2026-03-04T07:23:18Z")))
+  (given claim-v1-pipeline-integration-by-claude)
+  (normally r-cl-state-v1-pipeline-integration-by-claude claim-v1-pipeline-integration-by-claude state-claimed-v1-pipeline-integration-by-claude)
+  (normally r-cl-chain-v1-pipeline-integration-by-claude state-claimed-v1-pipeline-integration-by-claude claimed-pipeline-integration)
+)
+
+;; Propagation rules: failures in 'pipeline-integration' block downstream tasks
+(normally r-propagate-integration-tests-from-pipeline-integration-failed failed-pipeline-integration upstream-blocked-integration-tests)
+(normally r-propagate-integration-tests-from-pipeline-integration-permanently-failed permanently-failed-pipeline-integration upstream-blocked-integration-tests)
+(normally r-propagate-integration-tests-from-pipeline-integration-stale-v1 stale-v1-pipeline-integration upstream-blocked-integration-tests)
+(normally r-propagate-integration-tests-from-pipeline-integration-timeout-v1 timeout-v1-pipeline-integration upstream-blocked-integration-tests)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:54:50Z"
+  (given completed-pipeline-integration)
+  (given eval-result-v1-pipeline-integration-by-claude)
+  (given eval-confidence-v1-pipeline-integration-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:54:55Z"
+  (given delegated-v1-integration-tests-to-agent:claude)
+  (given (during (leased-v1-integration-tests) (moment "2026-03-04T06:54:55Z") (moment "2026-03-04T07:24:55Z")))
+  (given claim-v1-integration-tests-by-claude)
+  (normally r-cl-state-v1-integration-tests-by-claude claim-v1-integration-tests-by-claude state-claimed-v1-integration-tests-by-claude)
+  (normally r-cl-chain-v1-integration-tests-by-claude state-claimed-v1-integration-tests-by-claude claimed-integration-tests)
+)
+
+;; Propagation rules: failures in 'integration-tests' block downstream tasks
+(normally r-propagate-backward-compat-validation-from-integration-tests-failed failed-integration-tests upstream-blocked-backward-compat-validation)
+(normally r-propagate-backward-compat-validation-from-integration-tests-permanently-failed permanently-failed-integration-tests upstream-blocked-backward-compat-validation)
+(normally r-propagate-backward-compat-validation-from-integration-tests-stale-v1 stale-v1-integration-tests upstream-blocked-backward-compat-validation)
+(normally r-propagate-backward-compat-validation-from-integration-tests-timeout-v1 timeout-v1-integration-tests upstream-blocked-backward-compat-validation)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T06:59:54Z"
+  (given completed-integration-tests)
+  (given eval-result-v1-integration-tests-by-claude)
+  (given eval-confidence-v1-integration-tests-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T06:59:59Z"
+  (given delegated-v1-backward-compat-validation-to-agent:claude)
+  (given (during (leased-v1-backward-compat-validation) (moment "2026-03-04T06:59:59Z") (moment "2026-03-04T07:29:59Z")))
+  (given claim-v1-backward-compat-validation-by-claude)
+  (normally r-cl-state-v1-backward-compat-validation-by-claude claim-v1-backward-compat-validation-by-claude state-claimed-v1-backward-compat-validation-by-claude)
+  (normally r-cl-chain-v1-backward-compat-validation-by-claude state-claimed-v1-backward-compat-validation-by-claude claimed-backward-compat-validation)
+)
+
+;; Propagation rules: failures in 'backward-compat-validation' block downstream tasks
+(normally r-propagate-matches-query-temporal-from-backward-compat-validation-failed failed-backward-compat-validation upstream-blocked-matches-query-temporal)
+(normally r-propagate-matches-query-temporal-from-backward-compat-validation-permanently-failed permanently-failed-backward-compat-validation upstream-blocked-matches-query-temporal)
+(normally r-propagate-matches-query-temporal-from-backward-compat-validation-stale-v1 stale-v1-backward-compat-validation upstream-blocked-matches-query-temporal)
+(normally r-propagate-matches-query-temporal-from-backward-compat-validation-timeout-v1 timeout-v1-backward-compat-validation upstream-blocked-matches-query-temporal)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:10:17Z"
+  (given completed-backward-compat-validation)
+  (given eval-result-v1-backward-compat-validation-by-claude)
+  (given eval-confidence-v1-backward-compat-validation-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T07:10:23Z"
+  (given delegated-v1-matches-query-temporal-to-agent:claude)
+  (given (during (leased-v1-matches-query-temporal) (moment "2026-03-04T07:10:23Z") (moment "2026-03-04T07:40:23Z")))
+  (given claim-v1-matches-query-temporal-by-claude)
+  (normally r-cl-state-v1-matches-query-temporal-by-claude claim-v1-matches-query-temporal-by-claude state-claimed-v1-matches-query-temporal-by-claude)
+  (normally r-cl-chain-v1-matches-query-temporal-by-claude state-claimed-v1-matches-query-temporal-by-claude claimed-matches-query-temporal)
+)
+
+;; Propagation rules: failures in 'matches-query-temporal' block downstream tasks
+(normally r-propagate-query-operator-updates-from-matches-query-temporal-failed failed-matches-query-temporal upstream-blocked-query-operator-updates)
+(normally r-propagate-query-operator-updates-from-matches-query-temporal-permanently-failed permanently-failed-matches-query-temporal upstream-blocked-query-operator-updates)
+(normally r-propagate-query-operator-updates-from-matches-query-temporal-stale-v1 stale-v1-matches-query-temporal upstream-blocked-query-operator-updates)
+(normally r-propagate-query-operator-updates-from-matches-query-temporal-timeout-v1 timeout-v1-matches-query-temporal upstream-blocked-query-operator-updates)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:12:30Z"
+  (given completed-matches-query-temporal)
+  (given eval-result-v1-matches-query-temporal-by-claude)
+  (given eval-confidence-v1-matches-query-temporal-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T07:12:36Z"
+  (given delegated-v1-query-operator-updates-to-agent:claude)
+  (given (during (leased-v1-query-operator-updates) (moment "2026-03-04T07:12:36Z") (moment "2026-03-04T07:42:36Z")))
+  (given claim-v1-query-operator-updates-by-claude)
+  (normally r-cl-state-v1-query-operator-updates-by-claude claim-v1-query-operator-updates-by-claude state-claimed-v1-query-operator-updates-by-claude)
+  (normally r-cl-chain-v1-query-operator-updates-by-claude state-claimed-v1-query-operator-updates-by-claude claimed-query-operator-updates)
+)
+
+;; Propagation rules: failures in 'query-operator-updates' block downstream tasks
+(normally r-propagate-phase4-tests-from-query-operator-updates-failed failed-query-operator-updates upstream-blocked-phase4-tests)
+(normally r-propagate-phase4-tests-from-query-operator-updates-permanently-failed permanently-failed-query-operator-updates upstream-blocked-phase4-tests)
+(normally r-propagate-phase4-tests-from-query-operator-updates-stale-v1 stale-v1-query-operator-updates upstream-blocked-phase4-tests)
+(normally r-propagate-phase4-tests-from-query-operator-updates-timeout-v1 timeout-v1-query-operator-updates upstream-blocked-phase4-tests)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:16:14Z"
+  (given completed-query-operator-updates)
+  (given eval-result-v1-query-operator-updates-by-claude)
+  (given eval-confidence-v1-query-operator-updates-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T07:16:19Z"
+  (given delegated-v1-phase4-tests-to-agent:claude)
+  (given (during (leased-v1-phase4-tests) (moment "2026-03-04T07:16:19Z") (moment "2026-03-04T07:46:19Z")))
+  (given claim-v1-phase4-tests-by-claude)
+  (normally r-cl-state-v1-phase4-tests-by-claude claim-v1-phase4-tests-by-claude state-claimed-v1-phase4-tests-by-claude)
+  (normally r-cl-chain-v1-phase4-tests-by-claude state-claimed-v1-phase4-tests-by-claude claimed-phase4-tests)
+)
+
+;; Propagation rules: failures in 'phase4-tests' block downstream tasks
+(normally r-propagate-pbt-non-temporal-equivalence-from-phase4-tests-failed failed-phase4-tests upstream-blocked-pbt-non-temporal-equivalence)
+(normally r-propagate-pbt-non-temporal-equivalence-from-phase4-tests-permanently-failed permanently-failed-phase4-tests upstream-blocked-pbt-non-temporal-equivalence)
+(normally r-propagate-pbt-non-temporal-equivalence-from-phase4-tests-stale-v1 stale-v1-phase4-tests upstream-blocked-pbt-non-temporal-equivalence)
+(normally r-propagate-pbt-non-temporal-equivalence-from-phase4-tests-timeout-v1 timeout-v1-phase4-tests upstream-blocked-pbt-non-temporal-equivalence)
+(normally r-propagate-pbt-temporal-identity-from-phase4-tests-failed failed-phase4-tests upstream-blocked-pbt-temporal-identity)
+(normally r-propagate-pbt-temporal-identity-from-phase4-tests-permanently-failed permanently-failed-phase4-tests upstream-blocked-pbt-temporal-identity)
+(normally r-propagate-pbt-temporal-identity-from-phase4-tests-stale-v1 stale-v1-phase4-tests upstream-blocked-pbt-temporal-identity)
+(normally r-propagate-pbt-temporal-identity-from-phase4-tests-timeout-v1 timeout-v1-phase4-tests upstream-blocked-pbt-temporal-identity)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:22:31Z"
+  (given completed-phase4-tests)
+  (given eval-result-v1-phase4-tests-by-claude)
+  (given eval-confidence-v1-phase4-tests-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T07:22:36Z"
+  (given delegated-v1-pbt-temporal-identity-to-agent:claude)
+  (given (during (leased-v1-pbt-temporal-identity) (moment "2026-03-04T07:22:36Z") (moment "2026-03-04T07:52:36Z")))
+  (given claim-v1-pbt-temporal-identity-by-claude)
+  (normally r-cl-state-v1-pbt-temporal-identity-by-claude claim-v1-pbt-temporal-identity-by-claude state-claimed-v1-pbt-temporal-identity-by-claude)
+  (normally r-cl-chain-v1-pbt-temporal-identity-by-claude state-claimed-v1-pbt-temporal-identity-by-claude claimed-pbt-temporal-identity)
+)
+
+;; Propagation rules: failures in 'pbt-temporal-identity' block downstream tasks
+(normally r-propagate-final-validation-from-pbt-temporal-identity-failed failed-pbt-temporal-identity upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-temporal-identity-permanently-failed permanently-failed-pbt-temporal-identity upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-temporal-identity-stale-v1 stale-v1-pbt-temporal-identity upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-temporal-identity-timeout-v1 timeout-v1-pbt-temporal-identity upstream-blocked-final-validation)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:25:12Z"
+  (given completed-pbt-temporal-identity)
+  (given eval-result-v1-pbt-temporal-identity-by-claude)
+  (given eval-confidence-v1-pbt-temporal-identity-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T07:25:17Z"
+  (given delegated-v1-pbt-non-temporal-equivalence-to-agent:claude)
+  (given (during (leased-v1-pbt-non-temporal-equivalence) (moment "2026-03-04T07:25:17Z") (moment "2026-03-04T07:55:17Z")))
+  (given claim-v1-pbt-non-temporal-equivalence-by-claude)
+  (normally r-cl-state-v1-pbt-non-temporal-equivalence-by-claude claim-v1-pbt-non-temporal-equivalence-by-claude state-claimed-v1-pbt-non-temporal-equivalence-by-claude)
+  (normally r-cl-chain-v1-pbt-non-temporal-equivalence-by-claude state-claimed-v1-pbt-non-temporal-equivalence-by-claude claimed-pbt-non-temporal-equivalence)
+)
+
+;; Propagation rules: failures in 'pbt-non-temporal-equivalence' block downstream tasks
+(normally r-propagate-final-validation-from-pbt-non-temporal-equivalence-failed failed-pbt-non-temporal-equivalence upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-non-temporal-equivalence-permanently-failed permanently-failed-pbt-non-temporal-equivalence upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-non-temporal-equivalence-stale-v1 stale-v1-pbt-non-temporal-equivalence upstream-blocked-final-validation)
+(normally r-propagate-final-validation-from-pbt-non-temporal-equivalence-timeout-v1 timeout-v1-pbt-non-temporal-equivalence upstream-blocked-final-validation)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:27:23Z"
+  (given completed-pbt-non-temporal-equivalence)
+  (given eval-result-v1-pbt-non-temporal-equivalence-by-claude)
+  (given eval-confidence-v1-pbt-non-temporal-equivalence-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-04T07:27:28Z"
+  (given delegated-v1-final-validation-to-agent:claude)
+  (given (during (leased-v1-final-validation) (moment "2026-03-04T07:27:28Z") (moment "2026-03-04T07:57:28Z")))
+  (given claim-v1-final-validation-by-claude)
+  (normally r-cl-state-v1-final-validation-by-claude claim-v1-final-validation-by-claude state-claimed-v1-final-validation-by-claude)
+  (normally r-cl-chain-v1-final-validation-by-claude state-claimed-v1-final-validation-by-claude claimed-final-validation)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-04T07:29:38Z"
+  (given completed-final-validation)
+  (given eval-result-v1-final-validation-by-claude)
+  (given eval-confidence-v1-final-validation-1.00)
+)
