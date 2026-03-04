@@ -9,6 +9,7 @@ use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::query::matches_query_temporal;
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -117,9 +118,11 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 
     // First check if already provable
     let conclusions = reason(theory)?;
-    let is_provable = conclusions
-        .iter()
-        .any(|c| c.literal == *goal && c.conclusion_type.is_positive());
+    let is_provable = conclusions.iter().any(|c| {
+        c.literal == *goal
+            && matches_query_temporal(&goal.temporal, &c.literal.temporal)
+            && c.conclusion_type.is_positive()
+    });
 
     if is_provable {
         result

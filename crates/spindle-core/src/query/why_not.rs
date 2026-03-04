@@ -10,6 +10,7 @@ use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::query::matches_query_temporal;
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -178,16 +179,22 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     let conclusions = reason(theory)?;
 
     // First check if it IS provable (then why-not doesn't apply)
-    let is_provable = conclusions
-        .iter()
-        .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
+    let is_provable = conclusions.iter().any(|c| {
+        c.literal == *literal
+            && matches_query_temporal(&literal.temporal, &c.literal.temporal)
+            && c.conclusion_type.is_positive()
+    });
 
     if is_provable {
         // Return a result with would_derive taken from the conclusion's rule_label
         let mut result = WhyNotResult::new(literal.clone());
         result.would_derive = conclusions
             .iter()
-            .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
+            .find(|c| {
+                c.literal == *literal
+                    && matches_query_temporal(&literal.temporal, &c.literal.temporal)
+                    && c.conclusion_type.is_positive()
+            })
             .and_then(|c| c.rule_label.clone());
         return Ok(result);
     }

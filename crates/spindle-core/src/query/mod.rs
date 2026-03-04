@@ -374,7 +374,10 @@ pub fn query_with_options(
 
     // Check if literal is provable
     for conc in &conclusions {
-        if conc.literal == *literal && conc.conclusion_type.is_positive() {
+        if conc.literal == *literal
+            && matches_query_temporal(&literal.temporal, &conc.literal.temporal)
+            && conc.conclusion_type.is_positive()
+        {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
                 .with_conclusion_type(conc.conclusion_type));
         }
@@ -382,7 +385,10 @@ pub fn query_with_options(
 
     // Check if complement is provable (refuted)
     for conc in &conclusions {
-        if conc.literal == complement && conc.conclusion_type.is_positive() {
+        if conc.literal == complement
+            && matches_query_temporal(&complement.temporal, &conc.literal.temporal)
+            && conc.conclusion_type.is_positive()
+        {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
         }
     }
