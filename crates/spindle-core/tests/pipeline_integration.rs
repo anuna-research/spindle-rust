@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::pipeline::{
     Ground, MetadataVal, Pipeline, PipelineContext, PipelineStage, PrepareOptions, Severity,
-    TemporalFilter, Validate, WildcardRewrite, prepare,
+    TemporalBridge, TemporalFilter, Validate, WildcardRewrite, prepare,
 };
 use spindle_core::reason::{reason, reason_prepared, reason_with_options};
 use spindle_core::temporal::TimePoint;
@@ -162,6 +162,7 @@ fn temporal_pipeline_matches_prepare_inside_window() {
         .stage(Validate::default())
         .stage(WildcardRewrite)
         .stage(Ground::default())
+        .stage(TemporalBridge)
         .build();
     let (pipeline_theory, _) = pipeline.run(theory.clone()).unwrap();
     let conclusions_a = reason_prepared(&pipeline_theory).unwrap();
@@ -196,6 +197,7 @@ fn temporal_pipeline_matches_prepare_outside_window() {
         .stage(Validate::default())
         .stage(WildcardRewrite)
         .stage(Ground::default())
+        .stage(TemporalBridge)
         .build();
     let (pipeline_theory, _) = pipeline.run(theory.clone()).unwrap();
     let conclusions_a = reason_prepared(&pipeline_theory).unwrap();
@@ -344,14 +346,15 @@ fn individual_stages_match_pipeline_facts_only() {
     run_individual_vs_pipeline(theory);
 }
 
-/// Apply the three default stages individually (Validate, WildcardRewrite,
-/// Ground) and compare the resulting theory + reasoning conclusions against
-/// the single-shot `Pipeline::default_pipeline().run()` path.
+/// Apply the default stages individually (Validate, WildcardRewrite,
+/// Ground, TemporalBridge) and compare the resulting theory + reasoning
+/// conclusions against the single-shot `Pipeline::default_pipeline().run()` path.
 fn run_individual_vs_pipeline(theory: Theory) {
     // Path A: individual stages
     let validate = Validate::default();
     let wildcard = WildcardRewrite;
     let ground = Ground::default();
+    let bridge = TemporalBridge;
 
     let mut ctx = PipelineContext::default();
 
@@ -362,6 +365,9 @@ fn run_individual_vs_pipeline(theory: Theory) {
         .apply(t1, &mut ctx)
         .expect("wildcard rewrite should succeed");
     let t3 = ground.apply(t2, &mut ctx).expect("ground should succeed");
+    let t3 = bridge
+        .apply(t3, &mut ctx)
+        .expect("temporal bridge should succeed");
 
     // Path B: Pipeline::default_pipeline()
     let (pipeline_theory, _) = run_default_pipeline(&theory);
@@ -696,6 +702,7 @@ fn reason_with_options_temporal_matches_custom_pipeline() {
         .stage(Validate::default())
         .stage(WildcardRewrite)
         .stage(Ground::default())
+        .stage(TemporalBridge)
         .build();
     let (prepared, _) = pipeline.run(theory).unwrap();
     let conclusions_b = reason_prepared(&prepared).unwrap();
