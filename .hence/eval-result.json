@@ -4,23 +4,23 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 1,
-    "insertions": 153,
-    "deletions": 0,
+    "insertions": 24,
+    "deletions": 7,
     "file_list": [
-      "crates/spindle-core/src/pipeline/bridge.rs"
+      ".hence/context-manifest.json"
     ],
-    "dirty_files": 1
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-phase2-tests-changes",
-      "content": "Modified 1 files (+153, -0): crates/spindle-core/src/pipeline/bridge.rs",
+      "key": "task-pipeline-integration-changes",
+      "content": "Modified 1 files (+24, -7): .hence/context-manifest.json",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/phase2-tests-v1",
-  "evaluated_at": "2026-03-04T06:53:13Z",
+  "branch_name": "hence/pipeline-integration-v1",
+  "evaluated_at": "2026-03-04T06:54:50Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

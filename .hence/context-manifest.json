@@ -1,12 +1,12 @@
 {
-  "task_id": "phase2-tests",
-  "token_budget": 8000,
-  "tokens_used": 154,
+  "task_id": "pipeline-integration",
+  "token_budget": 6000,
+  "tokens_used": 181,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Write unit tests TEST-007 through TEST-010 and TEST-018 for TemporalBridge pipeline stage",
-      "token_cost": 22,
+      "content": "Wire TemporalBridge into prepare() pipeline after Ground and before TemporalVarValidation; also add to Pipeline::default_pipeline()",
+      "token_cost": 32,
       "priority": "PlanMeta"
     },
     {
@@ -50,8 +50,25 @@
       "content": "Modified 1 files (+11, -5): .hence/context-manifest.json",
       "token_cost": 14,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-phase2-tests-changes",
+      "content": "Modified 1 files (+153, -0): crates/spindle-core/src/pipeline/bridge.rs",
+      "token_cost": 17,
+      "priority": "AgentMemory"
     }
   ],
-  "elements_excluded": [],
-  "constructed_at": "2026-03-04T06:47:41Z"
+  "elements_excluded": [
+    {
+      "source": "context-file/crates/spindle-core/src/pipeline.rs",
+      "reason": "file not found",
+      "token_cost": 0
+    },
+    {
+      "source": "context-file/crates/spindle-core/src/pipeline/mod.rs",
+      "reason": "token budget exceeded",
+      "token_cost": 6914
+    }
+  ],
+  "constructed_at": "2026-03-04T06:53:19Z"
 }
