@@ -347,4 +347,157 @@ mod tests {
         // No new bridges should be generated since they already exist
         assert_eq!(result.rule_count(), original_count);
     }
+
+    /// Helper: create a temporal fact `>> name [start, end].`
+    fn temporal_fact(label: &str, name: &str, start: i64, end: i64) -> Rule {
+        let head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern(name),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(start), TimePoint::from_millis(end)),
+            vec![],
+        );
+        Rule::new(
+            label,
+            RuleType::Fact,
+            Vec::<Literal>::new(),
+            smallvec::smallvec![head],
+        )
+    }
+
+    // --- TEST-007: Bridge rule generated for temporal fact ---
+    // Trace: REQ-004
+    #[test]
+    fn bridge_rule_generated_for_temporal_fact() {
+        // >> p [1, 10].
+        let mut theory = Theory::new();
+        theory.add_rule(temporal_fact("f1", "p", 1, 10));
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        // Verify positive bridge: body is temporal p[1,10], head is atemporal p
+        let has_bridge = bridged.rules().any(|r| {
+            r.label.starts_with("__bridge::")
+                && !r.label.contains("neg")
+                && r.head.iter().any(|h| h.temporal.is_empty() && !h.negation)
+                && r.body
+                    .iter()
+                    .any(|b| b.as_logic().map_or(false, |l| !l.temporal.is_empty()))
+        });
+        assert!(has_bridge, "Expected bridging rule p[1,10] → p");
+    }
+
+    // --- TEST-008: Bridge generated even when base head exists (unconditional) ---
+    // Trace: REQ-004
+    #[test]
+    fn bridge_generated_even_when_base_head_exists() {
+        // >> p [1, 10].  >> p.
+        let mut theory = Theory::new();
+        theory.add_rule(temporal_fact("tf1", "p", 1, 10));
+        theory.add_fact("p");
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let bridge_count = bridged
+            .rules()
+            .filter(|r| r.label.starts_with("__bridge::"))
+            .count();
+        assert!(
+            bridge_count > 0,
+            "Bridge generated unconditionally for temporal heads even when base fact exists"
+        );
+    }
+
+    // --- TEST-009: Negation bridge generated ---
+    // Trace: REQ-004
+    #[test]
+    fn negation_bridge_generated() {
+        // >> p [1, 10].
+        let mut theory = Theory::new();
+        theory.add_rule(temporal_fact("f1", "p", 1, 10));
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let neg_bridge = bridged
+            .rules()
+            .find(|r| r.label.starts_with("__bridge::neg::"))
+            .expect("Expected negation bridging rule ~p[1,10] → ~p");
+
+        assert_eq!(neg_bridge.rule_type, RuleType::Strict);
+        assert!(neg_bridge.head[0].negation, "Negation bridge head must be negated");
+        assert!(
+            neg_bridge.head[0].temporal.is_empty(),
+            "Negation bridge head must be atemporal"
+        );
+        // Body should be negated and temporal
+        let body_lit = neg_bridge.body[0]
+            .as_logic()
+            .expect("body should be a logic literal");
+        assert!(body_lit.negation, "Negation bridge body must be negated");
+        assert!(
+            !body_lit.temporal.is_empty(),
+            "Negation bridge body must be temporal"
+        );
+    }
+
+    // --- TEST-010: Bridge stage is no-op for non-temporal theory ---
+    // Trace: REQ-004, REQ-008
+    #[test]
+    fn bridge_no_op_for_non_temporal_spl_theory() {
+        // >> bird.  bird => can_fly.
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_defeasible_rule(&["bird"], "can_fly");
+
+        let original_count = theory.rule_count();
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        assert_eq!(
+            original_count,
+            bridged.rule_count(),
+            "No bridge rules should be added to a non-temporal theory"
+        );
+        assert!(
+            ctx.diagnostics.is_empty(),
+            "No diagnostics expected for non-temporal theory"
+        );
+    }
+
+    // --- TEST-018: Bridge labels are deterministic ---
+    // Trace: REQ-010
+    #[test]
+    fn bridge_labels_are_deterministic() {
+        let bridge = TemporalBridge;
+
+        // First run: >> p [1, 10].
+        let mut theory1 = Theory::new();
+        theory1.add_rule(temporal_fact("f1", "p", 1, 10));
+        let mut ctx1 = PipelineContext::default();
+        let bridged1 = bridge.apply(theory1, &mut ctx1).unwrap();
+        let mut labels1: Vec<_> = bridged1
+            .rules()
+            .filter(|r| r.label.starts_with("__bridge::"))
+            .map(|r| r.label.clone())
+            .collect();
+        labels1.sort();
+
+        // Second run: same input
+        let mut theory2 = Theory::new();
+        theory2.add_rule(temporal_fact("f1", "p", 1, 10));
+        let mut ctx2 = PipelineContext::default();
+        let bridged2 = bridge.apply(theory2, &mut ctx2).unwrap();
+        let mut labels2: Vec<_> = bridged2
+            .rules()
+            .filter(|r| r.label.starts_with("__bridge::"))
+            .map(|r| r.label.clone())
+            .collect();
+        labels2.sort();
+
+        assert_eq!(labels1, labels2, "Bridge labels must be deterministic");
+        assert_eq!(labels1.len(), 2, "Expected exactly 2 bridge labels");
+    }
 }
