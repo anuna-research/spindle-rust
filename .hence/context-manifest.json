@@ -1,15 +1,21 @@
 {
-  "task_id": "atomkey-temporal",
-  "token_budget": 6000,
-  "tokens_used": 31,
+  "task_id": "intern-literal-temporal",
+  "token_budget": 4000,
+  "tokens_used": 42,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Add temporal: Temporal field to AtomKey struct in index.rs so that p[1,10] and p[20,30] produce distinct AtomId/LitId values",
-      "token_cost": 31,
+      "content": "Update intern_literal and get_lit_id in index.rs to include lit.temporal.clone() in the AtomKey construction",
+      "token_cost": 27,
       "priority": "PlanMeta"
+    },
+    {
+      "source": "memory/episodic/task-atomkey-temporal-changes",
+      "content": "Modified 1 files (+59, -1): crates/spindle-core/src/index.rs",
+      "token_cost": 15,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-04T06:28:59Z"
+  "constructed_at": "2026-03-04T06:32:22Z"
 }
