@@ -6,7 +6,7 @@ use crate::body::BodyLiteral;
 use crate::error::{Result, SpindleError};
 use crate::function_registry::FunctionRegistry;
 use crate::grounding::is_variable;
-use crate::intern::resolve;
+use crate::intern::{SymbolId, resolve};
 use crate::theory::Theory;
 use std::collections::HashSet;
 
@@ -33,7 +33,7 @@ impl PipelineStage for Validate {
         "validate"
     }
 
-    fn apply(&self, theory: Theory, ctx: &mut PipelineContext) -> Result<Theory> {
+    fn apply(&self, mut theory: Theory, ctx: &mut PipelineContext) -> Result<Theory> {
         if self.reject_wildcard_in_head {
             validate_wildcards(&theory)?;
         }
@@ -41,6 +41,7 @@ impl PipelineStage for Validate {
             validate_range_restriction(&theory)?;
         }
         validate_extension_calls(&theory, ctx.function_registry.as_ref())?;
+        compute_fold_grouping(&mut theory);
         ctx.diagnostics.push(Diagnostic {
             severity: Severity::Info,
             stage: self.name(),
@@ -83,6 +84,24 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
                     body_vars.insert(var_name.to_string());
                 }
             }
+            // Variables introduced by fold are also body variables:
+            // - result_var (like bind)
+            // - variables from the fold pattern that scope the aggregation
+            if let BodyLiteral::Fold(fold) = lit {
+                let var_name = resolve(fold.result_var);
+                if is_variable(var_name) {
+                    body_vars.insert(var_name.to_string());
+                }
+                // Fold pattern variables are body-introduced (they are iterated over)
+                if is_variable(fold.pattern.name()) {
+                    body_vars.insert(fold.pattern.name().to_string());
+                }
+                for pred in fold.pattern.predicates() {
+                    if is_variable(&pred) {
+                        body_vars.insert(pred);
+                    }
+                }
+            }
         }
 
         // Check head variables
@@ -111,6 +130,117 @@ fn validate_range_restriction(theory: &Theory) -> Result<()> {
     Ok(())
 }
 
+/// Compute `grouping_vars` for every fold in the theory.
+///
+/// A fold's grouping variables are pattern variables that also appear
+/// outside the fold — in the rule head or other body literals. These
+/// variables partition the matched facts into groups, producing one
+/// fold result per distinct combination of grouping variable values.
+fn compute_fold_grouping(theory: &mut Theory) {
+    let labels: Vec<_> = theory.rules().map(|r| r.label.clone()).collect();
+    for label in &labels {
+        let rule = theory.get_rule(label).unwrap();
+
+        // Quick check: does this rule have any folds?
+        let has_fold = rule.body.iter().any(|bl| bl.is_fold());
+        if !has_fold {
+            continue;
+        }
+
+        // Collect variables from head
+        let mut outer_vars: HashSet<SymbolId> = HashSet::new();
+        for head in &rule.head {
+            collect_literal_vars(head, &mut outer_vars);
+        }
+
+        // Collect variables from non-fold body literals
+        for bl in &rule.body {
+            match bl {
+                BodyLiteral::Logic(lit) => {
+                    collect_body_logic_vars(lit, &mut outer_vars);
+                }
+                BodyLiteral::Arithmetic(ArithConstraint::Bind { var, .. }) => {
+                    outer_vars.insert(*var);
+                }
+                BodyLiteral::Arithmetic(ArithConstraint::Compare { .. }) => {}
+                BodyLiteral::Fold(_) => {
+                    // Don't count other folds as "outer" context
+                }
+            }
+        }
+
+        // Now compute grouping_vars for each fold
+        // We need to collect fold indices first, then mutate
+        let fold_groupings: Vec<(usize, Vec<SymbolId>)> = rule
+            .body
+            .iter()
+            .enumerate()
+            .filter_map(|(i, bl)| {
+                if let BodyLiteral::Fold(fold) = bl {
+                    let mut pattern_vars: Vec<SymbolId> = Vec::new();
+                    // Collect pattern name if it's a variable
+                    let name = fold.pattern.name();
+                    if is_variable(name) {
+                        pattern_vars.push(fold.pattern.name_id());
+                    }
+                    // Collect pattern argument variables
+                    for arg in fold.pattern.predicate_args() {
+                        if let crate::body::BodyArg::Term(crate::term::Term::Symbol(id)) = arg
+                            && is_variable(resolve(*id))
+                        {
+                            pattern_vars.push(*id);
+                        }
+                    }
+                    // Grouping vars = pattern vars that appear in outer context
+                    let grouping: Vec<SymbolId> = pattern_vars
+                        .into_iter()
+                        .filter(|v| outer_vars.contains(v))
+                        .collect();
+                    Some((i, grouping))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Apply grouping vars
+        let rule = theory.get_rule_mut(label).unwrap();
+        for (i, grouping) in fold_groupings {
+            if let BodyLiteral::Fold(ref mut fold) = rule.body[i] {
+                fold.grouping_vars = grouping;
+            }
+        }
+    }
+}
+
+/// Collect variable SymbolIds from a head literal.
+fn collect_literal_vars(lit: &crate::literal::Literal, vars: &mut HashSet<SymbolId>) {
+    if is_variable(lit.name()) {
+        vars.insert(lit.name_id());
+    }
+    for term in lit.predicate_args() {
+        if let crate::term::Term::Symbol(id) = term
+            && is_variable(resolve(*id))
+        {
+            vars.insert(*id);
+        }
+    }
+}
+
+/// Collect variable SymbolIds from a body logic literal.
+fn collect_body_logic_vars(lit: &crate::body::BodyLogicLiteral, vars: &mut HashSet<SymbolId>) {
+    if is_variable(lit.name()) {
+        vars.insert(lit.name_id());
+    }
+    for arg in lit.predicate_args() {
+        if let crate::body::BodyArg::Term(crate::term::Term::Symbol(id)) = arg
+            && is_variable(resolve(*id))
+        {
+            vars.insert(*id);
+        }
+    }
+}
+
 /// Validate extension function calls in arithmetic expressions.
 ///
 /// Walks all `ArithExpr::Call` nodes in the theory and checks:
@@ -131,15 +261,91 @@ fn validate_extension_calls(theory: &Theory, registry: Option<&FunctionRegistry>
                     }
                 },
                 BodyLiteral::Logic(logic_lit) => {
-                    for arg in logic_lit.predicate_args() {
-                        if let crate::body::BodyArg::Arith(expr) = arg {
-                            validate_expr_calls(expr, registry)?;
-                        }
-                    }
+                    validate_body_logic_arith_args(logic_lit, registry)?;
+                }
+                BodyLiteral::Fold(fold) => {
+                    validate_fold(fold, registry)?;
                 }
             }
         }
     }
+    Ok(())
+}
+
+/// Validate arithmetic arguments in a body logic literal.
+fn validate_body_logic_arith_args(
+    logic_lit: &crate::body::BodyLogicLiteral,
+    registry: Option<&FunctionRegistry>,
+) -> Result<()> {
+    for arg in logic_lit.predicate_args() {
+        if let crate::body::BodyArg::Arith(expr) = arg {
+            validate_expr_calls(expr, registry)?;
+        }
+    }
+    Ok(())
+}
+
+/// Validate a fold literal.
+fn validate_fold(
+    fold: &crate::body::FoldLiteral,
+    registry: Option<&FunctionRegistry>,
+) -> Result<()> {
+    let result_var_name = crate::intern::resolve(fold.result_var);
+
+    // 1. result_var must be a ?-prefixed variable
+    if !result_var_name.starts_with('?') {
+        return Err(crate::error::SpindleError::Validation {
+            message: format!(
+                "Fold result must be a variable (starting with ?), got '{result_var_name}'"
+            ),
+        });
+    }
+
+    // 2. Fold pattern must not be negated
+    if fold.pattern.is_negated() {
+        return Err(crate::error::SpindleError::Validation {
+            message: "Fold pattern must not be negated".to_string(),
+        });
+    }
+
+    // 3. Reducer must exist in the function registry and accept arity 2
+    let reducer_name = crate::intern::resolve(fold.reducer);
+    match registry {
+        None => {
+            return Err(crate::error::SpindleError::Validation {
+                message: format!(
+                    "Fold reducer '{reducer_name}' used but no function registry provided"
+                ),
+            });
+        }
+        Some(reg) => {
+            if !reg.contains(fold.reducer) {
+                return Err(crate::error::SpindleError::Validation {
+                    message: format!("Unknown fold reducer function '{reducer_name}'"),
+                });
+            }
+            let func = reg.get(fold.reducer).unwrap();
+            let sig = func.signature();
+            if !sig.arity.accepts(2) {
+                return Err(crate::error::SpindleError::Validation {
+                    message: format!(
+                        "Fold reducer '{reducer_name}' must accept 2 arguments, but accepts {}",
+                        sig.arity
+                    ),
+                });
+            }
+        }
+    }
+
+    // 4. Validate extension function calls in extract and identity expressions
+    validate_expr_calls(&fold.extract, registry)?;
+    if let Some(ref identity) = fold.identity {
+        validate_expr_calls(identity, registry)?;
+    }
+
+    // 5. Validate arith args in fold pattern
+    validate_body_logic_arith_args(&fold.pattern, registry)?;
+
     Ok(())
 }
 

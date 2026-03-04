@@ -71,7 +71,7 @@ pub mod worklist;
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::arith::{ArithConstraint, ArithError, ArithExpr, CmpOp};
-    pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
+    pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral, FoldLiteral};
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};

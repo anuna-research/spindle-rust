@@ -24,10 +24,12 @@
 //! ```
 
 pub mod ground;
+pub mod stratify;
 pub mod temporal;
 pub mod validate;
 pub mod wildcard;
 pub use ground::Ground;
+pub use stratify::{Stratify, StratumInfo};
 pub use temporal::{TemporalFilter, TemporalVarValidation};
 pub use validate::Validate;
 pub use wildcard::WildcardRewrite;
@@ -102,6 +104,8 @@ pub struct PipelineContext {
     pub metadata: HashMap<String, MetadataVal>,
     /// Optional function registry for extension function dispatch.
     pub function_registry: Option<FunctionRegistry>,
+    /// Stratum assignments from the stratification stage.
+    pub stratum_info: Option<StratumInfo>,
 }
 
 /// A single, self-contained transformation over a [`Theory`].
@@ -298,6 +302,8 @@ pub struct PipelineResult {
     pub grounding_report: GroundingReport,
     /// Trust-weighted conclusions (populated when a trust policy is available)
     pub weighted_conclusions: Vec<WeightedConclusion>,
+    /// Stratum info (populated when folds require multi-stratum evaluation).
+    pub stratum_info: Option<StratumInfo>,
 }
 
 /// Prepare a theory for reasoning.
@@ -312,53 +318,61 @@ pub struct PipelineResult {
 /// configured according to `opts`. All existing callers continue to work
 /// without changes.
 pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> {
-    let mut builder = Pipeline::builder();
-
-    // 1. Temporal filter (optional)
-    if let Some(t) = opts.reference_time {
-        builder = builder.stage(TemporalFilter { reference_time: t });
+    let mut prelude = FunctionRegistry::with_prelude();
+    if let Some(user_reg) = opts.function_registry {
+        prelude.merge(user_reg);
     }
 
-    // 2. Validation
-    builder = builder.stage(Validate {
+    // Phase 1: Validate + Wildcard rewrite + Stratify (always runs)
+    let mut phase1 = Pipeline::builder();
+
+    if let Some(t) = opts.reference_time {
+        phase1 = phase1.stage(TemporalFilter { reference_time: t });
+    }
+
+    phase1 = phase1.stage(Validate {
         enforce_range_restricted: opts.validation.enforce_range_restricted,
         reject_wildcard_in_head: opts.validation.reject_wildcard_in_head,
     });
+    phase1 = phase1.stage(WildcardRewrite);
+    phase1 = phase1.stage(Stratify);
 
-    // 3. Wildcard rewrite
-    builder = builder.stage(WildcardRewrite);
+    let init_ctx = PipelineContext {
+        function_registry: Some(prelude),
+        ..Default::default()
+    };
+    let (theory_after_phase1, ctx_after_phase1) =
+        phase1.build().run_with_context(theory.clone(), init_ctx)?;
 
-    // 4. Grounding (optional)
-    if opts.grounding.enabled {
-        builder = builder.stage(Ground {
+    // Check if multi-stratum: if so, skip normal grounding (it will be done per-stratum)
+    let stratum_info = ctx_after_phase1.stratum_info.clone();
+    let is_multi_stratum = stratum_info
+        .as_ref()
+        .is_some_and(|s| s.num_strata > 1);
+
+    // Phase 2: Grounding + post-grounding stages (skipped for multi-stratum)
+    let mut phase2 = Pipeline::builder();
+
+    if opts.grounding.enabled && !is_multi_stratum {
+        phase2 = phase2.stage(Ground {
             max_iterations: opts.grounding.max_iterations,
             max_instances: opts.grounding.max_instances,
         });
     }
 
-    // 5. Temporal variable validation (rejects unresolved temporal vars after grounding)
-    builder = builder.stage(TemporalVarValidation::default());
-
-    // 6. Post-grounding temporal re-filter (grounding may have resolved temporal vars
-    //    to concrete intervals that are now filterable by reference_time)
-    if let Some(t) = opts.reference_time {
-        builder = builder.stage(TemporalFilter { reference_time: t });
+    if !is_multi_stratum {
+        phase2 = phase2.stage(TemporalVarValidation::default());
+        if let Some(t) = opts.reference_time {
+            phase2 = phase2.stage(TemporalFilter { reference_time: t });
+        }
     }
 
-    let pipeline = builder.build();
-    let mut prelude = FunctionRegistry::with_prelude();
-    if let Some(user_reg) = opts.function_registry {
-        prelude.merge(user_reg);
-    }
-    let init_ctx = PipelineContext {
-        function_registry: Some(prelude),
-        ..Default::default()
-    };
-    let (mut theory, ctx) = pipeline.run_with_context(theory.clone(), init_ctx)?;
+    let (mut theory_final, ctx) =
+        phase2.build().run_with_context(theory_after_phase1, ctx_after_phase1)?;
 
     // Apply explicit trust policy from options, overriding the parsed one
     if let Some(tp) = opts.trust_policy {
-        *theory.trust_policy_mut() = tp;
+        *theory_final.trust_policy_mut() = tp;
     }
 
     // Reconstruct GroundingReport from context metadata
@@ -418,10 +432,11 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
     };
 
     Ok(PipelineResult {
-        theory,
+        theory: theory_final,
         evaluated_at: opts.reference_time,
         grounding_report,
         weighted_conclusions: Vec::new(),
+        stratum_info,
     })
 }
 

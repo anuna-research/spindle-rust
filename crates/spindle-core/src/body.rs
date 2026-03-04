@@ -24,7 +24,7 @@
 use std::fmt;
 
 use crate::arith::{ArithConstraint, ArithExpr};
-use crate::intern::SymbolId;
+use crate::intern::{SymbolId, resolve};
 use crate::literal::{InternedLiteralName, Literal, render_spl_atom};
 use crate::mode::Mode;
 use crate::temporal::{Temporal, TemporalExpr};
@@ -382,6 +382,87 @@ impl fmt::Display for BodyLogicLiteral {
 }
 
 // ---------------------------------------------------------------------------
+// FoldLiteral
+// ---------------------------------------------------------------------------
+
+/// An aggregation literal in a rule body.
+///
+/// Folds aggregate a value across all matches of an inner pattern,
+/// combining them with a binary reducer function.
+///
+/// # Syntax
+///
+/// ```text
+/// (fold ?result <identity> <reducer> <extract> <pattern>)
+/// ```
+///
+/// - `?result`: variable that receives the aggregated value
+/// - `<identity>`: initial/empty-set value, or `None` for "required" (fail on empty)
+/// - `<reducer>`: name of a binary function (e.g., `+`, `min`, `max`)
+/// - `<extract>`: expression evaluated per match to produce a value
+/// - `<pattern>`: body logic literal that matches against facts
+///
+/// # Example
+///
+/// ```text
+/// (fold ?total 0 + ?pay (pay-line ?emp ?pay))
+/// ```
+///
+/// Sums all `?pay` values from `pay-line` facts for a given `?emp`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FoldLiteral {
+    /// Variable that receives the aggregated result.
+    pub result_var: SymbolId,
+    /// Identity element for the fold. `None` means "required" — the fold
+    /// fails (discards the substitution path) when the pattern has no matches.
+    pub identity: Option<ArithExpr>,
+    /// Name of the binary reducer function (e.g., `+`, `min`, `max`).
+    pub reducer: SymbolId,
+    /// Expression evaluated per match to produce a value to fold.
+    pub extract: ArithExpr,
+    /// Inner matching pattern (a body logic literal).
+    pub pattern: BodyLogicLiteral,
+    /// Variables from the fold pattern that serve as grouping keys.
+    /// These are pattern variables that also appear outside the fold
+    /// (in the rule head or other body literals). Computed during
+    /// validation/preprocessing.
+    pub grouping_vars: Vec<SymbolId>,
+}
+
+impl FoldLiteral {
+    /// Get the reducer function name as a string.
+    #[inline]
+    pub fn reducer_name(&self) -> &'static str {
+        resolve(self.reducer)
+    }
+
+    /// Get the result variable name as a string.
+    #[inline]
+    pub fn result_var_name(&self) -> &'static str {
+        resolve(self.result_var)
+    }
+
+    /// Render this fold literal in canonical SPL s-expression form.
+    pub fn to_spl(&self) -> String {
+        let result = resolve(self.result_var);
+        let identity = match &self.identity {
+            Some(expr) => expr.to_string(),
+            None => "required".to_string(),
+        };
+        let reducer = resolve(self.reducer);
+        let extract = self.extract.to_string();
+        let pattern = self.pattern.to_spl();
+        format!("(fold {result} {identity} {reducer} {extract} {pattern})")
+    }
+}
+
+impl fmt::Display for FoldLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_spl())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // BodyLiteral
 // ---------------------------------------------------------------------------
 
@@ -404,6 +485,8 @@ pub enum BodyLiteral {
     Logic(BodyLogicLiteral),
     /// An arithmetic constraint (bind or compare).
     Arithmetic(ArithConstraint),
+    /// A fold (aggregation) over matching facts.
+    Fold(FoldLiteral),
 }
 
 impl BodyLiteral {
@@ -431,6 +514,12 @@ impl BodyLiteral {
         matches!(self, BodyLiteral::Arithmetic(_))
     }
 
+    /// Returns `true` if this is a fold (aggregation) literal.
+    #[inline]
+    pub fn is_fold(&self) -> bool {
+        matches!(self, BodyLiteral::Fold(_))
+    }
+
     /// If this is a logic literal, return a reference to it.
     #[inline]
     pub fn as_logic(&self) -> Option<&BodyLogicLiteral> {
@@ -449,12 +538,22 @@ impl BodyLiteral {
         }
     }
 
-    /// Get the predicate name (logic literals only; returns `"<arith>"` for arithmetic).
+    /// If this is a fold literal, return a reference to it.
+    #[inline]
+    pub fn as_fold(&self) -> Option<&FoldLiteral> {
+        match self {
+            BodyLiteral::Fold(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Get the predicate name (logic literals only; returns `"<arith>"` for arithmetic, `"<fold>"` for fold).
     #[inline]
     pub fn name(&self) -> &'static str {
         match self {
             BodyLiteral::Logic(lit) => lit.name(),
             BodyLiteral::Arithmetic(_) => "<arith>",
+            BodyLiteral::Fold(_) => "<fold>",
         }
     }
 
@@ -471,6 +570,7 @@ impl BodyLiteral {
                 }
             }
             BodyLiteral::Arithmetic(_) => "<arith>".to_owned(),
+            BodyLiteral::Fold(_) => "<fold>".to_owned(),
         }
     }
 
@@ -481,7 +581,7 @@ impl BodyLiteral {
     pub fn is_negated(&self) -> bool {
         match self {
             BodyLiteral::Logic(lit) => lit.is_negated(),
-            BodyLiteral::Arithmetic(_) => false,
+            BodyLiteral::Arithmetic(_) | BodyLiteral::Fold(_) => false,
         }
     }
 
@@ -496,7 +596,7 @@ impl BodyLiteral {
     pub fn is_temporal(&self) -> bool {
         match self {
             BodyLiteral::Logic(lit) => lit.is_temporal(),
-            BodyLiteral::Arithmetic(_) => false,
+            BodyLiteral::Arithmetic(_) | BodyLiteral::Fold(_) => false,
         }
     }
 
@@ -505,7 +605,7 @@ impl BodyLiteral {
     pub fn has_temporal_variables(&self) -> bool {
         match self {
             BodyLiteral::Logic(lit) => lit.has_temporal_variables(),
-            BodyLiteral::Arithmetic(_) => false,
+            BodyLiteral::Arithmetic(_) | BodyLiteral::Fold(_) => false,
         }
     }
 
@@ -514,6 +614,7 @@ impl BodyLiteral {
         match self {
             BodyLiteral::Logic(lit) => lit.to_spl(),
             BodyLiteral::Arithmetic(c) => c.to_string(),
+            BodyLiteral::Fold(f) => f.to_spl(),
         }
     }
 
@@ -521,7 +622,7 @@ impl BodyLiteral {
     pub fn predicates(&self) -> Vec<String> {
         match self {
             BodyLiteral::Logic(lit) => lit.predicates(),
-            BodyLiteral::Arithmetic(_) => Vec::new(),
+            BodyLiteral::Arithmetic(_) | BodyLiteral::Fold(_) => Vec::new(),
         }
     }
 }
@@ -540,6 +641,13 @@ impl From<ArithConstraint> for BodyLiteral {
     }
 }
 
+impl From<FoldLiteral> for BodyLiteral {
+    #[inline]
+    fn from(f: FoldLiteral) -> Self {
+        BodyLiteral::Fold(f)
+    }
+}
+
 impl From<Literal> for BodyLiteral {
     #[inline]
     fn from(lit: Literal) -> Self {
@@ -552,6 +660,7 @@ impl fmt::Display for BodyLiteral {
         match self {
             BodyLiteral::Logic(lit) => write!(f, "{lit}"),
             BodyLiteral::Arithmetic(c) => write!(f, "{c}"),
+            BodyLiteral::Fold(fold) => write!(f, "{fold}"),
         }
     }
 }

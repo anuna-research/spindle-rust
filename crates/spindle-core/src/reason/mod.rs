@@ -35,8 +35,12 @@ pub(crate) mod state;
 
 use crate::conclusion::Conclusion;
 use crate::error::Result;
+use crate::function_registry::{EvalContext, FunctionRegistry};
+use crate::grounding::ground_theory_with_limit;
 use crate::index::IndexedTheory;
-use crate::pipeline::{PrepareOptions, prepare};
+use crate::literal::Literal;
+use crate::pipeline::{PrepareOptions, StratumInfo, prepare};
+use crate::rule::Rule;
 use crate::theory::Theory;
 
 use self::state::ReasoningState;
@@ -142,10 +146,133 @@ pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
 /// let conclusions = reason_with_options(&theory, opts).unwrap();
 /// ```
 pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<Conclusion>> {
-    // Phase 0: Pipeline (Filtering + Validation + Grounding)
+    // Phase 0: Pipeline (Filtering + Validation + Grounding / Stratification)
     let prepared = prepare(theory, opts)?;
 
-    reason_prepared(&prepared.theory)
+    match prepared.stratum_info {
+        Some(ref strata) if strata.num_strata > 1 => {
+            let registry = FunctionRegistry::with_prelude();
+            let ctx = EvalContext::with_registry(&registry);
+            reason_stratified(&prepared.theory, strata, &ctx)
+        }
+        _ => reason_prepared(&prepared.theory),
+    }
+}
+
+/// Perform stratified reasoning for theories with multi-stratum fold dependencies.
+///
+/// Processes strata in order (0..N), grounding and reasoning each stratum
+/// independently. Positive conclusions from earlier strata are accumulated
+/// as facts for later strata.
+fn reason_stratified(
+    unground_theory: &Theory,
+    strata: &StratumInfo,
+    ctx: &EvalContext<'_>,
+) -> Result<Vec<Conclusion>> {
+    let mut accumulated_facts: Vec<Literal> = Vec::new();
+    let mut all_conclusions: Vec<Conclusion> = Vec::new();
+
+    for stratum in 0..strata.num_strata {
+        // Build sub-theory: this stratum's rules + accumulated facts
+        let sub_theory =
+            build_stratum_theory(unground_theory, strata, stratum, &accumulated_facts);
+
+        // Ground the sub-theory (folds evaluate during grounding)
+        let (grounded, _) = ground_theory_with_limit(&sub_theory, 100, 10000, ctx);
+
+        // Reason
+        let conclusions = reason_prepared(&grounded)?;
+
+        // Accumulate positive conclusions as facts for next stratum
+        for c in &conclusions {
+            if c.is_positive() {
+                accumulated_facts.push(c.literal.clone());
+            }
+        }
+
+        all_conclusions.extend(conclusions);
+    }
+
+    // Deduplicate conclusions (positive conclusions from stratum 0 are
+    // re-derived as facts in later strata — keep only one copy)
+    deduplicate_conclusions(&mut all_conclusions);
+
+    Ok(all_conclusions)
+}
+
+/// Build a sub-theory for a specific stratum.
+///
+/// Includes:
+/// - All accumulated facts from prior strata (as fact rules)
+/// - All rules assigned to this stratum or earlier strata
+/// - Superiority relations involving rules in this stratum or prior strata
+fn build_stratum_theory(
+    original: &Theory,
+    strata: &StratumInfo,
+    target_stratum: usize,
+    accumulated_facts: &[Literal],
+) -> Theory {
+    let mut sub = Theory::new();
+
+    // Add accumulated facts from prior strata
+    for (i, fact) in accumulated_facts.iter().enumerate() {
+        let label = format!("__strat_fact_{i}");
+        sub.add_rule(Rule::fact(label, fact.clone()));
+    }
+
+    // Add rules from this stratum and all prior strata
+    let mut included_labels = std::collections::HashSet::new();
+    for rule in original.rules() {
+        let rule_stratum = strata.rule_strata.get(&rule.label).copied().unwrap_or(0);
+        if rule_stratum <= target_stratum {
+            sub.add_rule(rule.clone());
+            included_labels.insert(rule.label.clone());
+        }
+    }
+
+    // Copy superiority relations for included rules
+    for sup in original.superiorities() {
+        if included_labels.contains(&sup.superior) || included_labels.contains(&sup.inferior) {
+            sub.add_superiority(&sup.superior, &sup.inferior);
+        }
+    }
+
+    sub.copy_metadata_from(original);
+    *sub.trust_policy_mut() = original.trust_policy().clone();
+
+    sub
+}
+
+/// Remove duplicate conclusions, preferring definite over defeasible.
+fn deduplicate_conclusions(conclusions: &mut Vec<Conclusion>) {
+    use std::collections::HashMap;
+
+    // Key: (literal spl, is_positive) -> best conclusion
+    let mut seen: HashMap<(String, bool), usize> = HashMap::new();
+    let mut keep = vec![true; conclusions.len()];
+
+    for (i, c) in conclusions.iter().enumerate() {
+        let key = (c.literal.to_spl(), c.conclusion_type.is_positive());
+        if let Some(&prev_idx) = seen.get(&key) {
+            // Keep the more specific one (definite > defeasible)
+            let prev = &conclusions[prev_idx];
+            if c.conclusion_type.is_definite() && !prev.conclusion_type.is_definite() {
+                keep[prev_idx] = false;
+                seen.insert(key, i);
+            } else {
+                keep[i] = false;
+            }
+        } else {
+            seen.insert(key, i);
+        }
+    }
+
+    let mut i = 0;
+    conclusions.retain(|_| {
+        let r = keep[i];
+        i += 1;
+        r
+    });
 }
 
 /// Perform defeasible reasoning on an already-prepared theory.

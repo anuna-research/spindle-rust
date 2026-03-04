@@ -38,7 +38,7 @@ const CMP_OPS: &[&str] = &["=", "!=", "<", ">", "<=", ">="];
 /// This includes arithmetic operators, comparison operators, and the `bind` keyword.
 const RESERVED_KEYWORDS: &[&str] = &[
     "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "round", "floor", "ceil", "bind",
-    "=", "!=", "<", ">", "<=", ">=",
+    "fold", "=", "!=", "<", ">", "<=", ">=",
 ];
 
 /// Future-reserved keywords that cannot be used as predicate names or rule labels (REQ-008).

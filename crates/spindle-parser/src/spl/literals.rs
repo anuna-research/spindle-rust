@@ -7,7 +7,7 @@ use chrono::DateTime;
 use rust_decimal::Decimal;
 use spindle_core::Literal;
 use spindle_core::arith::ArithConstraint;
-use spindle_core::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
+use spindle_core::body::{BodyArg, BodyLiteral, BodyLogicLiteral, FoldLiteral};
 use spindle_core::intern::intern;
 use spindle_core::mode::Mode;
 use spindle_core::temporal::{
@@ -68,6 +68,8 @@ pub(crate) fn parse_body_with_line(
                         constraints.push(constraint);
                     } else if let Some(sq) = try_parse_state_query(item, line)? {
                         state_queries.push(sq);
+                    } else if let Some(fold) = try_parse_fold(item, line)? {
+                        body_literals.push(BodyLiteral::Fold(fold));
                     } else if let Some(arith) = try_parse_arith_constraint(item, line)? {
                         body_literals.push(BodyLiteral::Arithmetic(arith));
                     } else {
@@ -79,8 +81,10 @@ pub(crate) fn parse_body_with_line(
 
                 Ok((body_literals, constraints, state_queries))
             } else {
-                // Single expression — could be an arithmetic constraint or a literal
-                if let Some(arith) = try_parse_arith_constraint(expr, line)? {
+                // Single expression — could be a fold, arithmetic constraint, or a literal
+                if let Some(fold) = try_parse_fold(expr, line)? {
+                    Ok((vec![BodyLiteral::Fold(fold)], vec![], vec![]))
+                } else if let Some(arith) = try_parse_arith_constraint(expr, line)? {
                     Ok((vec![BodyLiteral::Arithmetic(arith)], vec![], vec![]))
                 } else {
                     Ok((
@@ -197,6 +201,98 @@ fn try_parse_compare(
     let rhs = parse_arith_expr(&items[2], line)?;
 
     Ok(ArithConstraint::Compare { op, lhs, rhs })
+}
+
+/// Try to parse an s-expression as a fold (aggregation) literal.
+///
+/// Syntax: `(fold ?result <identity> <reducer> <extract> <pattern>)`
+///
+/// - `?result`: variable atom (must start with `?`)
+/// - `<identity>`: arith expression, or the keyword `required`
+/// - `<reducer>`: atom (function name, e.g. `+`, `min`, `max`)
+/// - `<extract>`: arith expression
+/// - `<pattern>`: body logic literal
+///
+/// Returns `Ok(Some(FoldLiteral))` if this is a fold form, `Ok(None)` if not,
+/// or `Err` for malformed folds.
+fn try_parse_fold(expr: &SExpr, line: usize) -> Result<Option<FoldLiteral>, ParseError> {
+    let items = match expr {
+        SExpr::List { items, .. } if !items.is_empty() => items,
+        _ => return Ok(None),
+    };
+
+    let keyword = match items[0].as_atom() {
+        Some(kw) => kw,
+        None => return Ok(None),
+    };
+
+    if keyword != "fold" {
+        return Ok(None);
+    }
+
+    // (fold ?result <identity> <reducer> <extract> <pattern>) = 6 items
+    if items.len() != 6 {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!(
+                "'fold' requires exactly 5 arguments (result, identity, reducer, extract, pattern), got {}",
+                items.len() - 1
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+
+    // 1. result_var: must be a ?-prefixed variable atom
+    let result_name = items[1].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "'fold' first argument must be a variable (e.g. ?total), got a list".to_string(),
+        format: ParserFormat::Spl,
+        source_line: None,
+    })?;
+    if !result_name.starts_with('?') {
+        return Err(ParseError::ParserError {
+            line,
+            message: format!(
+                "'fold' first argument must be a variable (starting with ?), got '{result_name}'"
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
+    let result_var = intern(result_name);
+
+    // 2. identity: arith expression or the keyword "required"
+    let identity = if let Some("required") = items[2].as_atom() {
+        None
+    } else {
+        Some(parse_arith_expr(&items[2], line)?)
+    };
+
+    // 3. reducer: atom (function name)
+    let reducer_name = items[3].as_atom().ok_or_else(|| ParseError::ParserError {
+        line,
+        message: "'fold' reducer (3rd argument) must be an atom (e.g. +, min), got a list"
+            .to_string(),
+        format: ParserFormat::Spl,
+        source_line: None,
+    })?;
+    let reducer = intern(reducer_name);
+
+    // 4. extract: arith expression
+    let extract = parse_arith_expr(&items[4], line)?;
+
+    // 5. pattern: body logic literal
+    let pattern = parse_body_logic_literal_with_line(&items[5], line)?;
+
+    Ok(Some(FoldLiteral {
+        result_var,
+        identity,
+        reducer,
+        extract,
+        pattern,
+        grouping_vars: Vec::new(),
+    }))
 }
 
 /// Try to parse an s-expression as an Allen interval constraint.

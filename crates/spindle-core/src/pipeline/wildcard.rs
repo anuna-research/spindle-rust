@@ -52,6 +52,11 @@ fn rewrite_wildcards(theory: &Theory) -> Theory {
                 crate::body::BodyLiteral::Arithmetic(c) => {
                     new_body.push(crate::body::BodyLiteral::Arithmetic(c.clone()));
                 }
+                crate::body::BodyLiteral::Fold(f) => {
+                    let mut new_fold = f.clone();
+                    new_fold.pattern = rewrite_body_logic_wildcards(&f.pattern, &mut counter);
+                    new_body.push(crate::body::BodyLiteral::Fold(new_fold));
+                }
             }
         }
         new_rule.body = new_body.into();

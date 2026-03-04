@@ -88,6 +88,7 @@ fn body_literal_has_variables(bl: &BodyLiteral) -> bool {
                 || lit.has_temporal_variables()
         }
         BodyLiteral::Arithmetic(_) => true, // arithmetic constraints always contain variables
+        BodyLiteral::Fold(_) => true, // folds always need grounding context
     }
 }
 
@@ -503,6 +504,9 @@ fn apply_substitution_to_body_literal(
         // Arithmetic constraints are passed through unchanged during body matching.
         // (Evaluation of arithmetic constraints is handled separately.)
         BodyLiteral::Arithmetic(_) => bl.clone(),
+        // Folds are evaluated during grounding and stripped from the grounded rule
+        // (filtered out by the `bl.as_logic().is_some()` check in apply_substitution_to_rule).
+        BodyLiteral::Fold(_) => bl.clone(),
     }
 }
 
@@ -661,6 +665,234 @@ fn match_body_against_facts_ctx(
                 Vec::new() // evaluation failed — discard path
             }
         }
+        BodyLiteral::Fold(fold) => {
+            eval_fold_and_continue(
+                fold,
+                rest,
+                fact_index,
+                all_facts,
+                current_subst,
+                ctx,
+                |rest, fi, af, subst, ctx| {
+                    match_body_against_facts_ctx(rest, fi, af, subst, ctx)
+                        .into_iter()
+                        .map(|s| (s, false))
+                        .collect()
+                },
+            )
+            .into_iter()
+            .map(|(s, _)| s)
+            .collect()
+        }
+    }
+}
+
+/// A fold group: grouping variable bindings paired with extracted values.
+type FoldGroup = (Vec<(SymbolId, Term)>, Vec<Term>);
+
+/// Evaluate a fold literal against the current fact set and continue matching.
+///
+/// This is the core fold evaluation logic shared between `match_body_ordered_delta`
+/// and `match_body_against_facts_ctx`:
+///
+/// 1. Resolve the fold pattern under the current substitution (outer-bound variables become concrete)
+/// 2. Get candidate facts matching the resolved pattern
+/// 3. Group matches by grouping variables (pattern variables that appear outside the fold)
+/// 4. For each group, fold extracted values with the reducer function
+/// 5. Bind grouping variables + result variable and continue with remaining body literals
+fn eval_fold_and_continue<F>(
+    fold: &crate::body::FoldLiteral,
+    rest: &[BodyLiteral],
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+    all_facts: &[Literal],
+    current_subst: &Substitution,
+    ctx: &EvalContext<'_>,
+    continue_fn: F,
+) -> Vec<(Substitution, bool)>
+where
+    F: Fn(
+        &[BodyLiteral],
+        &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+        &[Literal],
+        &Substitution,
+        &EvalContext<'_>,
+    ) -> Vec<(Substitution, bool)>,
+{
+    // Resolve the fold pattern under the current substitution
+    let resolved = match resolve_body_logic(&fold.pattern, current_subst, ctx) {
+        Some(lit) => lit,
+        None => return Vec::new(),
+    };
+
+    // Get candidate facts
+    let candidates: Vec<&Literal> = if is_variable(resolved.name()) {
+        all_facts.iter().collect()
+    } else {
+        fact_index
+            .get(&fact_index_key(&resolved))
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
+    };
+
+    // Look up the reducer function
+    let registry = match ctx.registry {
+        Some(reg) => reg,
+        None => return Vec::new(),
+    };
+    let reducer = match registry.get(fold.reducer) {
+        Some(f) => f,
+        None => return Vec::new(),
+    };
+
+    // Determine which grouping vars are unbound (not already in current_subst).
+    // Bound grouping vars are already resolved in the pattern via resolve_body_logic.
+    let unbound_grouping: Vec<SymbolId> = fold
+        .grouping_vars
+        .iter()
+        .filter(|v| !current_subst.terms.contains_key(v))
+        .copied()
+        .collect();
+
+    if unbound_grouping.is_empty() {
+        // No grouping needed — aggregate all matches into a single result
+        let values = collect_fold_values(fold, &resolved, &candidates, current_subst, ctx);
+        let result = match compute_fold_result(fold, &values, current_subst, ctx, reducer) {
+            Some(r) => r,
+            None => return Vec::new(),
+        };
+        let mut new_subst = current_subst.clone();
+        new_subst.terms.insert(fold.result_var, result);
+        return continue_fn(rest, fact_index, all_facts, &new_subst, ctx);
+    }
+
+    // Group matches by unbound grouping variable values.
+    // Key: vector of Term values for grouping vars (in order of unbound_grouping)
+    // Value: vector of extracted Terms
+    let mut groups: Vec<FoldGroup> = Vec::new();
+
+    for fact in &candidates {
+        if let Some(local_bindings) = match_literal(&resolved, fact)
+            && let Some(merged) = merge_substitutions(current_subst, &local_bindings)
+        {
+            // Extract grouping key
+            let key: Vec<(SymbolId, Term)> = unbound_grouping
+                .iter()
+                .filter_map(|v| merged.terms.get(v).map(|t| (*v, t.clone())))
+                .collect();
+
+            // Skip if not all grouping vars are bound by this match
+            if key.len() != unbound_grouping.len() {
+                continue;
+            }
+
+            // Evaluate extract expression
+            if let Ok(val) = fold.extract.eval_with_context(&merged, ctx)
+                && let Ok(t) = Term::try_from(val)
+            {
+                // Find or create group
+                let key_vals: Vec<Term> = key.iter().map(|(_, t)| t.clone()).collect();
+                if let Some(group) = groups.iter_mut().find(|(k, _)| {
+                    k.iter().map(|(_, t)| t).collect::<Vec<_>>()
+                        == key_vals.iter().collect::<Vec<_>>()
+                }) {
+                    group.1.push(t);
+                } else {
+                    groups.push((key, vec![t]));
+                }
+            }
+        }
+    }
+
+    // Handle empty groups case (no matches at all)
+    if groups.is_empty() {
+        match &fold.identity {
+            Some(_) => {
+                // With identity, we can't produce any results because we don't
+                // know the grouping variable values. Return empty.
+                return Vec::new();
+            }
+            None => return Vec::new(), // "required" — discard path
+        }
+    }
+
+    // For each group, compute the fold result and continue
+    let mut all_results = Vec::new();
+    for (group_key, values) in &groups {
+        let result = match compute_fold_result(fold, values, current_subst, ctx, reducer) {
+            Some(r) => r,
+            None => continue,
+        };
+
+        let mut new_subst = current_subst.clone();
+        // Bind grouping variable values
+        for (var, val) in group_key {
+            new_subst.terms.insert(*var, val.clone());
+        }
+        // Bind fold result
+        new_subst.terms.insert(fold.result_var, result);
+
+        all_results.extend(continue_fn(rest, fact_index, all_facts, &new_subst, ctx));
+    }
+
+    all_results
+}
+
+/// Collect extracted values from facts matching the fold pattern.
+fn collect_fold_values(
+    fold: &crate::body::FoldLiteral,
+    resolved: &Literal,
+    candidates: &[&Literal],
+    current_subst: &Substitution,
+    ctx: &EvalContext<'_>,
+) -> Vec<Term> {
+    let mut values = Vec::new();
+    for fact in candidates {
+        if let Some(local_bindings) = match_literal(resolved, fact)
+            && let Some(merged) = merge_substitutions(current_subst, &local_bindings)
+            && let Ok(val) = fold.extract.eval_with_context(&merged, ctx)
+            && let Ok(t) = Term::try_from(val)
+        {
+            values.push(t);
+        }
+    }
+    values
+}
+
+/// Compute the fold result from a list of extracted values.
+/// Returns None if the fold should discard the path (required with empty set).
+fn compute_fold_result(
+    fold: &crate::body::FoldLiteral,
+    values: &[Term],
+    current_subst: &Substitution,
+    ctx: &EvalContext<'_>,
+    reducer: &dyn crate::function_registry::ExtensionFunction,
+) -> Option<Term> {
+    if values.is_empty() {
+        match &fold.identity {
+            Some(expr) => {
+                let val = expr.eval_with_context(current_subst, ctx).ok()?;
+                Term::try_from(val).ok()
+            }
+            None => None, // "required" — discard path
+        }
+    } else {
+        match &fold.identity {
+            Some(expr) => {
+                let val = expr.eval_with_context(current_subst, ctx).ok()?;
+                let mut acc = Term::try_from(val).ok()?;
+                for v in values {
+                    acc = reducer.eval(&[acc, v.clone()]).ok()?;
+                }
+                Some(acc)
+            }
+            None => {
+                let mut acc = values[0].clone();
+                for v in &values[1..] {
+                    acc = reducer.eval(&[acc, v.clone()]).ok()?;
+                }
+                Some(acc)
+            }
+        }
     }
 }
 
@@ -781,6 +1013,19 @@ fn match_body_ordered_delta(
             } else {
                 Vec::new()
             }
+        }
+        BodyLiteral::Fold(fold) => {
+            eval_fold_and_continue(
+                fold,
+                rest,
+                fact_index,
+                all_facts,
+                current_subst,
+                ctx,
+                |rest, fi, af, subst, ctx| {
+                    match_body_ordered_delta(rest, fi, af, delta_keys, subst, used_delta, ctx)
+                },
+            )
         }
     }
 }
