@@ -1,12 +1,12 @@
 {
-  "task_id": "pbt-non-temporal-equivalence",
-  "token_budget": 8000,
-  "tokens_used": 226,
+  "task_id": "final-validation",
+  "token_budget": 4000,
+  "tokens_used": 225,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Implement TEST-PBT-002: proptest that verifies non-temporal theories produce identical conclusions with and without TemporalBridge stage",
-      "token_cost": 34,
+      "content": "Run complete test suite across all workspace crates, verify zero defeasible.rs modifications, verify all 19 unit tests and 2 PBTs pass",
+      "token_cost": 33,
       "priority": "PlanMeta"
     },
     {
@@ -70,17 +70,6 @@
       "priority": "AgentMemory"
     }
   ],
-  "elements_excluded": [
-    {
-      "source": "context-file/crates/spindle-core/tests/difftest.rs",
-      "reason": "file not found",
-      "token_cost": 0
-    },
-    {
-      "source": "context-file/crates/spindle-core/tests/",
-      "reason": "file not found",
-      "token_cost": 0
-    }
-  ],
-  "constructed_at": "2026-03-04T07:25:17Z"
+  "elements_excluded": [],
+  "constructed_at": "2026-03-04T07:27:28Z"
 }
