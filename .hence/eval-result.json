@@ -3,27 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 4,
-    "insertions": 25,
-    "deletions": 11,
+    "files_changed": 2,
+    "insertions": 74,
+    "deletions": 6,
     "file_list": [
-      "crates/spindle-core/src/reason/defeasible.rs",
-      "crates/spindle-core/tests/arithmetic.rs",
-      "crates/spindle-core/tests/arithmetic_worked_examples.rs",
-      "crates/spindle-core/tests/pipeline_integration.rs"
+      ".hence/context-manifest.json",
+      "crates/spindle-core/src/query/mod.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-backward-compat-validation-changes",
-      "content": "Modified 4 files (+25, -11): crates/spindle-core/src/reason/defeasible.rs, crates/spindle-core/tests/arithmetic.rs, crates/spindle-core/tests/arithmetic_worked_examples.rs, crates/spindle-core/tests/pipeline_integration.rs",
+      "key": "task-matches-query-temporal-changes",
+      "content": "Modified 2 files (+74, -6): .hence/context-manifest.json, crates/spindle-core/src/query/mod.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/backward-compat-validation-v1",
-  "evaluated_at": "2026-03-04T07:10:17Z",
+  "branch_name": "hence/matches-query-temporal-v1",
+  "evaluated_at": "2026-03-04T07:12:30Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
