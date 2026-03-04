@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::intern::{SymbolId, intern, resolve};
 use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel};
+use crate::temporal::Temporal;
 use crate::term::Term;
 use crate::theory::Theory;
 
@@ -72,6 +73,7 @@ impl LitId {
 struct AtomKey {
     functor: SymbolId,
     mode: (SymbolId, bool), // name_id, negated
+    temporal: Temporal,
     args: Vec<Term>,
 }
 
@@ -146,6 +148,7 @@ impl<'a> IndexedTheory<'a> {
         let key = AtomKey {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
+            temporal: lit.temporal.clone(),
             args: lit.predicate_args().to_vec(),
         };
 
@@ -172,6 +175,7 @@ impl<'a> IndexedTheory<'a> {
         let key = AtomKey {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
+            temporal: lit.temporal.clone(),
             args: lit.predicate_args().to_vec(),
         };
 
@@ -202,7 +206,7 @@ impl<'a> IndexedTheory<'a> {
             key.functor,
             lit_id.is_negated(),
             mode,
-            crate::temporal::Temporal::empty(), // Temporal lost in identity, which is correct for reasoning
+            key.temporal.clone(),
             key.args.clone(),
         )
     }
@@ -274,6 +278,60 @@ impl<'a> IndexedTheory<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_indexed_theory_temporal_discrimination() {
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        // p[1,10]
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+                vec![],
+            ),
+        ));
+        // p[20,30]
+        theory.add_rule(Rule::fact(
+            "f2",
+            Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+                vec![],
+            ),
+        ));
+
+        let mut indexed = IndexedTheory::build(&theory);
+
+        let p_early = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let p_late = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+
+        let id_early = indexed.intern_literal(&p_early);
+        let id_late = indexed.intern_literal(&p_late);
+
+        assert_ne!(
+            id_early, id_late,
+            "p[1,10] and p[20,30] should have different LitIds"
+        );
+    }
 
     #[test]
     fn test_indexed_theory_arg_discrimination() {
