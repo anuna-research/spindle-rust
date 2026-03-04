@@ -295,7 +295,9 @@ mod tests {
 
     #[test]
     fn test_is_arith_op_all_operators() {
-        for op in &["+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**"] {
+        for op in &[
+            "+", "-", "*", "/", "div", "rem", "abs", "min", "max", "**", "round", "floor", "ceil",
+        ] {
             assert!(is_arith_op(op), "Expected '{op}' to be an arith op");
         }
     }

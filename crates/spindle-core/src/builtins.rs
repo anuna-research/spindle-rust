@@ -29,6 +29,18 @@ fn nv_to_term(nv: NumericValue) -> Result<Term, EvalError> {
     Term::try_from(nv).map_err(|e| EvalError::EvalFailed(e.to_string()))
 }
 
+fn check_arity(sig: &FunctionSignature, args: &[Term]) -> Result<(), EvalError> {
+    if !sig.arity.accepts(args.len()) {
+        return Err(EvalError::TypeError(format!(
+            "{} requires {} argument(s), got {}",
+            crate::intern::resolve(sig.name),
+            sig.arity,
+            args.len()
+        )));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // AddFn (+)
 // ---------------------------------------------------------------------------
@@ -55,6 +67,7 @@ impl ExtensionFunction for AddFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         if args.is_empty() {
             return Ok(Term::Integer(0));
         }
@@ -92,6 +105,7 @@ impl ExtensionFunction for SubFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let first = to_nv(args.first().ok_or_else(|| {
             EvalError::TypeError("subtraction requires at least 1 argument".into())
         })?)?;
@@ -132,6 +146,7 @@ impl ExtensionFunction for MulFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         if args.is_empty() {
             return Ok(Term::Integer(1));
         }
@@ -169,6 +184,7 @@ impl ExtensionFunction for DivFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let first = to_nv(args.first().ok_or_else(|| {
             EvalError::TypeError("division requires at least 1 argument".into())
         })?)?;
@@ -209,6 +225,7 @@ impl ExtensionFunction for MinFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let mut acc = to_nv(
             args.first()
                 .ok_or_else(|| EvalError::TypeError("min requires at least 1 argument".into()))?,
@@ -248,6 +265,7 @@ impl ExtensionFunction for MaxFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let mut acc = to_nv(
             args.first()
                 .ok_or_else(|| EvalError::TypeError("max requires at least 1 argument".into()))?,
@@ -287,6 +305,7 @@ impl ExtensionFunction for IDivFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let lhs = to_nv(&args[0])?;
         let rhs = to_nv(&args[1])?;
 
@@ -338,6 +357,7 @@ impl ExtensionFunction for RemFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let lhs = to_nv(&args[0])?;
         let rhs = to_nv(&args[1])?;
 
@@ -389,6 +409,7 @@ impl ExtensionFunction for PowFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let base = to_nv(&args[0])?;
         let exp = to_nv(&args[1])?;
         nv_to_term(eval_pow(base, exp)?)
@@ -421,6 +442,7 @@ impl ExtensionFunction for AbsFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         let v = to_nv(&args[0])?;
         nv_to_term(abs_value(v)?)
     }
@@ -452,6 +474,7 @@ impl ExtensionFunction for RoundFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         use rust_decimal::RoundingStrategy;
 
         let value = to_nv(&args[0])?;
@@ -468,7 +491,13 @@ impl ExtensionFunction for RoundFn {
                     }
                     .into());
                 }
-                *n as u32
+                u32::try_from(*n).map_err(|_| {
+                    EvalError::from(ArithError::TypeMismatch {
+                        op: "round",
+                        expected: "non-negative integer dp (0..4294967295)",
+                        got: "integer too large for dp",
+                    })
+                })?
             }
             _ => {
                 return Err(ArithError::TypeMismatch {
@@ -520,6 +549,7 @@ impl ExtensionFunction for FloorFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         use rust_decimal::prelude::ToPrimitive;
 
         let value = to_nv(&args[0])?;
@@ -571,6 +601,7 @@ impl ExtensionFunction for CeilFn {
     }
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        check_arity(&self.sig, args)?;
         use rust_decimal::prelude::ToPrimitive;
 
         let value = to_nv(&args[0])?;
@@ -863,5 +894,195 @@ mod tests {
     fn reciprocal_of_zero() {
         let result = eval_builtin("/", &[Term::Integer(0)]);
         assert!(result.is_err());
+    }
+
+    // ===================== arity safety =====================
+
+    #[test]
+    fn div_wrong_arity() {
+        let result = eval_builtin("div", &[Term::Integer(1)]);
+        assert!(result.is_err());
+        let result = eval_builtin(
+            "div",
+            &[Term::Integer(1), Term::Integer(2), Term::Integer(3)],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rem_wrong_arity() {
+        let result = eval_builtin("rem", &[Term::Integer(1)]);
+        assert!(result.is_err());
+        let result = eval_builtin(
+            "rem",
+            &[Term::Integer(1), Term::Integer(2), Term::Integer(3)],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn pow_wrong_arity() {
+        let result = eval_builtin("**", &[Term::Integer(2)]);
+        assert!(result.is_err());
+        let result = eval_builtin(
+            "**",
+            &[Term::Integer(2), Term::Integer(3), Term::Integer(4)],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn abs_wrong_arity() {
+        let result = eval_builtin("abs", &[]);
+        assert!(result.is_err());
+        let result = eval_builtin("abs", &[Term::Integer(1), Term::Integer(2)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn round_wrong_arity() {
+        let result = eval_builtin("round", &[Term::Integer(1)]);
+        assert!(result.is_err());
+        let result = eval_builtin(
+            "round",
+            &[Term::Integer(1), Term::Integer(2), Term::Integer(3)],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn floor_wrong_arity() {
+        let result = eval_builtin("floor", &[]);
+        assert!(result.is_err());
+        let result = eval_builtin("floor", &[Term::Integer(1), Term::Integer(2)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ceil_wrong_arity() {
+        let result = eval_builtin("ceil", &[]);
+        assert!(result.is_err());
+        let result = eval_builtin("ceil", &[Term::Integer(1), Term::Integer(2)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sub_zero_args() {
+        let result = eval_builtin("-", &[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn div_slash_zero_args() {
+        let result = eval_builtin("/", &[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn min_zero_args() {
+        let result = eval_builtin("min", &[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn max_zero_args() {
+        let result = eval_builtin("max", &[]);
+        assert!(result.is_err());
+    }
+
+    // ===================== large dp =====================
+
+    #[test]
+    fn round_large_dp() {
+        let result = eval_builtin(
+            "round",
+            &[Term::Decimal(Decimal::new(314, 2)), Term::Integer(i64::MAX)],
+        );
+        assert!(result.is_err());
+    }
+
+    // ===================== mixed-type min/max =====================
+
+    #[test]
+    fn min_mixed_int_decimal() {
+        let result = eval_builtin(
+            "min",
+            &[Term::Integer(5), Term::Decimal(Decimal::new(30, 1))],
+        )
+        .unwrap();
+        assert_eq!(result, Term::Decimal(Decimal::new(30, 1)));
+    }
+
+    #[test]
+    fn max_mixed_int_decimal() {
+        let result = eval_builtin(
+            "max",
+            &[Term::Integer(5), Term::Decimal(Decimal::new(30, 1))],
+        )
+        .unwrap();
+        // numeric_cmp promotes Integer(5) to Decimal(5) when comparing mixed types
+        assert_eq!(result, Term::Decimal(Decimal::new(5, 0)));
+    }
+
+    // ===================== round/floor/ceil unit =====================
+
+    #[test]
+    fn round_basic() {
+        let result = eval_builtin(
+            "round",
+            &[Term::Decimal(Decimal::new(314, 2)), Term::Integer(1)],
+        )
+        .unwrap();
+        assert_eq!(result, Term::Decimal(Decimal::new(31, 1)));
+    }
+
+    #[test]
+    fn round_half_even() {
+        let result = eval_builtin(
+            "round",
+            &[Term::Decimal(Decimal::new(25, 1)), Term::Integer(0)],
+        )
+        .unwrap();
+        assert_eq!(result, Term::Decimal(Decimal::new(2, 0)));
+    }
+
+    #[test]
+    fn floor_decimal() {
+        let result = eval_builtin("floor", &[Term::Decimal(Decimal::new(314, 2))]).unwrap();
+        assert_eq!(result, Term::Integer(3));
+    }
+
+    #[test]
+    fn floor_negative_decimal() {
+        let result = eval_builtin("floor", &[Term::Decimal(Decimal::new(-314, 2))]).unwrap();
+        assert_eq!(result, Term::Integer(-4));
+    }
+
+    #[test]
+    fn ceil_decimal() {
+        let result = eval_builtin("ceil", &[Term::Decimal(Decimal::new(314, 2))]).unwrap();
+        assert_eq!(result, Term::Integer(4));
+    }
+
+    #[test]
+    fn ceil_negative_decimal() {
+        let result = eval_builtin("ceil", &[Term::Decimal(Decimal::new(-314, 2))]).unwrap();
+        assert_eq!(result, Term::Integer(-3));
+    }
+
+    #[test]
+    fn floor_integer_passthrough() {
+        assert_eq!(
+            eval_builtin("floor", &[Term::Integer(7)]).unwrap(),
+            Term::Integer(7)
+        );
+    }
+
+    #[test]
+    fn ceil_integer_passthrough() {
+        assert_eq!(
+            eval_builtin("ceil", &[Term::Integer(7)]).unwrap(),
+            Term::Integer(7)
+        );
     }
 }
