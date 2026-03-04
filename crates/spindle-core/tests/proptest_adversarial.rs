@@ -933,8 +933,8 @@ proptest! {
         let mut theory = Theory::new();
         let mut labels = Vec::new();
 
-        for i in 0..std::cmp::min(n_facts, atoms.len()) {
-            theory.add_fact(atoms[i]);
+        for atom in atoms.iter().take(std::cmp::min(n_facts, atoms.len())) {
+            theory.add_fact(atom);
         }
 
         for i in 0..n_rules {
@@ -998,10 +998,10 @@ proptest! {
 /// Team defeat: one attacker defeated, another not → conclusion still blocked.
 ///
 ///   >> a, >> b, >> c
-///   r1: a => q
-///   r2: b => ~q
-///   r3: c => ~q
-///   r1 > r2 (but NOT r1 > r3)
+/// > > r1: a => q
+/// > > r2: b => ~q
+/// > > r3: c => ~q
+/// > > r1 > r2 (but NOT r1 > r3)
 ///
 /// r2 is defeated by r1, but r3 is undefeated → +d q should FAIL.
 #[test]
@@ -1029,9 +1029,9 @@ fn team_defeat_partial_superiority() {
 /// Superiority is not transitive: r1>r2 and r2>r3 does NOT imply r1>r3.
 ///
 ///   >> a, >> b
-///   r1: a => q   (r1 > r2)
-///   r2: a => ~q  (r2 > r3)
-///   r3: b => q
+/// > > r1: a => q   (r1 > r2)
+/// > > r2: a => ~q  (r2 > r3)
+/// > > r3: b => q
 ///
 /// For +d q: attackers = {r2}. Supporters = {r1, r3}.
 ///   r1 > r2 → attacker defeated → +d q ✓
@@ -1066,11 +1066,11 @@ fn superiority_not_transitive() {
 /// Cascading ambiguity: conflict on intermediate blocks entire downstream chain.
 ///
 ///   >> a
-///   r1: a => b
-///   r2: a => ~b
-///   r3: b => c
-///   r4: c => d
-///   r5: d => e
+/// > > r1: a => b
+/// > > r2: a => ~b
+/// > > r3: b => c
+/// > > r4: c => d
+/// > > r5: d => e
 ///
 /// b is ambiguous → c, d, e all blocked.
 #[test]
@@ -1105,9 +1105,9 @@ fn cascading_ambiguity_blocks_entire_chain() {
 /// Ambiguity is localized: independent conclusions unaffected.
 ///
 ///   >> a
-///   r1: => p
-///   r2: => ~p
-///   r3: a => q
+/// > > r1: => p
+/// > > r2: => ~p
+/// > > r3: a => q
 ///
 /// p is ambiguous, but q has independent support via r3 → +d q.
 #[test]
@@ -1219,10 +1219,10 @@ fn mutual_defeaters_prove_nothing() {
 /// Multi-hop strict chain must complete fully before defeasible phase.
 ///
 ///   >> a, >> b
-///   s1: a -> c
-///   s2: c -> d
-///   s3: d -> ~q
-///   r1: b => q
+/// > > s1: a -> c
+/// > > s2: c -> d
+/// > > s3: d -> ~q
+/// > > r1: b => q
 ///
 /// The strict chain a→c→d→~q must complete to produce +D ~q BEFORE
 /// the defeasible rule r1 is evaluated. Otherwise, r1 could incorrectly
@@ -1253,7 +1253,7 @@ fn multi_hop_strict_chain_completes_before_defeasible() {
 /// Duplicate facts should not cause body counter double-decrement.
 ///
 ///   >> p, >> p  (duplicate fact)
-///   r1: p, q => r
+/// > > r1: p, q => r
 ///
 /// With only p as fact (q missing), r should NOT fire.
 /// A buggy implementation might decrement the body counter twice for p,
@@ -1277,7 +1277,7 @@ fn duplicate_facts_no_spurious_rule_firing() {
 /// Multiple duplicate body literals in a single rule.
 ///
 ///   >> p
-///   r1: p, p, p => q
+/// > > r1: p, p, p => q
 ///
 /// Should fire because p is proven (the 3 body slots all match p).
 #[test]
@@ -1304,8 +1304,8 @@ fn triple_duplicate_body_fires() {
 /// This is an inconsistent theory, but the engine must handle it gracefully.
 ///
 ///   >> a, >> b
-///   s1: a -> q
-///   s2: b -> ~q
+/// > > s1: a -> q
+/// > > s2: b -> ~q
 ///
 /// Result: +D q, +D ~q, but -d q, -d ~q (condition 2 of +d fails for both).
 #[test]
@@ -1333,9 +1333,9 @@ fn conflicting_strict_chains() {
 /// when there's a conflict.
 ///
 ///   >> p
-///   r1: p => q
-///   r2: q => q  (self-loop)
-///   r3: p => ~q (attacker)
+/// > > r1: p => q
+/// > > r2: q => q  (self-loop)
+/// > > r3: p => ~q (attacker)
 ///
 /// q is blocked by ambiguity (r1 vs r3), self-loop r2 shouldn't change this.
 #[test]
@@ -1359,8 +1359,8 @@ fn self_loop_with_conflict() {
 /// Superiority between rules with different body predicates, one body unsatisfied.
 ///
 ///   >> a
-///   r1: a => q   (r1 > r2)
-///   r2: b => ~q  (body unsatisfied, b not a fact)
+/// > > r1: a => q   (r1 > r2)
+/// > > r2: b => ~q  (body unsatisfied, b not a fact)
 ///
 /// r2 is not applicable (body unsatisfied) → no conflict → +d q.
 #[test]
@@ -1383,11 +1383,11 @@ fn superior_rule_with_unsatisfied_attacker() {
 /// Diamond dependency: two paths to same conclusion, one blocked.
 ///
 ///   >> a
-///   r1: a => b
-///   r2: a => c
-///   r3: a => ~b (blocks b via ambiguity)
-///   r4: b => d
-///   r5: c => d
+/// > > r1: a => b
+/// > > r2: a => c
+/// > > r3: a => ~b (blocks b via ambiguity)
+/// > > r4: b => d
+/// > > r5: c => d
 ///
 /// b is ambiguous (r1 vs r3), but c is uncontested.
 /// d should be +d via r5 (c → d), even though r4 is blocked.
@@ -1416,10 +1416,10 @@ fn diamond_one_path_blocked_other_succeeds() {
 /// where one supporter's body becomes -d but another's remains applicable.
 ///
 ///   >> a, >> b, >> c
-///   r1: a => p
-///   r2: b => ~p  (blocks p via ambiguity with r1)
-///   r3: c => q
-///   r4: p => q   (this path is blocked)
+/// > > r1: a => p
+/// > > r2: b => ~p  (blocks p via ambiguity with r1)
+/// > > r3: c => q
+/// > > r4: p => q   (this path is blocked)
 ///
 /// q should be +d via r3 (independent of ambiguous p).
 #[test]
@@ -1446,11 +1446,11 @@ fn floating_conclusion_independent_support() {
 /// Five-rule star topology: one fact, five rules to different heads, some conflicting.
 ///
 ///   >> a
-///   r1: a => b
-///   r2: a => ~b
-///   r3: a => c
-///   r4: a => d
-///   r5: a => ~d
+/// > > r1: a => b
+/// > > r2: a => ~b
+/// > > r3: a => c
+/// > > r4: a => d
+/// > > r5: a => ~d
 ///
 /// b: ambiguous, c: +d, d: ambiguous.
 #[test]

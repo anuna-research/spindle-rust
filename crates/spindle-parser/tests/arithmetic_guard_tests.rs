@@ -508,7 +508,8 @@ fn test_008_07_future_reserved_count_as_label() {
 #[test]
 fn test_008_08_future_reserved_as_predicates() {
     // Still future-reserved
-    for kw in &["avg"] {
+    {
+        let kw = &"avg";
         let input = format!("(given {kw})");
         let err = parse_spl(&input).unwrap_err();
         let msg = format!("{err}");

@@ -17,7 +17,6 @@ use std::collections::HashSet;
 use spindle_core::literal::Literal;
 use spindle_core::reason::reason;
 use spindle_core::superiority::{Superiority, SuperiorityIndex};
-use spindle_core::temporal::Temporal;
 
 use proptest_helpers::{ATOMS, arb_literal, arb_mode, arb_temporal, arb_theory};
 

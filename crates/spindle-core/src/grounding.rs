@@ -640,12 +640,12 @@ fn match_body_against_facts_ctx(
             let mut results = Vec::new();
 
             for fact in candidates {
-                if let Some(new_bindings) = match_literal(&first_lit, fact) {
-                    if let Some(merged) = merge_substitutions(current_subst, &new_bindings) {
-                        results.extend(match_body_against_facts_ctx(
-                            rest, fact_index, all_facts, &merged, ctx,
-                        ));
-                    }
+                if let Some(new_bindings) = match_literal(&first_lit, fact)
+                    && let Some(merged) = merge_substitutions(current_subst, &new_bindings)
+                {
+                    results.extend(match_body_against_facts_ctx(
+                        rest, fact_index, all_facts, &merged, ctx,
+                    ));
                 }
             }
 
@@ -3636,7 +3636,7 @@ mod tests {
             .insert(intern("?c"), Term::Decimal(Decimal::new(314, 2)));
         subst
             .terms
-            .insert(intern("?d"), Term::Float(FiniteFloat::new(2.718).unwrap()));
+            .insert(intern("?d"), Term::Float(FiniteFloat::new(1.23).unwrap()));
 
         let result = apply_substitution_to_literal(&lit, &subst);
         assert_eq!(
@@ -3645,7 +3645,7 @@ mod tests {
                 Term::Symbol(intern("name")),
                 Term::Integer(42),
                 Term::Decimal(Decimal::new(314, 2)),
-                Term::Float(FiniteFloat::new(2.718).unwrap()),
+                Term::Float(FiniteFloat::new(1.23).unwrap()),
             ]
         );
     }

@@ -365,8 +365,8 @@ mod tests {
 
     #[test]
     fn finite_float_display() {
-        let f = FiniteFloat::new(3.14).unwrap();
-        assert_eq!(format!("{f}"), "3.14");
+        let f = FiniteFloat::new(1.23).unwrap();
+        assert_eq!(format!("{f}"), "1.23");
     }
 
     // -- Term tests --------------------------------------------------------
@@ -496,7 +496,7 @@ mod tests {
         let t: Term = nv.try_into().unwrap();
         assert_eq!(t, Term::Decimal(Decimal::new(10, 0)));
 
-        let nv = NumericValue::Float(3.14);
+        let nv = NumericValue::Float(1.23);
         let t: Term = nv.try_into().unwrap();
         assert!(matches!(t, Term::Float(_)));
 

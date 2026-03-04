@@ -96,14 +96,14 @@ fn test_012_04_decimal_preserves_scale() {
 // ===========================================================================
 #[test]
 fn test_012_05_float_round_trip() {
-    let dto = TermDto::Float(3.14);
+    let dto = TermDto::Float(1.23);
     let json = serde_json::to_string(&dto).unwrap();
     let back: TermDto = serde_json::from_str(&json).unwrap();
     assert_eq!(dto, back);
 
     let v: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(v["type"], "float");
-    assert_eq!(v["value"], 3.14);
+    assert_eq!(v["value"], 1.23);
 }
 
 // ===========================================================================

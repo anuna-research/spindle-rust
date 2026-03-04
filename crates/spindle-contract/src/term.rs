@@ -6,7 +6,7 @@
 //! - `Symbol` → `{"type": "symbol", "value": "name"}`
 //! - `Integer` → `{"type": "integer", "value": 42}` (string if |n| > 2^53)
 //! - `Decimal` → `{"type": "decimal", "value": "8.00"}` (always string, preserves scale)
-//! - `Float` → `{"type": "float", "value": 3.14}`
+//! - `Float` → `{"type": "float", "value": 1.23}`
 
 use serde::de::{self, MapAccess, Visitor};
 use serde::ser::SerializeMap;
@@ -213,9 +213,9 @@ mod tests {
 
     #[test]
     fn float_round_trip() {
-        let dto = TermDto::Float(3.14);
+        let dto = TermDto::Float(1.23);
         let json = serde_json::to_string(&dto).unwrap();
-        assert_eq!(json, r#"{"type":"float","value":3.14}"#);
+        assert_eq!(json, r#"{"type":"float","value":1.23}"#);
         let back: TermDto = serde_json::from_str(&json).unwrap();
         assert_eq!(dto, back);
     }

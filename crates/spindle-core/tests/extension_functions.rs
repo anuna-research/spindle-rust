@@ -232,7 +232,7 @@ fn basic_call_double() {
     let has_result_10 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(10)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(10)])
     });
     assert!(has_result_10, "expected (result 10) in grounded theory");
 }
@@ -262,7 +262,7 @@ fn call_nested_in_arithmetic() {
     let has_result_7 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(7)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(7)])
     });
     assert!(has_result_7, "expected (result 7) in grounded theory");
 }
@@ -294,7 +294,7 @@ fn multi_arg_function() {
     let has_total_6 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "total" && h.predicate_args() == &[Term::Integer(6)])
+            .any(|h| h.name() == "total" && h.predicate_args() == [Term::Integer(6)])
     });
     assert!(has_total_6, "expected (total 6) in grounded theory");
 }
@@ -467,7 +467,7 @@ fn ground_theory_with_eval_context() {
     let has_doubled_8 = grounded.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "doubled" && h.predicate_args() == &[Term::Integer(8)])
+            .any(|h| h.name() == "doubled" && h.predicate_args() == [Term::Integer(8)])
     });
     assert!(has_doubled_8, "expected (doubled 8) in grounded theory");
 }
@@ -526,7 +526,7 @@ fn range_arity_1_arg() {
     let has_result_5 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(5)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(5)])
     });
     assert!(has_result_5, "expected (result 5) with 1 arg");
 }
@@ -553,7 +553,7 @@ fn range_arity_2_args() {
     let has_result_5 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(5)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(5)])
     });
     assert!(has_result_5, "expected (result 5) with 2 args");
 }
@@ -580,7 +580,7 @@ fn range_arity_3_args() {
     let has_result_6 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(6)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(6)])
     });
     assert!(has_result_6, "expected (result 6) with 3 args");
 }
@@ -672,7 +672,7 @@ fn nested_call_in_call() {
     let has_result_12 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(12)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(12)])
     });
     assert!(has_result_12, "expected (result 12) from double(double(3))");
 }
@@ -708,7 +708,7 @@ fn call_in_body_predicate_argument() {
     let has_matched = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "matched" && h.predicate_args() == &[Term::Integer(3)])
+            .any(|h| h.name() == "matched" && h.predicate_args() == [Term::Integer(3)])
     });
     assert!(
         has_matched,
@@ -742,7 +742,7 @@ fn zero_arg_function() {
     let has_result_42 = result.theory.rules().any(|r| {
         r.head
             .iter()
-            .any(|h| h.name() == "result" && h.predicate_args() == &[Term::Integer(42)])
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Integer(42)])
     });
     assert!(has_result_42, "expected (result 42) from zero-arg function");
 }
@@ -772,7 +772,7 @@ fn end_to_end_reasoning_with_extension_function() {
     let has_result_10 = conclusions.iter().any(|c| {
         c.conclusion_type == ConclusionType::DefeasiblyProvable
             && c.literal.name() == "result"
-            && c.literal.predicate_args() == &[Term::Integer(10)]
+            && c.literal.predicate_args() == [Term::Integer(10)]
     });
     assert!(
         has_result_10,
@@ -847,7 +847,7 @@ fn decimal_return_from_extension_function() {
     let has_result = result.theory.rules().any(|r| {
         r.head.iter().any(|h| {
             h.name() == "result"
-                && h.predicate_args() == &[Term::try_from(NumericValue::Decimal(expected)).unwrap()]
+                && h.predicate_args() == [Term::try_from(NumericValue::Decimal(expected)).unwrap()]
         })
     });
     assert!(has_result, "expected (result 3.5) from half(7)");
@@ -922,7 +922,7 @@ fn float_return_from_extension_function() {
     let has_result = result.theory.rules().any(|r| {
         r.head.iter().any(|h| {
             h.name() == "result"
-                && h.predicate_args() == &[Term::Float(FiniteFloat::new(2.0).unwrap())]
+                && h.predicate_args() == [Term::Float(FiniteFloat::new(2.0).unwrap())]
         })
     });
     assert!(has_result, "expected (result 2.0) from sqrt(4)");
@@ -957,7 +957,7 @@ fn multiple_extension_functions_in_one_theory() {
     let has_result = result.theory.rules().any(|r| {
         r.head.iter().any(|h| {
             h.name() == "result"
-                && h.predicate_args() == &[Term::try_from(NumericValue::Decimal(expected)).unwrap()]
+                && h.predicate_args() == [Term::try_from(NumericValue::Decimal(expected)).unwrap()]
         })
     });
     assert!(has_result, "expected (result 5.0) from half(double(5))");

@@ -46,6 +46,7 @@ fn arb_bin_op_name() -> impl Strategy<Value = &'static str> {
     prop_oneof![Just("div"), Just("rem"), Just("**"),]
 }
 
+#[allow(dead_code)]
 fn arb_cmp_op() -> impl Strategy<Value = CmpOp> {
     prop_oneof![
         Just(CmpOp::Eq),
@@ -107,6 +108,7 @@ fn arb_substitution() -> impl Strategy<Value = Substitution> {
 }
 
 /// Create an EvalContext with the prelude registry.
+#[allow(dead_code)]
 fn prelude_ctx() -> (
     FunctionRegistry,
     impl Fn(&FunctionRegistry) -> EvalContext<'_>,
@@ -235,15 +237,14 @@ proptest! {
         };
         let reg = FunctionRegistry::with_prelude();
         let ctx = EvalContext::with_registry(&reg);
-        if let Ok(NumericValue::Integer(r)) = rem_expr.eval_with_context(&subst, &ctx) {
-            if r != 0 {
+        if let Ok(NumericValue::Integer(r)) = rem_expr.eval_with_context(&subst, &ctx)
+            && r != 0 {
                 prop_assert!(
                     (r > 0) == (b > 0),
                     "rem({}, {}) = {} should have same sign as divisor {}",
                     a, b, r, b
                 );
             }
-        }
     }
 
     /// Property 6: Comparison reflexivity — (= x x) always holds,
@@ -303,8 +304,8 @@ proptest! {
     ) {
         let reg = FunctionRegistry::with_prelude();
         let ctx = EvalContext::with_registry(&reg);
-        if let Ok(val) = expr.eval_with_context(&subst, &ctx) {
-            if let NumericValue::Float(f) = val {
+        if let Ok(val) = expr.eval_with_context(&subst, &ctx)
+            && let NumericValue::Float(f) = val {
                 prop_assert!(
                     f.is_finite(),
                     "Float result must be finite, got {}",
@@ -315,7 +316,6 @@ proptest! {
                     "Float result must not be NaN"
                 );
             }
-        }
     }
 
     /// Property 8: Source-order dependency — bind then compare succeeds,
@@ -338,9 +338,9 @@ proptest! {
         "#,
             val, threshold
         );
-        if let Ok(theory) = spindle_parser::parse_spl(&spl_ok) {
-            if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
-                if let Ok(conclusions) = reason_prepared(&result.theory) {
+        if let Ok(theory) = spindle_parser::parse_spl(&spl_ok)
+            && let Ok(result) = prepare(&theory, PrepareOptions::default())
+                && let Ok(conclusions) = reason_prepared(&result.theory) {
                     let has_pass = conclusions.iter().any(|c| {
                         c.conclusion_type == spindle_core::conclusion::ConclusionType::DefeasiblyProvable
                             && c.literal.name() == "pass"
@@ -351,8 +351,6 @@ proptest! {
                         prop_assert!(!has_pass, "bind({}) > {} should not yield pass", val, threshold);
                     }
                 }
-            }
-        }
 
         // Order 2: compare before bind (should always fail — ?x unbound)
         let spl_bad = format!(
@@ -364,9 +362,9 @@ proptest! {
         "#,
             threshold, val
         );
-        if let Ok(theory) = spindle_parser::parse_spl(&spl_bad) {
-            if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
-                if let Ok(conclusions) = reason_prepared(&result.theory) {
+        if let Ok(theory) = spindle_parser::parse_spl(&spl_bad)
+            && let Ok(result) = prepare(&theory, PrepareOptions::default())
+                && let Ok(conclusions) = reason_prepared(&result.theory) {
                     let has_pass_bad = conclusions.iter().any(|c| {
                         c.literal.name() == "pass-bad"
                     });
@@ -375,8 +373,6 @@ proptest! {
                         "reversed order (compare before bind) should never fire"
                     );
                 }
-            }
-        }
     }
 
     /// Property 9: Body-arg expression equivalence — a rule with (pred ?x (+ ?a ?b))
@@ -400,9 +396,9 @@ proptest! {
         "#,
             a, b, sum
         );
-        if let Ok(theory) = spindle_parser::parse_spl(&spl) {
-            if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
-                if let Ok(conclusions) = reason_prepared(&result.theory) {
+        if let Ok(theory) = spindle_parser::parse_spl(&spl)
+            && let Ok(result) = prepare(&theory, PrepareOptions::default())
+                && let Ok(conclusions) = reason_prepared(&result.theory) {
                     let has_match = conclusions.iter().any(|c| {
                         c.conclusion_type == spindle_core::conclusion::ConclusionType::DefeasiblyProvable
                             && c.literal.name() == "match"
@@ -413,8 +409,6 @@ proptest! {
                         a, b, sum
                     );
                 }
-            }
-        }
     }
 
     /// Property 10: Parser round-trip stability — parsing an arithmetic SPL
