@@ -355,6 +355,19 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
     let stratum_info = ctx_after_phase1.stratum_info.clone();
     let is_multi_stratum = stratum_info.as_ref().is_some_and(|s| s.num_strata > 1);
 
+    // Temporal features are not yet supported with multi-stratum (fold) theories.
+    // Temporal filtering happens in the main pipeline, but per-stratum grounding
+    // in reason_stratified() does not apply temporal filtering.
+    if is_multi_stratum && theory_after_phase1.has_temporal_literals() {
+        return Err(crate::error::SpindleError::Validation {
+            message: "Temporal features (valid-at, expires-at) are not yet supported in \
+                      theories with fold aggregation over derived relations. \
+                      Either remove temporal annotations or restructure to avoid \
+                      multi-stratum fold dependencies."
+                .into(),
+        });
+    }
+
     // Phase 2: Grounding + post-grounding stages (skipped for multi-stratum)
     let mut phase2 = Pipeline::builder();
 

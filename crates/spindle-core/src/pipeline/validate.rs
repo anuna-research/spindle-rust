@@ -341,23 +341,24 @@ fn validate_fold(
                 ),
             });
         }
-        Some(reg) => {
-            if !reg.contains(fold.reducer) {
+        Some(reg) => match reg.get(fold.reducer) {
+            None => {
                 return Err(crate::error::SpindleError::Validation {
                     message: format!("Unknown fold reducer function '{reducer_name}'"),
                 });
             }
-            let func = reg.get(fold.reducer).unwrap();
-            let sig = func.signature();
-            if !sig.arity.accepts(2) {
-                return Err(crate::error::SpindleError::Validation {
-                    message: format!(
-                        "Fold reducer '{reducer_name}' must accept 2 arguments, but accepts {}",
-                        sig.arity
-                    ),
-                });
+            Some(func) => {
+                let sig = func.signature();
+                if !sig.arity.accepts(2) {
+                    return Err(crate::error::SpindleError::Validation {
+                        message: format!(
+                            "Fold reducer '{reducer_name}' must accept 2 arguments, but accepts {}",
+                            sig.arity
+                        ),
+                    });
+                }
             }
-        }
+        },
     }
 
     // 5. Validate extension function calls in extract and identity expressions
@@ -385,27 +386,28 @@ fn validate_expr_calls(expr: &ArithExpr, registry: Option<&FunctionRegistry>) ->
                         ),
                     });
                 }
-                Some(reg) => {
-                    if !reg.contains(*name) {
+                Some(reg) => match reg.get(*name) {
+                    None => {
                         return Err(SpindleError::Validation {
                             message: format!(
                                 "Unknown extension function '{func_name}' in expression"
                             ),
                         });
                     }
-                    let func = reg.get(*name).unwrap();
-                    let sig = func.signature();
-                    if !sig.arity.accepts(args.len()) {
-                        return Err(SpindleError::Validation {
-                            message: format!(
-                                "Extension function '{}' expects {} argument(s), got {}",
-                                func_name,
-                                sig.arity,
-                                args.len()
-                            ),
-                        });
+                    Some(func) => {
+                        let sig = func.signature();
+                        if !sig.arity.accepts(args.len()) {
+                            return Err(SpindleError::Validation {
+                                message: format!(
+                                    "Extension function '{}' expects {} argument(s), got {}",
+                                    func_name,
+                                    sig.arity,
+                                    args.len()
+                                ),
+                            });
+                        }
                     }
-                }
+                },
             }
             // Validate arguments recursively
             for arg in args {

@@ -10,7 +10,7 @@
 //! - [`FunctionSignature`] — metadata (name, arity, description)
 //! - [`EvalContext`] — shared context threaded through evaluation
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::fmt;
 
 use crate::intern::{SymbolId, resolve};
@@ -34,7 +34,10 @@ impl Arity {
     pub fn accepts(&self, n: usize) -> bool {
         match self {
             Arity::Fixed(expected) => n == *expected,
-            Arity::Range(min, max) => n >= *min && n <= *max,
+            Arity::Range(min, max) => {
+                debug_assert!(min <= max, "Arity::Range invariant violated: {min} > {max}");
+                n >= *min && n <= *max
+            }
         }
     }
 }
@@ -128,14 +131,14 @@ pub trait ExtensionFunction: Send + Sync {
 /// validation stage to check function existence and arity, and by the
 /// evaluation stage to dispatch calls.
 pub struct FunctionRegistry {
-    functions: HashMap<SymbolId, Box<dyn ExtensionFunction>>,
+    functions: FxHashMap<SymbolId, Box<dyn ExtensionFunction>>,
 }
 
 impl FunctionRegistry {
     /// Create an empty registry.
     pub fn new() -> Self {
         Self {
-            functions: HashMap::new(),
+            functions: FxHashMap::default(),
         }
     }
 

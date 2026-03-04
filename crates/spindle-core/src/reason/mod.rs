@@ -238,7 +238,7 @@ fn build_stratum_theory(
     // have non-fold body literals that depend on relations derived by
     // stratum-0 rules, so those stratum-0 rules must be present for
     // grounding to produce the necessary intermediate facts.
-    let mut included_labels = std::collections::HashSet::new();
+    let mut included_labels = rustc_hash::FxHashSet::default();
     for rule in original.rules() {
         let rule_stratum = strata.rule_strata.get(&rule.label).copied().unwrap_or(0);
         if rule_stratum <= target_stratum {
@@ -297,6 +297,30 @@ fn deduplicate_conclusions(conclusions: &mut Vec<Conclusion>) {
         i += 1;
         r
     });
+}
+
+/// Perform defeasible reasoning on a [`PipelineResult`] from [`prepare()`].
+///
+/// This is the recommended entry point when you have already called
+/// [`prepare()`] and want to avoid redundant pipeline work. It correctly
+/// dispatches to stratified reasoning when the theory requires multiple
+/// strata (e.g. fold aggregation over derived relations).
+pub fn reason_from_prepared(result: &crate::pipeline::PipelineResult) -> Result<Vec<Conclusion>> {
+    match result.stratum_info {
+        Some(ref strata) if strata.num_strata > 1 => {
+            let fallback;
+            let registry = match result.function_registry {
+                Some(ref reg) => reg,
+                None => {
+                    fallback = FunctionRegistry::with_prelude();
+                    &fallback
+                }
+            };
+            let ctx = EvalContext::with_registry(registry);
+            reason_stratified(&result.theory, strata, &ctx, &result.grounding)
+        }
+        _ => reason_prepared(&result.theory),
+    }
 }
 
 /// Perform defeasible reasoning on an already-prepared theory.

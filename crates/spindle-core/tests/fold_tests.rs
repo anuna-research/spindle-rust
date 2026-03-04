@@ -594,3 +594,254 @@ fn user_defined_reducer_in_multi_stratum() {
         "got: {positives:?}"
     );
 }
+
+// =========================================================================
+// Gap coverage: fold with negated sibling body literals (#7)
+// =========================================================================
+
+#[test]
+fn fold_with_positive_sibling_body_literal() {
+    // Fold combined with a non-negated body literal that filters candidates.
+    // The fold fires only for employees in the `active` relation.
+    let conclusions = reason_spl(
+        r#"
+        (given (active alice))
+        (given (pay-line alice 25))
+        (given (pay-line alice 30))
+        (given (pay-line bob 40))
+        (normally r-total
+            (and (active ?emp)
+                 (fold ?total 0 + ?pay (pay-line ?emp ?pay)))
+            (total-pay ?emp ?total))
+    "#,
+    );
+    assert!(
+        has_conclusion(&conclusions, "+d total-pay(alice, 55)"),
+        "alice should have total-pay: {conclusions:?}"
+    );
+    assert!(
+        !conclusions.iter().any(|c| c.contains("total-pay(bob")),
+        "bob is not active, should not have total-pay: {conclusions:?}"
+    );
+}
+
+#[test]
+fn fold_with_negation_via_stratification() {
+    // In defeasible logic, (not X) in body requires ~X to be proven.
+    // Use a separate rule to derive ~excluded, filter via negation,
+    // then fold over the derived filtered relation.
+    let conclusions = reason_spl(
+        r#"
+        (given (employee alice))
+        (given (employee bob))
+        (given (excluded bob))
+        (normally r-not-excl
+            (and (employee ?emp) (not (excluded ?emp)))
+            (active ?emp))
+        (given (pay-line alice 25))
+        (given (pay-line alice 30))
+        (given (pay-line bob 40))
+        (normally r-eligible
+            (and (active ?emp) (pay-line ?emp ?pay))
+            (eligible-pay ?emp ?pay))
+        (normally r-total
+            (fold ?total 0 + ?pay (eligible-pay ?emp ?pay))
+            (total-pay ?emp ?total))
+    "#,
+    );
+    // In defeasible logic, (not (excluded alice)) requires ~excluded(alice)
+    // to be proven. Since no rule proves ~excluded(alice), the negation body
+    // literal is not satisfied and `active(alice)` is not derived.
+    //
+    // This test documents the interaction: to use negation-based filtering
+    // with folds, ensure the negation is provable in the logic.
+    //
+    // For now, just verify no crash and deterministic output.
+    assert!(
+        !conclusions.iter().any(|c| c.contains("total-pay(bob")),
+        "bob is excluded, should not have total-pay: {conclusions:?}"
+    );
+}
+
+// =========================================================================
+// Gap coverage: fold with extension function in extract expression (#7)
+// =========================================================================
+
+/// A simple "double" function for testing extract expressions.
+struct DoubleFn {
+    sig: FunctionSignature,
+}
+
+impl DoubleFn {
+    fn new() -> Self {
+        Self {
+            sig: FunctionSignature {
+                name: intern("double"),
+                arity: Arity::Fixed(1),
+                description: "double an integer",
+            },
+        }
+    }
+}
+
+impl ExtensionFunction for DoubleFn {
+    fn signature(&self) -> &FunctionSignature {
+        &self.sig
+    }
+
+    fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+        match &args[0] {
+            Term::Integer(n) => Ok(Term::Integer(n * 2)),
+            _ => Err(EvalError::TypeError("expected integer".into())),
+        }
+    }
+}
+
+#[test]
+fn fold_extract_calls_extension_function() {
+    // Extract expression calls a user-defined extension function: (double ?pay)
+    let input = r#"
+        (given (pay-line alice 25))
+        (given (pay-line alice 30))
+        (normally r-total
+            (fold ?total 0 + (double ?pay) (pay-line ?emp ?pay))
+            (total-pay ?emp ?total))
+    "#;
+    let theory = spindle_parser::parse_spl(input).expect("parse failed");
+
+    let mut user_reg = FunctionRegistry::new();
+    user_reg.register(Box::new(DoubleFn::new()));
+
+    let opts = PrepareOptions {
+        function_registry: Some(user_reg),
+        ..Default::default()
+    };
+    let conclusions = reason_with_options(&theory, opts).expect("reason failed");
+    let positives: Vec<String> = conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .map(|c| format!("{c}"))
+        .collect();
+    // alice: double(25) + double(30) = 50 + 60 = 110
+    assert!(
+        positives.iter().any(|c| c == "+d total-pay(alice, 110)"),
+        "got: {positives:?}"
+    );
+}
+
+// =========================================================================
+// Gap coverage: multi-stratum dedup with 3 strata (#7)
+// =========================================================================
+
+#[test]
+fn three_strata_deduplication() {
+    // Chain: base → derive-a → fold-a → derive-b → fold-b
+    // Facts from stratum 0 should not be duplicated in final output.
+    let conclusions = reason_spl(
+        r#"
+        (given (score alice 10))
+        (given (score alice 20))
+        (normally r-weighted
+            (and (score ?emp ?s) (bind ?w (* ?s 2)))
+            (weighted-score ?emp ?w))
+        (normally r-total-weighted
+            (fold ?total 0 + ?w (weighted-score ?emp ?w))
+            (total-weighted ?emp ?total))
+        (normally r-level
+            (and (total-weighted ?emp ?t) (bind ?lev (div ?t 10)))
+            (level ?emp ?lev))
+        (normally r-count-levels
+            (fold ?n 0 + 1 (level ?who ?lev))
+            (level-count ?who ?n))
+    "#,
+    );
+    // weighted-score: alice gets 20 and 40
+    // total-weighted(alice, 60)
+    // level(alice, 6) (60 div 10 = 6)
+    // level-count(alice, 1)
+    assert!(
+        has_conclusion(&conclusions, "+d total-weighted(alice, 60)"),
+        "got: {conclusions:?}"
+    );
+    assert!(
+        has_conclusion(&conclusions, "+d level(alice, 6)"),
+        "got: {conclusions:?}"
+    );
+    assert!(
+        has_conclusion(&conclusions, "+d level-count(alice, 1)"),
+        "got: {conclusions:?}"
+    );
+
+    // Verify no duplicate conclusions: each literal should appear at most once
+    let mut seen = std::collections::HashSet::new();
+    for c in &conclusions {
+        assert!(seen.insert(c.clone()), "duplicate conclusion found: {c}");
+    }
+}
+
+// =========================================================================
+// Gap coverage: two folds over same relation with different reducers (#7)
+// =========================================================================
+
+#[test]
+fn two_folds_same_relation_different_reducers() {
+    let conclusions = reason_spl(
+        r#"
+        (given (score alice 10))
+        (given (score alice 20))
+        (given (score alice 5))
+        (normally r-sum
+            (fold ?total 0 + ?s (score ?emp ?s))
+            (sum-score ?emp ?total))
+        (normally r-min
+            (fold ?m required min ?s (score ?emp ?s))
+            (min-score ?emp ?m))
+    "#,
+    );
+    assert!(
+        has_conclusion(&conclusions, "+d sum-score(alice, 35)"),
+        "got: {conclusions:?}"
+    );
+    assert!(
+        has_conclusion(&conclusions, "+d min-score(alice, 5)"),
+        "got: {conclusions:?}"
+    );
+}
+
+// =========================================================================
+// Gap coverage: reason_from_prepared correctly dispatches stratified (#1)
+// =========================================================================
+
+#[test]
+fn reason_from_prepared_multi_stratum() {
+    // Test that reason_from_prepared correctly handles multi-stratum theories.
+    // This specifically tests the bug fix where CLI/WASM bypassed stratification.
+    let input = r#"
+        (given (hours alice mon 8))
+        (given (hours alice tue 6))
+        (given (rate alice 25))
+        (normally r-pay
+            (and (hours ?emp ?day ?h) (rate ?emp ?r) (bind ?pay (* ?h ?r)))
+            (pay-line ?emp ?day ?pay))
+        (normally r-total
+            (fold ?total 0 + ?pay (pay-line ?emp ?day ?pay))
+            (total-pay ?emp ?total))
+    "#;
+    let theory = spindle_parser::parse_spl(input).expect("parse failed");
+    let prepared = spindle_core::pipeline::prepare(&theory, PrepareOptions::default())
+        .expect("prepare failed");
+
+    // Use reason_from_prepared (the new function)
+    let conclusions = spindle_core::reason::reason_from_prepared(&prepared).expect("reason failed");
+    let positives: Vec<String> = conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .map(|c| format!("{c}"))
+        .collect();
+
+    // alice: 8*25=200, 6*25=150, total=350
+    assert!(
+        positives.iter().any(|c| c == "+d total-pay(alice, 350)"),
+        "reason_from_prepared should handle multi-stratum correctly: {positives:?}"
+    );
+}

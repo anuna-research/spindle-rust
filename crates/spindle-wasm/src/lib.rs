@@ -36,7 +36,7 @@ use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
-use spindle_core::reason::reason;
+use spindle_core::reason::{reason, reason_from_prepared};
 use spindle_core::temporal::Temporal;
 use spindle_core::theory::{MetaValue, Theory};
 use spindle_parser::parse_spl;
@@ -200,7 +200,8 @@ impl Spindle {
         let prepared = prepare(&self.theory, PrepareOptions::default())
             .map_err(|e| JsError::new(&e.to_string()))?;
 
-        let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
+        let conclusions =
+            reason_from_prepared(&prepared).map_err(|e| JsError::new(&e.to_string()))?;
 
         let mut output_conclusions: Vec<ConclusionEntry> = conclusions
             .iter()
@@ -246,7 +247,8 @@ impl Spindle {
         let prepared = prepare(&self.theory, PrepareOptions::default())
             .map_err(|e| JsError::new(&e.to_string()))?;
 
-        let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
+        let conclusions =
+            reason_from_prepared(&prepared).map_err(|e| JsError::new(&e.to_string()))?;
 
         let mut output_conclusions: Vec<ConclusionEntryV2> = conclusions
             .iter()

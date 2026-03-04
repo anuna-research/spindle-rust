@@ -31,12 +31,11 @@ fn nv_to_term(nv: NumericValue) -> Result<Term, EvalError> {
 
 fn check_arity(sig: &FunctionSignature, args: &[Term]) -> Result<(), EvalError> {
     if !sig.arity.accepts(args.len()) {
-        return Err(EvalError::TypeError(format!(
-            "{} requires {} argument(s), got {}",
-            crate::intern::resolve(sig.name),
-            sig.arity,
-            args.len()
-        )));
+        return Err(EvalError::ArithError(ArithError::ArityMismatch {
+            name: sig.name,
+            expected: sig.arity.to_string(),
+            got: args.len(),
+        }));
     }
     Ok(())
 }
@@ -106,9 +105,8 @@ impl ExtensionFunction for SubFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
-        let first = to_nv(args.first().ok_or_else(|| {
-            EvalError::TypeError("subtraction requires at least 1 argument".into())
-        })?)?;
+        // Safe: check_arity guarantees at least 1 argument
+        let first = to_nv(&args[0])?;
         if args.len() == 1 {
             return nv_to_term(negate(first)?);
         }
@@ -185,9 +183,8 @@ impl ExtensionFunction for DivFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
-        let first = to_nv(args.first().ok_or_else(|| {
-            EvalError::TypeError("division requires at least 1 argument".into())
-        })?)?;
+        // Safe: check_arity guarantees at least 1 argument
+        let first = to_nv(&args[0])?;
         if args.len() == 1 {
             return nv_to_term(reciprocal(first)?);
         }
@@ -226,10 +223,8 @@ impl ExtensionFunction for MinFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
-        let mut acc = to_nv(
-            args.first()
-                .ok_or_else(|| EvalError::TypeError("min requires at least 1 argument".into()))?,
-        )?;
+        // Safe: check_arity guarantees at least 1 argument
+        let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
             let val = to_nv(arg)?;
             let (ord, pa, pb) = numeric_cmp(acc, val)?;
@@ -266,10 +261,8 @@ impl ExtensionFunction for MaxFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
-        let mut acc = to_nv(
-            args.first()
-                .ok_or_else(|| EvalError::TypeError("max requires at least 1 argument".into()))?,
-        )?;
+        // Safe: check_arity guarantees at least 1 argument
+        let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
             let val = to_nv(arg)?;
             let (ord, pa, pb) = numeric_cmp(acc, val)?;

@@ -9,6 +9,7 @@ use spindle_contract::reason::{
 };
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
+use spindle_core::reason::reason_from_prepared;
 use spindle_core::temporal::TimePoint;
 use spindle_core::trust::WeightedConclusion;
 
@@ -40,10 +41,9 @@ pub(crate) fn run_reason(
         )
     })?;
 
-    let conclusions =
-        spindle_core::reason::reason_prepared(&pipeline_result.theory).map_err(|e| {
-            CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
-        })?;
+    let conclusions = reason_from_prepared(&pipeline_result).map_err(|e| {
+        CliError::execution("REASONING_ERROR", format!("Error during reasoning: {e}"))
+    })?;
 
     // Compute trust-weighted conclusions if requested
     let weighted = if trust {
