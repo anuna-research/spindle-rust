@@ -1,12 +1,12 @@
 {
-  "task_id": "phase4-tests",
+  "task_id": "pbt-temporal-identity",
   "token_budget": 8000,
-  "tokens_used": 209,
+  "tokens_used": 226,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Write unit tests TEST-014 through TEST-016b for temporal query matching",
-      "token_cost": 17,
+      "content": "Implement TEST-PBT-001: proptest that verifies temporal identity bijection — intern(p)==intern(q) iff all fields including temporal match",
+      "token_cost": 34,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-04T07:16:19Z"
+  "constructed_at": "2026-03-04T07:22:36Z"
 }
