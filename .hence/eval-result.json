@@ -3,24 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 1,
-    "insertions": 24,
-    "deletions": 7,
+    "files_changed": 2,
+    "insertions": 298,
+    "deletions": 16,
     "file_list": [
-      ".hence/context-manifest.json"
+      ".hence/context-manifest.json",
+      "crates/spindle-core/tests/temporal_bridge_integration.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-pipeline-integration-changes",
-      "content": "Modified 1 files (+24, -7): .hence/context-manifest.json",
+      "key": "task-integration-tests-changes",
+      "content": "Modified 2 files (+298, -16): .hence/context-manifest.json, crates/spindle-core/tests/temporal_bridge_integration.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/pipeline-integration-v1",
-  "evaluated_at": "2026-03-04T06:54:50Z",
+  "branch_name": "hence/integration-tests-v1",
+  "evaluated_at": "2026-03-04T06:59:54Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
