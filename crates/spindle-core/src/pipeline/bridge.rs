@@ -55,6 +55,16 @@ impl PipelineStage for TemporalBridge {
         let mut seen: HashSet<String> = HashSet::new();
         let mut bridges: Vec<Rule> = Vec::new();
 
+        // Pre-seed seen set from pre-existing __bridge:: labels so we never
+        // regenerate a bridge that already exists in the theory.
+        for rule in theory.rules() {
+            if let Some(spl_key) = rule.label.strip_prefix("__bridge::") {
+                // Strip the optional "neg::" prefix to recover the canonical key
+                let canonical = spl_key.strip_prefix("neg::").unwrap_or(spl_key);
+                seen.insert(canonical.to_string());
+            }
+        }
+
         for rule in theory.rules() {
             for head_lit in rule.head.iter() {
                 if head_lit.temporal.is_empty() {
@@ -283,5 +293,58 @@ mod tests {
 
         // Two distinct temporal intervals → 2 pairs = 4 bridges
         assert_eq!(result.rule_count(), original_count + 4);
+    }
+
+    #[test]
+    fn skips_generation_when_bridge_labels_already_exist() {
+        let mut theory = Theory::new();
+
+        let head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(100), TimePoint::from_millis(200)),
+            vec![],
+        );
+        let spl_key = head.to_spl();
+
+        // Add a temporal fact
+        theory.add_rule(Rule::new(
+            "f1",
+            RuleType::Fact,
+            Vec::<Literal>::new(),
+            smallvec::smallvec![head.clone()],
+        ));
+
+        // Pre-add a bridge rule with the expected label
+        let pos_label = format!("__bridge::{spl_key}");
+        let dummy_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::empty(),
+            vec![],
+        );
+        theory.add_rule(Rule::strict(
+            pos_label,
+            smallvec![],
+            dummy_head.clone(),
+        ));
+        let neg_label = format!("__bridge::neg::{spl_key}");
+        let neg_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            true,
+            crate::mode::Mode::empty(),
+            Temporal::empty(),
+            vec![],
+        );
+        theory.add_rule(Rule::strict(neg_label, smallvec![], neg_head));
+
+        let original_count = theory.rule_count();
+        let mut ctx = PipelineContext::default();
+        let result = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        // No new bridges should be generated since they already exist
+        assert_eq!(result.rule_count(), original_count);
     }
 }
