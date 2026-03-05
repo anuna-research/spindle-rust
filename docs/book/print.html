@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-8adc3643.js";
+            window.path_to_searchindex_js = "searchindex-6479850a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-25a1a19c.js"></script>
@@ -189,15 +189,30 @@
 <h2 id="what-is-defeasible-logic"><a class="header" href="#what-is-defeasible-logic">What is Defeasible Logic?</a></h2>
 <p>Defeasible logic is a <strong>non-monotonic reasoning</strong> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.</p>
 <pre><code class="language-lisp">; The classic "Tweety" example
-(given bird)
-(given penguin)
+(given bird tweety)              ; Tweety is a bird
+(given penguin tweety)           ; Tweety is a penguin
 
-(normally r1 bird flies)           ; Birds typically fly
-(normally r2 penguin (not flies))  ; Penguins don't fly
+(normally birds-fly              ; Birds typically fly
+  (bird ?x) (flies ?x))
 
-(prefer r2 r1)                     ; Penguin rule beats bird rule
+(normally penguins-dont-fly      ; Penguins don't fly
+  (penguin ?x) (not (flies ?x)))
+
+(prefer penguins-dont-fly birds-fly)  ; Specificity: more specific rule prevails
 </code></pre>
-<p><strong>Result:</strong> <code>-flies</code> is provable (Tweety doesn’t fly).</p>
+<p><strong>Result:</strong></p>
+<pre><code>Conclusions:
+
+  +D penguin(tweety)
+  +D bird(tweety)
+  +d penguin(tweety)
+  +d bird(tweety)
+  +d ~flies(tweety)
+  -D flies(tweety)
+  -d flies(tweety)
+  -D ~flies(tweety)
+</code></pre>
+<p>Tweety is defeasibly proven not to fly (<code>+d ~flies(tweety)</code>), because <code>penguins-dont-fly</code> defeats <code>birds-fly</code>.</p>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <ul>
 <li><strong>Four rule types:</strong> facts, strict rules, defeasible rules, and defeaters</li>

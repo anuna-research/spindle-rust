@@ -13,16 +13,34 @@ Defeasible logic is a **non-monotonic reasoning** system that allows conclusions
 
 ```lisp
 ; The classic "Tweety" example
-(given bird)
-(given penguin)
+(given bird tweety)              ; Tweety is a bird
+(given penguin tweety)           ; Tweety is a penguin
 
-(normally r1 bird flies)           ; Birds typically fly
-(normally r2 penguin (not flies))  ; Penguins don't fly
+(normally birds-fly              ; Birds typically fly
+  (bird ?x) (flies ?x))
 
-(prefer r2 r1)                     ; Penguin rule beats bird rule
+(normally penguins-dont-fly      ; Penguins don't fly
+  (penguin ?x) (not (flies ?x)))
+
+(prefer penguins-dont-fly birds-fly)  ; Specificity: more specific rule prevails
 ```
 
-**Result:** `-flies` is provable (Tweety doesn't fly).
+**Result:**
+
+```
+Conclusions:
+
+  +D penguin(tweety)
+  +D bird(tweety)
+  +d penguin(tweety)
+  +d bird(tweety)
+  +d ~flies(tweety)
+  -D flies(tweety)
+  -d flies(tweety)
+  -D ~flies(tweety)
+```
+
+Tweety is defeasibly proven not to fly (`+d ~flies(tweety)`), because `penguins-dont-fly` defeats `birds-fly`.
 
 ## Features
 
