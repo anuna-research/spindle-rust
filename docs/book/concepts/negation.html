@@ -197,7 +197,7 @@
 <li>Absence of <code>P</code> does not imply <code>(not P)</code></li>
 </ul>
 <h2 id="syntax"><a class="header" href="#syntax">Syntax</a></h2>
-<pre><code class="language-lisp">(given (not guilty))
+<pre><code class="language-spl">(given (not guilty))
 (normally r1 penguin (not flies))
 </code></pre>
 <h2 id="three-valued-outcomes"><a class="header" href="#three-valued-outcomes">Three-Valued Outcomes</a></h2>
@@ -215,7 +215,7 @@
 </table>
 </div>
 <h2 id="example-unknown-state"><a class="header" href="#example-unknown-state">Example: Unknown State</a></h2>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (normally r1 bird flies)
 ; No information about grounded
 </code></pre>
@@ -230,25 +230,25 @@
 <p><code>P</code> and <code>(not P)</code> are <strong>complements</strong>. They interact in specific ways:</p>
 <h3 id="conflict"><a class="header" href="#conflict">Conflict</a></h3>
 <p>If rules prove both <code>P</code> and <code>(not P)</code>:</p>
-<pre><code class="language-lisp">(given a)
+<pre><code class="language-spl">(given a)
 (normally r1 a p)
 (normally r2 a (not p))
 </code></pre>
 <p>Without superiority, neither is provable (ambiguity).</p>
 <h3 id="definite-blocking"><a class="header" href="#definite-blocking">Definite Blocking</a></h3>
 <p>If <code>(not P)</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
-<pre><code class="language-lisp">(given (not p))              ; Definite fact: (not p)
+<pre><code class="language-spl">(given (not p))              ; Definite fact: (not p)
 (normally r1 a p)            ; Tries to prove p
 </code></pre>
 <p>Even if r1’s body is satisfied, <code>+d p</code> is blocked because <code>+D -p</code>.</p>
 <h2 id="negation-in-rule-bodies"><a class="header" href="#negation-in-rule-bodies">Negation in Rule Bodies</a></h2>
 <p>Negated literals can appear in rule bodies:</p>
-<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
+<pre><code class="language-spl">(normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
 (normally r2 (and student (not employed)) needs-loan)
 </code></pre>
 <h2 id="consistency"><a class="header" href="#consistency">Consistency</a></h2>
 <p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>(not P)</code>:</p>
-<pre><code class="language-lisp">(given p)
+<pre><code class="language-spl">(given p)
 (given (not p))
 </code></pre>
 <p>Result:</p>
@@ -261,7 +261,7 @@
 <p>To detect inconsistency, check for literals where both <code>+D P</code> and <code>+D -P</code> (or <code>+d P</code> and <code>+d -P</code>) are concluded.</p>
 <h2 id="closed-world-assumption"><a class="header" href="#closed-world-assumption">Closed World Assumption</a></h2>
 <p>Spindle does <strong>not</strong> use the Closed World Assumption by default. If you need it, add explicit rules:</p>
-<pre><code class="language-lisp">; CWA for 'guilty': if not proven guilty, then not guilty
+<pre><code class="language-spl">; CWA for 'guilty': if not proven guilty, then not guilty
 (given (not guilty))                    ; Default: not guilty
 (normally r1 evidence guilty)           ; Can be overridden by evidence
 (prefer r1 f1)
@@ -319,6 +319,7 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

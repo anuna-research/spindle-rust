@@ -6,7 +6,7 @@ Superiority relations resolve conflicts between competing rules.
 
 When two rules conclude opposite things, we have a conflict:
 
-```lisp
+```spl
 (given bird)
 (given penguin)
 (normally r1 bird flies)
@@ -17,7 +17,7 @@ Both r1 and r2 fire. Without superiority, we get **ambiguity** — neither `flie
 
 ## Declaring Superiority
 
-```lisp
+```spl
 (prefer r2 r1)    ; r2 beats r1
 ```
 
@@ -27,12 +27,12 @@ Now when both rules fire, r2 wins and `(not flies)` is provable.
 
 Shorthand for multiple superiority relations:
 
-```lisp
+```spl
 (prefer r3 r2 r1)   ; r3 > r2 > r1
 ```
 
 Expands to:
-```lisp
+```spl
 (prefer r3 r2)
 (prefer r2 r1)
 ```
@@ -41,7 +41,7 @@ Expands to:
 
 Superiority is **not automatically transitive**. If you need r3 > r1, declare it explicitly:
 
-```lisp
+```spl
 (prefer r3 r2)
 (prefer r2 r1)
 (prefer r3 r1)    ; Must be explicit
@@ -60,7 +60,7 @@ When evaluating a defeasible conclusion:
 
 ## Example: Three-Way Conflict
 
-```lisp
+```spl
 (given a)
 (given b)
 (given c)
@@ -83,7 +83,7 @@ Analysis:
 
 If two rules are equally superior over each other (or neither is superior), ambiguity results:
 
-```lisp
+```spl
 (given trigger)
 (normally r1 trigger a)
 (normally r2 trigger (not a))
@@ -96,7 +96,7 @@ Result: Neither `a` nor `(not a)` is provable.
 
 Defeaters can be overridden by superiority:
 
-```lisp
+```spl
 (given bird)
 (given healthy)
 
@@ -113,7 +113,7 @@ If both `bird` and `healthy` are true, r2 beats d1 and `flies` is provable.
 
 Strict rules **always win** over defeasible rules, regardless of superiority:
 
-```lisp
+```spl
 (given p)
 (always r1 p q)              ; Strict
 (normally r2 p (not q))      ; Defeasible
@@ -131,7 +131,7 @@ Superiority only affects conflicts between:
 
 ### Use Specificity
 More specific rules should be superior:
-```lisp
+```spl
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
 (prefer r2 r1)    ; Penguin is more specific than bird
@@ -139,14 +139,14 @@ More specific rules should be superior:
 
 ### Document Reasoning
 Use comments to explain why one rule beats another:
-```lisp
+```spl
 ; Medical override: confirmed diagnosis beats symptoms
 (prefer r-diagnosis r-symptoms)
 ```
 
 ### Avoid Cycles
 Don't create circular superiority:
-```lisp
+```spl
 ; BAD — creates a cycle
 (prefer r1 r2)
 (prefer r2 r1)

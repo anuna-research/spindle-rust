@@ -184,14 +184,14 @@
 <p>Spindle supports four types of rules, each with different semantics for how conclusions are drawn.</p>
 <h2 id="facts-given"><a class="header" href="#facts-given">Facts (<code>given</code>)</a></h2>
 <p>Facts are unconditional truths. They have no body (antecedent) and are always true.</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (given penguin)
 (given (not guilty))    ; Negated fact
 </code></pre>
 <p>Facts produce <strong>definite conclusions</strong> (<code>+D</code>) that cannot be defeated.</p>
 <h2 id="strict-rules-always"><a class="header" href="#strict-rules-always">Strict Rules (<code>always</code>)</a></h2>
 <p>Strict rules express necessary implications. If the body is true, the head <strong>must</strong> be true.</p>
-<pre><code class="language-lisp">(always r1 penguin bird)              ; All penguins are birds
+<pre><code class="language-spl">(always r1 penguin bird)              ; All penguins are birds
 (always r2 (and human mortal) dies)   ; All mortal humans die
 </code></pre>
 <p>Strict rules produce <strong>definite conclusions</strong> (<code>+D</code>). They cannot be defeated by defeasible rules.</p>
@@ -204,7 +204,7 @@
 </ul>
 <h2 id="defeasible-rules-normally"><a class="header" href="#defeasible-rules-normally">Defeasible Rules (<code>normally</code>)</a></h2>
 <p>Defeasible rules express typical or default behavior that may have exceptions.</p>
-<pre><code class="language-lisp">(normally r1 bird flies)            ; Birds typically fly
+<pre><code class="language-spl">(normally r1 bird flies)            ; Birds typically fly
 (normally r2 student has-loans)     ; Students typically have loans
 </code></pre>
 <p>Defeasible rules produce <strong>defeasible conclusions</strong> (<code>+d</code>) that can be defeated by:</p>
@@ -222,10 +222,10 @@
 </ul>
 <h2 id="defeaters-except"><a class="header" href="#defeaters-except">Defeaters (<code>except</code>)</a></h2>
 <p>Defeaters are special rules that <strong>block</strong> conclusions without proving anything themselves.</p>
-<pre><code class="language-lisp">(except d1 broken-wing flies)    ; A broken wing blocks "flies"
+<pre><code class="language-spl">(except d1 broken-wing flies)    ; A broken wing blocks "flies"
 </code></pre>
 <h3 id="defeater-vs-defeasible-rule"><a class="header" href="#defeater-vs-defeasible-rule">Defeater vs. Defeasible Rule</a></h3>
-<pre><code class="language-lisp">; Defeasible rule: proves (not flies)
+<pre><code class="language-spl">; Defeasible rule: proves (not flies)
 (normally r1 penguin (not flies))
 
 ; Defeater: only blocks flies, doesn't prove (not flies)
@@ -246,22 +246,22 @@
 <h2 id="rule-bodies-antecedents"><a class="header" href="#rule-bodies-antecedents">Rule Bodies (Antecedents)</a></h2>
 <p>Rule bodies can contain:</p>
 <h3 id="single-literal"><a class="header" href="#single-literal">Single Literal</a></h3>
-<pre><code class="language-lisp">(normally r1 bird flies)
+<pre><code class="language-spl">(normally r1 bird flies)
 </code></pre>
 <h3 id="multiple-literals-conjunction"><a class="header" href="#multiple-literals-conjunction">Multiple Literals (Conjunction)</a></h3>
-<pre><code class="language-lisp">(normally r1 (and bird healthy) flies)
+<pre><code class="language-spl">(normally r1 (and bird healthy) flies)
 (normally r2 (and student employed) busy)
 </code></pre>
 <h3 id="negated-literals"><a class="header" href="#negated-literals">Negated Literals</a></h3>
-<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)   ; Non-penguin birds fly
+<pre><code class="language-spl">(normally r1 (and bird (not penguin)) flies)   ; Non-penguin birds fly
 </code></pre>
 <h2 id="rule-heads-consequents"><a class="header" href="#rule-heads-consequents">Rule Heads (Consequents)</a></h2>
 <p>Rule heads are single literals that can be:</p>
 <h3 id="positive"><a class="header" href="#positive">Positive</a></h3>
-<pre><code class="language-lisp">(normally r1 bird flies)
+<pre><code class="language-spl">(normally r1 bird flies)
 </code></pre>
 <h3 id="negated"><a class="header" href="#negated">Negated</a></h3>
-<pre><code class="language-lisp">(normally r1 penguin (not flies))
+<pre><code class="language-spl">(normally r1 penguin (not flies))
 </code></pre>
 <h2 id="rule-labels"><a class="header" href="#rule-labels">Rule Labels</a></h2>
 <p>Every rule has a label (identifier) used for:</p>
@@ -271,7 +271,7 @@
 <li>Debugging</li>
 </ul>
 <p>Labels are optional (auto-generated if omitted):</p>
-<pre><code class="language-lisp">(normally r1 bird flies)      ; labeled r1
+<pre><code class="language-spl">(normally r1 bird flies)      ; labeled r1
 (normally bird flies)         ; auto-labeled
 </code></pre>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
@@ -340,6 +340,7 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

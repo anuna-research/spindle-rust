@@ -36,7 +36,7 @@ user:admin        - An administrative user
 
 The `claims` block attributes statements to a source identity:
 
-```lisp
+```spl
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
@@ -67,7 +67,7 @@ Claims blocks cannot be nested.
 
 Multiple agents contribute claims about a pull request:
 
-```lisp
+```spl
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
@@ -162,7 +162,7 @@ Trust policies can be declared directly in SPL source files using three directiv
 
 Assigns a trust value to a source identifier:
 
-```lisp
+```spl
 (trusts agent:security 0.95)
 (trusts agent:coder 0.9)
 (trusts system:policy 1.0)
@@ -175,7 +175,7 @@ Values must be in the range `[0.0, 1.0]`.
 
 Attaches a time-based decay model to a source. The decay model reduces trust as assertions age:
 
-```lisp
+```spl
 ; Trust halves every hour (3600 seconds)
 (decays agent:sensor exponential 3600.0)
 
@@ -192,7 +192,7 @@ See [Decay Models](#decay-models) for formula details.
 
 Defines a named threshold for decision-making:
 
-```lisp
+```spl
 (threshold action 0.7)
 (threshold warn 0.5)
 (threshold log 0.3)
@@ -200,7 +200,7 @@ Defines a named threshold for decision-making:
 
 ### Complete SPL Example
 
-```lisp
+```spl
 ; Trust configuration
 (trusts agent:security 0.95)
 (trusts agent:coder 0.9)
@@ -769,7 +769,7 @@ for lr in &learned_rules {
 
 In a code review pipeline, multiple agents contribute assessments with varying trust levels:
 
-```lisp
+```spl
 ; Security scanner has high credibility for vulnerability findings
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
@@ -844,7 +844,7 @@ This example demonstrates the complete trust workflow from theory definition thr
 
 **1. Define a theory with trust directives** (`review.spl`):
 
-```lisp
+```spl
 ; Trust configuration
 (trusts agent:security 0.95)
 (trusts agent:coder 0.85)

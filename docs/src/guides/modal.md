@@ -36,7 +36,7 @@ A prohibition states that something is not allowed. If `(forbidden enter)` is co
 
 Modal operators use keyword wrappers:
 
-```lisp
+```spl
 ; Obligation: (must <literal>)
 (given (must pay))
 (normally r1 signed-contract (must pay))
@@ -54,7 +54,7 @@ Modal operators use keyword wrappers:
 
 Negation of modal literals in SPL uses the `not` wrapper:
 
-```lisp
+```spl
 ; Negated obligation: not obligated to pay
 (normally r4 exemption (not (must pay)))
 
@@ -71,7 +71,7 @@ Modal operators can appear in both the body and head of rules, in all rule types
 
 ### Examples
 
-```lisp
+```spl
 ; If you signed a contract, you are obligated to pay
 (normally r1 signed-contract (must pay))
 
@@ -96,7 +96,7 @@ Modal operators can appear in both the body and head of rules, in all rule types
 
 In SPL, modal operators can be combined with predicates and variables:
 
-```lisp
+```spl
 ; Employees are obligated to report hours
 (given (employee alice))
 (given (employee bob))
@@ -282,7 +282,7 @@ set.insert(pay.literal_id());
 
 Model regulatory compliance where obligations can be defeated by exceptions:
 
-```lisp
+```spl
 ; All companies must file annual reports
 (normally r1 company (must file-annual-report))
 
@@ -302,7 +302,7 @@ Model regulatory compliance where obligations can be defeated by exceptions:
 
 Model access control with defeasible permissions:
 
-```lisp
+```spl
 ; Employees may access the office
 (normally r1 employee (may access-office))
 
@@ -321,7 +321,7 @@ Model access control with defeasible permissions:
 
 Track obligations through chains of reasoning:
 
-```lisp
+```spl
 ; Signing a contract creates an obligation to pay
 (normally r1 signed-contract (must pay))
 
@@ -340,7 +340,7 @@ Track obligations through chains of reasoning:
 
 Combine obligations, permissions, and prohibitions in a single theory:
 
-```lisp
+```spl
 ; Citizens must pay taxes
 (normally r1 citizen (must pay-taxes))
 
@@ -369,20 +369,20 @@ Combine obligations, permissions, and prohibitions in a single theory:
 ## Best Practices
 
 1. **Be explicit about modal relationships**
-   ```lisp
+   ```spl
    ; If something is obligatory, it is also permitted
    (always obligation-implies-permission (must ?x) (may ?x))
    ```
 
 2. **Use superiority to handle conflicts between norms**
-   ```lisp
+   ```spl
    (normally r1 employee (must attend-meeting))
    (normally r2 (and employee on-leave) (not (must attend-meeting)))
    (prefer r2 r1)
    ```
 
 3. **Separate normative and factual reasoning**
-   ```lisp
+   ```spl
    ; Factual rules
    (normally r1 penguin bird)
    (normally r2 bird flies)
@@ -392,7 +392,7 @@ Combine obligations, permissions, and prohibitions in a single theory:
    ```
 
 4. **Document the intended interpretation of custom modes**
-   ```lisp
+   ```spl
    ; [K] = epistemic "known to be true"
    ; Use metadata to document the mode's meaning
    (meta r1 (description "Agents know their own obligations"))

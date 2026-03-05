@@ -198,7 +198,7 @@
 </div>
 <h2 id="definite-conclusions-d---d"><a class="header" href="#definite-conclusions-d---d">Definite Conclusions (+D / -D)</a></h2>
 <p><strong>Definite provability</strong> uses only facts and strict rules. No defeasible reasoning is involved.</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (always r1 bird animal)        ; Strict rule
 (normally r2 bird flies)       ; Defeasible rule
 </code></pre>
@@ -217,7 +217,7 @@
 </ul>
 <h2 id="defeasible-conclusions-d---d"><a class="header" href="#defeasible-conclusions-d---d">Defeasible Conclusions (+d / -d)</a></h2>
 <p><strong>Defeasible provability</strong> extends definite provability with defeasible rules.</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (normally r1 bird flies)
 </code></pre>
 <p>Conclusions:</p>
@@ -234,7 +234,7 @@
 </code></pre>
 <h2 id="conflict-and-ambiguity"><a class="header" href="#conflict-and-ambiguity">Conflict and Ambiguity</a></h2>
 <p>When rules conflict without a superiority relation, neither conclusion is provable:</p>
-<pre><code class="language-lisp">(given trigger)
+<pre><code class="language-spl">(given trigger)
 (normally r1 trigger outcome)
 (normally r2 trigger (not outcome))
 ; No superiority declared
@@ -248,7 +248,7 @@
 <p>Both outcomes are <strong>ambiguous</strong> — neither can be proven.</p>
 <h2 id="resolved-conflict"><a class="header" href="#resolved-conflict">Resolved Conflict</a></h2>
 <p>With superiority, the conflict is resolved:</p>
-<pre><code class="language-lisp">(given trigger)
+<pre><code class="language-spl">(given trigger)
 (normally r1 trigger outcome)
 (normally r2 trigger (not outcome))
 (prefer r1 r2)
@@ -259,7 +259,7 @@
 <li><code>-d -outcome</code> — r2 is defeated</li>
 </ul>
 <h2 id="example-multi-level"><a class="header" href="#example-multi-level">Example: Multi-Level</a></h2>
-<pre><code class="language-lisp">(given a)
+<pre><code class="language-spl">(given a)
 (always r1 a b)                ; Strict: a implies b
 (normally r2 b c)              ; Defeasible: b typically implies c
 (normally r3 b (not c))        ; Defeasible: b typically implies (not c)
@@ -368,6 +368,7 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

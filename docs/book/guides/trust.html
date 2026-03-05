@@ -208,7 +208,7 @@ user:admin        - An administrative user
 </code></pre>
 <h3 id="spl-claims-syntax"><a class="header" href="#spl-claims-syntax">SPL Claims Syntax</a></h3>
 <p>The <code>claims</code> block attributes statements to a source identity:</p>
-<pre><code class="language-lisp">(claims agent:security
+<pre><code class="language-spl">(claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
   (given vulnerability_detected)
@@ -238,7 +238,7 @@ user:admin        - An administrative user
 <p>Claims blocks cannot be nested.</p>
 <h3 id="multi-agent-example"><a class="header" href="#multi-agent-example">Multi-Agent Example</a></h3>
 <p>Multiple agents contribute claims about a pull request:</p>
-<pre><code class="language-lisp">(claims agent:security
+<pre><code class="language-spl">(claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
   (given vulnerability_detected)
@@ -326,7 +326,7 @@ assert_eq!(policy.get_trust("unknown_agent"), 0.5);
 <p>Trust policies can be declared directly in SPL source files using three directive forms.</p>
 <h3 id="trusts-source-value"><a class="header" href="#trusts-source-value"><code>(trusts source value)</code></a></h3>
 <p>Assigns a trust value to a source identifier:</p>
-<pre><code class="language-lisp">(trusts agent:security 0.95)
+<pre><code class="language-spl">(trusts agent:security 0.95)
 (trusts agent:coder 0.9)
 (trusts system:policy 1.0)
 (trusts external:api 0.6)
@@ -334,7 +334,7 @@ assert_eq!(policy.get_trust("unknown_agent"), 0.5);
 <p>Values must be in the range <code>[0.0, 1.0]</code>.</p>
 <h3 id="decays-source-model-param"><a class="header" href="#decays-source-model-param"><code>(decays source model param)</code></a></h3>
 <p>Attaches a time-based decay model to a source. The decay model reduces trust as assertions age:</p>
-<pre><code class="language-lisp">; Trust halves every hour (3600 seconds)
+<pre><code class="language-spl">; Trust halves every hour (3600 seconds)
 (decays agent:sensor exponential 3600.0)
 
 ; Trust decreases at 0.001 per second
@@ -346,12 +346,12 @@ assert_eq!(policy.get_trust("unknown_agent"), 0.5);
 <p>See <a href="#decay-models">Decay Models</a> for formula details.</p>
 <h3 id="threshold-name-value"><a class="header" href="#threshold-name-value"><code>(threshold name value)</code></a></h3>
 <p>Defines a named threshold for decision-making:</p>
-<pre><code class="language-lisp">(threshold action 0.7)
+<pre><code class="language-spl">(threshold action 0.7)
 (threshold warn 0.5)
 (threshold log 0.3)
 </code></pre>
 <h3 id="complete-spl-example"><a class="header" href="#complete-spl-example">Complete SPL Example</a></h3>
-<pre><code class="language-lisp">; Trust configuration
+<pre><code class="language-spl">; Trust configuration
 (trusts agent:security 0.95)
 (trusts agent:coder 0.9)
 (decays agent:sensor exponential 3600.0)
@@ -833,7 +833,7 @@ for lr in &amp;learned_rules {
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <h3 id="multi-agent-systems"><a class="header" href="#multi-agent-systems">Multi-Agent Systems</a></h3>
 <p>In a code review pipeline, multiple agents contribute assessments with varying trust levels:</p>
-<pre><code class="language-lisp">; Security scanner has high credibility for vulnerability findings
+<pre><code class="language-spl">; Security scanner has high credibility for vulnerability findings
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
@@ -898,7 +898,7 @@ assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
 <h3 id="end-to-end-example"><a class="header" href="#end-to-end-example">End-to-End Example</a></h3>
 <p>This example demonstrates the complete trust workflow from theory definition through CLI output.</p>
 <p><strong>1. Define a theory with trust directives</strong> (<code>review.spl</code>):</p>
-<pre><code class="language-lisp">; Trust configuration
+<pre><code class="language-spl">; Trust configuration
 (trusts agent:security 0.95)
 (trusts agent:coder 0.85)
 (trusts agent:qa 0.80)
@@ -1006,6 +1006,7 @@ assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

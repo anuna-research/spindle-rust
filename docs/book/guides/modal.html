@@ -210,7 +210,7 @@
 <p>A prohibition states that something is not allowed. If <code>(forbidden enter)</code> is concluded, then entering is forbidden.</p>
 <h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
 <p>Modal operators use keyword wrappers:</p>
-<pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
+<pre><code class="language-spl">; Obligation: (must &lt;literal&gt;)
 (given (must pay))
 (normally r1 signed-contract (must pay))
 
@@ -224,7 +224,7 @@
 </code></pre>
 <h3 id="spl-negation"><a class="header" href="#spl-negation">SPL Negation</a></h3>
 <p>Negation of modal literals in SPL uses the <code>not</code> wrapper:</p>
-<pre><code class="language-lisp">; Negated obligation: not obligated to pay
+<pre><code class="language-spl">; Negated obligation: not obligated to pay
 (normally r4 exemption (not (must pay)))
 
 ; Negated permission: not permitted to access
@@ -236,7 +236,7 @@
 <h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
 <p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
 <h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
-<pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
+<pre><code class="language-spl">; If you signed a contract, you are obligated to pay
 (normally r1 signed-contract (must pay))
 
 ; If obligated to pay and haven't paid, violation
@@ -257,7 +257,7 @@
 </code></pre>
 <h3 id="combining-with-predicates-and-variables"><a class="header" href="#combining-with-predicates-and-variables">Combining with Predicates and Variables</a></h3>
 <p>In SPL, modal operators can be combined with predicates and variables:</p>
-<pre><code class="language-lisp">; Employees are obligated to report hours
+<pre><code class="language-spl">; Employees are obligated to report hours
 (given (employee alice))
 (given (employee bob))
 (normally r1 (employee ?x) (must (report-hours ?x)))
@@ -438,7 +438,7 @@ set.insert(pay.literal_id());
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <h3 id="compliance-rules"><a class="header" href="#compliance-rules">Compliance Rules</a></h3>
 <p>Model regulatory compliance where obligations can be defeated by exceptions:</p>
-<pre><code class="language-lisp">; All companies must file annual reports
+<pre><code class="language-spl">; All companies must file annual reports
 (normally r1 company (must file-annual-report))
 
 ; Small companies are exempt from detailed reporting
@@ -454,7 +454,7 @@ set.insert(pay.literal_id());
 </code></pre>
 <h3 id="permission-systems"><a class="header" href="#permission-systems">Permission Systems</a></h3>
 <p>Model access control with defeasible permissions:</p>
-<pre><code class="language-lisp">; Employees may access the office
+<pre><code class="language-spl">; Employees may access the office
 (normally r1 employee (may access-office))
 
 ; Suspended employees lose access
@@ -469,7 +469,7 @@ set.insert(pay.literal_id());
 </code></pre>
 <h3 id="obligation-tracking"><a class="header" href="#obligation-tracking">Obligation Tracking</a></h3>
 <p>Track obligations through chains of reasoning:</p>
-<pre><code class="language-lisp">; Signing a contract creates an obligation to pay
+<pre><code class="language-spl">; Signing a contract creates an obligation to pay
 (normally r1 signed-contract (must pay))
 
 ; Obligation to pay and failure to pay results in violation
@@ -484,7 +484,7 @@ set.insert(pay.literal_id());
 </code></pre>
 <h3 id="mixed-normative-reasoning"><a class="header" href="#mixed-normative-reasoning">Mixed Normative Reasoning</a></h3>
 <p>Combine obligations, permissions, and prohibitions in a single theory:</p>
-<pre><code class="language-lisp">; Citizens must pay taxes
+<pre><code class="language-spl">; Citizens must pay taxes
 (normally r1 citizen (must pay-taxes))
 
 ; Citizens may vote
@@ -512,20 +512,20 @@ set.insert(pay.literal_id());
 <ol>
 <li>
 <p><strong>Be explicit about modal relationships</strong></p>
-<pre><code class="language-lisp">; If something is obligatory, it is also permitted
+<pre><code class="language-spl">; If something is obligatory, it is also permitted
 (always obligation-implies-permission (must ?x) (may ?x))
 </code></pre>
 </li>
 <li>
 <p><strong>Use superiority to handle conflicts between norms</strong></p>
-<pre><code class="language-lisp">(normally r1 employee (must attend-meeting))
+<pre><code class="language-spl">(normally r1 employee (must attend-meeting))
 (normally r2 (and employee on-leave) (not (must attend-meeting)))
 (prefer r2 r1)
 </code></pre>
 </li>
 <li>
 <p><strong>Separate normative and factual reasoning</strong></p>
-<pre><code class="language-lisp">; Factual rules
+<pre><code class="language-spl">; Factual rules
 (normally r1 penguin bird)
 (normally r2 bird flies)
 
@@ -535,7 +535,7 @@ set.insert(pay.literal_id());
 </li>
 <li>
 <p><strong>Document the intended interpretation of custom modes</strong></p>
-<pre><code class="language-lisp">; [K] = epistemic "known to be true"
+<pre><code class="language-spl">; [K] = epistemic "known to be true"
 ; Use metadata to document the mode's meaning
 (meta r1 (description "Agents know their own obligations"))
 (normally r1 (must ?x) (K ?x))
@@ -594,6 +594,7 @@ set.insert(pay.literal_id());
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

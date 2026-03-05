@@ -10,7 +10,7 @@ SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DF
 
 Semicolon to end of line:
 
-```lisp
+```spl
 ; This is a comment
 (given bird)  ; Inline comment
 ```
@@ -71,7 +71,7 @@ unary-op    = "abs"
 
 ### Simple Facts
 
-```lisp
+```spl
 (given bird)
 (given penguin)
 (given (not guilty))
@@ -79,14 +79,14 @@ unary-op    = "abs"
 
 ### Predicate Facts
 
-```lisp
+```spl
 (given (parent alice bob))
 (given (employed alice acme))
 ```
 
 ### Flat Predicate Syntax
 
-```lisp
+```spl
 (given parent alice bob)     ; Same as (given (parent alice bob))
 (given employed alice acme)
 ```
@@ -95,21 +95,21 @@ unary-op    = "abs"
 
 ### Strict Rules (`always`)
 
-```lisp
+```spl
 (always r1 penguin bird)
 (always r2 (and human mortal) dies)
 ```
 
 ### Defeasible Rules (`normally`)
 
-```lisp
+```spl
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
 ```
 
 ### Defeaters (`except`)
 
-```lisp
+```spl
 (except d1 broken-wing flies)
 ```
 
@@ -117,7 +117,7 @@ unary-op    = "abs"
 
 Labels are optional (auto-generated):
 
-```lisp
+```spl
 (normally bird flies)        ; Gets label like "r1"
 (always penguin bird)        ; Gets label like "s1"
 ```
@@ -126,7 +126,7 @@ Labels are optional (auto-generated):
 
 ### Simple
 
-```lisp
+```spl
 bird
 flies
 has-feathers
@@ -134,19 +134,19 @@ has-feathers
 
 ### Negated
 
-```lisp
+```spl
 (not flies)
 (not (parent alice bob))
 ```
 
 Or with prefix:
-```lisp
+```spl
 ~flies
 ```
 
 ### Predicates with Arguments
 
-```lisp
+```spl
 (parent alice bob)
 (employed ?x acme)
 (ancestor ?x ?z)
@@ -156,7 +156,7 @@ Or with prefix:
 
 Use `and` for multiple conditions:
 
-```lisp
+```spl
 (normally r1 (and bird healthy) flies)
 (normally r2 (and student employed) busy)
 ```
@@ -165,7 +165,7 @@ Use `and` for multiple conditions:
 
 Variables start with `?`:
 
-```lisp
+```spl
 (given (parent alice bob))
 (given (parent bob charlie))
 
@@ -178,7 +178,7 @@ Variables start with `?`:
 
 Use `_` to match anything:
 
-```lisp
+```spl
 (normally r1 (parent _ ?y) (has-parent ?y))
 ```
 
@@ -186,18 +186,18 @@ Use `_` to match anything:
 
 ### Two Rules
 
-```lisp
+```spl
 (prefer r2 r1)    ; r2 > r1
 ```
 
 ### Chain
 
-```lisp
+```spl
 (prefer r3 r2 r1)  ; r3 > r2 > r1
 ```
 
 Expands to:
-```lisp
+```spl
 (prefer r3 r2)
 (prefer r2 r1)
 ```
@@ -206,7 +206,7 @@ Expands to:
 
 Attach metadata to rules:
 
-```lisp
+```spl
 (meta r1
   (description "Birds normally fly")
   (confidence 0.9)
@@ -215,7 +215,7 @@ Attach metadata to rules:
 
 ### Properties
 
-```lisp
+```spl
 (meta rule-label
   (key "string value")
   (key2 ("list" "of" "values")))
@@ -225,19 +225,19 @@ Attach metadata to rules:
 
 ### Obligation (`must`)
 
-```lisp
+```spl
 (normally signed-contract (must pay))
 ```
 
 ### Permission (`may`)
 
-```lisp
+```spl
 (normally member (may access))
 ```
 
 ### Forbidden (`forbidden`)
 
-```lisp
+```spl
 (normally unauthorized (forbidden enter))
 ```
 
@@ -247,7 +247,7 @@ Attach metadata to rules:
 
 Supported time formats:
 
-```lisp
+```spl
 (moment "2024-06-15T14:30:00Z")  ; RFC3339 / ISO 8601
 1718461800000                    ; Epoch milliseconds
 inf                              ; Positive infinity
@@ -258,7 +258,7 @@ inf                              ; Positive infinity
 
 ### During
 
-```lisp
+```spl
 (given (during bird 1 10))
 (given (during (employed alice acme)
   (moment "2020-01-01T00:00:00Z")
@@ -320,7 +320,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 
 ### Numeric Literals
 
-```lisp
+```spl
 42          ; Integer
 3.14        ; Decimal (arbitrary precision)
 ```
@@ -340,7 +340,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 | `min` | N-ary | Minimum |
 | `max` | N-ary | Maximum |
 
-```lisp
+```spl
 (+ 1 2)           ; => 3
 (* 2 3 4)         ; => 24
 (- 10 3 2)        ; => 5 (left fold: 10-3-2)
@@ -355,7 +355,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 
 Bind a variable to the result of an arithmetic expression:
 
-```lisp
+```spl
 (normally r1
   (and (price ?p) (tax-rate ?r)
        (bind ?total (+ ?p (* ?p ?r))))
@@ -366,7 +366,7 @@ Bind a variable to the result of an arithmetic expression:
 
 Compare two arithmetic expressions:
 
-```lisp
+```spl
 (normally r1
   (and (age ?x ?a) (> ?a 18))
   (adult ?x))
@@ -382,7 +382,7 @@ Available operators: `=`, `!=`, `<`, `>`, `<=`, `>=`
 
 Arithmetic expressions can appear as predicate arguments in rule bodies:
 
-```lisp
+```spl
 (normally r1
   (and (price ?item ?p) (tax-rate ?r))
   (invoice ?item (+ ?p (* ?p ?r))))
@@ -420,7 +420,7 @@ Future reserved: `sum`, `count`, `avg`, `round`, `floor`, `ceil`
 
 The `claims` block attributes statements to a named source, with optional metadata.
 
-```lisp
+```spl
 (claims agent:alice
   :at "2024-06-15T12:00:00Z"
   :sig "abc123"
@@ -447,7 +447,7 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 
 ## Complete Example
 
-```lisp
+```spl
 ; The Penguin Example
 
 ; Facts

@@ -185,7 +185,7 @@
 <h2 id="time-points"><a class="header" href="#time-points">Time Points</a></h2>
 <p>Time points are represented as milliseconds since the Unix epoch (UTC).</p>
 <h3 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h3>
-<pre><code class="language-lisp">(moment "2024-06-15T14:30:00Z")    ; RFC3339 / ISO 8601 string (UTC)
+<pre><code class="language-spl">(moment "2024-06-15T14:30:00Z")    ; RFC3339 / ISO 8601 string (UTC)
 1718461800000                      ; Integer epoch milliseconds
 inf                                ; Positive infinity (never ends)
 -inf                               ; Negative infinity (always existed)
@@ -195,7 +195,7 @@ inf                                ; Positive infinity (never ends)
 <p>The <code>during</code> operator associates a literal with a time interval <code>[start, end]</code>.</p>
 <p>Syntax: <code>(during literal start end)</code></p>
 <h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
-<pre><code class="language-lisp">; Alice worked at Acme from 2020 to 2022
+<pre><code class="language-spl">; Alice worked at Acme from 2020 to 2022
 (given (during (employed alice acme) (moment "2020-01-01T00:00:00Z") (moment "2022-01-01T00:00:00Z")))
 
 ; Alice works at Beta from 2022 onwards
@@ -212,7 +212,7 @@ inf                                ; Positive infinity (never ends)
 <p>Starting in v0.3.0 (SPEC-018), temporal atoms with different time bounds are treated as <strong>distinct atoms</strong> during reasoning. Previously, <code>p[1,10]</code> and <code>p[20,30]</code> collapsed to the same internal identifier, which caused incorrect behaviour such as premature rule firing and cross-window satisfaction.</p>
 <h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
 <p>The internal <code>AtomKey</code> used for indexing now includes temporal bounds as part of atom identity. Two literals that differ only in their temporal intervals produce distinct identifiers:</p>
-<pre><code class="language-lisp">; These are now three distinct atoms:
+<pre><code class="language-spl">; These are now three distinct atoms:
 (given (during p 1 10))      ; p[1,10]
 (given (during p 20 30))     ; p[20,30]
 (given p)                    ; p (base, no temporal bounds)
@@ -245,7 +245,7 @@ inf                                ; Positive infinity (never ends)
 <p>This ensures that evidence against a predicate in any temporal window propagates to the base level, enabling correct ambiguity blocking under skeptical semantics.</p>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p>Consider a theory about employment:</p>
-<pre><code class="language-lisp">; Alice worked at Acme from 2020 to 2022
+<pre><code class="language-spl">; Alice worked at Acme from 2020 to 2022
 (given (during (employed alice acme)
                (moment "2020-01-01T00:00:00Z")
                (moment "2022-01-01T00:00:00Z")))
@@ -254,7 +254,7 @@ inf                                ; Positive infinity (never ends)
 (rule r1 (=&gt; (employed alice acme) (has_income alice)))
 </code></pre>
 <p>The <code>TemporalBridge</code> stage automatically generates:</p>
-<pre><code class="language-lisp">; Synthetic bridge (strict):
+<pre><code class="language-spl">; Synthetic bridge (strict):
 ; (employed alice acme)[2020,2022] → (employed alice acme)
 </code></pre>
 <p>This allows rule <code>r1</code> to fire, because the bridge proves the base <code>(employed alice acme)</code> from the temporal fact. Without the bridge, <code>r1</code> would never fire since its body expects the base atom.</p>
@@ -277,7 +277,7 @@ inf                                ; Positive infinity (never ends)
 <li><strong>Base query</strong> (no temporal bounds): Acts as a wildcard, matching any temporal variant of the predicate. This preserves backward compatibility.</li>
 <li><strong>Temporal query</strong> (with bounds): Requires an exact temporal match.</li>
 </ul>
-<pre><code class="language-lisp">; Given these conclusions after reasoning:
+<pre><code class="language-spl">; Given these conclusions after reasoning:
 ;   +d p[1,10]
 ;   +d p[20,30]
 ;   +d p         (via bridging)
@@ -345,6 +345,7 @@ inf                                ; Positive infinity (never ends)
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

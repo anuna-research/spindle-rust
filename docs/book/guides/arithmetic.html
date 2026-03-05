@@ -224,7 +224,7 @@
 <p>Once a Float enters a computation, the entire result is Float. Keep this in mind if exact precision matters to your use case.</p>
 <h3 id="cross-type-matching"><a class="header" href="#cross-type-matching">Cross-Type Matching</a></h3>
 <p>During grounding, numeric values match across types when equal:</p>
-<pre><code class="language-lisp">(given (limit 100))          ; Integer
+<pre><code class="language-spl">(given (limit 100))          ; Integer
 (given (score alice 100.0))  ; Decimal
 
 ; ?s (Decimal 100.0) matches ?limit (Integer 100) in the comparison
@@ -235,7 +235,7 @@
 <h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
 <h3 id="n-ary-operators"><a class="header" href="#n-ary-operators">N-ary Operators</a></h3>
 <p>These accept two or more arguments:</p>
-<pre><code class="language-lisp">(+ 1 2 3)       ; =&gt; 6
+<pre><code class="language-spl">(+ 1 2 3)       ; =&gt; 6
 (- 10 3 2)      ; =&gt; 5  (left fold: (10-3)-2)
 (* 2 3 4)       ; =&gt; 24
 (/ 100 5 2)     ; =&gt; 10 (left fold: (100/5)/2)
@@ -245,26 +245,26 @@
 <p>Subtraction and division use <strong>left fold</strong> semantics: <code>(- a b c)</code> = <code>((a - b) - c)</code>.</p>
 <h3 id="binary-operators"><a class="header" href="#binary-operators">Binary Operators</a></h3>
 <p>These require exactly two arguments:</p>
-<pre><code class="language-lisp">(div 7 2)    ; =&gt; 3   (integer division, floor toward -inf)
+<pre><code class="language-spl">(div 7 2)    ; =&gt; 3   (integer division, floor toward -inf)
 (rem 7 2)    ; =&gt; 1   (remainder)
 (** 2 10)    ; =&gt; 1024 (exponentiation)
 </code></pre>
 <p><code>div</code> and <code>rem</code> require integer operands.</p>
 <h3 id="unary-operator"><a class="header" href="#unary-operator">Unary Operator</a></h3>
-<pre><code class="language-lisp">(abs -5)            ; =&gt; 5
+<pre><code class="language-spl">(abs -5)            ; =&gt; 5
 (abs (- 3 10))      ; =&gt; 7
 </code></pre>
 <h3 id="nesting"><a class="header" href="#nesting">Nesting</a></h3>
 <p>Expressions can be arbitrarily nested:</p>
-<pre><code class="language-lisp">(+ (* ?base ?rate) (abs (- ?adjustment ?threshold)))
+<pre><code class="language-spl">(+ (* ?base ?rate) (abs (- ?adjustment ?threshold)))
 </code></pre>
 <h2 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h2>
 <p><code>bind</code> assigns the result of an expression to a variable:</p>
-<pre><code class="language-lisp">(bind ?total (+ ?price ?tax))
+<pre><code class="language-spl">(bind ?total (+ ?price ?tax))
 </code></pre>
 <p>The variable must be unbound (not previously assigned in this rule). If it is already bound, the bind succeeds only if the existing value equals the computed result.</p>
 <h3 id="example-computing-derived-values"><a class="header" href="#example-computing-derived-values">Example: Computing Derived Values</a></h3>
-<pre><code class="language-lisp">(given (item widget 25))
+<pre><code class="language-spl">(given (item widget 25))
 (given (item gadget 10))
 (given (discount 0.15))
 
@@ -277,14 +277,14 @@
 <p>Results: <code>(final-price widget 21.25)</code>, <code>(final-price gadget 8.50)</code></p>
 <h2 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h2>
 <p>Comparisons filter substitutions:</p>
-<pre><code class="language-lisp">(&gt; ?age 18)
+<pre><code class="language-spl">(&gt; ?age 18)
 (&lt;= ?score 100)
 (= ?x ?y)
 (!= ?status 0)
 </code></pre>
 <p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
 <h3 id="example-filtering-by-condition"><a class="header" href="#example-filtering-by-condition">Example: Filtering by Condition</a></h3>
-<pre><code class="language-lisp">(given (employee alice 95000))
+<pre><code class="language-spl">(given (employee alice 95000))
 (given (employee bob 45000))
 (given (employee carol 120000))
 
@@ -295,14 +295,14 @@
 <p>Only <code>alice</code> and <code>carol</code> satisfy <code>(&gt; ?salary 90000)</code>.</p>
 <h3 id="comparisons-with-expressions"><a class="header" href="#comparisons-with-expressions">Comparisons with Expressions</a></h3>
 <p>Both sides can be expressions:</p>
-<pre><code class="language-lisp">(normally r1
+<pre><code class="language-spl">(normally r1
   (and (budget ?b) (cost ?item ?c) (tax-rate ?r)
        (&gt; ?b (+ ?c (* ?c ?r))))
   (affordable ?item))
 </code></pre>
 <h2 id="evaluation-order"><a class="header" href="#evaluation-order">Evaluation Order</a></h2>
 <p>Body elements are evaluated <strong>left to right</strong>. Variables must be bound by a preceding literal or bind before they can be used in arithmetic:</p>
-<pre><code class="language-lisp">; CORRECT: ?price is bound before bind uses it
+<pre><code class="language-spl">; CORRECT: ?price is bound before bind uses it
 (normally r1
   (and (item ?name ?price)
        (bind ?discounted (* ?price 0.9)))
@@ -311,7 +311,7 @@
 <p>If an arithmetic expression references an unbound variable, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
 <h2 id="arithmetic-in-predicate-arguments"><a class="header" href="#arithmetic-in-predicate-arguments">Arithmetic in Predicate Arguments</a></h2>
 <p>Arithmetic expressions can appear directly as predicate arguments in the body:</p>
-<pre><code class="language-lisp">(normally r1
+<pre><code class="language-spl">(normally r1
   (and (base ?x ?b) (offset ?x ?o))
   (result ?x (+ ?b ?o)))
 </code></pre>
@@ -320,7 +320,7 @@
 <p>Spindle enforces several restrictions on where arithmetic can appear. Each is checked at parse time and produces a clear error message.</p>
 <h3 id="no-arithmetic-in-heads-or-facts-req-009"><a class="header" href="#no-arithmetic-in-heads-or-facts-req-009">No Arithmetic in Heads or Facts (REQ-009)</a></h3>
 <p>Arithmetic constraints (<code>bind</code>, comparisons) are for filtering and computing in rule bodies. They cannot appear as conclusions.</p>
-<pre><code class="language-lisp">; INVALID — bind in head position
+<pre><code class="language-spl">; INVALID — bind in head position
 (normally r1 (price ?p) (bind ?total (* ?p 1.1)))
 
 ; INVALID — bind as a fact
@@ -335,7 +335,7 @@
 <p>The same message appears for comparison operators (<code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>) used as head literals.</p>
 <h3 id="no-negated-arithmetic-req-011"><a class="header" href="#no-negated-arithmetic-req-011">No Negated Arithmetic (REQ-011)</a></h3>
 <p>Arithmetic constraints cannot be wrapped in <code>not</code>. This avoids ambiguity about what “not greater than” means in a defeasible logic context.</p>
-<pre><code class="language-lisp">; INVALID — cannot negate a comparison
+<pre><code class="language-spl">; INVALID — cannot negate a comparison
 (normally r1 (and (val ?x) (not (&gt; ?x 100))) (low ?x))
 
 ; INVALID — cannot negate bind
@@ -345,12 +345,12 @@
 <pre><code>Arithmetic predicate '&gt;' cannot be negated (REQ-011). Use the positive form in the rule body instead.
 </code></pre>
 <p>Use the complementary comparison instead:</p>
-<pre><code class="language-lisp">; CORRECT — use &lt;= instead of (not &gt;)
+<pre><code class="language-spl">; CORRECT — use &lt;= instead of (not &gt;)
 (normally r1 (and (val ?x) (&lt;= ?x 100)) (low ?x))
 </code></pre>
 <h3 id="no-temporal-variables-in-arithmetic-req-006"><a class="header" href="#no-temporal-variables-in-arithmetic-req-006">No Temporal Variables in Arithmetic (REQ-006)</a></h3>
 <p>Variables bound by <code>during</code> expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If a temporal variable appears in an arithmetic expression, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
-<pre><code class="language-lisp">; The rule below will never produce "shifted" because ?T is temporal
+<pre><code class="language-spl">; The rule below will never produce "shifted" because ?T is temporal
 (given (during (event) 100 200))
 (normally r1
   (and (during (event) ?T ?U) (bind ?next (+ ?T 1)))
@@ -453,6 +453,7 @@ bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

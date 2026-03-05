@@ -50,7 +50,7 @@ Once a Float enters a computation, the entire result is Float. Keep this in mind
 
 During grounding, numeric values match across types when equal:
 
-```lisp
+```spl
 (given (limit 100))          ; Integer
 (given (score alice 100.0))  ; Decimal
 
@@ -66,7 +66,7 @@ During grounding, numeric values match across types when equal:
 
 These accept two or more arguments:
 
-```lisp
+```spl
 (+ 1 2 3)       ; => 6
 (- 10 3 2)      ; => 5  (left fold: (10-3)-2)
 (* 2 3 4)       ; => 24
@@ -81,7 +81,7 @@ Subtraction and division use **left fold** semantics: `(- a b c)` = `((a - b) - 
 
 These require exactly two arguments:
 
-```lisp
+```spl
 (div 7 2)    ; => 3   (integer division, floor toward -inf)
 (rem 7 2)    ; => 1   (remainder)
 (** 2 10)    ; => 1024 (exponentiation)
@@ -91,7 +91,7 @@ These require exactly two arguments:
 
 ### Unary Operator
 
-```lisp
+```spl
 (abs -5)            ; => 5
 (abs (- 3 10))      ; => 7
 ```
@@ -100,7 +100,7 @@ These require exactly two arguments:
 
 Expressions can be arbitrarily nested:
 
-```lisp
+```spl
 (+ (* ?base ?rate) (abs (- ?adjustment ?threshold)))
 ```
 
@@ -108,7 +108,7 @@ Expressions can be arbitrarily nested:
 
 `bind` assigns the result of an expression to a variable:
 
-```lisp
+```spl
 (bind ?total (+ ?price ?tax))
 ```
 
@@ -116,7 +116,7 @@ The variable must be unbound (not previously assigned in this rule). If it is al
 
 ### Example: Computing Derived Values
 
-```lisp
+```spl
 (given (item widget 25))
 (given (item gadget 10))
 (given (discount 0.15))
@@ -134,7 +134,7 @@ Results: `(final-price widget 21.25)`, `(final-price gadget 8.50)`
 
 Comparisons filter substitutions:
 
-```lisp
+```spl
 (> ?age 18)
 (<= ?score 100)
 (= ?x ?y)
@@ -145,7 +145,7 @@ Available operators: `=`, `!=`, `<`, `>`, `<=`, `>=`
 
 ### Example: Filtering by Condition
 
-```lisp
+```spl
 (given (employee alice 95000))
 (given (employee bob 45000))
 (given (employee carol 120000))
@@ -161,7 +161,7 @@ Only `alice` and `carol` satisfy `(> ?salary 90000)`.
 
 Both sides can be expressions:
 
-```lisp
+```spl
 (normally r1
   (and (budget ?b) (cost ?item ?c) (tax-rate ?r)
        (> ?b (+ ?c (* ?c ?r))))
@@ -172,7 +172,7 @@ Both sides can be expressions:
 
 Body elements are evaluated **left to right**. Variables must be bound by a preceding literal or bind before they can be used in arithmetic:
 
-```lisp
+```spl
 ; CORRECT: ?price is bound before bind uses it
 (normally r1
   (and (item ?name ?price)
@@ -186,7 +186,7 @@ If an arithmetic expression references an unbound variable, the substitution is 
 
 Arithmetic expressions can appear directly as predicate arguments in the body:
 
-```lisp
+```spl
 (normally r1
   (and (base ?x ?b) (offset ?x ?o))
   (result ?x (+ ?b ?o)))
@@ -202,7 +202,7 @@ Spindle enforces several restrictions on where arithmetic can appear. Each is ch
 
 Arithmetic constraints (`bind`, comparisons) are for filtering and computing in rule bodies. They cannot appear as conclusions.
 
-```lisp
+```spl
 ; INVALID — bind in head position
 (normally r1 (price ?p) (bind ?total (* ?p 1.1)))
 
@@ -225,7 +225,7 @@ The same message appears for comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>
 
 Arithmetic constraints cannot be wrapped in `not`. This avoids ambiguity about what "not greater than" means in a defeasible logic context.
 
-```lisp
+```spl
 ; INVALID — cannot negate a comparison
 (normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))
 
@@ -241,7 +241,7 @@ Arithmetic predicate '>' cannot be negated (REQ-011). Use the positive form in t
 
 Use the complementary comparison instead:
 
-```lisp
+```spl
 ; CORRECT — use <= instead of (not >)
 (normally r1 (and (val ?x) (<= ?x 100)) (low ?x))
 ```
@@ -250,7 +250,7 @@ Use the complementary comparison instead:
 
 Variables bound by `during` expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If a temporal variable appears in an arithmetic expression, the substitution is silently discarded (the rule does not fire for that ground instance).
 
-```lisp
+```spl
 ; The rule below will never produce "shifted" because ?T is temporal
 (given (during (event) 100 200))
 (normally r1

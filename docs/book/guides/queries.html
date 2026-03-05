@@ -205,7 +205,7 @@ let result = what_if(&amp;theory, hypotheticals, &amp;goal);
 </ol>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p>Original theory:</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (normally r1 bird flies)
 (normally r2 wounded (not flies))
 (prefer r2 r1)
@@ -250,7 +250,7 @@ let explanation = why_not(&amp;theory, &amp;literal);
 </ol>
 <h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
 <p>Theory:</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (given penguin)
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
@@ -315,7 +315,7 @@ let result = abduce(&amp;theory, &amp;goal, max_solutions);
 </ol>
 <h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
 <p>Theory:</p>
-<pre><code class="language-lisp">(normally r1 bird flies)
+<pre><code class="language-spl">(normally r1 bird flies)
 (normally r2 penguin (not flies))
 (normally r3 (and bird healthy) strong-flyer)
 (prefer r2 r1)
@@ -343,7 +343,7 @@ struct AbductionSolution {
 <span class="boring">}</span></code></pre>
 <h3 id="handling-conflicts"><a class="header" href="#handling-conflicts">Handling Conflicts</a></h3>
 <p>Abduction considers superiority:</p>
-<pre><code class="language-lisp">(given penguin)
+<pre><code class="language-spl">(given penguin)
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
 (prefer r2 r1)
@@ -472,6 +472,7 @@ console.log(abduce);
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

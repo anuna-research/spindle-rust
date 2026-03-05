@@ -184,12 +184,12 @@
 <p>Spindle supports first-order variables using Datalog-style bottom-up grounding.</p>
 <h2 id="variable-syntax"><a class="header" href="#variable-syntax">Variable Syntax</a></h2>
 <p>Variables are prefixed with <code>?</code>:</p>
-<pre><code class="language-lisp">?x
+<pre><code class="language-spl">?x
 ?person
 ?any_value
 </code></pre>
 <h2 id="basic-example"><a class="header" href="#basic-example">Basic Example</a></h2>
-<pre><code class="language-lisp">; Facts with predicates
+<pre><code class="language-spl">; Facts with predicates
 (given (parent alice bob))
 (given (parent bob charlie))
 
@@ -203,7 +203,7 @@
 </ul>
 <h2 id="transitive-closure"><a class="header" href="#transitive-closure">Transitive Closure</a></h2>
 <p>A classic example - computing ancestors:</p>
-<pre><code class="language-lisp">; Base facts
+<pre><code class="language-spl">; Base facts
 (given (parent alice bob))
 (given (parent bob charlie))
 (given (parent charlie david))
@@ -226,12 +226,12 @@
 <h2 id="how-grounding-works"><a class="header" href="#how-grounding-works">How Grounding Works</a></h2>
 <h3 id="step-1-collect-ground-facts"><a class="header" href="#step-1-collect-ground-facts">Step 1: Collect Ground Facts</a></h3>
 <p>Extract all predicate instances from facts:</p>
-<pre><code class="language-lisp">(given (parent alice bob))   →  parent(alice, bob)
+<pre><code class="language-spl">(given (parent alice bob))   →  parent(alice, bob)
 (given (parent bob charlie)) →  parent(bob, charlie)
 </code></pre>
 <h3 id="step-2-match-rule-bodies"><a class="header" href="#step-2-match-rule-bodies">Step 2: Match Rule Bodies</a></h3>
 <p>For each rule, find all substitutions that satisfy the body:</p>
-<pre><code class="language-lisp">(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+<pre><code class="language-spl">(normally r1 (parent ?x ?y) (ancestor ?x ?y))
 </code></pre>
 <p>Substitutions:</p>
 <ul>
@@ -240,14 +240,14 @@
 </ul>
 <h3 id="step-3-generate-ground-rules"><a class="header" href="#step-3-generate-ground-rules">Step 3: Generate Ground Rules</a></h3>
 <p>Apply substitutions to create ground instances:</p>
-<pre><code class="language-lisp">; Ground instances of r1
+<pre><code class="language-spl">; Ground instances of r1
 (normally r1_1 (parent alice bob) (ancestor alice bob))
 (normally r1_2 (parent bob charlie) (ancestor bob charlie))
 </code></pre>
 <h3 id="step-4-forward-chaining"><a class="header" href="#step-4-forward-chaining">Step 4: Forward Chaining</a></h3>
 <p>Reason over the ground theory using standard algorithms.</p>
 <h2 id="multiple-variables"><a class="header" href="#multiple-variables">Multiple Variables</a></h2>
-<pre><code class="language-lisp">(given (edge a b))
+<pre><code class="language-spl">(given (edge a b))
 (given (edge b c))
 (given (edge c d))
 
@@ -260,18 +260,18 @@
 </ul>
 <h2 id="wildcard-variable"><a class="header" href="#wildcard-variable">Wildcard Variable</a></h2>
 <p>Use <code>_</code> when you don’t care about a value:</p>
-<pre><code class="language-lisp">(normally r1 (parent _ ?y) (has-parent ?y))
+<pre><code class="language-spl">(normally r1 (parent _ ?y) (has-parent ?y))
 </code></pre>
 <p>This matches any parent relationship.</p>
 <h2 id="variable-scope"><a class="header" href="#variable-scope">Variable Scope</a></h2>
 <p>Variables are scoped to their rule:</p>
-<pre><code class="language-lisp">; ?x in r1 is independent of ?x in r2
+<pre><code class="language-spl">; ?x in r1 is independent of ?x in r2
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 (normally r2 (friend ?x ?y) (knows ?x ?y))
 </code></pre>
 <h2 id="safety-requirement"><a class="header" href="#safety-requirement">Safety Requirement</a></h2>
 <p>All head variables must appear in the body (<strong>range-restricted</strong>):</p>
-<pre><code class="language-lisp">; VALID: ?x and ?y appear in body
+<pre><code class="language-spl">; VALID: ?x and ?y appear in body
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 
 ; INVALID: ?z not in body (unsafe)
@@ -280,7 +280,7 @@
 <p>Unsafe rules would generate infinite ground instances.</p>
 <h2 id="negation-with-variables"><a class="header" href="#negation-with-variables">Negation with Variables</a></h2>
 <p>Negated predicates in the body:</p>
-<pre><code class="language-lisp">(given (bird tweety))
+<pre><code class="language-spl">(given (bird tweety))
 (given (penguin tweety))
 (given (bird eddie))
 
@@ -290,7 +290,7 @@
 <p><strong>Important</strong>: The negated predicate must be <strong>ground</strong> after substitution. Spindle uses stratified negation.</p>
 <h2 id="grounding-with-superiority"><a class="header" href="#grounding-with-superiority">Grounding with Superiority</a></h2>
 <p>Superiority applies to the <strong>rule template</strong>, affecting all ground instances:</p>
-<pre><code class="language-lisp">(given (bird tweety))
+<pre><code class="language-spl">(given (bird tweety))
 (given (penguin tweety))
 
 (normally r1 (bird ?x) (flies ?x))
@@ -321,7 +321,7 @@
 <h2 id="arithmetic-in-grounded-rules"><a class="header" href="#arithmetic-in-grounded-rules">Arithmetic in Grounded Rules</a></h2>
 <p>Arithmetic expressions are evaluated during grounding after variables are substituted.</p>
 <h3 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h3>
-<pre><code class="language-lisp">(given (item widget 25))
+<pre><code class="language-spl">(given (item widget 25))
 (given (item gadget 10))
 (given (tax-rate 0.1))
 
@@ -339,7 +339,7 @@
 </ol>
 <h3 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h3>
 <p>Guards filter substitutions that don’t satisfy the comparison:</p>
-<pre><code class="language-lisp">(given (score alice 85))
+<pre><code class="language-spl">(given (score alice 85))
 (given (score bob 42))
 
 (normally r1
@@ -349,7 +349,7 @@
 <p>Only <code>{?name→alice, ?s→85}</code> satisfies <code>(&gt;= 85 50)</code>, so only <code>(passing alice)</code> is derived.</p>
 <h3 id="evaluation-order"><a class="header" href="#evaluation-order">Evaluation Order</a></h3>
 <p>Body literals are evaluated left-to-right. Variables must be bound before they are used in arithmetic:</p>
-<pre><code class="language-lisp">; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
+<pre><code class="language-spl">; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
 (normally r1
   (and (item ?name ?price)
        (bind ?discounted (* ?price 0.9)))
@@ -363,7 +363,7 @@
 </code></pre>
 <h3 id="cross-type-matching"><a class="header" href="#cross-type-matching">Cross-Type Matching</a></h3>
 <p>Numeric terms match across types when values are equal:</p>
-<pre><code class="language-lisp">(given (threshold 100))        ; Integer 100
+<pre><code class="language-spl">(given (threshold 100))        ; Integer 100
 (given (score alice 100.0))    ; Decimal 100.0
 
 (normally r1
@@ -373,11 +373,11 @@
 <p><code>Integer(100)</code> matches <code>Decimal(100.0)</code> in comparisons, so this works as expected.</p>
 <h2 id="variables-vs-manual-enumeration"><a class="header" href="#variables-vs-manual-enumeration">Variables vs. Manual Enumeration</a></h2>
 <p>SPL supports variables, so you can write a single rule:</p>
-<pre><code class="language-lisp">; Single rule with variables
+<pre><code class="language-spl">; Single rule with variables
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 </code></pre>
 <p>Without variables, you would need to enumerate all ground instances manually:</p>
-<pre><code class="language-lisp">(normally r1 (parent alice bob) (ancestor alice bob))
+<pre><code class="language-spl">(normally r1 (parent alice bob) (ancestor alice bob))
 (normally r2 (parent bob charlie) (ancestor bob charlie))
 </code></pre>
 
@@ -432,6 +432,7 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4176d14d.js"></script>
 
 
 

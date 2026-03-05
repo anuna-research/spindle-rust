@@ -11,7 +11,7 @@ This project is part of the SPINdle family:
 
 Defeasible logic is a **non-monotonic reasoning** system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.
 
-```lisp
+```spl
 ; The classic "Tweety" example
 (given bird tweety)              ; Tweety is a bird
 (given penguin tweety)           ; Tweety is a penguin

@@ -8,7 +8,7 @@ Time points are represented as milliseconds since the Unix epoch (UTC).
 
 ### Supported Formats
 
-```lisp
+```spl
 (moment "2024-06-15T14:30:00Z")    ; RFC3339 / ISO 8601 string (UTC)
 1718461800000                      ; Integer epoch milliseconds
 inf                                ; Positive infinity (never ends)
@@ -25,7 +25,7 @@ Syntax: `(during literal start end)`
 
 ### Examples
 
-```lisp
+```spl
 ; Alice worked at Acme from 2020 to 2022
 (given (during (employed alice acme) (moment "2020-01-01T00:00:00Z") (moment "2022-01-01T00:00:00Z")))
 
@@ -50,7 +50,7 @@ Starting in v0.3.0 (SPEC-018), temporal atoms with different time bounds are tre
 
 The internal `AtomKey` used for indexing now includes temporal bounds as part of atom identity. Two literals that differ only in their temporal intervals produce distinct identifiers:
 
-```lisp
+```spl
 ; These are now three distinct atoms:
 (given (during p 1 10))      ; p[1,10]
 (given (during p 20 30))     ; p[20,30]
@@ -95,7 +95,7 @@ This ensures that evidence against a predicate in any temporal window propagates
 
 Consider a theory about employment:
 
-```lisp
+```spl
 ; Alice worked at Acme from 2020 to 2022
 (given (during (employed alice acme)
                (moment "2020-01-01T00:00:00Z")
@@ -107,7 +107,7 @@ Consider a theory about employment:
 
 The `TemporalBridge` stage automatically generates:
 
-```lisp
+```spl
 ; Synthetic bridge (strict):
 ; (employed alice acme)[2020,2022] → (employed alice acme)
 ```
@@ -142,7 +142,7 @@ The query operators `query`, `what_if`, `why_not`, and `abduce` now use temporal
 - **Base query** (no temporal bounds): Acts as a wildcard, matching any temporal variant of the predicate. This preserves backward compatibility.
 - **Temporal query** (with bounds): Requires an exact temporal match.
 
-```lisp
+```spl
 ; Given these conclusions after reasoning:
 ;   +d p[1,10]
 ;   +d p[20,30]

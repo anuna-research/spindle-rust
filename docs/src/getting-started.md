@@ -26,7 +26,7 @@ This installs the `spindle` command to your Cargo bin directory.
 
 Create a file called `hello.spl`:
 
-```lisp
+```spl
 ; Facts
 (given bird)
 
@@ -65,7 +65,7 @@ Output:
 
 Create `penguin.spl`:
 
-```lisp
+```spl
 ; Tweety is a bird and a penguin
 (given bird)
 (given penguin)

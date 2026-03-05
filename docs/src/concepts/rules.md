@@ -6,7 +6,7 @@ Spindle supports four types of rules, each with different semantics for how conc
 
 Facts are unconditional truths. They have no body (antecedent) and are always true.
 
-```lisp
+```spl
 (given bird)
 (given penguin)
 (given (not guilty))    ; Negated fact
@@ -18,7 +18,7 @@ Facts produce **definite conclusions** (`+D`) that cannot be defeated.
 
 Strict rules express necessary implications. If the body is true, the head **must** be true.
 
-```lisp
+```spl
 (always r1 penguin bird)              ; All penguins are birds
 (always r2 (and human mortal) dies)   ; All mortal humans die
 ```
@@ -36,7 +36,7 @@ Use strict rules for:
 
 Defeasible rules express typical or default behavior that may have exceptions.
 
-```lisp
+```spl
 (normally r1 bird flies)            ; Birds typically fly
 (normally r2 student has-loans)     ; Students typically have loans
 ```
@@ -57,13 +57,13 @@ Use defeasible rules for:
 
 Defeaters are special rules that **block** conclusions without proving anything themselves.
 
-```lisp
+```spl
 (except d1 broken-wing flies)    ; A broken wing blocks "flies"
 ```
 
 ### Defeater vs. Defeasible Rule
 
-```lisp
+```spl
 ; Defeasible rule: proves (not flies)
 (normally r1 penguin (not flies))
 
@@ -87,18 +87,18 @@ Use defeaters when:
 Rule bodies can contain:
 
 ### Single Literal
-```lisp
+```spl
 (normally r1 bird flies)
 ```
 
 ### Multiple Literals (Conjunction)
-```lisp
+```spl
 (normally r1 (and bird healthy) flies)
 (normally r2 (and student employed) busy)
 ```
 
 ### Negated Literals
-```lisp
+```spl
 (normally r1 (and bird (not penguin)) flies)   ; Non-penguin birds fly
 ```
 
@@ -107,12 +107,12 @@ Rule bodies can contain:
 Rule heads are single literals that can be:
 
 ### Positive
-```lisp
+```spl
 (normally r1 bird flies)
 ```
 
 ### Negated
-```lisp
+```spl
 (normally r1 penguin (not flies))
 ```
 
@@ -124,7 +124,7 @@ Every rule has a label (identifier) used for:
 - Debugging
 
 Labels are optional (auto-generated if omitted):
-```lisp
+```spl
 (normally r1 bird flies)      ; labeled r1
 (normally bird flies)         ; auto-labeled
 ```
