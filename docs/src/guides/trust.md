@@ -872,11 +872,22 @@ This example demonstrates the complete trust workflow from theory definition thr
   (given manual_review_ok)
   (normally qa1 manual_review_ok qa_approved))
 
-; Deployment rule: all three must agree
-(normally deploy1
-  (and security_clear code_ready qa_approved)
-  ready_to_deploy)
+; Deployment rule: attributed to a system policy source
+; Every rule must be inside a claims block to participate in trust.
+; Rules outside claims blocks have no source and receive trust 0.0.
+(trusts system:policy 1.0)
+(claims system:policy
+  (normally deploy1
+    (and security_clear code_ready qa_approved)
+    ready_to_deploy))
 ```
+
+> **Important:** The default trust for unsourced rules is `0.0`. Any rule
+> defined outside a `claims` block has no source attribution and will receive
+> a trust degree of zero — making it the weakest link in any derivation chain
+> that passes through it. Always wrap rules in a `claims` block when using
+> trust-weighted reasoning. For structural or policy rules that are axiomatic,
+> attribute them to a fully-trusted system source like `system:policy`.
 
 **2. Run with trust output**:
 
@@ -889,25 +900,25 @@ spindle reason --trust review.spl
 ```
 Conclusions:
 
-  +D no_vulnerabilities (trust: 0.95) [agent:security]
   +D lint_clean (trust: 0.85) [agent:coder]
   +D manual_review_ok (trust: 0.80) [agent:qa]
+  +D no_vulnerabilities (trust: 0.95) [agent:security]
   +D tests_pass (trust: 0.85) [agent:coder]
-  +d no_vulnerabilities (trust: 0.95) [agent:security]
-  +d manual_review_ok (trust: 0.80) [agent:qa]
   +d lint_clean (trust: 0.85) [agent:coder]
   +d tests_pass (trust: 0.85) [agent:coder]
+  +d no_vulnerabilities (trust: 0.95) [agent:security]
+  +d manual_review_ok (trust: 0.80) [agent:qa]
+  +d code_ready (trust: 0.85) [agent:coder]
   +d security_clear (trust: 0.95) [agent:security]
   +d qa_approved (trust: 0.80) [agent:qa]
-  +d code_ready (trust: 0.85) [agent:coder]
-  +d ready_to_deploy (trust: 0.00) [agent:coder, agent:qa, agent:security]
-  -D qa_approved (trust: 0.00)
-  -D code_ready (trust: 0.00)
-  -D security_clear (trust: 0.00)
+  +d ready_to_deploy (trust: 0.80) [agent:coder, agent:qa, agent:security, system:policy]
   -D ready_to_deploy (trust: 0.00)
+  -D security_clear (trust: 0.00)
+  -D code_ready (trust: 0.00)
+  -D qa_approved (trust: 0.00)
 ```
 
-Each fact retains its source's trust degree. Derived conclusions like `security_clear` inherit trust from their source's claims block. The `ready_to_deploy` rule is defined outside any `claims` block, so it has no source attribution and receives a trust degree of `0.00` — to fix this, wrap the deployment rule in its own claims block or assign it to a fully trusted system source.
+The deployment conclusion (`ready_to_deploy`) has trust `0.80` — the weakest link across the derivation chain: `min(1.0, 0.95, 0.85, 0.80) = 0.80`. This meets the `deploy` threshold (0.8) and can proceed.
 
 ## Limitations
 
