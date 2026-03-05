@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-1d9fa331.js";
+            window.path_to_searchindex_js = "searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-25a1a19c.js"></script>
@@ -187,7 +187,7 @@
 <li><strong>spindle-rust</strong> - This Rust port, based on spindle-racket v1.7.0</li>
 </ul>
 <h2 id="what-is-defeasible-logic"><a class="header" href="#what-is-defeasible-logic">What is Defeasible Logic?</a></h2>
-<p>Defeasible logic is a <a href="https://www.youtube.com/watch?v=Ozipf13jRr4&amp;t=1066"><strong>non-monotonic reasoning</strong></a> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is <strong>tractable</strong> — inference runs in linear time relative to the size of the theory, making it suitable for real-world applications where other non-monotonic formalisms are intractable.</p>
+<p>Defeasible logic is a <a href="https://www.youtube.com/watch?v=Ozipf13jRr4&amp;t=1066"><strong>non-monotonic reasoning</strong></a> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is <strong>tractable</strong> — for propositional theories, inference runs in linear time relative to the size of the theory (Maher, 2001). With first-order variables, a grounding phase instantiates rules against known facts before reasoning begins; the grounding step can be exponential in rule body size (as with Datalog), but reasoning over the ground theory remains polynomial. This makes defeasible logic practical where other non-monotonic formalisms are intractable.</p>
 <pre><code class="language-spl">; The classic "Tweety" example
 (given bird tweety)              ; Tweety is a bird
 (given penguin tweety)           ; Tweety is a penguin

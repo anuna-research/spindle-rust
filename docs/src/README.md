@@ -9,7 +9,7 @@ This project is part of the SPINdle family:
 
 ## What is Defeasible Logic?
 
-Defeasible logic is a [**non-monotonic reasoning**](https://www.youtube.com/watch?v=Ozipf13jRr4&t=1066) system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is **tractable** — inference runs in linear time relative to the size of the theory, making it suitable for real-world applications where other non-monotonic formalisms are intractable.
+Defeasible logic is a [**non-monotonic reasoning**](https://www.youtube.com/watch?v=Ozipf13jRr4&t=1066) system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is **tractable** — for propositional theories, inference runs in linear time relative to the size of the theory (Maher, 2001). With first-order variables, a grounding phase instantiates rules against known facts before reasoning begins; the grounding step can be exponential in rule body size (as with Datalog), but reasoning over the ground theory remains polynomial. This makes defeasible logic practical where other non-monotonic formalisms are intractable.
 
 ```spl
 ; The classic "Tweety" example
