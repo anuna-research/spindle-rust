@@ -83,6 +83,10 @@ impl ExtensionFunction for AddFn {
         }
         nv_to_term(acc)
     }
+
+    fn is_fold_safe(&self) -> bool {
+        true
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +177,10 @@ impl ExtensionFunction for MulFn {
         }
         nv_to_term(acc)
     }
+
+    fn is_fold_safe(&self) -> bool {
+        true
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +269,10 @@ impl ExtensionFunction for MinFn {
         }
         nv_to_term(acc)
     }
+
+    fn is_fold_safe(&self) -> bool {
+        true
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +314,10 @@ impl ExtensionFunction for MaxFn {
             acc = if ord.is_ge() { pa } else { pb };
         }
         nv_to_term(acc)
+    }
+
+    fn is_fold_safe(&self) -> bool {
+        true
     }
 }
 

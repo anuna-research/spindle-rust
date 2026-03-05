@@ -134,6 +134,65 @@ fn validate_fold_unknown_reducer_rejected() {
     assert!(result.is_err(), "should reject fold with unknown reducer");
 }
 
+#[test]
+fn validate_fold_non_commutative_reducer_rejected() {
+    // Subtraction is not commutative/associative, so it must be rejected as a fold reducer.
+    let input = r#"
+        (given (a 10))
+        (given (a 3))
+        (normally r-bad
+            (fold ?total 0 - ?x (a ?x))
+            (result ?total))
+    "#;
+    let theory = spindle_parser::parse_spl(input).expect("parse should succeed");
+    let result = reason_with_options(&theory, PrepareOptions::default());
+    assert!(
+        result.is_err(),
+        "should reject fold with non-commutative reducer '-'"
+    );
+}
+
+#[test]
+fn validate_fold_division_reducer_rejected() {
+    let input = r#"
+        (given (a 10))
+        (given (a 2))
+        (normally r-bad
+            (fold ?total 1 / ?x (a ?x))
+            (result ?total))
+    "#;
+    let theory = spindle_parser::parse_spl(input).expect("parse should succeed");
+    let result = reason_with_options(&theory, PrepareOptions::default());
+    assert!(
+        result.is_err(),
+        "should reject fold with non-commutative reducer '/'"
+    );
+}
+
+#[test]
+fn validate_fold_commutative_reducers_accepted() {
+    // +, *, min, max should all be accepted
+    for (reducer, identity) in &[("+", "0"), ("*", "1"), ("min", "required"), ("max", "required")]
+    {
+        let input = format!(
+            r#"
+            (given (a 10))
+            (given (a 3))
+            (normally r-ok
+                (fold ?total {identity} {reducer} ?x (a ?x))
+                (result ?total))
+        "#,
+        );
+        let theory = spindle_parser::parse_spl(&input).expect("parse should succeed");
+        let result = reason_with_options(&theory, PrepareOptions::default());
+        assert!(
+            result.is_ok(),
+            "reducer '{reducer}' should be accepted as fold-safe, got: {:?}",
+            result.err()
+        );
+    }
+}
+
 // =========================================================================
 // Fold evaluation tests (single stratum — fold over base facts)
 // =========================================================================
@@ -555,6 +614,10 @@ impl ExtensionFunction for MultiplyReducer {
             (Term::Integer(a), Term::Integer(b)) => Ok(Term::Integer(a * b)),
             _ => Err(EvalError::TypeError("expected integers".into())),
         }
+    }
+
+    fn is_fold_safe(&self) -> bool {
+        true
     }
 }
 

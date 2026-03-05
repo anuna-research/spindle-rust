@@ -357,6 +357,15 @@ fn validate_fold(
                         ),
                     });
                 }
+                if !func.is_fold_safe() {
+                    return Err(crate::error::SpindleError::Validation {
+                        message: format!(
+                            "Fold reducer '{reducer_name}' is not commutative and associative — \
+                             fold iteration order is undefined, so only order-independent \
+                             reducers (+, *, min, max) are allowed"
+                        ),
+                    });
+                }
             }
         },
     }

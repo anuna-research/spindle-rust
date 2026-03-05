@@ -912,9 +912,12 @@ fn match_body_with_delta(
     // Build a set of delta fact keys for efficient membership testing
     let delta_keys: FxHashSet<_> = delta_facts.iter().map(literal_key).collect();
 
-    // If body has no logic literals, arithmetic-only bodies are always delta-relevant
-    // (the rule is essentially a ground generator).
-    let has_logic_literals = body.iter().any(|bl| matches!(bl, BodyLiteral::Logic(_)));
+    // If body has no fact-matching literals, arithmetic-only bodies are always
+    // delta-relevant (the rule is essentially a ground generator). Folds contain
+    // an inner pattern that matches against facts, so they count as fact-matching.
+    let has_logic_literals = body
+        .iter()
+        .any(|bl| matches!(bl, BodyLiteral::Logic(_) | BodyLiteral::Fold(_)));
 
     let mut results = Vec::new();
     let mut seen: FxHashSet<SubstitutionKey> = FxHashSet::default();
@@ -938,6 +941,32 @@ fn match_body_with_delta(
     }
 
     results
+}
+
+/// Check whether any fact matching a fold's inner pattern is a delta fact.
+fn fold_matches_delta(
+    fold: &crate::body::FoldLiteral,
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+    all_facts: &[Literal],
+    current_subst: &Substitution,
+    delta_keys: &FxHashSet<(SymbolId, bool, Vec<Term>, Mode, Temporal)>,
+    ctx: &EvalContext<'_>,
+) -> bool {
+    let resolved = match resolve_body_logic(&fold.pattern, current_subst, ctx) {
+        Some(lit) => lit,
+        None => return false,
+    };
+    let candidates: Vec<&Literal> = if is_variable(resolved.name()) {
+        all_facts.iter().collect()
+    } else {
+        fact_index
+            .get(&fact_index_key(&resolved))
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
+    };
+    candidates
+        .iter()
+        .any(|fact| match_literal(&resolved, fact).is_some() && delta_keys.contains(&literal_key(fact)))
 }
 
 /// Recursive helper for source-order body matching with delta tracking.
@@ -1007,17 +1036,36 @@ fn match_body_ordered_delta(
                 Vec::new()
             }
         }
-        BodyLiteral::Fold(fold) => eval_fold_and_continue(
-            fold,
-            rest,
-            fact_index,
-            all_facts,
-            current_subst,
-            ctx,
-            |rest, fi, af, subst, ctx| {
-                match_body_ordered_delta(rest, fi, af, delta_keys, subst, used_delta, ctx)
-            },
-        ),
+        BodyLiteral::Fold(fold) => {
+            // Check if any fact matching the fold pattern is a delta fact.
+            let fold_delta = fold_matches_delta(
+                fold,
+                fact_index,
+                all_facts,
+                current_subst,
+                delta_keys,
+                ctx,
+            );
+            eval_fold_and_continue(
+                fold,
+                rest,
+                fact_index,
+                all_facts,
+                current_subst,
+                ctx,
+                |rest, fi, af, subst, ctx| {
+                    match_body_ordered_delta(
+                        rest,
+                        fi,
+                        af,
+                        delta_keys,
+                        subst,
+                        used_delta || fold_delta,
+                        ctx,
+                    )
+                },
+            )
+        }
     }
 }
 

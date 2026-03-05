@@ -119,6 +119,19 @@ pub trait ExtensionFunction: Send + Sync {
     /// Arguments are fully evaluated [`Term`] values. The function should
     /// return a single [`Term`] result, or an [`EvalError`] on failure.
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError>;
+
+    /// Whether this function is safe to use as a fold reducer.
+    ///
+    /// Fold reducers must be commutative and associative because the order
+    /// in which matched facts are folded is not defined. Functions that are
+    /// not commutative (e.g. `-`, `/`) would produce non-deterministic
+    /// results depending on fact iteration order.
+    ///
+    /// Defaults to `false`. Override to return `true` for functions that
+    /// satisfy both properties.
+    fn is_fold_safe(&self) -> bool {
+        false
+    }
 }
 
 // ---------------------------------------------------------------------------
