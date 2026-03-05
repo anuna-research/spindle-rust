@@ -72,10 +72,10 @@ impl ExtensionFunction for AddFn {
             return Ok(Term::Integer(0));
         }
         // Binary temporal addition cases
-        if args.len() == 2 {
-            if let Some(result) = try_temporal_add(&args[0], &args[1])? {
-                return Ok(result);
-            }
+        if args.len() == 2
+            && let Some(result) = try_temporal_add(&args[0], &args[1])?
+        {
+            return Ok(result);
         }
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
@@ -113,10 +113,10 @@ impl ExtensionFunction for SubFn {
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
         // Binary temporal subtraction cases
-        if args.len() == 2 {
-            if let Some(result) = try_temporal_sub(&args[0], &args[1])? {
-                return Ok(result);
-            }
+        if args.len() == 2
+            && let Some(result) = try_temporal_sub(&args[0], &args[1])?
+        {
+            return Ok(result);
         }
         // Safe: check_arity guarantees at least 1 argument
         let first = to_nv(&args[0])?;
@@ -162,10 +162,10 @@ impl ExtensionFunction for MulFn {
             return Ok(Term::Integer(1));
         }
         // Binary temporal multiplication cases
-        if args.len() == 2 {
-            if let Some(result) = try_temporal_mul(&args[0], &args[1])? {
-                return Ok(result);
-            }
+        if args.len() == 2
+            && let Some(result) = try_temporal_mul(&args[0], &args[1])?
+        {
+            return Ok(result);
         }
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
@@ -203,10 +203,10 @@ impl ExtensionFunction for DivFn {
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
         // Binary temporal division cases
-        if args.len() == 2 {
-            if let Some(result) = try_temporal_div(&args[0], &args[1])? {
-                return Ok(result);
-            }
+        if args.len() == 2
+            && let Some(result) = try_temporal_div(&args[0], &args[1])?
+        {
+            return Ok(result);
         }
         // Safe: check_arity guarantees at least 1 argument
         let first = to_nv(&args[0])?;
@@ -249,7 +249,7 @@ impl ExtensionFunction for MinFn {
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
         // Check if all args are the same temporal type
-        if args.first().map_or(false, |a| a.is_temporal()) {
+        if args.first().is_some_and(|a| a.is_temporal()) {
             return temporal_min_max(args, true);
         }
         // Safe: check_arity guarantees at least 1 argument
@@ -291,7 +291,7 @@ impl ExtensionFunction for MaxFn {
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
         // Check if all args are the same temporal type
-        if args.first().map_or(false, |a| a.is_temporal()) {
+        if args.first().is_some_and(|a| a.is_temporal()) {
             return temporal_min_max(args, false);
         }
         // Safe: check_arity guarantees at least 1 argument
@@ -742,6 +742,10 @@ fn try_temporal_sub(a: &Term, b: &Term) -> Result<Option<Term>, EvalError> {
 /// Try temporal multiplication. Returns Ok(Some(result)) if a temporal case matched.
 fn try_temporal_mul(a: &Term, b: &Term) -> Result<Option<Term>, EvalError> {
     match (a, b) {
+        // Duration * Duration is not supported
+        (Term::Duration(_), Term::Duration(_)) => Err(EvalError::TypeError(
+            "Duration * Duration is not supported".to_string(),
+        )),
         // Duration * Number → Duration
         (Term::Duration(m), other) | (other, Term::Duration(m)) => {
             let scale = term_to_f64(other).ok_or_else(|| {

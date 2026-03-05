@@ -1001,8 +1001,7 @@ fn try_parse_temporal_term(value: &str, line: usize) -> Result<Option<Term>, Par
             })
             .or_else(|e| {
                 // Try with Z suffix without seconds
-                if rest.ends_with('Z') {
-                    let without_z = &rest[..rest.len() - 1];
+                if let Some(without_z) = rest.strip_suffix('Z') {
                     DateTime::parse_from_str(
                         &format!("{without_z}+00:00"),
                         "%Y-%m-%dT%H:%M%:z",
@@ -1125,53 +1124,7 @@ fn try_parse_temporal_term(value: &str, line: usize) -> Result<Option<Term>, Par
 /// Negative durations are supported with a leading `-`.
 /// Returns total signed minutes, or `None` if the format is invalid.
 fn parse_duration_string(s: &str) -> Option<i64> {
-    let (negative, s) = if let Some(rest) = s.strip_prefix('-') {
-        (true, rest)
-    } else {
-        (false, s)
-    };
-
-    if s.is_empty() {
-        return None;
-    }
-
-    let mut total: i64 = 0;
-    let mut found_component = false;
-    let mut remaining = s;
-
-    // Try to parse days
-    if let Some(pos) = remaining.find('d') {
-        let num: i64 = remaining[..pos].parse().ok()?;
-        total += num * 24 * 60;
-        remaining = &remaining[pos + 1..];
-        found_component = true;
-    }
-
-    // Try to parse hours
-    if let Some(pos) = remaining.find('h') {
-        let num: i64 = remaining[..pos].parse().ok()?;
-        total += num * 60;
-        remaining = &remaining[pos + 1..];
-        found_component = true;
-    }
-
-    // Try to parse minutes
-    if let Some(pos) = remaining.find('m') {
-        let num: i64 = remaining[..pos].parse().ok()?;
-        total += num;
-        remaining = &remaining[pos + 1..];
-        found_component = true;
-    }
-
-    // Nothing should remain, and at least one component must be present
-    if !remaining.is_empty() || !found_component {
-        return None;
-    }
-
-    if negative {
-        total = -total;
-    }
-    Some(total)
+    spindle_core::term::parse_duration_components(s)
 }
 
 /// Parse an atom string as a [`Term`], detecting numeric and temporal literals.
@@ -1179,10 +1132,10 @@ fn parse_duration_string(s: &str) -> Option<i64> {
 /// Detection order: temporal (#-prefixed) → numeric → symbol.
 pub(crate) fn parse_term_from_atom(value: &str, line: usize) -> Result<Term, ParseError> {
     // Try temporal literals first (prefixed with #)
-    if value.starts_with('#') {
-        if let Some(term) = try_parse_temporal_term(value, line)? {
-            return Ok(term);
-        }
+    if value.starts_with('#')
+        && let Some(term) = try_parse_temporal_term(value, line)?
+    {
+        return Ok(term);
         // Unknown # prefix — fall through to symbol
     }
 

@@ -143,6 +143,32 @@ fn parse_temporal_in_bind() {
     assert_eq!(rules.len(), 1);
 }
 
+// ===================== Negative duration =====================
+
+#[test]
+fn parse_negative_duration() {
+    let input = "(given (adj #dur:-1h30m))";
+    let theory = parse_spl(input).expect("should parse negative duration");
+    let facts: Vec<_> = theory.rules().filter(|r| r.is_fact()).collect();
+    assert_eq!(facts.len(), 1);
+    let args = facts[0].head[0].predicate_args();
+    assert_eq!(format!("{}", args[0]), "#dur:-1h30m");
+}
+
+#[test]
+fn duration_negative_round_trip() {
+    let input = "(given (d #dur:-1h30m))";
+    let theory = parse_spl(input).unwrap();
+    let arg = &theory.rules().next().unwrap().head[0].predicate_args()[0];
+    let displayed = format!("{}", arg);
+    assert_eq!(displayed, "#dur:-1h30m");
+    // Parse the displayed form back
+    let input2 = format!("(given (d {displayed}))");
+    let theory2 = parse_spl(&input2).unwrap();
+    let arg2 = &theory2.rules().next().unwrap().head[0].predicate_args()[0];
+    assert_eq!(arg, arg2);
+}
+
 // ===================== Multiple temporal facts =====================
 
 #[test]
@@ -154,6 +180,36 @@ fn parse_multiple_temporal_facts() {
     let theory = parse_spl(input).expect("should parse multiple temporal facts");
     let facts: Vec<_> = theory.rules().filter(|r| r.is_fact()).collect();
     assert_eq!(facts.len(), 2);
+}
+
+// ===================== Datetime display round-trip =====================
+
+#[test]
+fn datetime_display_round_trip_offset() {
+    let input = "(given (e #dt:2025-07-15T14:00:00+10:00))";
+    let theory = parse_spl(input).unwrap();
+    let arg = &theory.rules().next().unwrap().head[0].predicate_args()[0];
+    let displayed = format!("{}", arg);
+    assert_eq!(displayed, "#dt:2025-07-15T14:00+10:00");
+    // Parse the displayed form back
+    let input2 = format!("(given (e {displayed}))");
+    let theory2 = parse_spl(&input2).unwrap();
+    let arg2 = &theory2.rules().next().unwrap().head[0].predicate_args()[0];
+    assert_eq!(arg, arg2);
+}
+
+#[test]
+fn datetime_display_round_trip_utc() {
+    let input = "(given (e #dt:2025-07-15T14:00:00Z))";
+    let theory = parse_spl(input).unwrap();
+    let arg = &theory.rules().next().unwrap().head[0].predicate_args()[0];
+    let displayed = format!("{}", arg);
+    assert_eq!(displayed, "#dt:2025-07-15T14:00Z");
+    // Parse the displayed form back
+    let input2 = format!("(given (e {displayed}))");
+    let theory2 = parse_spl(&input2).unwrap();
+    let arg2 = &theory2.rules().next().unwrap().head[0].predicate_args()[0];
+    assert_eq!(arg, arg2);
 }
 
 // ===================== Round-trip: parse → display → parse =====================

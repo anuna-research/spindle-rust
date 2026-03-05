@@ -2,7 +2,7 @@
 //!
 //! These functions are registered in the prelude and available from `bind` expressions.
 
-use chrono::{Datelike, NaiveDate, TimeZone};
+use chrono::{Datelike, NaiveDate, Timelike, TimeZone};
 
 use crate::function_registry::{
     Arity, EvalError, ExtensionFunction, FunctionRegistry, FunctionSignature,
@@ -154,7 +154,6 @@ impl ExtensionFunction for TimeOfFn {
         check_arity(&self.sig, args)?;
         match &args[0] {
             Term::Datetime(dt) => {
-                use chrono::Timelike;
                 let h = dt.hour() as u16;
                 let m = dt.minute() as u16;
                 Ok(Term::Time(h * 60 + m))
@@ -476,7 +475,9 @@ impl ExtensionFunction for AddMonthsFn {
             }
         };
         let months = match &args[1] {
-            Term::Integer(n) => *n as i32,
+            Term::Integer(n) => i32::try_from(*n).map_err(|_| {
+                EvalError::TypeError("add-months: months value out of range".to_string())
+            })?,
             other => {
                 return Err(EvalError::TypeError(format!(
                     "add-months: expected Integer, got {other:?}"
@@ -517,7 +518,9 @@ impl ExtensionFunction for AddYearsFn {
             }
         };
         let years = match &args[1] {
-            Term::Integer(n) => *n as i32,
+            Term::Integer(n) => i32::try_from(*n).map_err(|_| {
+                EvalError::TypeError("add-years: years value out of range".to_string())
+            })?,
             other => {
                 return Err(EvalError::TypeError(format!(
                     "add-years: expected Integer, got {other:?}"

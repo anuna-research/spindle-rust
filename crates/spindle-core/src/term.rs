@@ -190,7 +190,6 @@ impl Hash for Term {
             Term::Datetime(dt) => {
                 dt.timestamp().hash(state);
                 dt.timestamp_subsec_nanos().hash(state);
-                dt.offset().local_minus_utc().hash(state);
             }
             Term::Duration(m) => m.hash(state),
             Term::Offset(m) => m.hash(state),
@@ -381,6 +380,66 @@ impl fmt::Display for Term {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Duration parsing (shared between parser and contract)
+// ---------------------------------------------------------------------------
+
+/// Parse a duration component string like `"1d2h30m"` or `"-1h30m"` into total minutes.
+///
+/// Supported components: `d` (days = 1440 min), `h` (hours = 60 min), `m` (minutes).
+/// At least one component is required. Returns `None` on parse error or overflow.
+pub fn parse_duration_components(s: &str) -> Option<i64> {
+    let (negative, s) = if let Some(rest) = s.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, s)
+    };
+
+    if s.is_empty() {
+        return None;
+    }
+
+    let mut total: i64 = 0;
+    let mut found_component = false;
+    let mut remaining = s;
+
+    // Try to parse days
+    if let Some(pos) = remaining.find('d') {
+        let num: i64 = remaining[..pos].parse().ok()?;
+        let minutes = num.checked_mul(24 * 60)?;
+        total = total.checked_add(minutes)?;
+        remaining = &remaining[pos + 1..];
+        found_component = true;
+    }
+
+    // Try to parse hours
+    if let Some(pos) = remaining.find('h') {
+        let num: i64 = remaining[..pos].parse().ok()?;
+        let minutes = num.checked_mul(60)?;
+        total = total.checked_add(minutes)?;
+        remaining = &remaining[pos + 1..];
+        found_component = true;
+    }
+
+    // Try to parse minutes
+    if let Some(pos) = remaining.find('m') {
+        let num: i64 = remaining[..pos].parse().ok()?;
+        total = total.checked_add(num)?;
+        remaining = &remaining[pos + 1..];
+        found_component = true;
+    }
+
+    // Nothing should remain, and at least one component must be present
+    if !remaining.is_empty() || !found_component {
+        return None;
+    }
+
+    if negative {
+        total = total.checked_neg()?;
+    }
+    Some(total)
 }
 
 // Convenience conversions ──────────────────────────────────────────────────
@@ -795,6 +854,40 @@ mod tests {
         let t = Term::Decimal(d);
         assert!(t.is_numeric());
         assert_eq!(d.to_string(), s);
+    }
+
+    #[test]
+    fn datetime_same_instant_different_offset_eq_and_hash() {
+        use chrono::{FixedOffset, NaiveDate, TimeZone};
+        use std::collections::HashSet;
+
+        let aest = Term::Datetime(
+            FixedOffset::east_opt(10 * 3600)
+                .unwrap()
+                .from_local_datetime(
+                    &NaiveDate::from_ymd_opt(2025, 7, 15)
+                        .unwrap()
+                        .and_hms_opt(9, 0, 0)
+                        .unwrap(),
+                )
+                .unwrap(),
+        );
+        let utc = Term::Datetime(
+            FixedOffset::east_opt(0)
+                .unwrap()
+                .from_local_datetime(
+                    &NaiveDate::from_ymd_opt(2025, 7, 14)
+                        .unwrap()
+                        .and_hms_opt(23, 0, 0)
+                        .unwrap(),
+                )
+                .unwrap(),
+        );
+        assert_eq!(aest, utc);
+        // Verify hash consistency
+        let mut set = HashSet::new();
+        set.insert(aest);
+        assert!(set.contains(&utc));
     }
 
     #[test]

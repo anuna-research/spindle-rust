@@ -54,7 +54,11 @@ impl From<&Term> for TermDto {
             Term::Date(d) => TermDto::Date(d.format("%Y-%m-%d").to_string()),
             Term::Time(m) => TermDto::Time(format!("{:02}:{:02}", m / 60, m % 60)),
             Term::Datetime(dt) => TermDto::Datetime(dt.to_rfc3339()),
-            Term::Duration(m) => TermDto::Duration(m.to_string()),
+            Term::Duration(_) => {
+                // Use Term's Display format, stripping the #dur: prefix
+                let display = format!("{}", term);
+                TermDto::Duration(display.strip_prefix("#dur:").unwrap_or(&display).to_string())
+            }
             Term::Offset(m) => {
                 if *m == 0 {
                     TermDto::Offset("Z".to_string())
@@ -99,7 +103,12 @@ impl TermDto {
             TermDto::Datetime(s) => chrono::DateTime::parse_from_rfc3339(s)
                 .ok()
                 .map(Term::Datetime),
-            TermDto::Duration(s) => s.parse::<i64>().ok().map(Term::Duration),
+            TermDto::Duration(s) => {
+                // Try component format first (e.g. "1d2h30m"), then raw minutes
+                spindle_core::term::parse_duration_components(s)
+                    .or_else(|| s.parse::<i64>().ok())
+                    .map(Term::Duration)
+            }
             TermDto::Offset(s) => {
                 if s == "Z" {
                     Some(Term::Offset(0))
@@ -325,5 +334,38 @@ mod tests {
             let back = TermDto::from(&term);
             assert_eq!(dto, &back, "round-trip failed for {:?}", dto);
         }
+    }
+
+    #[test]
+    fn to_term_round_trip_temporal() {
+        let terms = [
+            TermDto::Date("2025-07-15".to_string()),
+            TermDto::Time("14:30".to_string()),
+            TermDto::Datetime("2025-07-15T14:00:00+10:00".to_string()),
+            TermDto::Duration("1d2h30m".to_string()),
+            TermDto::Offset("+10:00".to_string()),
+            TermDto::Offset("Z".to_string()),
+        ];
+        for dto in &terms {
+            let term = dto.to_term().expect(&format!("to_term should succeed for {:?}", dto));
+            let back = TermDto::from(&term);
+            assert_eq!(dto, &back, "round-trip failed for {:?}", dto);
+        }
+    }
+
+    #[test]
+    fn duration_dto_backward_compat_raw_minutes() {
+        // Old format: raw minutes string
+        let dto = TermDto::Duration("90".to_string());
+        let term = dto.to_term().expect("should parse raw minutes");
+        assert_eq!(term, Term::Duration(90));
+    }
+
+    #[test]
+    fn duration_dto_human_readable_format() {
+        // New format: component string
+        let term = Term::Duration(1590); // 1d2h30m
+        let dto = TermDto::from(&term);
+        assert_eq!(dto, TermDto::Duration("1d2h30m".to_string()));
     }
 }

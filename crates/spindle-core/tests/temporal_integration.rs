@@ -151,6 +151,82 @@ fn days_between_in_rule() {
     );
 }
 
+// ===================== Cross-offset datetime comparison =====================
+
+#[test]
+fn cross_offset_datetime_comparison() {
+    // AEST (UTC+10) 09:00 is earlier than UTC+8 09:00 (because AEST 09:00 = 23:00 UTC previous day,
+    // while UTC+8 09:00 = 01:00 UTC same day)
+    let input = r#"
+(given (ev a #dt:2025-07-15T09:00:00+10:00))
+(given (ev b #dt:2025-07-15T09:00:00+08:00))
+(normally r1
+  (and (ev a ?dt-a)
+       (ev b ?dt-b)
+       (< ?dt-a ?dt-b))
+  (a-before-b))
+"#;
+    let conclusions = run_spl(input);
+    assert!(
+        has_conclusion(&conclusions, "a-before-b", true),
+        "AEST 09:00 (UTC-1d 23:00) should be before UTC+8 09:00 (UTC 01:00). Got: {:?}",
+        conclusions
+            .iter()
+            .map(|c| format!("{}", c.literal))
+            .collect::<Vec<_>>()
+    );
+}
+
+// ===================== Mixed temporal min/max error =====================
+
+#[test]
+fn mixed_temporal_min_max_error() {
+    // min with Date and Time should fail
+    let input = r#"
+(given (d #d:2025-01-01))
+(given (t #t:09:00))
+(normally r1
+  (and (d ?d)
+       (t ?t)
+       (bind ?m (min ?d ?t)))
+  (result ?m))
+"#;
+    let conclusions = run_spl(input);
+    // Should NOT produce a result (error in bind)
+    assert!(
+        !has_conclusion(&conclusions, "result", true),
+        "min of Date and Time should fail. Got: {:?}",
+        conclusions
+            .iter()
+            .map(|c| format!("{}", c.literal))
+            .collect::<Vec<_>>()
+    );
+}
+
+// ===================== Fold with durations =====================
+
+#[test]
+fn fold_sum_durations() {
+    let input = r#"
+(given (task a #dur:2h))
+(given (task b #dur:1h30m))
+(given (task c #dur:45m))
+(normally r-total
+  (fold ?sum #dur:0m + ?d (task ?name ?d))
+  (total-duration ?sum))
+"#;
+    let conclusions = run_spl(input);
+    // 2h + 1h30m + 45m = 120 + 90 + 45 = 255 minutes = 4h15m
+    assert!(
+        has_conclusion(&conclusions, "total-duration(#dur:4h15m)", true),
+        "Got: {:?}",
+        conclusions
+            .iter()
+            .map(|c| format!("{}", c.literal))
+            .collect::<Vec<_>>()
+    );
+}
+
 // ===================== Add months =====================
 
 #[test]
