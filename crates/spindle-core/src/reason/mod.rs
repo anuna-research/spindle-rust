@@ -171,19 +171,23 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 /// Perform stratified reasoning for theories with multi-stratum fold dependencies.
 ///
 /// Processes strata in order (0..N), grounding and reasoning each stratum
-/// independently. Positive conclusions from earlier strata are accumulated
-/// as facts for later strata.
+/// independently. Each stratum's conclusions are **finalized** before the
+/// next stratum runs — positive conclusions are carried forward as synthetic
+/// facts, and lower-stratum rules are NOT re-included (Datalog model).
+///
+/// This avoids the ghost-rule problem where re-included lower-stratum rules
+/// create un-defeatable synthetic supporters that block legitimate defeat.
 fn reason_stratified(
     unground_theory: &Theory,
     strata: &StratumInfo,
     ctx: &EvalContext<'_>,
     grounding: &GroundingOptions,
 ) -> Result<Vec<Conclusion>> {
-    let mut accumulated_facts: Vec<(Literal, bool)> = Vec::new();
+    let mut accumulated_facts: Vec<AccumulatedFact> = Vec::new();
     let mut all_conclusions: Vec<Conclusion> = Vec::new();
 
     for stratum in 0..strata.num_strata {
-        // Build sub-theory: this stratum's rules + accumulated facts
+        // Build sub-theory: this stratum's rules + accumulated facts from prior strata
         let sub_theory = build_stratum_theory(unground_theory, strata, stratum, &accumulated_facts);
 
         // Ground the sub-theory using caller-provided limits (folds evaluate during grounding)
@@ -197,19 +201,24 @@ fn reason_stratified(
         // Reason
         let conclusions = reason_prepared(&grounded)?;
 
-        // Accumulate positive conclusions for next stratum, tracking proof strength.
-        // If a literal appears as both +D and +d from the same stratum, keep definite
-        // (since +D subsumes +d).
+        // Accumulate positive conclusions for next stratum, tracking proof strength
+        // and originating rule label (for provenance). If a literal appears as both
+        // +D and +d from the same stratum, keep definite (since +D subsumes +d).
         for c in &conclusions {
             if c.is_positive() {
                 let is_def = c.conclusion_type.is_definite();
                 let key = c.literal.to_spl();
-                if let Some(existing) = accumulated_facts.iter_mut().find(|(l, _)| l.to_spl() == key) {
-                    if is_def && !existing.1 {
-                        existing.1 = true; // upgrade to definite
+                if let Some(existing) = accumulated_facts.iter_mut().find(|f| f.literal.to_spl() == key) {
+                    if is_def && !existing.is_definite {
+                        existing.is_definite = true; // upgrade to definite
+                        existing.rule_label = c.rule_label.clone(); // use definite's label
                     }
                 } else {
-                    accumulated_facts.push((c.literal.clone(), is_def));
+                    accumulated_facts.push(AccumulatedFact {
+                        literal: c.literal.clone(),
+                        is_definite: is_def,
+                        rule_label: c.rule_label.clone(),
+                    });
                 }
             }
         }
@@ -217,61 +226,75 @@ fn reason_stratified(
         all_conclusions.extend(conclusions);
     }
 
-    // Deduplicate conclusions (positive conclusions from stratum 0 are
-    // re-derived as facts in later strata — keep only one copy)
+    // Deduplicate conclusions — accumulated facts from prior strata produce
+    // synthetic conclusions in later strata; keep only the original version.
     deduplicate_conclusions(&mut all_conclusions);
 
     Ok(all_conclusions)
 }
 
+/// A positive conclusion carried across stratum boundaries.
+struct AccumulatedFact {
+    literal: Literal,
+    is_definite: bool,
+    /// The label of the original rule that derived this conclusion.
+    /// Stored as provenance metadata on synthetic facts so that
+    /// explanation and trust systems can trace through stratum boundaries.
+    rule_label: Option<String>,
+}
+
 /// Build a sub-theory for a specific stratum.
 ///
-/// Includes:
-/// - All accumulated facts from prior strata (as fact rules)
-/// - All rules assigned to this stratum or earlier strata
-/// - Superiority relations involving rules in this stratum or prior strata
+/// Uses the **finalized strata** model (Datalog-with-aggregation semantics):
+/// - Accumulated facts from prior strata are the sole input from earlier strata
+/// - Only rules assigned to this specific stratum are included (not lower strata)
+/// - Each stratum's conclusions are finalized before the next stratum runs
+///
+/// Provenance: each synthetic fact stores the originating rule label in
+/// theory metadata so explanation/trust can trace through stratum boundaries.
 fn build_stratum_theory(
     original: &Theory,
     strata: &StratumInfo,
     target_stratum: usize,
-    accumulated_facts: &[(Literal, bool)],
+    accumulated_facts: &[AccumulatedFact],
 ) -> Theory {
     let mut sub = Theory::new();
 
     // Add accumulated facts from prior strata, preserving proof strength.
     // Definite conclusions become facts; defeasible ones become empty-body
     // defeasible rules so the reasoning engine derives them as +d, not +D.
-    for (i, (literal, is_definite)) in accumulated_facts.iter().enumerate() {
+    // Provenance metadata maps synthetic labels back to originating rules.
+    for (i, fact) in accumulated_facts.iter().enumerate() {
         let label = format!("__strat_fact_{i}");
-        if *is_definite {
-            sub.add_rule(Rule::fact(label, literal.clone()));
+        if fact.is_definite {
+            sub.add_rule(Rule::fact(label.clone(), fact.literal.clone()));
         } else {
             sub.add_rule(Rule::defeasible(
-                label,
+                label.clone(),
                 SmallVec::<[BodyLiteral; 4]>::new(),
-                literal.clone(),
+                fact.literal.clone(),
             ));
+        }
+        // Store provenance: synthetic label → originating rule label
+        if let Some(ref orig_label) = fact.rule_label {
+            sub.add_meta_string(&label, "__provenance_rule", orig_label);
         }
     }
 
-    // Include rules from this stratum AND all prior strata. Lower-stratum
-    // rules must be re-included because stratification only tracks fold
-    // dependencies, not all inter-rule dependencies. A stratum-1 rule can
-    // have non-fold body literals that depend on relations derived by
-    // stratum-0 rules, so those stratum-0 rules must be present for
-    // grounding to produce the necessary intermediate facts.
+    // Only include rules assigned to THIS stratum. Lower-stratum rules are
+    // not re-included — their conclusions are already present as accumulated
+    // facts. This avoids the ghost-rule problem where re-included rules
+    // create un-defeatable synthetic supporters.
     let mut included_labels = rustc_hash::FxHashSet::default();
     for rule in original.rules() {
         let rule_stratum = strata.rule_strata.get(&rule.label).copied().unwrap_or(0);
-        if rule_stratum <= target_stratum {
+        if rule_stratum == target_stratum {
             sub.add_rule(rule.clone());
             included_labels.insert(rule.label.clone());
         }
     }
 
     // Copy superiority relations only when both participants are present.
-    // A superiority with one missing participant is semantically meaningless
-    // and could interact incorrectly with synthetic stratum labels.
     for sup in original.superiorities() {
         if included_labels.contains(&sup.superior) && included_labels.contains(&sup.inferior) {
             sub.add_superiority(&sup.superior, &sup.inferior);
@@ -286,9 +309,10 @@ fn build_stratum_theory(
 
 /// Remove duplicate conclusions across strata.
 ///
-/// Because stratified reasoning re-includes lower-stratum rules, conclusions
-/// from earlier strata are re-derived in later strata. This deduplication
-/// ensures each (literal, conclusion_type) pair appears at most once.
+/// Accumulated facts from prior strata are re-derived as synthetic
+/// conclusions in later strata. This deduplication ensures each
+/// (literal, conclusion_type) pair appears at most once, keeping
+/// the first occurrence (which has the original rule label).
 ///
 /// The key includes the full `ConclusionType` (not just polarity), so that
 /// distinct proof strengths like `+D p` and `+d p` are preserved — these

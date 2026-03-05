@@ -554,7 +554,12 @@ fn build_trust_tree(
     }
     visited.insert(lit_key.clone());
 
-    let (trust, source) = if let Some(label) = rule_label {
+    // Resolve rule label: follow provenance through synthetic stratum facts
+    let effective_label: Option<&str> = rule_label.map(|label| {
+        theory.resolve_stratum_provenance(label).unwrap_or(label)
+    });
+
+    let (trust, source) = if let Some(label) = effective_label {
         resolve_rule_trust(label, theory, policy, reference_time)
     } else {
         (policy.default_trust, None)
@@ -566,7 +571,7 @@ fn build_trust_tree(
     }
 
     // Recurse into body literals of the deriving rule
-    if let Some(label) = rule_label
+    if let Some(label) = effective_label
         && let Some(rule) = theory.get_rule(label)
     {
         let mut children = Vec::new();

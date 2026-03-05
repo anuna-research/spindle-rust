@@ -982,3 +982,118 @@ fn dedup_preserves_both_definite_and_defeasible() {
         "+d rate(alice, 25) missing (dropped by dedup): {positives:?}"
     );
 }
+
+// =========================================================================
+// Issue 2: Synthetic accumulated facts — finalized strata
+// =========================================================================
+
+#[test]
+fn no_strat_fact_labels_in_conclusions() {
+    // Conclusions from multi-stratum theories should never be attributed to
+    // synthetic `__strat_fact_*` rules. Every positive conclusion should
+    // trace back to a user-defined rule label.
+    let theory = spindle_parser::parse_spl(
+        r#"
+        (given (hours alice mon 8))
+        (given (hours alice tue 6))
+        (given (rate alice 25))
+        (normally r-pay
+            (and (hours ?emp ?day ?h) (rate ?emp ?r) (bind ?pay (* ?h ?r)))
+            (pay-line ?emp ?day ?pay))
+        (normally r-total
+            (fold ?total 0 + ?pay (pay-line ?emp ?day ?pay))
+            (total-pay ?emp ?total))
+    "#,
+    )
+    .expect("parse failed");
+
+    let conclusions =
+        reason_with_options(&theory, PrepareOptions::default()).expect("reason failed");
+
+    for c in &conclusions {
+        if let Some(ref label) = c.rule_label {
+            assert!(
+                !label.starts_with("__strat_fact_"),
+                "conclusion {c} has synthetic label '{label}' — \
+                 should be attributed to an original rule"
+            );
+        }
+    }
+}
+
+#[test]
+fn finalized_strata_no_redundant_re_derivation() {
+    // With finalized strata, lower-stratum rules should NOT re-derive
+    // conclusions in higher strata. The conclusion count should be stable
+    // whether or not stratification is needed.
+    //
+    // This theory has 2 strata. If lower-stratum rules are re-included,
+    // stratum 1 redundantly re-derives stratum-0 conclusions.
+    let theory = spindle_parser::parse_spl(
+        r#"
+        (given (item a 10))
+        (given (item b 20))
+        (normally r-line (item ?x ?price) (line ?x ?price))
+        (normally r-total
+            (fold ?total 0 + ?price (line ?x ?price))
+            (grand-total ?total))
+    "#,
+    )
+    .expect("parse failed");
+
+    let conclusions =
+        reason_with_options(&theory, PrepareOptions::default()).expect("reason failed");
+
+    // Count how many times each positive conclusion literal appears
+    let positive_literals: Vec<String> = conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .map(|c| format!("{}", c))
+        .collect();
+
+    // Each conclusion should appear exactly once (no duplicates from re-inclusion)
+    let mut seen = std::collections::HashSet::new();
+    for lit in &positive_literals {
+        assert!(
+            seen.insert(lit.clone()),
+            "duplicate positive conclusion: {lit}"
+        );
+    }
+}
+
+#[test]
+fn cross_stratum_conclusion_rule_labels_are_original() {
+    // In a multi-stratum theory, conclusions from lower strata should be
+    // attributed to their original rule labels, not to synthetic
+    // `__strat_fact_*` labels. This is critical for explanation and trust
+    // systems that trace proof chains via rule_label.
+    let theory = spindle_parser::parse_spl(
+        r#"
+        (given (task alice coding))
+        (given (task bob review))
+        (normally r-active (task ?emp ?t) (active ?emp))
+        (normally r-count
+            (fold ?n 0 + 1 (active ?emp))
+            (headcount ?n))
+    "#,
+    )
+    .expect("parse failed");
+
+    let conclusions =
+        reason_with_options(&theory, PrepareOptions::default()).expect("reason failed");
+
+    // All positive conclusions should have rule_labels that point to
+    // original user-defined rules, not synthetic stratum facts.
+    for c in &conclusions {
+        if c.is_positive()
+            && let Some(ref label) = c.rule_label
+        {
+            assert!(
+                !label.starts_with("__strat_fact_"),
+                "conclusion {} attributed to synthetic label '{}' — \
+                 should trace to original rule",
+                c, label
+            );
+        }
+    }
+}

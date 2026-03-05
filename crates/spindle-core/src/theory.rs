@@ -31,6 +31,16 @@ pub enum MetaValue {
     List(Vec<String>),
 }
 
+impl MetaValue {
+    /// Returns the value as a string slice if it is a `String` variant.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            MetaValue::String(s) => Some(s),
+            MetaValue::List(_) => None,
+        }
+    }
+}
+
 /// Metadata for a label (e.g., task description, priority)
 #[derive(Debug, Clone, Default)]
 pub struct Meta {
@@ -204,6 +214,23 @@ impl Theory {
     /// Copy metadata from another theory
     pub fn copy_metadata_from(&mut self, other: &Theory) {
         self.metadata = other.metadata.clone();
+    }
+
+    /// Resolve a synthetic stratum fact label to its originating rule label.
+    ///
+    /// During stratified reasoning, accumulated facts from prior strata are
+    /// injected as synthetic `__strat_fact_N` rules. This method follows the
+    /// provenance metadata to return the original rule label, enabling
+    /// explanation and trust systems to trace through stratum boundaries.
+    ///
+    /// Returns `None` if the label is not a synthetic fact or has no provenance.
+    pub fn resolve_stratum_provenance(&self, label: &str) -> Option<&str> {
+        if !label.starts_with("__strat_fact_") {
+            return None;
+        }
+        self.get_meta(label)
+            .and_then(|m| m.properties.get("__provenance_rule"))
+            .and_then(|v| v.as_str())
     }
 
     /// Get the trust policy

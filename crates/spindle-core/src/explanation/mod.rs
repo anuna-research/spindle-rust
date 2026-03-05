@@ -108,7 +108,13 @@ fn explain_inner(
 
     let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
-    if let Some(rule_label) = &conclusion.rule_label
+    // Resolve rule label: if this is a synthetic stratum fact, follow
+    // provenance metadata to find the original rule label.
+    let effective_label = conclusion.rule_label.as_deref().map(|label| {
+        theory.resolve_stratum_provenance(label).unwrap_or(label)
+    });
+
+    if let Some(rule_label) = effective_label
         && let Some(rule) = theory.get_rule(rule_label)
     {
         let mut step = ProofStep::new(
