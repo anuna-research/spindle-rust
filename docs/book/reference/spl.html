@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-6479850a.js";
+            window.path_to_searchindex_js = "../searchindex-55a70f2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-25a1a19c.js"></script>
@@ -254,15 +254,15 @@ unary-op    = "abs"
 </code></pre>
 <h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
 <h3 id="strict-rules-always"><a class="header" href="#strict-rules-always">Strict Rules (<code>always</code>)</a></h3>
-<pre><code class="language-spl">(always r1 penguin bird)
-(always r2 (and human mortal) dies)
+<pre><code class="language-spl">(always penguins-are-birds penguin bird)
+(always mortals-die (and human mortal) dies)
 </code></pre>
 <h3 id="defeasible-rules-normally"><a class="header" href="#defeasible-rules-normally">Defeasible Rules (<code>normally</code>)</a></h3>
-<pre><code class="language-spl">(normally r1 bird flies)
-(normally r2 penguin (not flies))
+<pre><code class="language-spl">(normally birds-fly bird flies)
+(normally penguins-dont-fly penguin (not flies))
 </code></pre>
 <h3 id="defeaters-except"><a class="header" href="#defeaters-except">Defeaters (<code>except</code>)</a></h3>
-<pre><code class="language-spl">(except d1 broken-wing flies)
+<pre><code class="language-spl">(except broken-wing-blocks-flight broken-wing flies)
 </code></pre>
 <h3 id="unlabeled-rules"><a class="header" href="#unlabeled-rules">Unlabeled Rules</a></h3>
 <p>Labels are optional (auto-generated):</p>
@@ -289,8 +289,8 @@ has-feathers
 </code></pre>
 <h2 id="conjunction"><a class="header" href="#conjunction">Conjunction</a></h2>
 <p>Use <code>and</code> for multiple conditions:</p>
-<pre><code class="language-spl">(normally r1 (and bird healthy) flies)
-(normally r2 (and student employed) busy)
+<pre><code class="language-spl">(normally healthy-birds-fly (and bird healthy) flies)
+(normally busy-students (and student employed) busy)
 </code></pre>
 <h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
 <p>Variables start with <code>?</code>:</p>
@@ -298,27 +298,27 @@ has-feathers
 (given (parent bob charlie))
 
 ; Transitive closure
-(normally r1 (parent ?x ?y) (ancestor ?x ?y))
-(normally r2 (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
+(normally parent-is-ancestor (parent ?x ?y) (ancestor ?x ?y))
+(normally ancestor-chain (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
 </code></pre>
 <h3 id="wildcard"><a class="header" href="#wildcard">Wildcard</a></h3>
 <p>Use <code>_</code> to match anything:</p>
-<pre><code class="language-spl">(normally r1 (parent _ ?y) (has-parent ?y))
+<pre><code class="language-spl">(normally has-any-parent (parent _ ?y) (has-parent ?y))
 </code></pre>
 <h2 id="superiority"><a class="header" href="#superiority">Superiority</a></h2>
 <h3 id="two-rules"><a class="header" href="#two-rules">Two Rules</a></h3>
-<pre><code class="language-spl">(prefer r2 r1)    ; r2 &gt; r1
+<pre><code class="language-spl">(prefer penguins-dont-fly birds-fly)
 </code></pre>
 <h3 id="chain"><a class="header" href="#chain">Chain</a></h3>
-<pre><code class="language-spl">(prefer r3 r2 r1)  ; r3 &gt; r2 &gt; r1
+<pre><code class="language-spl">(prefer emergency-override safety-protocol standard-rule)
 </code></pre>
 <p>Expands to:</p>
-<pre><code class="language-spl">(prefer r3 r2)
-(prefer r2 r1)
+<pre><code class="language-spl">(prefer emergency-override safety-protocol)
+(prefer safety-protocol standard-rule)
 </code></pre>
 <h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
 <p>Attach metadata to rules:</p>
-<pre><code class="language-spl">(meta r1
+<pre><code class="language-spl">(meta birds-fly
   (description "Birds normally fly")
   (confidence 0.9)
   (source "ornithology-handbook"))
@@ -330,13 +330,13 @@ has-feathers
 </code></pre>
 <h2 id="modal-operators"><a class="header" href="#modal-operators">Modal Operators</a></h2>
 <h3 id="obligation-must"><a class="header" href="#obligation-must">Obligation (<code>must</code>)</a></h3>
-<pre><code class="language-spl">(normally signed-contract (must pay))
+<pre><code class="language-spl">(normally contract-requires-payment signed-contract (must pay))
 </code></pre>
 <h3 id="permission-may"><a class="header" href="#permission-may">Permission (<code>may</code>)</a></h3>
-<pre><code class="language-spl">(normally member (may access))
+<pre><code class="language-spl">(normally members-may-access member (may access))
 </code></pre>
 <h3 id="forbidden-forbidden"><a class="header" href="#forbidden-forbidden">Forbidden (<code>forbidden</code>)</a></h3>
-<pre><code class="language-spl">(normally unauthorized (forbidden enter))
+<pre><code class="language-spl">(normally no-entry-unauthorized unauthorized (forbidden enter))
 </code></pre>
 <h2 id="temporal-reasoning"><a class="header" href="#temporal-reasoning">Temporal Reasoning</a></h2>
 <h3 id="time-points"><a class="header" href="#time-points">Time Points</a></h3>
@@ -443,25 +443,25 @@ giving 6 symmetric pairs plus <code>equals</code>:</p>
 </code></pre>
 <h3 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h3>
 <p>Bind a variable to the result of an arithmetic expression:</p>
-<pre><code class="language-spl">(normally r1
+<pre><code class="language-spl">(normally compute-total
   (and (price ?p) (tax-rate ?r)
        (bind ?total (+ ?p (* ?p ?r))))
   (total ?total))
 </code></pre>
 <h3 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h3>
 <p>Compare two arithmetic expressions:</p>
-<pre><code class="language-spl">(normally r1
+<pre><code class="language-spl">(normally adult-by-age
   (and (age ?x ?a) (&gt; ?a 18))
   (adult ?x))
 
-(normally r2
+(normally failing-score
   (and (score ?x ?s) (&lt;= ?s 50))
   (failing ?x))
 </code></pre>
 <p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
 <h3 id="arithmetic-in-predicate-arguments"><a class="header" href="#arithmetic-in-predicate-arguments">Arithmetic in Predicate Arguments</a></h3>
 <p>Arithmetic expressions can appear as predicate arguments in rule bodies:</p>
-<pre><code class="language-spl">(normally r1
+<pre><code class="language-spl">(normally compute-invoice
   (and (price ?item ?p) (tax-rate ?r))
   (invoice ?item (+ ?p (* ?p ?r))))
 </code></pre>
@@ -494,7 +494,7 @@ bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
   :id "claim-001"
   :note "sensor reading"
   (given sunny)
-  (normally r1 sunny (not umbrella)))
+  (normally no-umbrella-when-sunny sunny (not umbrella)))
 </code></pre>
 <h3 id="syntax"><a class="header" href="#syntax">Syntax</a></h3>
 <pre><code>(claims source [:at timestamp] [:sig signature] [:id block-id] [:note annotation]
@@ -516,23 +516,23 @@ bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
 (given penguin)
 
 ; Strict rule
-(always s1 penguin bird)
+(always penguins-are-birds penguin bird)
 
 ; Defeasible rules
-(normally r1 bird flies)
-(normally r2 bird has-feathers)
-(normally r3 penguin (not flies))
-(normally r4 penguin swims)
+(normally birds-fly bird flies)
+(normally birds-have-feathers bird has-feathers)
+(normally penguins-dont-fly penguin (not flies))
+(normally penguins-swim penguin swims)
 
-; Superiority
-(prefer r3 r1)
+; Superiority — specificity
+(prefer penguins-dont-fly birds-fly)
 
 ; Defeater
-(except d1 broken-wing flies)
+(except broken-wing-blocks-flight broken-wing flies)
 
 ; Metadata
-(meta r1 (description "Birds typically fly"))
-(meta r3 (description "Penguins are an exception"))
+(meta birds-fly (description "Birds typically fly"))
+(meta penguins-dont-fly (description "Penguins are an exception"))
 </code></pre>
 
                     </main>
@@ -586,7 +586,7 @@ bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../src/spl-highlight-4176d14d.js"></script>
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

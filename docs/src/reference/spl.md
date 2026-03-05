@@ -96,21 +96,21 @@ unary-op    = "abs"
 ### Strict Rules (`always`)
 
 ```spl
-(always r1 penguin bird)
-(always r2 (and human mortal) dies)
+(always penguins-are-birds penguin bird)
+(always mortals-die (and human mortal) dies)
 ```
 
 ### Defeasible Rules (`normally`)
 
 ```spl
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
+(normally birds-fly bird flies)
+(normally penguins-dont-fly penguin (not flies))
 ```
 
 ### Defeaters (`except`)
 
 ```spl
-(except d1 broken-wing flies)
+(except broken-wing-blocks-flight broken-wing flies)
 ```
 
 ### Unlabeled Rules
@@ -157,8 +157,8 @@ Or with prefix:
 Use `and` for multiple conditions:
 
 ```spl
-(normally r1 (and bird healthy) flies)
-(normally r2 (and student employed) busy)
+(normally healthy-birds-fly (and bird healthy) flies)
+(normally busy-students (and student employed) busy)
 ```
 
 ## Variables
@@ -170,8 +170,8 @@ Variables start with `?`:
 (given (parent bob charlie))
 
 ; Transitive closure
-(normally r1 (parent ?x ?y) (ancestor ?x ?y))
-(normally r2 (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
+(normally parent-is-ancestor (parent ?x ?y) (ancestor ?x ?y))
+(normally ancestor-chain (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
 ```
 
 ### Wildcard
@@ -179,7 +179,7 @@ Variables start with `?`:
 Use `_` to match anything:
 
 ```spl
-(normally r1 (parent _ ?y) (has-parent ?y))
+(normally has-any-parent (parent _ ?y) (has-parent ?y))
 ```
 
 ## Superiority
@@ -187,19 +187,19 @@ Use `_` to match anything:
 ### Two Rules
 
 ```spl
-(prefer r2 r1)    ; r2 > r1
+(prefer penguins-dont-fly birds-fly)
 ```
 
 ### Chain
 
 ```spl
-(prefer r3 r2 r1)  ; r3 > r2 > r1
+(prefer emergency-override safety-protocol standard-rule)
 ```
 
 Expands to:
 ```spl
-(prefer r3 r2)
-(prefer r2 r1)
+(prefer emergency-override safety-protocol)
+(prefer safety-protocol standard-rule)
 ```
 
 ## Metadata
@@ -207,7 +207,7 @@ Expands to:
 Attach metadata to rules:
 
 ```spl
-(meta r1
+(meta birds-fly
   (description "Birds normally fly")
   (confidence 0.9)
   (source "ornithology-handbook"))
@@ -226,19 +226,19 @@ Attach metadata to rules:
 ### Obligation (`must`)
 
 ```spl
-(normally signed-contract (must pay))
+(normally contract-requires-payment signed-contract (must pay))
 ```
 
 ### Permission (`may`)
 
 ```spl
-(normally member (may access))
+(normally members-may-access member (may access))
 ```
 
 ### Forbidden (`forbidden`)
 
 ```spl
-(normally unauthorized (forbidden enter))
+(normally no-entry-unauthorized unauthorized (forbidden enter))
 ```
 
 ## Temporal Reasoning
@@ -356,7 +356,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 Bind a variable to the result of an arithmetic expression:
 
 ```spl
-(normally r1
+(normally compute-total
   (and (price ?p) (tax-rate ?r)
        (bind ?total (+ ?p (* ?p ?r))))
   (total ?total))
@@ -367,11 +367,11 @@ Bind a variable to the result of an arithmetic expression:
 Compare two arithmetic expressions:
 
 ```spl
-(normally r1
+(normally adult-by-age
   (and (age ?x ?a) (> ?a 18))
   (adult ?x))
 
-(normally r2
+(normally failing-score
   (and (score ?x ?s) (<= ?s 50))
   (failing ?x))
 ```
@@ -383,7 +383,7 @@ Available operators: `=`, `!=`, `<`, `>`, `<=`, `>=`
 Arithmetic expressions can appear as predicate arguments in rule bodies:
 
 ```spl
-(normally r1
+(normally compute-invoice
   (and (price ?item ?p) (tax-rate ?r))
   (invoice ?item (+ ?p (* ?p ?r))))
 ```
@@ -427,7 +427,7 @@ The `claims` block attributes statements to a named source, with optional metada
   :id "claim-001"
   :note "sensor reading"
   (given sunny)
-  (normally r1 sunny (not umbrella)))
+  (normally no-umbrella-when-sunny sunny (not umbrella)))
 ```
 
 ### Syntax
@@ -455,22 +455,22 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 (given penguin)
 
 ; Strict rule
-(always s1 penguin bird)
+(always penguins-are-birds penguin bird)
 
 ; Defeasible rules
-(normally r1 bird flies)
-(normally r2 bird has-feathers)
-(normally r3 penguin (not flies))
-(normally r4 penguin swims)
+(normally birds-fly bird flies)
+(normally birds-have-feathers bird has-feathers)
+(normally penguins-dont-fly penguin (not flies))
+(normally penguins-swim penguin swims)
 
-; Superiority
-(prefer r3 r1)
+; Superiority — specificity
+(prefer penguins-dont-fly birds-fly)
 
 ; Defeater
-(except d1 broken-wing flies)
+(except broken-wing-blocks-flight broken-wing flies)
 
 ; Metadata
-(meta r1 (description "Birds typically fly"))
-(meta r3 (description "Penguins are an exception"))
+(meta birds-fly (description "Birds typically fly"))
+(meta penguins-dont-fly (description "Penguins are an exception"))
 ```
 
