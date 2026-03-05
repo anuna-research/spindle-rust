@@ -72,9 +72,12 @@ pub fn compute_strata(theory: &Theory) -> Result<StratumInfo> {
     let mut rule_head_relations: FxHashMap<RuleLabel, FxHashSet<SymbolId>> = FxHashMap::default();
     // Collect fold dependencies: rule label -> set of relations it folds over
     let mut fold_deps: FxHashMap<RuleLabel, FxHashSet<SymbolId>> = FxHashMap::default();
+    // Collect ALL body dependencies per rule (normal and fold, only to derived relations)
+    let mut normal_deps: FxHashMap<RuleLabel, FxHashSet<SymbolId>> = FxHashMap::default();
+    let mut all_fold_deps: FxHashMap<RuleLabel, FxHashSet<SymbolId>> = FxHashMap::default();
 
+    // First pass: collect head relations and derived relations.
     for rule in theory.rules() {
-        // Record head relations
         let mut head_rels = FxHashSet::default();
         for head in &rule.head {
             let name_id = head.name_id();
@@ -84,16 +87,35 @@ pub fn compute_strata(theory: &Theory) -> Result<StratumInfo> {
             }
         }
         rule_head_relations.insert(rule.label.clone(), head_rels);
+    }
 
-        // Record fold dependencies
+    // Second pass: collect body dependencies (now derived_relations is complete).
+    for rule in theory.rules() {
+        let mut rule_normal_deps: FxHashSet<SymbolId> = FxHashSet::default();
+        let mut rule_fold_deps: FxHashSet<SymbolId> = FxHashSet::default();
         for bl in &rule.body {
-            if let BodyLiteral::Fold(fold) = bl {
-                fold_deps
-                    .entry(rule.label.clone())
-                    .or_default()
-                    .insert(fold.pattern.name_id());
+            match bl {
+                BodyLiteral::Logic(lit) => {
+                    let dep = lit.name_id();
+                    if derived_relations.contains(&dep) {
+                        rule_normal_deps.insert(dep);
+                    }
+                }
+                BodyLiteral::Fold(fold) => {
+                    let dep = fold.pattern.name_id();
+                    if derived_relations.contains(&dep) {
+                        rule_fold_deps.insert(dep);
+                    }
+                    fold_deps
+                        .entry(rule.label.clone())
+                        .or_default()
+                        .insert(dep);
+                }
+                BodyLiteral::Arithmetic(_) => {}
             }
         }
+        normal_deps.insert(rule.label.clone(), rule_normal_deps);
+        all_fold_deps.insert(rule.label.clone(), rule_fold_deps);
     }
 
     // If no folds, everything is stratum 0
@@ -108,48 +130,79 @@ pub fn compute_strata(theory: &Theory) -> Result<StratumInfo> {
         });
     }
 
-    // Build dependency graph between relations.
-    // Edge: head_rel -> folded_rel means head_rel depends on folded_rel being complete.
-    // In stratum terms: stratum(head_rel) > stratum(folded_rel) if folded_rel is derived.
-    let mut relation_deps: FxHashMap<SymbolId, FxHashSet<SymbolId>> = FxHashMap::default();
+    // Build dependency edges between relations.
+    // normal_edges: stratum(head) >= stratum(dep)
+    // fold_edges:   stratum(head) >= stratum(dep) + 1
+    let mut normal_edges: FxHashMap<SymbolId, FxHashSet<SymbolId>> = FxHashMap::default();
+    let mut fold_edges: FxHashMap<SymbolId, FxHashSet<SymbolId>> = FxHashMap::default();
 
-    for (rule_label, folded_rels) in &fold_deps {
-        if let Some(head_rels) = rule_head_relations.get(rule_label) {
-            for &head_rel in head_rels {
-                for &folded_rel in folded_rels {
-                    // Only add dependency if the folded relation is actually derived (not just given as facts)
-                    if derived_relations.contains(&folded_rel) {
-                        relation_deps
-                            .entry(head_rel)
-                            .or_default()
-                            .insert(folded_rel);
+    for rule in theory.rules() {
+        if let Some(head_rels) = rule_head_relations.get(&rule.label) {
+            // Normal body deps
+            if let Some(deps) = normal_deps.get(&rule.label) {
+                for &head_rel in head_rels.iter() {
+                    for &dep in deps {
+                        // Skip self-loops for normal edges (recursive rules stay in same stratum)
+                        if dep != head_rel {
+                            normal_edges.entry(head_rel).or_default().insert(dep);
+                        }
+                    }
+                }
+            }
+            // Fold body deps
+            if let Some(deps) = all_fold_deps.get(&rule.label) {
+                for &head_rel in head_rels.iter() {
+                    for &dep in deps {
+                        fold_edges.entry(head_rel).or_default().insert(dep);
                     }
                 }
             }
         }
     }
 
-    // Assign strata to relations via topological sort.
-    // relation_stratum[rel] = max(relation_stratum[dep] for dep in deps) + 1
-    // Base facts (not derived or no fold deps) get stratum 0.
+    // Fixed-point iteration to assign strata.
     let mut relation_stratum: FxHashMap<SymbolId, usize> = FxHashMap::default();
-    let mut visiting: FxHashSet<SymbolId> = FxHashSet::default();
-    let mut visited: FxHashSet<SymbolId> = FxHashSet::default();
+    let max_iterations = derived_relations.len() + 1;
 
-    // Collect all relations that participate
-    let all_relations: FxHashSet<SymbolId> = rule_head_relations
-        .values()
-        .flat_map(|s| s.iter().copied())
-        .collect();
-
-    for &rel in &all_relations {
-        assign_stratum(
-            rel,
-            &relation_deps,
-            &mut relation_stratum,
-            &mut visiting,
-            &mut visited,
-        )?;
+    for iteration in 0..=max_iterations {
+        if iteration == max_iterations {
+            return Err(SpindleError::Validation {
+                message: "Aggregation cycle detected. \
+                         Cycles through aggregation are not supported.\n\
+                         Hint: restructure so that aggregation dependencies flow in one direction."
+                    .to_string(),
+            });
+        }
+        let mut changed = false;
+        for rule in theory.rules() {
+            if let Some(head_rels) = rule_head_relations.get(&rule.label) {
+                for &head_rel in head_rels.iter() {
+                    let mut required = 0usize;
+                    // Normal edges: stratum(head) >= stratum(dep)
+                    if let Some(deps) = normal_edges.get(&head_rel) {
+                        for &dep in deps {
+                            let dep_s = relation_stratum.get(&dep).copied().unwrap_or(0);
+                            required = required.max(dep_s);
+                        }
+                    }
+                    // Fold edges: stratum(head) >= stratum(dep) + 1
+                    if let Some(deps) = fold_edges.get(&head_rel) {
+                        for &dep in deps {
+                            let dep_s = relation_stratum.get(&dep).copied().unwrap_or(0);
+                            required = required.max(dep_s + 1);
+                        }
+                    }
+                    let current = relation_stratum.get(&head_rel).copied().unwrap_or(0);
+                    if required > current {
+                        relation_stratum.insert(head_rel, required);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
     }
 
     // Assign rules to strata based on their head relation's stratum.
@@ -172,47 +225,6 @@ pub fn compute_strata(theory: &Theory) -> Result<StratumInfo> {
         rule_strata,
         num_strata: max_stratum + 1,
     })
-}
-
-/// Recursively assign a stratum to a relation via DFS with cycle detection.
-fn assign_stratum(
-    rel: SymbolId,
-    deps: &FxHashMap<SymbolId, FxHashSet<SymbolId>>,
-    strata: &mut FxHashMap<SymbolId, usize>,
-    visiting: &mut FxHashSet<SymbolId>,
-    visited: &mut FxHashSet<SymbolId>,
-) -> Result<usize> {
-    if let Some(&s) = strata.get(&rel) {
-        return Ok(s);
-    }
-    if visiting.contains(&rel) {
-        let rel_name = crate::intern::resolve(rel);
-        return Err(SpindleError::Validation {
-            message: format!(
-                "Aggregation cycle detected involving relation '{rel_name}'. \
-                 Cycles through aggregation are not supported.\n\
-                 Hint: restructure so that aggregation dependencies flow in one direction."
-            ),
-        });
-    }
-
-    visiting.insert(rel);
-
-    let stratum = if let Some(dep_rels) = deps.get(&rel) {
-        let mut max_dep = 0usize;
-        for &dep in dep_rels {
-            let dep_stratum = assign_stratum(dep, deps, strata, visiting, visited)?;
-            max_dep = max_dep.max(dep_stratum);
-        }
-        max_dep + 1
-    } else {
-        0
-    };
-
-    visiting.remove(&rel);
-    visited.insert(rel);
-    strata.insert(rel, stratum);
-    Ok(stratum)
 }
 
 #[cfg(test)]
@@ -345,5 +357,47 @@ mod tests {
         assert!(result.is_err());
         let msg = format!("{}", result.unwrap_err());
         assert!(msg.contains("Aggregation cycle"), "got: {msg}");
+    }
+
+    #[test]
+    fn transitive_fold_dependency_through_non_fold_rule() {
+        // Rule B (fold): applicable-rate -> topup-pay (stratum 1)
+        // Rule C (normal): topup-pay -> pay-line
+        // Rule D (fold): pay-line -> total-pay
+        // D should be in stratum 2 because pay-line depends on topup-pay which is stratum 1.
+        let mut theory = Theory::new();
+        theory.add_fact("base");
+        theory.add_defeasible_rule(&["base"], "applicable-rate");
+        theory.add_rule(make_fold_rule("r-topup", "applicable-rate", "topup-pay"));
+        // Normal rule: topup-pay -> pay-line
+        theory.add_defeasible_rule(&["topup-pay"], "pay-line");
+        theory.add_rule(make_fold_rule("r-total", "pay-line", "total-pay"));
+
+        let info = compute_strata(&theory).unwrap();
+        // applicable-rate: stratum 0
+        // topup-pay: stratum 1 (fold over applicable-rate)
+        // pay-line: stratum 1 (normal dep on topup-pay)
+        // total-pay: stratum 2 (fold over pay-line which is stratum 1)
+        assert_eq!(info.rule_strata["r-topup"], 1);
+        assert_eq!(info.rule_strata["r-total"], 2);
+        assert!(info.num_strata >= 3);
+    }
+
+    #[test]
+    fn non_fold_mutual_dependency_same_stratum() {
+        // Mutual recursion through normal edges should not cause a cycle error.
+        // a -> b -> a (both normal rules), plus a fold over some other relation.
+        let mut theory = Theory::new();
+        theory.add_fact("base");
+        theory.add_defeasible_rule(&["base"], "x");
+        theory.add_defeasible_rule(&["x"], "y");
+        theory.add_defeasible_rule(&["y"], "x");
+        // Add a fold so we don't hit the early no-fold return
+        theory.add_rule(make_fold_rule("r-fold", "x", "result"));
+
+        let info = compute_strata(&theory).unwrap();
+        // x and y should be in the same stratum (0) due to mutual normal deps
+        // result should be in stratum 1 (fold over x)
+        assert_eq!(info.rule_strata["r-fold"], 1);
     }
 }

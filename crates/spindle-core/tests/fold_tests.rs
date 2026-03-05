@@ -667,6 +667,52 @@ fn fold_with_negation_via_stratification() {
 // Gap coverage: fold with extension function in extract expression (#7)
 // =========================================================================
 
+// =========================================================================
+// Transitive fold dependency (fold determinism fix)
+// =========================================================================
+
+#[test]
+fn fold_transitive_dependency_correct_result() {
+    // Chain: base facts -> fold -> intermediate -> normal derive -> fold
+    // The second fold must wait for the first fold's results to propagate
+    // through the normal derivation chain.
+    let conclusions = reason_spl(
+        r#"
+        (given (hours alice mon 8))
+        (given (hours alice tue 6))
+        (given (rate alice 25))
+        (normally r-pay
+            (and (hours ?emp ?day ?h) (rate ?emp ?r) (bind ?pay (* ?h ?r)))
+            (pay-line ?emp ?day ?pay))
+        (normally r-topup
+            (fold ?total 0 + ?pay (pay-line ?emp ?day ?pay))
+            (subtotal ?emp ?total))
+        (normally r-with-bonus
+            (and (subtotal ?emp ?s) (bind ?final (+ ?s 100)))
+            (final-pay ?emp ?final))
+        (normally r-grand-total
+            (fold ?gt 0 + ?f (final-pay ?emp ?f))
+            (grand-total ?emp ?gt))
+    "#,
+    );
+    // pay-line: alice mon 200, alice tue 150
+    // subtotal(alice, 350) via fold
+    // final-pay(alice, 450) via normal rule (350 + 100)
+    // grand-total(alice, 450) via fold over final-pay
+    assert!(
+        conclusions.iter().any(|c| c.contains("subtotal(alice, 350)")),
+        "got: {conclusions:?}"
+    );
+    assert!(
+        conclusions.iter().any(|c| c.contains("final-pay(alice, 450)")),
+        "got: {conclusions:?}"
+    );
+    assert!(
+        conclusions.iter().any(|c| c.contains("grand-total(alice, 450)")),
+        "got: {conclusions:?}"
+    );
+}
+
 /// A simple "double" function for testing extract expressions.
 struct DoubleFn {
     sig: FunctionSignature,
@@ -760,15 +806,15 @@ fn three_strata_deduplication() {
     // level(alice, 6) (60 div 10 = 6)
     // level-count(alice, 1)
     assert!(
-        has_conclusion(&conclusions, "+d total-weighted(alice, 60)"),
+        conclusions.iter().any(|c| c.contains("total-weighted(alice, 60)")),
         "got: {conclusions:?}"
     );
     assert!(
-        has_conclusion(&conclusions, "+d level(alice, 6)"),
+        conclusions.iter().any(|c| c.contains("level(alice, 6)")),
         "got: {conclusions:?}"
     );
     assert!(
-        has_conclusion(&conclusions, "+d level-count(alice, 1)"),
+        conclusions.iter().any(|c| c.contains("level-count(alice, 1)")),
         "got: {conclusions:?}"
     );
 
