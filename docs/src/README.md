@@ -3,7 +3,7 @@
 **Spindle-Rust** is a Rust implementation of the SPINdle defeasible logic reasoning engine.
 
 This project is part of the SPINdle family:
-- **[SPINdle](http://spindle.data61.csiro.au/)** ([source](https://sourceforge.net/projects/spindlereasoner/)) - The original Java implementation by NICTA (now Data61/CSIRO)
+- **[SPINdle](https://research.csiro.au/bpli/tools/spindle/)** ([source](https://sourceforge.net/projects/spindlereasoner/)) - The original Java implementation by NICTA (now Data61/CSIRO)
 - **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A comprehensive Racket port of SPINdle Java v2.2.4, with trust-weighted reasoning
 - **spindle-rust** - This Rust port, based on spindle-racket v1.7.0
 
@@ -102,7 +102,7 @@ spindle-parser = { path = "crates/spindle-parser" }
 
 ## References
 
-- [SPINdle Project](http://spindle.data61.csiro.au/) - Original Java implementation by NICTA/Data61
+- [SPINdle Project](https://research.csiro.au/bpli/tools/spindle/) - Original Java implementation by NICTA/Data61
 - Nute, D. (1994). "Defeasible Logic" - Foundational paper on defeasible logic
 - [spindle-racket](https://codeberg.org/anuna/spindle-racket) - Racket implementation this port is based on
 

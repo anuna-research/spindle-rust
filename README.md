@@ -3,10 +3,10 @@
 [![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)](.)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 
-A Rust implementation of the [SPINdle](http://spindle.data61.csiro.au/) defeasible logic reasoning engine.
+A Rust implementation of the [SPINdle](https://research.csiro.au/bpli/tools/spindle/) defeasible logic reasoning engine.
 
 This project is part of the SPINdle family:
-- **[SPINdle](http://spindle.data61.csiro.au/)** - The original Java implementation (v2.2.4) by NICTA (now Data61/CSIRO)
+- **[SPINdle](https://research.csiro.au/bpli/tools/spindle/)** - The original Java implementation (v2.2.4) by NICTA (now Data61/CSIRO)
 - **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A Racket port with trust-weighted reasoning and `#lang spindle`
 - **spindle-rust** - This Rust port, based on spindle-racket v1.7.0
 
@@ -234,7 +234,7 @@ cd docs && mdbook serve
 
 ## References
 
-- [SPINdle Project](http://spindle.data61.csiro.au/) - Original Java implementation by NICTA/Data61
+- [SPINdle Project](https://research.csiro.au/bpli/tools/spindle/) - Original Java implementation by NICTA/Data61
 - Nute, D. (1994). "Defeasible Logic" - Foundational paper
 - [spindle-racket](https://codeberg.org/anuna/spindle-racket) - Racket implementation
 

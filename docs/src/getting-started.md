@@ -2,7 +2,7 @@
 
 This guide walks you through installing Spindle-Rust and running your first defeasible logic program.
 
-Spindle-Rust is a Rust port of [SPINdle](http://spindle.data61.csiro.au/), a defeasible logic reasoning system originally developed by NICTA (now Data61/CSIRO). This implementation is based on [spindle-racket](https://codeberg.org/anuna/spindle-racket) v1.7.0.
+Spindle-Rust is a Rust port of [SPINdle](https://research.csiro.au/bpli/tools/spindle/), a defeasible logic reasoning system originally developed by NICTA (now Data61/CSIRO). This implementation is based on [spindle-racket](https://codeberg.org/anuna/spindle-racket) v1.7.0.
 
 ## Installation
 
