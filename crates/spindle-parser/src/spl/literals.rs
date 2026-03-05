@@ -966,11 +966,226 @@ fn try_parse_numeric_term(value: &str, line: usize) -> Result<Option<Term>, Pars
     Ok(None)
 }
 
-/// Parse an atom string as a [`Term`], detecting numeric literals.
+/// Try to parse a temporal literal from an atom string.
 ///
-/// If the atom matches a numeric pattern, returns the appropriate numeric Term.
-/// Otherwise returns `Term::Symbol`.
+/// Temporal literals use `#` prefixed syntax:
+/// - `#d:YYYY-MM-DD` → `Term::Date`
+/// - `#t:HH:MM` → `Term::Time`
+/// - `#dt:YYYY-MM-DDTHH:MM+HH:MM` (or `Z` suffix) → `Term::Datetime`
+/// - `#dur:NdNhNm` → `Term::Duration` (components optional, at least one required)
+/// - `#off:+HH:MM` / `#off:-HH:MM` / `#off:Z` → `Term::Offset`
+///
+/// Returns `Ok(None)` if the atom doesn't start with a temporal prefix.
+/// Returns `Err` if it starts with a temporal prefix but the value is malformed.
+fn try_parse_temporal_term(value: &str, line: usize) -> Result<Option<Term>, ParseError> {
+    if let Some(rest) = value.strip_prefix("#d:") {
+        // Date: YYYY-MM-DD
+        let date = chrono::NaiveDate::parse_from_str(rest, "%Y-%m-%d").map_err(|_| {
+            ParseError::ParserError {
+                line,
+                message: format!("Invalid date literal '{value}'. Expected format: #d:YYYY-MM-DD"),
+                format: ParserFormat::Spl,
+                source_line: None,
+            }
+        })?;
+        return Ok(Some(Term::Date(date)));
+    }
+
+    if let Some(rest) = value.strip_prefix("#dt:") {
+        // Datetime: YYYY-MM-DDTHH:MM+HH:MM or YYYY-MM-DDTHH:MMZ
+        // Try RFC 3339 first, then custom formats
+        let dt = DateTime::parse_from_rfc3339(rest)
+            .or_else(|_| {
+                // Try without seconds: 2025-07-15T14:00+10:00
+                DateTime::parse_from_str(rest, "%Y-%m-%dT%H:%M%:z")
+            })
+            .or_else(|e| {
+                // Try with Z suffix without seconds
+                if rest.ends_with('Z') {
+                    let without_z = &rest[..rest.len() - 1];
+                    DateTime::parse_from_str(
+                        &format!("{without_z}+00:00"),
+                        "%Y-%m-%dT%H:%M%:z",
+                    )
+                } else {
+                    Err(e)
+                }
+            })
+            .map_err(|_| ParseError::ParserError {
+                line,
+                message: format!(
+                    "Invalid datetime literal '{value}'. Expected format: #dt:YYYY-MM-DDTHH:MM+HH:MM or #dt:YYYY-MM-DDTHH:MMZ"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            })?;
+        return Ok(Some(Term::Datetime(dt)));
+    }
+
+    if let Some(rest) = value.strip_prefix("#t:") {
+        // Time: HH:MM
+        let parts: Vec<&str> = rest.split(':').collect();
+        if parts.len() != 2 {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!("Invalid time literal '{value}'. Expected format: #t:HH:MM"),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+        let h: u16 = parts[0].parse().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Invalid time literal '{value}'. Hours must be a number"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        let m: u16 = parts[1].parse().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Invalid time literal '{value}'. Minutes must be a number"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        if h >= 24 || m >= 60 {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "Invalid time literal '{value}'. Hours must be 0-23, minutes 0-59"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+        return Ok(Some(Term::Time(h * 60 + m)));
+    }
+
+    if let Some(rest) = value.strip_prefix("#dur:") {
+        // Duration: NdNhNm (components optional, at least one required)
+        let minutes = parse_duration_string(rest).ok_or_else(|| ParseError::ParserError {
+            line,
+            message: format!(
+                "Invalid duration literal '{value}'. Expected format: #dur:NdNhNm (e.g., #dur:1d2h30m, #dur:90m, #dur:2h)"
+            ),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        return Ok(Some(Term::Duration(minutes)));
+    }
+
+    if let Some(rest) = value.strip_prefix("#off:") {
+        // Offset: +HH:MM, -HH:MM, or Z
+        if rest == "Z" {
+            return Ok(Some(Term::Offset(0)));
+        }
+        let (sign, unsigned): (i16, &str) = if let Some(r) = rest.strip_prefix('+') {
+            (1, r)
+        } else if let Some(r) = rest.strip_prefix('-') {
+            (-1, r)
+        } else {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "Invalid offset literal '{value}'. Expected format: #off:+HH:MM, #off:-HH:MM, or #off:Z"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        };
+        let parts: Vec<&str> = unsigned.split(':').collect();
+        if parts.len() != 2 {
+            return Err(ParseError::ParserError {
+                line,
+                message: format!(
+                    "Invalid offset literal '{value}'. Expected format: #off:+HH:MM or #off:-HH:MM"
+                ),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
+        }
+        let h: i16 = parts[0].parse().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Invalid offset literal '{value}'. Hours must be a number"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        let m: i16 = parts[1].parse().map_err(|_| ParseError::ParserError {
+            line,
+            message: format!("Invalid offset literal '{value}'. Minutes must be a number"),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        return Ok(Some(Term::Offset(sign * (h * 60 + m))));
+    }
+
+    Ok(None)
+}
+
+/// Parse a duration string in the format `NdNhNm`.
+///
+/// Each component (days, hours, minutes) is optional, but at least one must be present.
+/// Negative durations are supported with a leading `-`.
+/// Returns total signed minutes, or `None` if the format is invalid.
+fn parse_duration_string(s: &str) -> Option<i64> {
+    let (negative, s) = if let Some(rest) = s.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, s)
+    };
+
+    if s.is_empty() {
+        return None;
+    }
+
+    let mut total: i64 = 0;
+    let mut found_component = false;
+    let mut remaining = s;
+
+    // Try to parse days
+    if let Some(pos) = remaining.find('d') {
+        let num: i64 = remaining[..pos].parse().ok()?;
+        total += num * 24 * 60;
+        remaining = &remaining[pos + 1..];
+        found_component = true;
+    }
+
+    // Try to parse hours
+    if let Some(pos) = remaining.find('h') {
+        let num: i64 = remaining[..pos].parse().ok()?;
+        total += num * 60;
+        remaining = &remaining[pos + 1..];
+        found_component = true;
+    }
+
+    // Try to parse minutes
+    if let Some(pos) = remaining.find('m') {
+        let num: i64 = remaining[..pos].parse().ok()?;
+        total += num;
+        remaining = &remaining[pos + 1..];
+        found_component = true;
+    }
+
+    // Nothing should remain, and at least one component must be present
+    if !remaining.is_empty() || !found_component {
+        return None;
+    }
+
+    if negative {
+        total = -total;
+    }
+    Some(total)
+}
+
+/// Parse an atom string as a [`Term`], detecting numeric and temporal literals.
+///
+/// Detection order: temporal (#-prefixed) → numeric → symbol.
 pub(crate) fn parse_term_from_atom(value: &str, line: usize) -> Result<Term, ParseError> {
+    // Try temporal literals first (prefixed with #)
+    if value.starts_with('#') {
+        if let Some(term) = try_parse_temporal_term(value, line)? {
+            return Ok(term);
+        }
+        // Unknown # prefix — fall through to symbol
+    }
+
     if let Some(term) = try_parse_numeric_term(value, line)? {
         Ok(term)
     } else {
@@ -1091,7 +1306,7 @@ mod tests {
     use super::*;
     use spindle_core::arith::{ArithExpr, CmpOp};
     use spindle_core::intern::{intern, resolve};
-    use spindle_core::term::NumericValue;
+    use spindle_core::term::Term;
 
     /// Helper: build an SExpr atom.
     fn atom(s: &str) -> SExpr {
@@ -1120,7 +1335,7 @@ mod tests {
         match &body[0] {
             BodyLiteral::Arithmetic(ArithConstraint::Bind { var, expr }) => {
                 assert_eq!(*var, intern("?x"));
-                assert_eq!(*expr, ArithExpr::Lit(NumericValue::Integer(42)));
+                assert_eq!(*expr, ArithExpr::Lit(Term::Integer(42)));
             }
             other => panic!("Expected Arithmetic(Bind), got: {other:?}"),
         }
@@ -1222,7 +1437,7 @@ mod tests {
             BodyLiteral::Arithmetic(ArithConstraint::Compare { op, lhs, rhs }) => {
                 assert_eq!(*op, CmpOp::Eq);
                 assert_eq!(*lhs, ArithExpr::Var(intern("?x")));
-                assert_eq!(*rhs, ArithExpr::Lit(NumericValue::Integer(5)));
+                assert_eq!(*rhs, ArithExpr::Lit(Term::Integer(5)));
             }
             other => panic!("Expected Arithmetic(Compare), got: {other:?}"),
         }
@@ -1414,7 +1629,7 @@ mod tests {
             BodyArg::Arith(ArithExpr::Call { name, args }) if resolve(*name) == "*" => {
                 assert_eq!(args.len(), 2);
                 assert_eq!(args[0], ArithExpr::Var(intern("?p")));
-                assert_eq!(args[1], ArithExpr::Lit(NumericValue::Integer(2)));
+                assert_eq!(args[1], ArithExpr::Lit(Term::Integer(2)));
             }
             other => panic!("Expected BodyArg::Arith(Call(*)), got: {other:?}"),
         }

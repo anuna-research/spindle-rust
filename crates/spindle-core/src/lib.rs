@@ -63,6 +63,7 @@ pub mod reason;
 pub mod rule;
 pub mod superiority;
 pub mod temporal;
+pub(crate) mod temporal_functions;
 pub mod term;
 pub mod theory;
 pub mod trust;

@@ -9,7 +9,7 @@
 use spindle_core::arith::ArithExpr;
 use spindle_core::body::BodyArg;
 use spindle_core::intern::{intern, resolve};
-use spindle_core::term::NumericValue;
+use spindle_core::term::Term;
 use spindle_parser::parse_spl;
 
 // =========================================================================
@@ -35,8 +35,8 @@ fn test_002_01_add_in_argument_position() {
             ArithExpr::Call {
                 name: intern("+"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(3)),
-                    ArithExpr::Lit(NumericValue::Integer(4)),
+                    ArithExpr::Lit(Term::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(4)),
                 ]
             }
         );
@@ -66,7 +66,7 @@ fn test_002_02_nested_arith_expr() {
                     "First arg should be +, got: {:?}",
                     args[0]
                 );
-                assert_eq!(args[1], ArithExpr::Lit(NumericValue::Integer(2)));
+                assert_eq!(args[1], ArithExpr::Lit(Term::Integer(2)));
             }
             _ => panic!("Expected Call(*), got: {expr:?}"),
         }
@@ -87,9 +87,9 @@ fn test_002_03_variadic_add() {
             ArithExpr::Call {
                 name: intern("+"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(1)),
-                    ArithExpr::Lit(NumericValue::Integer(2)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(1)),
+                    ArithExpr::Lit(Term::Integer(2)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -189,9 +189,9 @@ fn test_002_06_left_fold_sub_div() {
             ArithExpr::Call {
                 name: intern("-"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(10)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
-                    ArithExpr::Lit(NumericValue::Integer(2)),
+                    ArithExpr::Lit(Term::Integer(10)),
+                    ArithExpr::Lit(Term::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(2)),
                 ]
             }
         );
@@ -210,9 +210,9 @@ fn test_002_06_left_fold_sub_div() {
             ArithExpr::Call {
                 name: intern("/"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(12)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
-                    ArithExpr::Lit(NumericValue::Integer(2)),
+                    ArithExpr::Lit(Term::Integer(12)),
+                    ArithExpr::Lit(Term::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(2)),
                 ]
             }
         );
@@ -235,8 +235,8 @@ fn test_002_07_binary_operators() {
             ArithExpr::Call {
                 name: intern("div"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(10)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(10)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -255,8 +255,8 @@ fn test_002_07_binary_operators() {
             ArithExpr::Call {
                 name: intern("rem"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(10)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(10)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -274,8 +274,8 @@ fn test_002_07_binary_operators() {
             ArithExpr::Call {
                 name: intern("**"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(2)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(2)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -344,7 +344,7 @@ fn test_002_09_variadic_min_max() {
             ArithExpr::Call {
                 name: intern("max"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(0)),
+                    ArithExpr::Lit(Term::Integer(0)),
                     ArithExpr::Var(intern("?x")),
                 ]
             }
@@ -413,7 +413,7 @@ fn test_002_12_arith_in_body_literal_arg() {
                     name: intern("*"),
                     args: vec![
                         ArithExpr::Var(intern("?p")),
-                        ArithExpr::Lit(NumericValue::Integer(2)),
+                        ArithExpr::Lit(Term::Integer(2)),
                     ]
                 }
             );

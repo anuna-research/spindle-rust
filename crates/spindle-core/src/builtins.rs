@@ -4,6 +4,7 @@
 //! `round`, `floor`, `ceil`) is implemented as an [`ExtensionFunction`] and registered
 //! in the prelude registry.
 
+use chrono::Duration as ChronoDuration;
 use rust_decimal::Decimal;
 
 use crate::arith::{
@@ -70,6 +71,12 @@ impl ExtensionFunction for AddFn {
         if args.is_empty() {
             return Ok(Term::Integer(0));
         }
+        // Binary temporal addition cases
+        if args.len() == 2 {
+            if let Some(result) = try_temporal_add(&args[0], &args[1])? {
+                return Ok(result);
+            }
+        }
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
             acc = add_values(acc, to_nv(arg)?)?;
@@ -105,6 +112,12 @@ impl ExtensionFunction for SubFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
+        // Binary temporal subtraction cases
+        if args.len() == 2 {
+            if let Some(result) = try_temporal_sub(&args[0], &args[1])? {
+                return Ok(result);
+            }
+        }
         // Safe: check_arity guarantees at least 1 argument
         let first = to_nv(&args[0])?;
         if args.len() == 1 {
@@ -148,6 +161,12 @@ impl ExtensionFunction for MulFn {
         if args.is_empty() {
             return Ok(Term::Integer(1));
         }
+        // Binary temporal multiplication cases
+        if args.len() == 2 {
+            if let Some(result) = try_temporal_mul(&args[0], &args[1])? {
+                return Ok(result);
+            }
+        }
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
             acc = mul_values(acc, to_nv(arg)?)?;
@@ -183,6 +202,12 @@ impl ExtensionFunction for DivFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
+        // Binary temporal division cases
+        if args.len() == 2 {
+            if let Some(result) = try_temporal_div(&args[0], &args[1])? {
+                return Ok(result);
+            }
+        }
         // Safe: check_arity guarantees at least 1 argument
         let first = to_nv(&args[0])?;
         if args.len() == 1 {
@@ -223,6 +248,10 @@ impl ExtensionFunction for MinFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
+        // Check if all args are the same temporal type
+        if args.first().map_or(false, |a| a.is_temporal()) {
+            return temporal_min_max(args, true);
+        }
         // Safe: check_arity guarantees at least 1 argument
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
@@ -261,6 +290,10 @@ impl ExtensionFunction for MaxFn {
 
     fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
         check_arity(&self.sig, args)?;
+        // Check if all args are the same temporal type
+        if args.first().map_or(false, |a| a.is_temporal()) {
+            return temporal_min_max(args, false);
+        }
         // Safe: check_arity guarantees at least 1 argument
         let mut acc = to_nv(&args[0])?;
         for arg in &args[1..] {
@@ -618,6 +651,149 @@ impl ExtensionFunction for CeilFn {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Temporal arithmetic helpers
+// ---------------------------------------------------------------------------
+
+/// Convert a numeric Term to an f64 for scaling operations.
+fn term_to_f64(t: &Term) -> Option<f64> {
+    match t {
+        Term::Integer(n) => Some(*n as f64),
+        Term::Decimal(d) => {
+            use rust_decimal::prelude::ToPrimitive;
+            d.to_f64()
+        }
+        Term::Float(f) => Some(f.value()),
+        _ => None,
+    }
+}
+
+/// Try temporal addition. Returns Ok(Some(result)) if a temporal case matched,
+/// Ok(None) if not temporal, or Err on type errors.
+fn try_temporal_add(a: &Term, b: &Term) -> Result<Option<Term>, EvalError> {
+    match (a, b) {
+        // Datetime + Duration → Datetime
+        (Term::Datetime(dt), Term::Duration(m)) | (Term::Duration(m), Term::Datetime(dt)) => {
+            let result = *dt + ChronoDuration::minutes(*m);
+            Ok(Some(Term::Datetime(result)))
+        }
+        // Date + Duration → Date (whole days only)
+        (Term::Date(d), Term::Duration(m)) | (Term::Duration(m), Term::Date(d)) => {
+            if *m % 1440 != 0 {
+                return Err(EvalError::TypeError(
+                    "Date + Duration requires duration to be whole days (multiple of 1440 minutes)"
+                        .to_string(),
+                ));
+            }
+            let days = *m / 1440;
+            let result = *d + ChronoDuration::days(days);
+            Ok(Some(Term::Date(result)))
+        }
+        // Duration + Duration → Duration
+        (Term::Duration(a), Term::Duration(b)) => Ok(Some(Term::Duration(
+            a.checked_add(*b)
+                .ok_or_else(|| EvalError::EvalFailed("Duration overflow".to_string()))?,
+        ))),
+        _ => Ok(None),
+    }
+}
+
+/// Try temporal subtraction. Returns Ok(Some(result)) if a temporal case matched.
+fn try_temporal_sub(a: &Term, b: &Term) -> Result<Option<Term>, EvalError> {
+    match (a, b) {
+        // Datetime - Duration → Datetime
+        (Term::Datetime(dt), Term::Duration(m)) => {
+            let result = *dt - ChronoDuration::minutes(*m);
+            Ok(Some(Term::Datetime(result)))
+        }
+        // Datetime - Datetime → Duration (signed difference in minutes)
+        (Term::Datetime(dt1), Term::Datetime(dt2)) => {
+            let diff = (*dt1 - *dt2).num_minutes();
+            Ok(Some(Term::Duration(diff)))
+        }
+        // Date - Duration → Date (whole days only)
+        (Term::Date(d), Term::Duration(m)) => {
+            if *m % 1440 != 0 {
+                return Err(EvalError::TypeError(
+                    "Date - Duration requires duration to be whole days (multiple of 1440 minutes)"
+                        .to_string(),
+                ));
+            }
+            let days = *m / 1440;
+            let result = *d - ChronoDuration::days(days);
+            Ok(Some(Term::Date(result)))
+        }
+        // Date - Date → Integer (signed days)
+        (Term::Date(d1), Term::Date(d2)) => {
+            let diff = (*d1 - *d2).num_days();
+            Ok(Some(Term::Integer(diff)))
+        }
+        // Duration - Duration → Duration
+        (Term::Duration(a), Term::Duration(b)) => Ok(Some(Term::Duration(
+            a.checked_sub(*b)
+                .ok_or_else(|| EvalError::EvalFailed("Duration overflow".to_string()))?,
+        ))),
+        _ => Ok(None),
+    }
+}
+
+/// Try temporal multiplication. Returns Ok(Some(result)) if a temporal case matched.
+fn try_temporal_mul(a: &Term, b: &Term) -> Result<Option<Term>, EvalError> {
+    match (a, b) {
+        // Duration * Number → Duration
+        (Term::Duration(m), other) | (other, Term::Duration(m)) => {
+            let scale = term_to_f64(other).ok_or_else(|| {
+                EvalError::TypeError(format!("Cannot multiply Duration by {other:?}"))
+            })?;
+            let result = (*m as f64 * scale) as i64;
+            Ok(Some(Term::Duration(result)))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Try temporal division. Returns Ok(Some(result)) if a temporal case matched.
+fn try_temporal_div(a: &Term, b: &Term) -> Result<Option<Term>, EvalError> {
+    match (a, b) {
+        // Duration / Number → Duration
+        (Term::Duration(m), other) if other.to_numeric_value().is_some() => {
+            let scale = term_to_f64(other).ok_or_else(|| {
+                EvalError::TypeError(format!("Cannot divide Duration by {other:?}"))
+            })?;
+            if scale == 0.0 {
+                return Err(EvalError::from(ArithError::DivisionByZero));
+            }
+            let result = (*m as f64 / scale) as i64;
+            Ok(Some(Term::Duration(result)))
+        }
+        // Duration / Duration → Decimal (ratio)
+        (Term::Duration(a), Term::Duration(b)) => {
+            if *b == 0 {
+                return Err(EvalError::from(ArithError::DivisionByZero));
+            }
+            let ratio = Decimal::from(*a) / Decimal::from(*b);
+            Ok(Some(Term::Decimal(ratio)))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Temporal min/max: compare using temporal_cmp. `is_min` selects min behavior.
+fn temporal_min_max(args: &[Term], is_min: bool) -> Result<Term, EvalError> {
+    let mut best = args[0].clone();
+    for arg in &args[1..] {
+        let ord = best.temporal_cmp(arg).ok_or_else(|| {
+            EvalError::TypeError(format!(
+                "Cannot compare {best:?} with {arg:?} — mixed temporal types"
+            ))
+        })?;
+        if (is_min && ord.is_gt()) || (!is_min && ord.is_lt()) {
+            best = arg.clone();
+        }
+    }
+    Ok(best)
 }
 
 // ---------------------------------------------------------------------------

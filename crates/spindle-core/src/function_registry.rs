@@ -150,10 +150,11 @@ impl FunctionRegistry {
         self.functions.insert(name, f);
     }
 
-    /// Create a registry pre-loaded with all built-in arithmetic functions.
+    /// Create a registry pre-loaded with all built-in arithmetic and temporal functions.
     pub fn with_prelude() -> Self {
         let mut reg = Self::new();
         crate::builtins::register_builtins(&mut reg);
+        crate::temporal_functions::register_temporal_functions(&mut reg);
         reg
     }
 

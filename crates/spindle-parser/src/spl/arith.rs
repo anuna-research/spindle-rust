@@ -18,7 +18,7 @@
 use rust_decimal::Decimal;
 use spindle_core::arith::{ArithExpr, CmpOp};
 use spindle_core::intern::intern;
-use spindle_core::term::NumericValue;
+use spindle_core::term::{FiniteFloat, Term};
 
 use crate::ParseError;
 use crate::error::ParserFormat;
@@ -144,16 +144,23 @@ pub(crate) fn parse_arith_expr(expr: &SExpr, line: usize) -> Result<ArithExpr, P
     }
 }
 
-/// Parse an atom as a leaf arithmetic expression (variable or numeric literal).
+/// Parse an atom as a leaf arithmetic expression (variable, temporal, or numeric literal).
 fn parse_arith_atom(name: &str, line: usize) -> Result<ArithExpr, ParseError> {
     // Variables start with ?
     if name.starts_with('?') {
         return Ok(ArithExpr::Var(intern(name)));
     }
 
+    // Try temporal literals (#d:, #t:, #dt:, #dur:, #off:)
+    if name.starts_with('#') {
+        use super::literals::parse_term_from_atom;
+        let term = parse_term_from_atom(name, line)?;
+        return Ok(ArithExpr::Lit(term));
+    }
+
     // Try integer first
     if let Ok(n) = name.parse::<i64>() {
-        return Ok(ArithExpr::Lit(NumericValue::Integer(n)));
+        return Ok(ArithExpr::Lit(Term::Integer(n)));
     }
 
     // Try decimal (contains '.' but no 'e'/'E' for scientific notation)
@@ -162,7 +169,7 @@ fn parse_arith_atom(name: &str, line: usize) -> Result<ArithExpr, ParseError> {
         && !name.contains('E')
         && let Ok(d) = name.parse::<Decimal>()
     {
-        return Ok(ArithExpr::Lit(NumericValue::Decimal(d)));
+        return Ok(ArithExpr::Lit(Term::Decimal(d)));
     }
 
     // Try float (scientific notation or other float formats).
@@ -172,8 +179,8 @@ fn parse_arith_atom(name: &str, line: usize) -> Result<ArithExpr, ParseError> {
     if (name.contains('.') || name.contains('e') || name.contains('E'))
         && let Ok(f) = name.parse::<f64>()
     {
-        if f.is_finite() {
-            return Ok(ArithExpr::Lit(NumericValue::Float(f)));
+        if let Some(ff) = FiniteFloat::new(f) {
+            return Ok(ArithExpr::Lit(Term::Float(ff)));
         }
         return Err(ParseError::ParserError {
             line,
@@ -274,7 +281,7 @@ mod tests {
     use super::*;
     use spindle_core::arith::ArithExpr;
     use spindle_core::intern::{intern, resolve};
-    use spindle_core::term::NumericValue;
+    use spindle_core::term::{FiniteFloat, Term};
 
     /// Helper: build an SExpr atom.
     fn atom(s: &str) -> SExpr {
@@ -335,19 +342,19 @@ mod tests {
     #[test]
     fn test_parse_integer_positive() {
         let expr = parse_arith_expr(&atom("42"), 1).unwrap();
-        assert_eq!(expr, ArithExpr::Lit(NumericValue::Integer(42)));
+        assert_eq!(expr, ArithExpr::Lit(Term::Integer(42)));
     }
 
     #[test]
     fn test_parse_integer_zero() {
         let expr = parse_arith_expr(&atom("0"), 1).unwrap();
-        assert_eq!(expr, ArithExpr::Lit(NumericValue::Integer(0)));
+        assert_eq!(expr, ArithExpr::Lit(Term::Integer(0)));
     }
 
     #[test]
     fn test_parse_integer_negative() {
         let expr = parse_arith_expr(&atom("-7"), 1).unwrap();
-        assert_eq!(expr, ArithExpr::Lit(NumericValue::Integer(-7)));
+        assert_eq!(expr, ArithExpr::Lit(Term::Integer(-7)));
     }
 
     // =====================================================================
@@ -358,14 +365,14 @@ mod tests {
     fn test_parse_decimal() {
         let expr = parse_arith_expr(&atom("3.14"), 1).unwrap();
         let expected = "3.14".parse::<Decimal>().unwrap();
-        assert_eq!(expr, ArithExpr::Lit(NumericValue::Decimal(expected)));
+        assert_eq!(expr, ArithExpr::Lit(Term::Decimal(expected)));
     }
 
     #[test]
     fn test_parse_decimal_negative() {
         let expr = parse_arith_expr(&atom("-0.5"), 1).unwrap();
         let expected = "-0.5".parse::<Decimal>().unwrap();
-        assert_eq!(expr, ArithExpr::Lit(NumericValue::Decimal(expected)));
+        assert_eq!(expr, ArithExpr::Lit(Term::Decimal(expected)));
     }
 
     // =====================================================================
@@ -375,7 +382,10 @@ mod tests {
     #[test]
     fn test_parse_float_scientific() {
         let expr = parse_arith_expr(&atom("1.5e2"), 1).unwrap();
-        assert_eq!(expr, ArithExpr::Lit(NumericValue::Float(150.0)));
+        assert_eq!(
+            expr,
+            ArithExpr::Lit(Term::Float(FiniteFloat::new(150.0).unwrap()))
+        );
     }
 
     // =====================================================================
@@ -431,7 +441,7 @@ mod tests {
             expr,
             ArithExpr::Call {
                 name: intern("+"),
-                args: vec![ArithExpr::Lit(NumericValue::Integer(5))]
+                args: vec![ArithExpr::Lit(Term::Integer(5))]
             }
         );
     }
@@ -444,8 +454,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("+"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(1)),
-                    ArithExpr::Lit(NumericValue::Integer(2)),
+                    ArithExpr::Lit(Term::Integer(1)),
+                    ArithExpr::Lit(Term::Integer(2)),
                 ]
             }
         );
@@ -490,8 +500,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("*"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(3)),
-                    ArithExpr::Lit(NumericValue::Integer(4)),
+                    ArithExpr::Lit(Term::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(4)),
                 ]
             }
         );
@@ -508,7 +518,7 @@ mod tests {
             expr,
             ArithExpr::Call {
                 name: intern("-"),
-                args: vec![ArithExpr::Lit(NumericValue::Integer(5))]
+                args: vec![ArithExpr::Lit(Term::Integer(5))]
             }
         );
     }
@@ -521,8 +531,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("-"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(10)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(10)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -546,7 +556,7 @@ mod tests {
             expr,
             ArithExpr::Call {
                 name: intern("/"),
-                args: vec![ArithExpr::Lit(NumericValue::Integer(2))]
+                args: vec![ArithExpr::Lit(Term::Integer(2))]
             }
         );
     }
@@ -569,7 +579,7 @@ mod tests {
             expr,
             ArithExpr::Call {
                 name: intern("min"),
-                args: vec![ArithExpr::Lit(NumericValue::Integer(5))]
+                args: vec![ArithExpr::Lit(Term::Integer(5))]
             }
         );
     }
@@ -601,8 +611,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("max"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(1)),
-                    ArithExpr::Lit(NumericValue::Integer(9)),
+                    ArithExpr::Lit(Term::Integer(1)),
+                    ArithExpr::Lit(Term::Integer(9)),
                 ]
             }
         );
@@ -627,8 +637,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("div"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(10)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(10)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -660,8 +670,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("rem"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(10)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(10)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -682,8 +692,8 @@ mod tests {
             ArithExpr::Call {
                 name: intern("**"),
                 args: vec![
-                    ArithExpr::Lit(NumericValue::Integer(2)),
-                    ArithExpr::Lit(NumericValue::Integer(3)),
+                    ArithExpr::Lit(Term::Integer(2)),
+                    ArithExpr::Lit(Term::Integer(3)),
                 ]
             }
         );
@@ -707,7 +717,7 @@ mod tests {
             expr,
             ArithExpr::Call {
                 name: intern("abs"),
-                args: vec![ArithExpr::Lit(NumericValue::Integer(-5))],
+                args: vec![ArithExpr::Lit(Term::Integer(-5))],
             }
         );
     }
@@ -744,11 +754,11 @@ mod tests {
                     ArithExpr::Call {
                         name: intern("*"),
                         args: vec![
-                            ArithExpr::Lit(NumericValue::Integer(2)),
-                            ArithExpr::Lit(NumericValue::Integer(3)),
+                            ArithExpr::Lit(Term::Integer(2)),
+                            ArithExpr::Lit(Term::Integer(3)),
                         ]
                     },
-                    ArithExpr::Lit(NumericValue::Integer(4)),
+                    ArithExpr::Lit(Term::Integer(4)),
                 ]
             }
         );
@@ -828,8 +838,8 @@ mod tests {
         if let ArithExpr::Call { name, args } = &expr {
             assert_eq!(resolve(*name), "+");
             assert_eq!(args.len(), 3);
-            assert!(matches!(args[0], ArithExpr::Lit(NumericValue::Integer(1))));
-            assert!(matches!(args[1], ArithExpr::Lit(NumericValue::Decimal(_))));
+            assert!(matches!(args[0], ArithExpr::Lit(Term::Integer(1))));
+            assert!(matches!(args[1], ArithExpr::Lit(Term::Decimal(_))));
             assert!(matches!(args[2], ArithExpr::Var(_)));
         } else {
             panic!("Expected Call");

@@ -32,6 +32,16 @@ pub enum TermDto {
     Decimal(String),
     /// An IEEE 754 float.
     Float(f64),
+    /// An ISO 8601 date string (YYYY-MM-DD).
+    Date(String),
+    /// A time-of-day string (HH:MM).
+    Time(String),
+    /// An ISO 8601 datetime string with offset.
+    Datetime(String),
+    /// A duration string (e.g., "1d2h30m" or raw minutes).
+    Duration(String),
+    /// A UTC offset string (e.g., "+10:00" or "Z").
+    Offset(String),
 }
 
 impl From<&Term> for TermDto {
@@ -41,13 +51,25 @@ impl From<&Term> for TermDto {
             Term::Integer(n) => TermDto::Integer(*n),
             Term::Decimal(d) => TermDto::Decimal(d.to_string()),
             Term::Float(f) => TermDto::Float(f.value()),
+            Term::Date(d) => TermDto::Date(d.format("%Y-%m-%d").to_string()),
+            Term::Time(m) => TermDto::Time(format!("{:02}:{:02}", m / 60, m % 60)),
+            Term::Datetime(dt) => TermDto::Datetime(dt.to_rfc3339()),
+            Term::Duration(m) => TermDto::Duration(m.to_string()),
+            Term::Offset(m) => {
+                if *m == 0 {
+                    TermDto::Offset("Z".to_string())
+                } else {
+                    let sign = if *m >= 0 { '+' } else { '-' };
+                    let abs = m.unsigned_abs();
+                    TermDto::Offset(format!("{sign}{:02}:{:02}", abs / 60, abs % 60))
+                }
+            }
         }
     }
 }
 
 impl TermDto {
-    /// Convert back to a [`Term`], returning `None` only if the decimal string
-    /// cannot be parsed (should not happen for well-formed DTOs).
+    /// Convert back to a [`Term`], returning `None` only if parsing fails.
     pub fn to_term(&self) -> Option<Term> {
         match self {
             TermDto::Symbol(s) => Some(Term::Symbol(spindle_core::intern::intern(s))),
@@ -57,6 +79,43 @@ impl TermDto {
                 rust_decimal::Decimal::from_str(s).ok().map(Term::Decimal)
             }
             TermDto::Float(f) => FiniteFloat::new(*f).map(Term::Float),
+            TermDto::Date(s) => chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                .ok()
+                .map(Term::Date),
+            TermDto::Time(s) => {
+                let parts: Vec<&str> = s.split(':').collect();
+                if parts.len() == 2 {
+                    let h: u16 = parts[0].parse().ok()?;
+                    let m: u16 = parts[1].parse().ok()?;
+                    if h < 24 && m < 60 {
+                        Some(Term::Time(h * 60 + m))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            TermDto::Datetime(s) => chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(Term::Datetime),
+            TermDto::Duration(s) => s.parse::<i64>().ok().map(Term::Duration),
+            TermDto::Offset(s) => {
+                if s == "Z" {
+                    Some(Term::Offset(0))
+                } else {
+                    let sign: i16 = if s.starts_with('-') { -1 } else { 1 };
+                    let rest = s.trim_start_matches(['+', '-']);
+                    let parts: Vec<&str> = rest.split(':').collect();
+                    if parts.len() == 2 {
+                        let h: i16 = parts[0].parse().ok()?;
+                        let m: i16 = parts[1].parse().ok()?;
+                        Some(Term::Offset(sign * (h * 60 + m)))
+                    } else {
+                        None
+                    }
+                }
+            }
         }
     }
 }
@@ -89,6 +148,26 @@ impl Serialize for TermDto {
             TermDto::Float(f) => {
                 map.serialize_entry("type", "float")?;
                 map.serialize_entry("value", f)?;
+            }
+            TermDto::Date(s) => {
+                map.serialize_entry("type", "date")?;
+                map.serialize_entry("value", s)?;
+            }
+            TermDto::Time(s) => {
+                map.serialize_entry("type", "time")?;
+                map.serialize_entry("value", s)?;
+            }
+            TermDto::Datetime(s) => {
+                map.serialize_entry("type", "datetime")?;
+                map.serialize_entry("value", s)?;
+            }
+            TermDto::Duration(s) => {
+                map.serialize_entry("type", "duration")?;
+                map.serialize_entry("value", s)?;
+            }
+            TermDto::Offset(s) => {
+                map.serialize_entry("type", "offset")?;
+                map.serialize_entry("value", s)?;
             }
         }
         map.end()
@@ -161,6 +240,19 @@ impl<'de> Visitor<'de> for TermDtoVisitor {
                     .as_f64()
                     .ok_or_else(|| de::Error::custom("float value must be a number"))?;
                 Ok(TermDto::Float(f))
+            }
+            "date" | "time" | "datetime" | "duration" | "offset" => {
+                let s = value.as_str().ok_or_else(|| {
+                    de::Error::custom(format!("{} value must be a string", type_str))
+                })?;
+                match type_str.as_str() {
+                    "date" => Ok(TermDto::Date(s.to_string())),
+                    "time" => Ok(TermDto::Time(s.to_string())),
+                    "datetime" => Ok(TermDto::Datetime(s.to_string())),
+                    "duration" => Ok(TermDto::Duration(s.to_string())),
+                    "offset" => Ok(TermDto::Offset(s.to_string())),
+                    _ => unreachable!(),
+                }
             }
             other => Err(de::Error::custom(format!("unknown term type: {other}"))),
         }

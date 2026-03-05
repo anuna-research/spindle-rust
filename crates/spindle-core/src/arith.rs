@@ -60,8 +60,8 @@ pub enum CmpOp {
 /// An arithmetic expression tree.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArithExpr {
-    /// A literal numeric value.
-    Lit(NumericValue),
+    /// A literal value (numeric or temporal).
+    Lit(Term),
     /// A variable reference, resolved from the substitution.
     Var(SymbolId),
     /// A call to a named function (builtins and extensions).
@@ -303,6 +303,31 @@ pub(crate) fn numeric_cmp(
         _ => unreachable!("promote_pair ensures matching types"),
     };
     Ok((ord, pa, pb))
+}
+
+/// Compare two [`Term`] values, supporting both numeric and temporal types.
+///
+/// Numeric terms are compared via [`numeric_cmp`] (with type promotion).
+/// Temporal terms of the same kind are compared via [`Term::temporal_cmp`].
+/// Cross-category comparisons (e.g. numeric vs temporal) return a
+/// [`ArithError::TypeMismatch`].
+pub(crate) fn term_cmp(a: Term, b: Term) -> Result<Ordering, ArithError> {
+    // Try numeric comparison first
+    if let (Some(nv_a), Some(nv_b)) = (a.to_numeric_value(), b.to_numeric_value()) {
+        let (ord, _, _) = numeric_cmp(nv_a, nv_b)?;
+        return Ok(ord);
+    }
+
+    // Try temporal comparison
+    if let Some(ord) = a.temporal_cmp(&b) {
+        return Ok(ord);
+    }
+
+    Err(ArithError::TypeMismatch {
+        op: "compare",
+        expected: "matching types",
+        got: "incomparable types",
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -603,11 +628,12 @@ pub(crate) fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericV
 // Variable resolution
 // ---------------------------------------------------------------------------
 
-/// Resolve a variable from the substitution to a numeric value.
+/// Resolve a variable from the substitution to a [`Term`].
 ///
-/// The substitution maps `SymbolId → Term`, so we extract the numeric
-/// value directly from the bound `Term`.
-fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, ArithError> {
+/// The substitution maps `SymbolId → Term`, so we return the bound `Term`
+/// directly. Symbols are handled via a legacy path that tries to parse
+/// the symbol string as a number.
+fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<Term, ArithError> {
     let bound = match subst.terms.get(&name) {
         Some(t) => t,
         None => {
@@ -624,22 +650,21 @@ fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, Ari
         }
     };
     match bound {
-        Term::Integer(n) => Ok(NumericValue::Integer(*n)),
-        Term::Decimal(d) => Ok(NumericValue::Decimal(*d)),
-        Term::Float(f) => Ok(NumericValue::Float(f.value())),
         Term::Symbol(id) => {
             // Legacy path: try to parse the symbol string as a number.
             let s = resolve(*id);
             if let Ok(n) = s.parse::<i64>() {
-                return Ok(NumericValue::Integer(n));
+                return Ok(Term::Integer(n));
             }
             if let Ok(d) = s.parse::<Decimal>() {
-                return Ok(NumericValue::Decimal(d));
+                return Ok(Term::Decimal(d));
             }
             if let Ok(f) = s.parse::<f64>()
                 && f.is_finite()
             {
-                return Ok(NumericValue::Float(f));
+                return Ok(Term::Float(
+                    FiniteFloat::new(f).ok_or(ArithError::NonFiniteFloat)?,
+                ));
             }
             Err(ArithError::TypeMismatch {
                 op: "var",
@@ -647,6 +672,7 @@ fn resolve_var(subst: &Substitution, name: SymbolId) -> Result<NumericValue, Ari
                 got: "symbol",
             })
         }
+        other => Ok(other.clone()),
     }
 }
 
@@ -666,13 +692,13 @@ impl ArithExpr {
 
     /// Evaluate this expression under the given substitution.
     ///
-    /// Returns the resulting numeric value, or an error if evaluation fails
+    /// Returns the resulting [`Term`], or an error if evaluation fails
     /// (overflow, unbound variable, type mismatch, etc.).
     ///
     /// Uses a cached prelude registry for builtin function dispatch.
     /// Prefer `eval_with_context` on hot paths where you already have
     /// a registry.
-    pub fn eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> {
+    pub fn eval(&self, subst: &Substitution) -> Result<Term, ArithError> {
         let ctx = EvalContext::with_registry(&PRELUDE);
         self.eval_with_context(subst, &ctx)
     }
@@ -685,7 +711,7 @@ impl ArithExpr {
         &self,
         subst: &Substitution,
         ctx: &EvalContext<'_>,
-    ) -> Result<NumericValue, ArithError> {
+    ) -> Result<Term, ArithError> {
         match self {
             ArithExpr::Lit(v) => Ok(v.clone()),
             ArithExpr::Var(name) => resolve_var(subst, *name),
@@ -698,10 +724,7 @@ impl ArithExpr {
                     .ok_or(ArithError::UnknownFunction { name: *name })?;
                 let term_args: Vec<Term> = args
                     .iter()
-                    .map(|a| {
-                        let nv = a.eval_with_context(subst, ctx)?;
-                        Term::try_from(nv).map_err(|_| ArithError::NonFiniteFloat)
-                    })
+                    .map(|a| a.eval_with_context(subst, ctx))
                     .collect::<Result<_, _>>()?;
                 let sig = func.signature();
                 if !sig.arity.accepts(term_args.len()) {
@@ -711,14 +734,9 @@ impl ArithExpr {
                         got: term_args.len(),
                     });
                 }
-                let result = func.eval(&term_args).map_err(|e| match e {
+                func.eval(&term_args).map_err(|e| match e {
                     crate::function_registry::EvalError::ArithError(ae) => ae,
                     other => ArithError::FunctionError(format!("{other}")),
-                })?;
-                result.to_numeric_value().ok_or(ArithError::TypeMismatch {
-                    op: "call",
-                    expected: "numeric",
-                    got: "symbol",
                 })
             }
         }
@@ -753,15 +771,7 @@ impl ArithConstraint {
     ) -> Result<(), ArithError> {
         match self {
             ArithConstraint::Bind { var, expr } => {
-                let val = expr.eval_with_context(subst, ctx)?;
-                // Bind the variable directly as a typed Term value.
-                let term = match val {
-                    NumericValue::Integer(n) => Term::Integer(n),
-                    NumericValue::Decimal(d) => Term::Decimal(d),
-                    NumericValue::Float(f) => {
-                        Term::Float(FiniteFloat::new(f).ok_or(ArithError::NonFiniteFloat)?)
-                    }
-                };
+                let term = expr.eval_with_context(subst, ctx)?;
                 // If the variable is already bound, verify consistency
                 // instead of silently overwriting. This prevents rules like
                 // `(and (val ?x) (bind ?x (+ ?x 1)))` from producing
@@ -778,7 +788,7 @@ impl ArithConstraint {
             ArithConstraint::Compare { op, lhs, rhs } => {
                 let l = lhs.eval_with_context(subst, ctx)?;
                 let r = rhs.eval_with_context(subst, ctx)?;
-                let (ord, _, _) = numeric_cmp(l, r)?;
+                let ord = term_cmp(l, r)?;
                 let holds = match op {
                     CmpOp::Eq => ord == Ordering::Equal,
                     CmpOp::Ne => ord != Ordering::Equal,
@@ -832,15 +842,15 @@ mod tests {
     }
 
     fn lit_int(n: i64) -> ArithExpr {
-        ArithExpr::Lit(NumericValue::Integer(n))
+        ArithExpr::Lit(Term::Integer(n))
     }
 
     fn lit_dec(n: i64, scale: u32) -> ArithExpr {
-        ArithExpr::Lit(NumericValue::Decimal(Decimal::new(n, scale)))
+        ArithExpr::Lit(Term::Decimal(Decimal::new(n, scale)))
     }
 
     fn lit_float(f: f64) -> ArithExpr {
-        ArithExpr::Lit(NumericValue::Float(f))
+        ArithExpr::Lit(Term::Float(FiniteFloat::new(f).unwrap()))
     }
 
     fn var(name: &str) -> ArithExpr {
@@ -859,20 +869,20 @@ mod tests {
     #[test]
     fn eval_literal() {
         let subst = Substitution::default();
-        assert_eq!(lit_int(42).eval(&subst).unwrap(), NumericValue::Integer(42));
+        assert_eq!(lit_int(42).eval(&subst).unwrap(), Term::Integer(42));
     }
 
     #[test]
     fn eval_variable() {
         let subst = make_subst(&[("?x", "7")]);
-        assert_eq!(var("?x").eval(&subst).unwrap(), NumericValue::Integer(7));
+        assert_eq!(var("?x").eval(&subst).unwrap(), Term::Integer(7));
     }
 
     #[test]
     fn eval_variable_decimal() {
         let subst = make_subst(&[("?x", "3.14")]);
         let result = var("?x").eval(&subst).unwrap();
-        assert!(matches!(result, NumericValue::Decimal(_)));
+        assert!(matches!(result, Term::Decimal(_)));
     }
 
     #[test]
@@ -936,7 +946,7 @@ mod tests {
         let mut subst = Substitution::default();
         subst.terms.insert(intern("?x"), Term::Integer(42));
         subst.temporal.insert(intern("?x"), TimePoint::Moment(100));
-        assert_eq!(var("?x").eval(&subst).unwrap(), NumericValue::Integer(42));
+        assert_eq!(var("?x").eval(&subst).unwrap(), Term::Integer(42));
     }
 
     #[test]
@@ -964,21 +974,21 @@ mod tests {
     fn add_identity() {
         let subst = Substitution::default();
         let expr = call("+", vec![]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(0));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(0));
     }
 
     #[test]
     fn add_single() {
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(5)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(5));
     }
 
     #[test]
     fn add_multiple() {
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(1), lit_int(2), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(6));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(6));
     }
 
     #[test]
@@ -994,7 +1004,7 @@ mod tests {
     fn sub_unary_negation() {
         let subst = Substitution::default();
         let expr = call("-", vec![lit_int(5)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-5));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(-5));
     }
 
     #[test]
@@ -1002,7 +1012,7 @@ mod tests {
         let subst = Substitution::default();
         // (- 10 3 2) = 10 - 3 - 2 = 5
         let expr = call("-", vec![lit_int(10), lit_int(3), lit_int(2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(5));
     }
 
     #[test]
@@ -1018,14 +1028,14 @@ mod tests {
     fn mul_identity() {
         let subst = Substitution::default();
         let expr = call("*", vec![]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
     fn mul_multiple() {
         let subst = Substitution::default();
         let expr = call("*", vec![lit_int(2), lit_int(3), lit_int(4)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(24));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(24));
     }
 
     // -- Division ----------------------------------------------------------
@@ -1036,7 +1046,7 @@ mod tests {
         // (/ 2) = 0.5 as Decimal
         let expr = call("/", vec![lit_int(2)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Decimal(Decimal::new(5, 1)));
+        assert_eq!(result, Term::Decimal(Decimal::new(5, 1)));
     }
 
     #[test]
@@ -1052,7 +1062,7 @@ mod tests {
         // (/ 10 3) produces Decimal
         let expr = call("/", vec![lit_int(10), lit_int(3)]);
         let result = expr.eval(&subst).unwrap();
-        assert!(matches!(result, NumericValue::Decimal(_)));
+        assert!(matches!(result, Term::Decimal(_)));
     }
 
     #[test]
@@ -1068,7 +1078,7 @@ mod tests {
         // (/ 100 2 5) = 100/2/5 = 10
         let expr = call("/", vec![lit_int(100), lit_int(2), lit_int(5)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Decimal(Decimal::from(10)));
+        assert_eq!(result, Term::Decimal(Decimal::from(10)));
     }
 
     // -- Min/Max -----------------------------------------------------------
@@ -1077,21 +1087,21 @@ mod tests {
     fn min_single() {
         let subst = Substitution::default();
         let expr = call("min", vec![lit_int(5)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(5));
     }
 
     #[test]
     fn min_multiple() {
         let subst = Substitution::default();
         let expr = call("min", vec![lit_int(5), lit_int(2), lit_int(8)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(2));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(2));
     }
 
     #[test]
     fn max_multiple() {
         let subst = Substitution::default();
         let expr = call("max", vec![lit_int(5), lit_int(2), lit_int(8)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(8));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(8));
     }
 
     #[test]
@@ -1107,7 +1117,7 @@ mod tests {
     fn idiv_basic() {
         let subst = Substitution::default();
         let expr = call("div", vec![lit_int(10), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(3));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(3));
     }
 
     #[test]
@@ -1115,7 +1125,7 @@ mod tests {
         let subst = Substitution::default();
         // (div -7 2) → -4
         let expr = call("div", vec![lit_int(-7), lit_int(2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-4));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(-4));
     }
 
     #[test]
@@ -1142,7 +1152,7 @@ mod tests {
         let subst = Substitution::default();
         // (rem 10 3) → 1
         let expr = call("rem", vec![lit_int(10), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
@@ -1150,7 +1160,7 @@ mod tests {
         let subst = Substitution::default();
         // (rem -7 2) → 1
         let expr = call("rem", vec![lit_int(-7), lit_int(2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
@@ -1158,7 +1168,7 @@ mod tests {
         let subst = Substitution::default();
         // (rem 7 -2) → -1
         let expr = call("rem", vec![lit_int(7), lit_int(-2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(-1));
     }
 
     // -- Pow (exponentiation) ----------------------------------------------
@@ -1168,7 +1178,7 @@ mod tests {
         let subst = Substitution::default();
         // 2^10 = 1024
         let expr = call("**", vec![lit_int(2), lit_int(10)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1024));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1024));
     }
 
     #[test]
@@ -1176,7 +1186,7 @@ mod tests {
         let subst = Substitution::default();
         // 0^0 = 1
         let expr = call("**", vec![lit_int(0), lit_int(0)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
@@ -1185,7 +1195,7 @@ mod tests {
         // 2^(-1) = 0.5 (Decimal)
         let expr = call("**", vec![lit_int(2), lit_int(-1)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Decimal(Decimal::new(5, 1)));
+        assert_eq!(result, Term::Decimal(Decimal::new(5, 1)));
     }
 
     #[test]
@@ -1209,7 +1219,7 @@ mod tests {
         // Float base → Float result
         let expr = call("**", vec![lit_float(2.0), lit_int(3)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Float(8.0));
+        assert_eq!(result, Term::Float(FiniteFloat::new(8.0).unwrap()));
     }
 
     // -- Abs ---------------------------------------------------------------
@@ -1218,14 +1228,14 @@ mod tests {
     fn abs_positive() {
         let subst = Substitution::default();
         let expr = call("abs", vec![lit_int(5)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(5));
     }
 
     #[test]
     fn abs_negative() {
         let subst = Substitution::default();
         let expr = call("abs", vec![lit_int(-5)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(5));
     }
 
     #[test]
@@ -1243,7 +1253,7 @@ mod tests {
         // Integer + Decimal → Decimal
         let expr = call("+", vec![lit_int(1), lit_dec(25, 1)]); // 1 + 2.5
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Decimal(Decimal::new(35, 1)));
+        assert_eq!(result, Term::Decimal(Decimal::new(35, 1)));
     }
 
     #[test]
@@ -1252,7 +1262,7 @@ mod tests {
         // Integer + Float → Float
         let expr = call("+", vec![lit_int(1), lit_float(2.5)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Float(3.5));
+        assert_eq!(result, Term::Float(FiniteFloat::new(3.5).unwrap()));
     }
 
     #[test]
@@ -1261,7 +1271,7 @@ mod tests {
         // Decimal + Float → Float
         let expr = call("+", vec![lit_dec(25, 1), lit_float(1.0)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Float(3.5));
+        assert_eq!(result, Term::Float(FiniteFloat::new(3.5).unwrap()));
     }
 
     #[test]
@@ -1270,7 +1280,7 @@ mod tests {
         // min(Integer(5), Float(3.0)) → Float(3.0) (float contagion)
         let expr = call("min", vec![lit_int(5), lit_float(3.0)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Float(3.0));
+        assert_eq!(result, Term::Float(FiniteFloat::new(3.0).unwrap()));
     }
 
     // -- ArithConstraint: Bind ---------------------------------------------
@@ -1358,7 +1368,7 @@ mod tests {
         // (/ (- ?a ?b) 2) = (10 - 3) / 2 = 3.5
         let expr = call("/", vec![call("-", vec![var("?a"), var("?b")]), lit_int(2)]);
         let result = expr.eval(&subst).unwrap();
-        assert_eq!(result, NumericValue::Decimal(Decimal::new(35, 1)));
+        assert_eq!(result, Term::Decimal(Decimal::new(35, 1)));
     }
 
     #[test]
@@ -1366,7 +1376,7 @@ mod tests {
         let subst = make_subst(&[("?x", "3"), ("?y", "7")]);
         // (abs (- ?x ?y)) = abs(3 - 7) = abs(-4) = 4
         let expr = call("abs", vec![call("-", vec![var("?x"), var("?y")])]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(4));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(4));
     }
 
     // -- ArithError Display ------------------------------------------------
@@ -1390,7 +1400,7 @@ mod tests {
         // (+ 3 4) evaluates to Integer(7).
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(3), lit_int(4)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(7));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(7));
     }
 
     #[test]
@@ -1398,7 +1408,7 @@ mod tests {
         // (* (+ ?a ?b) 2) with ?a=3, ?b=4 → 14.
         let subst = make_subst(&[("?a", "3"), ("?b", "4")]);
         let expr = call("*", vec![call("+", vec![var("?a"), var("?b")]), lit_int(2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(14));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(14));
     }
 
     #[test]
@@ -1406,21 +1416,15 @@ mod tests {
         // (+ 1 2 3) evaluates to 6.
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(1), lit_int(2), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(6));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(6));
     }
 
     #[test]
     fn test_002_04_zero_arg_identity() {
         // (+) → Integer(0); (*) → Integer(1).
         let subst = Substitution::default();
-        assert_eq!(
-            call("+", vec![]).eval(&subst).unwrap(),
-            NumericValue::Integer(0),
-        );
-        assert_eq!(
-            call("*", vec![]).eval(&subst).unwrap(),
-            NumericValue::Integer(1),
-        );
+        assert_eq!(call("+", vec![]).eval(&subst).unwrap(), Term::Integer(0),);
+        assert_eq!(call("*", vec![]).eval(&subst).unwrap(), Term::Integer(1),);
     }
 
     #[test]
@@ -1428,12 +1432,12 @@ mod tests {
         // (- ?x) → negation; (/ ?x) → reciprocal (Decimal).
         let subst = make_subst(&[("?x", "4")]);
         let neg = call("-", vec![var("?x")]);
-        assert_eq!(neg.eval(&subst).unwrap(), NumericValue::Integer(-4));
+        assert_eq!(neg.eval(&subst).unwrap(), Term::Integer(-4));
 
         let recip = call("/", vec![var("?x")]);
         assert_eq!(
             recip.eval(&subst).unwrap(),
-            NumericValue::Decimal(Decimal::new(25, 2)), // 0.25
+            Term::Decimal(Decimal::new(25, 2)), // 0.25
         );
     }
 
@@ -1442,13 +1446,13 @@ mod tests {
         let subst = Substitution::default();
         // (- 10 3 2) = 10 - 3 - 2 = 5
         let sub_expr = call("-", vec![lit_int(10), lit_int(3), lit_int(2)]);
-        assert_eq!(sub_expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(sub_expr.eval(&subst).unwrap(), Term::Integer(5));
 
         // (/ 12 3 2) = 12 / 3 / 2 = 2 (as Decimal, since int/int → Decimal)
         let div_expr = call("/", vec![lit_int(12), lit_int(3), lit_int(2)]);
         assert_eq!(
             div_expr.eval(&subst).unwrap(),
-            NumericValue::Decimal(Decimal::from(2)),
+            Term::Decimal(Decimal::from(2)),
         );
     }
 
@@ -1457,13 +1461,13 @@ mod tests {
         let subst = Substitution::default();
         // div evaluates correctly
         let idiv = call("div", vec![lit_int(10), lit_int(3)]);
-        assert_eq!(idiv.eval(&subst).unwrap(), NumericValue::Integer(3));
+        assert_eq!(idiv.eval(&subst).unwrap(), Term::Integer(3));
         // rem evaluates correctly
         let rem = call("rem", vec![lit_int(10), lit_int(3)]);
-        assert_eq!(rem.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(rem.eval(&subst).unwrap(), Term::Integer(1));
         // ** evaluates correctly
         let pow = call("**", vec![lit_int(2), lit_int(10)]);
-        assert_eq!(pow.eval(&subst).unwrap(), NumericValue::Integer(1024));
+        assert_eq!(pow.eval(&subst).unwrap(), Term::Integer(1024));
     }
 
     #[test]
@@ -1471,7 +1475,7 @@ mod tests {
         // (abs (- ?a ?b)) = abs(3 - 7) = 4.
         let subst = make_subst(&[("?a", "3"), ("?b", "7")]);
         let expr = call("abs", vec![call("-", vec![var("?a"), var("?b")])]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(4));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(4));
     }
 
     #[test]
@@ -1479,10 +1483,10 @@ mod tests {
         let subst = make_subst(&[("?a", "5"), ("?b", "2"), ("?c", "8")]);
         // (min ?a ?b ?c) → 2
         let min_expr = call("min", vec![var("?a"), var("?b"), var("?c")]);
-        assert_eq!(min_expr.eval(&subst).unwrap(), NumericValue::Integer(2));
+        assert_eq!(min_expr.eval(&subst).unwrap(), Term::Integer(2));
         // (max 0 ?a) → 5
         let max_expr = call("max", vec![lit_int(0), var("?a")]);
-        assert_eq!(max_expr.eval(&subst).unwrap(), NumericValue::Integer(5));
+        assert_eq!(max_expr.eval(&subst).unwrap(), Term::Integer(5));
     }
 
     #[test]
@@ -1504,7 +1508,7 @@ mod tests {
         // (+ 3 4) → Integer(7)
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(3), lit_int(4)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(7));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(7));
     }
 
     #[test]
@@ -1513,8 +1517,8 @@ mod tests {
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(3), lit_dec(40, 1)]); // 4.0
         let result = expr.eval(&subst).unwrap();
-        assert!(matches!(result, NumericValue::Decimal(_)));
-        assert_eq!(result, NumericValue::Decimal(Decimal::new(70, 1)));
+        assert!(matches!(result, Term::Decimal(_)));
+        assert_eq!(result, Term::Decimal(Decimal::new(70, 1)));
     }
 
     #[test]
@@ -1522,7 +1526,10 @@ mod tests {
         // (+ 3 4.0e0) → Float(7.0) — scientific notation means float, contagious.
         let subst = Substitution::default();
         let expr = call("+", vec![lit_int(3), lit_float(4.0)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Float(7.0));
+        assert_eq!(
+            expr.eval(&subst).unwrap(),
+            Term::Float(FiniteFloat::new(7.0).unwrap())
+        );
     }
 
     #[test]
@@ -1532,7 +1539,7 @@ mod tests {
         let expr = call("+", vec![lit_dec(1, 1), lit_dec(2, 1)]);
         assert_eq!(
             expr.eval(&subst).unwrap(),
-            NumericValue::Decimal(Decimal::new(3, 1)),
+            Term::Decimal(Decimal::new(3, 1)),
         );
     }
 
@@ -1543,7 +1550,7 @@ mod tests {
         let expr = call("/", vec![lit_int(10), lit_int(3)]);
         let result = expr.eval(&subst).unwrap();
         match &result {
-            NumericValue::Decimal(d) => {
+            Term::Decimal(d) => {
                 let s = d.to_string();
                 assert!(s.starts_with("3."), "expected '3.' prefix, got: {s}");
                 let frac = &s[2..];
@@ -1569,8 +1576,8 @@ mod tests {
         let expr = call("/", vec![lit_int(10), lit_float(3.0)]);
         let result = expr.eval(&subst).unwrap();
         match &result {
-            NumericValue::Float(f) => {
-                assert!((*f - 10.0 / 3.0).abs() < 1e-10);
+            Term::Float(f) => {
+                assert!((f.value() - 10.0 / 3.0).abs() < 1e-10);
             }
             other => panic!("expected Float, got: {other:?}"),
         }
@@ -1582,8 +1589,8 @@ mod tests {
         let subst = Substitution::default();
         let expr = call("*", vec![lit_int(100), lit_dec(8, 2)]);
         let result = expr.eval(&subst).unwrap();
-        assert!(matches!(result, NumericValue::Decimal(_)));
-        assert_eq!(result, NumericValue::Decimal(Decimal::from(8)));
+        assert!(matches!(result, Term::Decimal(_)));
+        assert_eq!(result, Term::Decimal(Decimal::from(8)));
     }
 
     #[test]
@@ -1591,7 +1598,7 @@ mod tests {
         // (div 10 3) → Integer(3)
         let subst = Substitution::default();
         let expr = call("div", vec![lit_int(10), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(3));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(3));
     }
 
     #[test]
@@ -1599,7 +1606,7 @@ mod tests {
         // (div -7 2) → Integer(-4) — floor toward −∞, not truncation toward 0.
         let subst = Substitution::default();
         let expr = call("div", vec![lit_int(-7), lit_int(2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-4));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(-4));
     }
 
     #[test]
@@ -1607,7 +1614,7 @@ mod tests {
         // (rem 10 3) → Integer(1)
         let subst = Substitution::default();
         let expr = call("rem", vec![lit_int(10), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
@@ -1615,7 +1622,7 @@ mod tests {
         // (rem -7 2) → Integer(1) — floor remainder.
         let subst = Substitution::default();
         let expr = call("rem", vec![lit_int(-7), lit_int(2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
@@ -1623,7 +1630,7 @@ mod tests {
         // (rem 7 -2) → Integer(-1) — floor remainder.
         let subst = Substitution::default();
         let expr = call("rem", vec![lit_int(7), lit_int(-2)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(-1));
     }
 
     #[test]
@@ -1653,7 +1660,7 @@ mod tests {
         // (** 2 10) → Integer(1024)
         let subst = Substitution::default();
         let expr = call("**", vec![lit_int(2), lit_int(10)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1024));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1024));
     }
 
     #[test]
@@ -1661,7 +1668,7 @@ mod tests {
         // (** 0 0) → Integer(1)
         let subst = Substitution::default();
         let expr = call("**", vec![lit_int(0), lit_int(0)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(1));
     }
 
     #[test]
@@ -1671,7 +1678,7 @@ mod tests {
         let expr = call("**", vec![lit_int(2), lit_int(-1)]);
         assert_eq!(
             expr.eval(&subst).unwrap(),
-            NumericValue::Decimal(Decimal::new(5, 1)),
+            Term::Decimal(Decimal::new(5, 1)),
         );
     }
 
@@ -1689,8 +1696,8 @@ mod tests {
         let subst = Substitution::default();
         let expr = call("**", vec![lit_dec(20, 1), lit_int(3)]); // 2.0 ^ 3
         let result = expr.eval(&subst).unwrap();
-        assert!(matches!(result, NumericValue::Decimal(_)));
-        assert_eq!(result, NumericValue::Decimal(Decimal::from(8)));
+        assert!(matches!(result, Term::Decimal(_)));
+        assert_eq!(result, Term::Decimal(Decimal::from(8)));
     }
 
     #[test]
@@ -1698,7 +1705,10 @@ mod tests {
         // (** 2.0e0 3) → Float(8.0) — float is contagious.
         let subst = Substitution::default();
         let expr = call("**", vec![lit_float(2.0), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Float(8.0));
+        assert_eq!(
+            expr.eval(&subst).unwrap(),
+            Term::Float(FiniteFloat::new(8.0).unwrap())
+        );
     }
 
     #[test]
@@ -1723,7 +1733,7 @@ mod tests {
         // (** -2 3) → Integer(-8) — integer exponents on negative bases are fine.
         let subst = Substitution::default();
         let expr = call("**", vec![lit_int(-2), lit_int(3)]);
-        assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-8));
+        assert_eq!(expr.eval(&subst).unwrap(), Term::Integer(-8));
     }
 
     #[test]
@@ -1733,7 +1743,7 @@ mod tests {
         let expr = call("**", vec![lit_dec(40, 1), lit_dec(5, 1)]); // 4.0 ^ 0.5
         let result = expr.eval(&subst).unwrap();
         // rust_decimal's checked_powd should give us approximately 2.0
-        if let NumericValue::Decimal(d) = result {
+        if let Term::Decimal(d) = result {
             assert!((d - Decimal::from(2)).abs() < Decimal::new(1, 4)); // within 0.0001
         } else {
             panic!("expected Decimal result");
@@ -1748,45 +1758,22 @@ mod tests {
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
     }
 
-    // -- P2: Non-finite float values must error, not silently coerce ----------
+    // -- P2: Non-finite float values must be rejected at construction ----------
+    // (FiniteFloat::new rejects NaN/Inf, so these test the Term::Float guard)
 
     #[test]
-    fn bind_nan_returns_error() {
-        let mut subst = Substitution::default();
-        let constraint = ArithConstraint::Bind {
-            var: intern("?r"),
-            expr: lit_float(f64::NAN),
-        };
-        assert_eq!(
-            constraint.eval(&mut subst).unwrap_err(),
-            ArithError::NonFiniteFloat
-        );
+    fn finite_float_rejects_nan() {
+        assert!(FiniteFloat::new(f64::NAN).is_none());
     }
 
     #[test]
-    fn bind_positive_infinity_returns_error() {
-        let mut subst = Substitution::default();
-        let constraint = ArithConstraint::Bind {
-            var: intern("?r"),
-            expr: lit_float(f64::INFINITY),
-        };
-        assert_eq!(
-            constraint.eval(&mut subst).unwrap_err(),
-            ArithError::NonFiniteFloat
-        );
+    fn finite_float_rejects_positive_infinity() {
+        assert!(FiniteFloat::new(f64::INFINITY).is_none());
     }
 
     #[test]
-    fn bind_negative_infinity_returns_error() {
-        let mut subst = Substitution::default();
-        let constraint = ArithConstraint::Bind {
-            var: intern("?r"),
-            expr: lit_float(f64::NEG_INFINITY),
-        };
-        assert_eq!(
-            constraint.eval(&mut subst).unwrap_err(),
-            ArithError::NonFiniteFloat
-        );
+    fn finite_float_rejects_negative_infinity() {
+        assert!(FiniteFloat::new(f64::NEG_INFINITY).is_none());
     }
 
     // -- P1: Bind must check consistency when variable is already bound --------
@@ -1896,7 +1883,7 @@ mod tests {
                 args: vec![lit_int(5)],
             };
             let result = expr.eval_with_context(&subst, &ctx).unwrap();
-            assert_eq!(result, NumericValue::Integer(10));
+            assert_eq!(result, Term::Integer(10));
         }
 
         #[test]

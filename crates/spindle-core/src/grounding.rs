@@ -538,7 +538,7 @@ fn resolve_body_logic(
             }
             BodyArg::Arith(expr) => {
                 let val = expr.eval_with_context(subst, ctx).ok()?;
-                terms.push(Term::try_from(val).ok()?);
+                terms.push(val);
             }
         }
     }
@@ -787,9 +787,7 @@ where
             }
 
             // Evaluate extract expression
-            if let Ok(val) = fold.extract.eval_with_context(&merged, ctx)
-                && let Ok(t) = Term::try_from(val)
-            {
+            if let Ok(t) = fold.extract.eval_with_context(&merged, ctx) {
                 let key_vals: Vec<Term> = key.iter().map(|(_, t)| t.clone()).collect();
                 groups
                     .entry(key_vals)
@@ -849,8 +847,7 @@ fn collect_fold_values(
     for fact in candidates {
         if let Some(local_bindings) = match_literal(resolved, fact)
             && let Some(merged) = merge_substitutions(current_subst, &local_bindings)
-            && let Ok(val) = fold.extract.eval_with_context(&merged, ctx)
-            && let Ok(t) = Term::try_from(val)
+            && let Ok(t) = fold.extract.eval_with_context(&merged, ctx)
         {
             values.push(t);
         }
@@ -869,17 +866,13 @@ fn compute_fold_result(
 ) -> Option<Term> {
     if values.is_empty() {
         match &fold.identity {
-            Some(expr) => {
-                let val = expr.eval_with_context(current_subst, ctx).ok()?;
-                Term::try_from(val).ok()
-            }
+            Some(expr) => expr.eval_with_context(current_subst, ctx).ok(),
             None => None, // "required" — discard path
         }
     } else {
         match &fold.identity {
             Some(expr) => {
-                let val = expr.eval_with_context(current_subst, ctx).ok()?;
-                let mut acc = Term::try_from(val).ok()?;
+                let mut acc = expr.eval_with_context(current_subst, ctx).ok()?;
                 for v in values {
                     acc = reducer.eval(&[acc, v.clone()]).ok()?;
                 }
@@ -2881,7 +2874,7 @@ mod tests {
 
         let bind_y = BodyLiteral::Arithmetic(ArithConstraint::Bind {
             var: y_id,
-            expr: ArithExpr::Lit(NumericValue::Integer(10)),
+            expr: ArithExpr::Lit(Term::Integer(10)),
         });
 
         let cost_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
@@ -2923,7 +2916,7 @@ mod tests {
 
         let bind_y = BodyLiteral::Arithmetic(ArithConstraint::Bind {
             var: y_id,
-            expr: ArithExpr::Lit(NumericValue::Integer(99)),
+            expr: ArithExpr::Lit(Term::Integer(99)),
         });
 
         let cost_lit = BodyLiteral::Logic(BodyLogicLiteral::new(
@@ -2977,7 +2970,7 @@ mod tests {
         let compare = BodyLiteral::Arithmetic(ArithConstraint::Compare {
             op: CmpOp::Gt,
             lhs: ArithExpr::Var(p_id),
-            rhs: ArithExpr::Lit(NumericValue::Integer(50)),
+            rhs: ArithExpr::Lit(Term::Integer(50)),
         });
 
         let body = vec![price_lit, compare];
@@ -3041,10 +3034,7 @@ mod tests {
                 BodyArg::Term(Term::Symbol(x_id)),
                 BodyArg::Arith(ArithExpr::Call {
                     name: intern("+"),
-                    args: vec![
-                        ArithExpr::Var(n_id),
-                        ArithExpr::Lit(NumericValue::Integer(1)),
-                    ],
+                    args: vec![ArithExpr::Var(n_id), ArithExpr::Lit(Term::Integer(1))],
                 }),
             ],
         ));
@@ -3099,10 +3089,7 @@ mod tests {
                 BodyArg::Term(Term::Symbol(x_id)),
                 BodyArg::Arith(ArithExpr::Call {
                     name: intern("+"),
-                    args: vec![
-                        ArithExpr::Var(unbound_id),
-                        ArithExpr::Lit(NumericValue::Integer(1)),
-                    ],
+                    args: vec![ArithExpr::Var(unbound_id), ArithExpr::Lit(Term::Integer(1))],
                 }),
             ],
         ));
@@ -3155,10 +3142,7 @@ mod tests {
             var: total_id,
             expr: ArithExpr::Call {
                 name: intern("+"),
-                args: vec![
-                    ArithExpr::Var(n_id),
-                    ArithExpr::Lit(NumericValue::Integer(100)),
-                ],
+                args: vec![ArithExpr::Var(n_id), ArithExpr::Lit(Term::Integer(100))],
             },
         });
 
@@ -3230,7 +3214,7 @@ mod tests {
         let compare = BodyLiteral::Arithmetic(ArithConstraint::Compare {
             op: CmpOp::Gt,
             lhs: ArithExpr::Var(p_id),
-            rhs: ArithExpr::Lit(NumericValue::Integer(50)),
+            rhs: ArithExpr::Lit(Term::Integer(50)),
         });
 
         let body = vec![price_lit, compare];
@@ -3318,16 +3302,13 @@ mod tests {
                 var: tax_id,
                 expr: ArithExpr::Call {
                     name: intern("*"),
-                    args: vec![
-                        ArithExpr::Var(price_id),
-                        ArithExpr::Lit(NumericValue::Integer(2)),
-                    ],
+                    args: vec![ArithExpr::Var(price_id), ArithExpr::Lit(Term::Integer(2)),],
                 },
             }),
             BodyLiteral::Arithmetic(ArithConstraint::Compare {
                 op: CmpOp::Gt,
                 lhs: ArithExpr::Var(tax_id),
-                rhs: ArithExpr::Lit(NumericValue::Integer(15)),
+                rhs: ArithExpr::Lit(Term::Integer(15)),
             }),
         ];
 
@@ -3819,10 +3800,7 @@ mod tests {
                 var: total_id,
                 expr: ArithExpr::Call {
                     name: intern("+"),
-                    args: vec![
-                        ArithExpr::Var(n_id),
-                        ArithExpr::Lit(NumericValue::Integer(5)),
-                    ],
+                    args: vec![ArithExpr::Var(n_id), ArithExpr::Lit(Term::Integer(5)),],
                 },
             }),
         ];
@@ -3935,8 +3913,8 @@ mod tests {
         let arith = ArithExpr::Call {
             name: intern("+"),
             args: vec![
-                ArithExpr::Lit(NumericValue::Integer(1)),
-                ArithExpr::Lit(NumericValue::Integer(2)),
+                ArithExpr::Lit(Term::Integer(1)),
+                ArithExpr::Lit(Term::Integer(2)),
             ],
         };
         let body_lit = BodyLogicLiteral::new(

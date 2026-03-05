@@ -20,9 +20,11 @@
 //! and provides stable `Eq` + `Hash` implementations suitable for use in
 //! hash maps and sets.
 
+use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
+use chrono::{DateTime, FixedOffset, NaiveDate};
 use rust_decimal::Decimal;
 
 use crate::intern::{SymbolId, resolve};
@@ -130,10 +132,8 @@ impl fmt::Display for FiniteFloat {
 /// A typed value in the Spindle logic system.
 ///
 /// Terms appear as arguments in literals and as results of arithmetic
-/// expressions. The four variants cover the value space needed by the
-/// defeasible-logic language.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// expressions. The variants cover numeric, symbolic, and temporal values.
+#[derive(Clone, Debug)]
 pub enum Term {
     /// An interned symbolic name.
     Symbol(SymbolId),
@@ -143,6 +143,113 @@ pub enum Term {
     Decimal(Decimal),
     /// A canonicalized finite IEEE 754 float.
     Float(FiniteFloat),
+    /// A calendar date (no time component).
+    Date(NaiveDate),
+    /// Time of day as minutes since midnight (0–1439).
+    Time(u16),
+    /// A timezone-aware date-time.
+    Datetime(DateTime<FixedOffset>),
+    /// A signed duration in minutes.
+    Duration(i64),
+    /// A timezone offset in signed minutes east of UTC.
+    Offset(i16),
+}
+
+// Manual trait implementations for Term because DateTime<FixedOffset>
+// does not implement Hash via derive, and we need custom PartialEq/Eq.
+
+impl PartialEq for Term {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Term::Symbol(a), Term::Symbol(b)) => a == b,
+            (Term::Integer(a), Term::Integer(b)) => a == b,
+            (Term::Decimal(a), Term::Decimal(b)) => a == b,
+            (Term::Float(a), Term::Float(b)) => a == b,
+            (Term::Date(a), Term::Date(b)) => a == b,
+            (Term::Time(a), Term::Time(b)) => a == b,
+            (Term::Datetime(a), Term::Datetime(b)) => a == b,
+            (Term::Duration(a), Term::Duration(b)) => a == b,
+            (Term::Offset(a), Term::Offset(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Term {}
+
+impl Hash for Term {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Term::Symbol(id) => id.hash(state),
+            Term::Integer(n) => n.hash(state),
+            Term::Decimal(d) => d.hash(state),
+            Term::Float(f) => f.hash(state),
+            Term::Date(d) => d.hash(state),
+            Term::Time(m) => m.hash(state),
+            Term::Datetime(dt) => {
+                dt.timestamp().hash(state);
+                dt.timestamp_subsec_nanos().hash(state);
+                dt.offset().local_minus_utc().hash(state);
+            }
+            Term::Duration(m) => m.hash(state),
+            Term::Offset(m) => m.hash(state),
+        }
+    }
+}
+
+// Feature-gated serde support using a helper enum
+#[cfg(feature = "serde")]
+mod term_serde {
+    use super::*;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    enum TermProxy {
+        Symbol(SymbolId),
+        Integer(i64),
+        Decimal(Decimal),
+        Float(FiniteFloat),
+        Date(NaiveDate),
+        Time(u16),
+        Datetime(DateTime<FixedOffset>),
+        Duration(i64),
+        Offset(i16),
+    }
+
+    impl Serialize for Term {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let proxy = match self {
+                Term::Symbol(v) => TermProxy::Symbol(*v),
+                Term::Integer(v) => TermProxy::Integer(*v),
+                Term::Decimal(v) => TermProxy::Decimal(*v),
+                Term::Float(v) => TermProxy::Float(*v),
+                Term::Date(v) => TermProxy::Date(*v),
+                Term::Time(v) => TermProxy::Time(*v),
+                Term::Datetime(v) => TermProxy::Datetime(*v),
+                Term::Duration(v) => TermProxy::Duration(*v),
+                Term::Offset(v) => TermProxy::Offset(*v),
+            };
+            proxy.serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Term {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let proxy = TermProxy::deserialize(deserializer)?;
+            Ok(match proxy {
+                TermProxy::Symbol(v) => Term::Symbol(v),
+                TermProxy::Integer(v) => Term::Integer(v),
+                TermProxy::Decimal(v) => Term::Decimal(v),
+                TermProxy::Float(v) => Term::Float(v),
+                TermProxy::Date(v) => Term::Date(v),
+                TermProxy::Time(v) => Term::Time(v),
+                TermProxy::Datetime(v) => Term::Datetime(v),
+                TermProxy::Duration(v) => Term::Duration(v),
+                TermProxy::Offset(v) => Term::Offset(v),
+            })
+        }
+    }
 }
 
 impl Term {
@@ -150,6 +257,15 @@ impl Term {
     #[inline]
     pub fn is_numeric(&self) -> bool {
         matches!(self, Term::Integer(_) | Term::Decimal(_) | Term::Float(_))
+    }
+
+    /// Returns `true` if this term holds a temporal value (Date, Time, Datetime, Duration, Offset).
+    #[inline]
+    pub fn is_temporal(&self) -> bool {
+        matches!(
+            self,
+            Term::Date(_) | Term::Time(_) | Term::Datetime(_) | Term::Duration(_) | Term::Offset(_)
+        )
     }
 
     /// Cross-type numeric equality (REQ-005).
@@ -175,13 +291,28 @@ impl Term {
         }
     }
 
-    /// Convert this term to a [`NumericValue`], returning `None` for symbols.
+    /// Compare two temporal terms of the same kind, returning the ordering.
+    ///
+    /// Returns `None` if the terms are not both temporal of the same variant
+    /// (or if either term is not temporal).
+    pub fn temporal_cmp(&self, other: &Term) -> Option<Ordering> {
+        match (self, other) {
+            (Term::Date(a), Term::Date(b)) => Some(a.cmp(b)),
+            (Term::Time(a), Term::Time(b)) => Some(a.cmp(b)),
+            (Term::Datetime(a), Term::Datetime(b)) => Some(a.cmp(b)),
+            (Term::Duration(a), Term::Duration(b)) => Some(a.cmp(b)),
+            (Term::Offset(a), Term::Offset(b)) => Some(a.cmp(b)),
+            _ => None,
+        }
+    }
+
+    /// Convert this term to a [`NumericValue`], returning `None` for non-numeric types.
     pub fn to_numeric_value(&self) -> Option<NumericValue> {
         match self {
-            Term::Symbol(_) => None,
             Term::Integer(n) => Some(NumericValue::Integer(*n)),
             Term::Decimal(d) => Some(NumericValue::Decimal(*d)),
             Term::Float(f) => Some(NumericValue::Float(f.value())),
+            _ => None,
         }
     }
 }
@@ -193,6 +324,61 @@ impl fmt::Display for Term {
             Term::Integer(n) => write!(f, "{n}"),
             Term::Decimal(d) => write!(f, "{d}"),
             Term::Float(v) => write!(f, "{v}"),
+            Term::Date(d) => write!(f, "#d:{}", d.format("%Y-%m-%d")),
+            Term::Time(minutes) => {
+                let h = minutes / 60;
+                let m = minutes % 60;
+                write!(f, "#t:{h:02}:{m:02}")
+            }
+            Term::Datetime(dt) => {
+                let offset_secs = dt.offset().local_minus_utc();
+                if offset_secs == 0 {
+                    write!(f, "#dt:{}Z", dt.format("%Y-%m-%dT%H:%M"))
+                } else {
+                    let sign = if offset_secs >= 0 { '+' } else { '-' };
+                    let abs_secs = offset_secs.unsigned_abs();
+                    let oh = abs_secs / 3600;
+                    let om = (abs_secs % 3600) / 60;
+                    write!(
+                        f,
+                        "#dt:{}{sign}{oh:02}:{om:02}",
+                        dt.format("%Y-%m-%dT%H:%M")
+                    )
+                }
+            }
+            Term::Duration(minutes) => {
+                let abs = minutes.unsigned_abs();
+                let d = abs / 1440;
+                let h = (abs % 1440) / 60;
+                let m = abs % 60;
+                let neg = if *minutes < 0 { "-" } else { "" };
+                if d > 0 && h > 0 && m > 0 {
+                    write!(f, "#dur:{neg}{d}d{h}h{m}m")
+                } else if d > 0 && h > 0 {
+                    write!(f, "#dur:{neg}{d}d{h}h")
+                } else if d > 0 && m > 0 {
+                    write!(f, "#dur:{neg}{d}d{m}m")
+                } else if d > 0 {
+                    write!(f, "#dur:{neg}{d}d")
+                } else if h > 0 && m > 0 {
+                    write!(f, "#dur:{neg}{h}h{m}m")
+                } else if h > 0 {
+                    write!(f, "#dur:{neg}{h}h")
+                } else {
+                    write!(f, "#dur:{neg}{m}m")
+                }
+            }
+            Term::Offset(minutes) => {
+                if *minutes == 0 {
+                    write!(f, "#off:Z")
+                } else {
+                    let sign = if *minutes >= 0 { '+' } else { '-' };
+                    let abs = minutes.unsigned_abs();
+                    let h = abs / 60;
+                    let m = abs % 60;
+                    write!(f, "#off:{sign}{h:02}:{m:02}")
+                }
+            }
         }
     }
 }

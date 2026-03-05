@@ -699,7 +699,7 @@ mod tests {
 
     #[test]
     fn body_arg_from_arith_expr() {
-        let expr = ArithExpr::Lit(NumericValue::Integer(5));
+        let expr = ArithExpr::Lit(Term::Integer(5));
         let arg: BodyArg = expr.clone().into();
         assert_eq!(arg, BodyArg::Arith(expr));
     }
@@ -806,7 +806,7 @@ mod tests {
     fn body_literal_arithmetic_variant() {
         let constraint = ArithConstraint::Bind {
             var: intern("?x"),
-            expr: ArithExpr::Lit(NumericValue::Integer(42)),
+            expr: ArithExpr::Lit(Term::Integer(42)),
         };
         let bl = BodyLiteral::Arithmetic(constraint.clone());
         assert!(bl.is_arithmetic());
@@ -827,7 +827,7 @@ mod tests {
         let constraint = ArithConstraint::Compare {
             op: CmpOp::Gt,
             lhs: ArithExpr::Var(intern("?x")),
-            rhs: ArithExpr::Lit(NumericValue::Integer(10)),
+            rhs: ArithExpr::Lit(Term::Integer(10)),
         };
         let bl: BodyLiteral = constraint.into();
         assert!(bl.is_arithmetic());
@@ -843,7 +843,7 @@ mod tests {
     fn body_literal_display_arithmetic() {
         let bl = BodyLiteral::Arithmetic(ArithConstraint::Bind {
             var: intern("?x"),
-            expr: ArithExpr::Lit(NumericValue::Integer(42)),
+            expr: ArithExpr::Lit(Term::Integer(42)),
         });
         let display = format!("{bl}");
         assert!(display.contains("bind"));

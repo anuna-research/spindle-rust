@@ -223,13 +223,13 @@ mod tests {
     use crate::intern::intern;
     use crate::literal::Literal;
     use crate::rule::{Rule, RuleBody};
-    use crate::term::NumericValue;
+    use crate::term::Term;
     use smallvec::smallvec;
 
     fn make_fold_rule(label: &str, fold_over: &str, head_name: &str) -> Rule {
         let fold = FoldLiteral {
             result_var: intern("?total"),
-            identity: Some(ArithExpr::Lit(NumericValue::Integer(0))),
+            identity: Some(ArithExpr::Lit(Term::Integer(0))),
             reducer: intern("+"),
             extract: ArithExpr::Var(intern("?val")),
             pattern: BodyLogicLiteral::new(

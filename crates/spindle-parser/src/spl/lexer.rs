@@ -246,6 +246,7 @@ fn parse_atom<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr
             || c == '>'
             || c == '='
             || c == '!'
+            || c == '#'
     })
     .parse(input)?;
     Ok((

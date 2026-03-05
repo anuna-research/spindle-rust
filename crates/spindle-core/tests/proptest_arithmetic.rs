@@ -1,6 +1,6 @@
 //! Property-based tests for the arithmetic module (TEST-PBT-001).
 //!
-//! Generators: bounded-depth ArithExpr (max depth 4), random NumericValue,
+//! Generators: bounded-depth ArithExpr (max depth 4), random Term,
 //! random Substitution, random rule-body fragments.
 //!
 //! 10 properties tested with 500+ cases each.
@@ -12,20 +12,20 @@ use spindle_core::arith::{ArithConstraint, ArithExpr, CmpOp};
 use spindle_core::function_registry::{EvalContext, FunctionRegistry};
 use spindle_core::grounding::Substitution;
 use spindle_core::intern::intern;
-use spindle_core::term::{FiniteFloat, NumericValue, Term};
+use spindle_core::term::{FiniteFloat, Term};
 
 // ---------------------------------------------------------------------------
 // Generators
 // ---------------------------------------------------------------------------
 
-fn arb_numeric_value() -> impl Strategy<Value = NumericValue> {
+fn arb_term() -> impl Strategy<Value = Term> {
     prop_oneof![
-        4 => (-1_000_000i64..1_000_000).prop_map(NumericValue::Integer),
+        4 => (-1_000_000i64..1_000_000).prop_map(Term::Integer),
         3 => (-999_999i64..999_999)
-            .prop_map(|n| NumericValue::Decimal(Decimal::new(n, 2))),
+            .prop_map(|n| Term::Decimal(Decimal::new(n, 2))),
         3 => (-1000.0f64..1000.0)
             .prop_filter("must be finite", |f| f.is_finite())
-            .prop_map(NumericValue::Float),
+            .prop_map(|f| Term::Float(FiniteFloat::new(f).unwrap())),
     ]
 }
 
@@ -60,7 +60,7 @@ fn arb_cmp_op() -> impl Strategy<Value = CmpOp> {
 
 /// Generate an ArithExpr of bounded depth.
 fn arb_arith_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> {
-    let leaf = arb_numeric_value().prop_map(ArithExpr::Lit);
+    let leaf = arb_term().prop_map(ArithExpr::Lit);
     leaf.prop_recursive(max_depth, 64, 4, |inner| {
         prop_oneof![
             // N-ary Call with 1-3 args
@@ -90,17 +90,10 @@ fn arb_arith_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> {
 
 /// Generate a substitution with some bound variables.
 fn arb_substitution() -> impl Strategy<Value = Substitution> {
-    proptest::collection::vec((0..5u32, arb_numeric_value()), 0..=5).prop_map(|bindings| {
+    proptest::collection::vec((0..5u32, arb_term()), 0..=5).prop_map(|bindings| {
         let mut subst = Substitution::default();
-        for (idx, val) in bindings {
+        for (idx, term) in bindings {
             let var_name = format!("?v{}", idx);
-            let term = match val {
-                NumericValue::Integer(n) => Term::Integer(n),
-                NumericValue::Decimal(d) => Term::Decimal(d),
-                NumericValue::Float(f) => {
-                    Term::Float(FiniteFloat::new(f).unwrap_or(FiniteFloat::new(0.0).unwrap()))
-                }
-            };
             subst.terms.insert(intern(&var_name), term);
         }
         subst
@@ -169,15 +162,15 @@ proptest! {
         let expr = ArithExpr::Call {
             name: intern("+"),
             args: vec![
-                ArithExpr::Lit(NumericValue::Integer(a)),
-                ArithExpr::Lit(NumericValue::Decimal(Decimal::new(b_dec, 2))),
+                ArithExpr::Lit(Term::Integer(a)),
+                ArithExpr::Lit(Term::Decimal(Decimal::new(b_dec, 2))),
             ],
         };
         let reg = FunctionRegistry::with_prelude();
         let ctx = EvalContext::with_registry(&reg);
         if let Ok(result) = expr.eval_with_context(&subst, &ctx) {
             prop_assert!(
-                matches!(result, NumericValue::Decimal(_)),
+                matches!(result, Term::Decimal(_)),
                 "Integer + Decimal should produce Decimal, got {:?}",
                 result
             );
@@ -195,21 +188,21 @@ proptest! {
         let div_expr = ArithExpr::Call {
             name: intern("div"),
             args: vec![
-                ArithExpr::Lit(NumericValue::Integer(a)),
-                ArithExpr::Lit(NumericValue::Integer(b)),
+                ArithExpr::Lit(Term::Integer(a)),
+                ArithExpr::Lit(Term::Integer(b)),
             ],
         };
         let rem_expr = ArithExpr::Call {
             name: intern("rem"),
             args: vec![
-                ArithExpr::Lit(NumericValue::Integer(a)),
-                ArithExpr::Lit(NumericValue::Integer(b)),
+                ArithExpr::Lit(Term::Integer(a)),
+                ArithExpr::Lit(Term::Integer(b)),
             ],
         };
 
         let reg = FunctionRegistry::with_prelude();
         let ctx = EvalContext::with_registry(&reg);
-        if let (Ok(NumericValue::Integer(q)), Ok(NumericValue::Integer(r))) =
+        if let (Ok(Term::Integer(q)), Ok(Term::Integer(r))) =
             (div_expr.eval_with_context(&subst, &ctx), rem_expr.eval_with_context(&subst, &ctx))
         {
             prop_assert_eq!(
@@ -231,13 +224,13 @@ proptest! {
         let rem_expr = ArithExpr::Call {
             name: intern("rem"),
             args: vec![
-                ArithExpr::Lit(NumericValue::Integer(a)),
-                ArithExpr::Lit(NumericValue::Integer(b)),
+                ArithExpr::Lit(Term::Integer(a)),
+                ArithExpr::Lit(Term::Integer(b)),
             ],
         };
         let reg = FunctionRegistry::with_prelude();
         let ctx = EvalContext::with_registry(&reg);
-        if let Ok(NumericValue::Integer(r)) = rem_expr.eval_with_context(&subst, &ctx)
+        if let Ok(Term::Integer(r)) = rem_expr.eval_with_context(&subst, &ctx)
             && r != 0 {
                 prop_assert!(
                     (r > 0) == (b > 0),
@@ -250,17 +243,10 @@ proptest! {
     /// Property 6: Comparison reflexivity — (= x x) always holds,
     /// (< x x) never holds, (<= x x) always holds.
     #[test]
-    fn arith_comparison_reflexivity(val in arb_numeric_value()) {
+    fn arith_comparison_reflexivity(val in arb_term()) {
         let mut subst = Substitution::default();
         let var_id = intern("?x");
-        let term = match &val {
-            NumericValue::Integer(n) => Term::Integer(*n),
-            NumericValue::Decimal(d) => Term::Decimal(*d),
-            NumericValue::Float(f) => {
-                Term::Float(FiniteFloat::new(*f).unwrap_or(FiniteFloat::new(0.0).unwrap()))
-            }
-        };
-        subst.terms.insert(var_id, term);
+        subst.terms.insert(var_id, val.clone());
 
         let eq_constraint = ArithConstraint::Compare {
             op: CmpOp::Eq,
@@ -305,14 +291,15 @@ proptest! {
         let reg = FunctionRegistry::with_prelude();
         let ctx = EvalContext::with_registry(&reg);
         if let Ok(val) = expr.eval_with_context(&subst, &ctx)
-            && let NumericValue::Float(f) = val {
+            && let Term::Float(f) = val {
+                // FiniteFloat is always finite and non-NaN by construction
                 prop_assert!(
-                    f.is_finite(),
+                    f.value().is_finite(),
                     "Float result must be finite, got {}",
                     f
                 );
                 prop_assert!(
-                    !f.is_nan(),
+                    !f.value().is_nan(),
                     "Float result must not be NaN"
                 );
             }

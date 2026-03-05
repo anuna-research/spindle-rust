@@ -9,22 +9,22 @@ use spindle_core::arith::{ArithError, ArithExpr};
 use spindle_core::function_registry::{EvalContext, FunctionRegistry};
 use spindle_core::grounding::Substitution;
 use spindle_core::intern::intern;
-use spindle_core::term::NumericValue;
+use spindle_core::term::{FiniteFloat, Term};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 fn lit_int(n: i64) -> ArithExpr {
-    ArithExpr::Lit(NumericValue::Integer(n))
+    ArithExpr::Lit(Term::Integer(n))
 }
 
 fn lit_dec(n: i64, scale: u32) -> ArithExpr {
-    ArithExpr::Lit(NumericValue::Decimal(Decimal::new(n, scale)))
+    ArithExpr::Lit(Term::Decimal(Decimal::new(n, scale)))
 }
 
 fn lit_float(f: f64) -> ArithExpr {
-    ArithExpr::Lit(NumericValue::Float(f))
+    ArithExpr::Lit(Term::Float(FiniteFloat::new(f).unwrap()))
 }
 
 fn call(name: &str, args: Vec<ArithExpr>) -> ArithExpr {
@@ -34,7 +34,7 @@ fn call(name: &str, args: Vec<ArithExpr>) -> ArithExpr {
     }
 }
 
-fn eval(expr: &ArithExpr) -> Result<NumericValue, ArithError> {
+fn eval(expr: &ArithExpr) -> Result<Term, ArithError> {
     let reg = FunctionRegistry::with_prelude();
     let ctx = EvalContext::with_registry(&reg);
     expr.eval_with_context(&Substitution::default(), &ctx)
@@ -48,63 +48,63 @@ fn eval(expr: &ArithExpr) -> Result<NumericValue, ArithError> {
 fn round_half_to_even_2_5() {
     // round(2.5, 0) = 2 (half-to-even: rounds to nearest even)
     let result = eval(&call("round", vec![lit_dec(25, 1), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(2, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(2, 0)));
 }
 
 #[test]
 fn round_half_to_even_3_5() {
     // round(3.5, 0) = 4 (half-to-even: rounds to nearest even)
     let result = eval(&call("round", vec![lit_dec(35, 1), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(4, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(4, 0)));
 }
 
 #[test]
 fn round_half_to_even_4_5() {
     // round(4.5, 0) = 4
     let result = eval(&call("round", vec![lit_dec(45, 1), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(4, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(4, 0)));
 }
 
 #[test]
 fn round_half_to_even_5_5() {
     // round(5.5, 0) = 6
     let result = eval(&call("round", vec![lit_dec(55, 1), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(6, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(6, 0)));
 }
 
 #[test]
 fn round_to_2dp() {
     // round(3.14159, 2) = 3.14
     let result = eval(&call("round", vec![lit_dec(314159, 5), lit_int(2)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(314, 2)));
+    assert_eq!(result, Term::Decimal(Decimal::new(314, 2)));
 }
 
 #[test]
 fn round_negative_half_to_even() {
     // round(-2.5, 0) = -2 (half-to-even)
     let result = eval(&call("round", vec![lit_dec(-25, 1), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(-2, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(-2, 0)));
 }
 
 #[test]
 fn round_negative_half_to_even_odd() {
     // round(-3.5, 0) = -4
     let result = eval(&call("round", vec![lit_dec(-35, 1), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(-4, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(-4, 0)));
 }
 
 #[test]
 fn round_integer_input() {
     // round(42, 0) = 42.0 (integer promoted to Decimal)
     let result = eval(&call("round", vec![lit_int(42), lit_int(0)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(42, 0)));
+    assert_eq!(result, Term::Decimal(Decimal::new(42, 0)));
 }
 
 #[test]
 fn round_integer_input_with_dp() {
     // round(42, 2) = 42.00
     let result = eval(&call("round", vec![lit_int(42), lit_int(2)])).unwrap();
-    assert_eq!(result, NumericValue::Decimal(Decimal::new(4200, 2)));
+    assert_eq!(result, Term::Decimal(Decimal::new(4200, 2)));
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn round_float_input() {
     // round(2.5e0, 0) should work (float promoted to decimal for rounding)
     let result = eval(&call("round", vec![lit_float(2.5), lit_int(0)])).unwrap();
     // Result is Decimal
-    assert!(matches!(result, NumericValue::Decimal(_)));
+    assert!(matches!(result, Term::Decimal(_)));
 }
 
 // =====================================================================
@@ -143,49 +143,49 @@ fn round_float_input() {
 fn floor_positive_fractional() {
     // floor(3.7) = 3
     let result = eval(&call("floor", vec![lit_dec(37, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(3));
+    assert_eq!(result, Term::Integer(3));
 }
 
 #[test]
 fn floor_negative_fractional() {
     // floor(-3.2) = -4 (rounds toward negative infinity)
     let result = eval(&call("floor", vec![lit_dec(-32, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(-4));
+    assert_eq!(result, Term::Integer(-4));
 }
 
 #[test]
 fn floor_exact_integer_value() {
     // floor(5.0) = 5
     let result = eval(&call("floor", vec![lit_dec(50, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(5));
+    assert_eq!(result, Term::Integer(5));
 }
 
 #[test]
 fn floor_integer_passthrough() {
     // floor(42) = 42
     let result = eval(&call("floor", vec![lit_int(42)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(42));
+    assert_eq!(result, Term::Integer(42));
 }
 
 #[test]
 fn floor_negative_exact() {
     // floor(-5.0) = -5
     let result = eval(&call("floor", vec![lit_dec(-50, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(-5));
+    assert_eq!(result, Term::Integer(-5));
 }
 
 #[test]
 fn floor_float_input() {
     // floor(3.7e0) = 3
     let result = eval(&call("floor", vec![lit_float(3.7)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(3));
+    assert_eq!(result, Term::Integer(3));
 }
 
 #[test]
 fn floor_negative_float() {
     // floor(-3.2e0) = -4
     let result = eval(&call("floor", vec![lit_float(-3.2)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(-4));
+    assert_eq!(result, Term::Integer(-4));
 }
 
 // =====================================================================
@@ -196,49 +196,49 @@ fn floor_negative_float() {
 fn ceil_positive_fractional() {
     // ceil(3.2) = 4
     let result = eval(&call("ceil", vec![lit_dec(32, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(4));
+    assert_eq!(result, Term::Integer(4));
 }
 
 #[test]
 fn ceil_negative_fractional() {
     // ceil(-3.7) = -3 (rounds toward positive infinity)
     let result = eval(&call("ceil", vec![lit_dec(-37, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(-3));
+    assert_eq!(result, Term::Integer(-3));
 }
 
 #[test]
 fn ceil_exact_integer_value() {
     // ceil(5.0) = 5
     let result = eval(&call("ceil", vec![lit_dec(50, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(5));
+    assert_eq!(result, Term::Integer(5));
 }
 
 #[test]
 fn ceil_integer_passthrough() {
     // ceil(42) = 42
     let result = eval(&call("ceil", vec![lit_int(42)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(42));
+    assert_eq!(result, Term::Integer(42));
 }
 
 #[test]
 fn ceil_negative_exact() {
     // ceil(-5.0) = -5
     let result = eval(&call("ceil", vec![lit_dec(-50, 1)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(-5));
+    assert_eq!(result, Term::Integer(-5));
 }
 
 #[test]
 fn ceil_float_input() {
     // ceil(3.2e0) = 4
     let result = eval(&call("ceil", vec![lit_float(3.2)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(4));
+    assert_eq!(result, Term::Integer(4));
 }
 
 #[test]
 fn ceil_negative_float() {
     // ceil(-3.7e0) = -3
     let result = eval(&call("ceil", vec![lit_float(-3.7)])).unwrap();
-    assert_eq!(result, NumericValue::Integer(-3));
+    assert_eq!(result, Term::Integer(-3));
 }
 
 // =====================================================================

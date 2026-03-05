@@ -17,7 +17,7 @@ use spindle_core::grounding::ground_theory_with_limit;
 use spindle_core::intern::intern;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::reason::reason_with_options;
-use spindle_core::term::{FiniteFloat, NumericValue, Term};
+use spindle_core::term::{FiniteFloat, Term};
 use spindle_parser::parse_spl;
 
 // ---------------------------------------------------------------------------
@@ -622,7 +622,9 @@ fn range_arity_too_many_args_fails_validation() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn non_numeric_return_discards_path() {
+fn non_numeric_return_now_binds_successfully() {
+    // Since eval now returns Term (not just NumericValue), a non-numeric
+    // return (Symbol) is successfully bound via (bind ?y ...).
     let spl = r#"
         (given (val 5))
         (normally r1
@@ -638,14 +640,16 @@ fn non_numeric_return_discards_path() {
         function_registry: Some(reg),
         ..Default::default()
     };
-    let result = prepare(&theory, opts)
-        .expect("prepare should succeed (non-numeric silently discards path)");
+    let result = prepare(&theory, opts).expect("prepare should succeed");
 
     let has_result = result
         .theory
         .rules()
         .any(|r| r.head.iter().any(|h| h.name() == "result"));
-    assert!(!has_result, "should not produce any result rules");
+    assert!(
+        has_result,
+        "non-numeric bind should now succeed and produce result rules"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -845,10 +849,9 @@ fn decimal_return_from_extension_function() {
     // half(7) = 3.5
     let expected = Decimal::from(7).checked_div(Decimal::from(2)).unwrap();
     let has_result = result.theory.rules().any(|r| {
-        r.head.iter().any(|h| {
-            h.name() == "result"
-                && h.predicate_args() == [Term::try_from(NumericValue::Decimal(expected)).unwrap()]
-        })
+        r.head
+            .iter()
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Decimal(expected)])
     });
     assert!(has_result, "expected (result 3.5) from half(7)");
 }
@@ -955,10 +958,9 @@ fn multiple_extension_functions_in_one_theory() {
     // double(5) = 10, half(10) = 5.0 (Decimal)
     let expected = Decimal::from(10).checked_div(Decimal::from(2)).unwrap();
     let has_result = result.theory.rules().any(|r| {
-        r.head.iter().any(|h| {
-            h.name() == "result"
-                && h.predicate_args() == [Term::try_from(NumericValue::Decimal(expected)).unwrap()]
-        })
+        r.head
+            .iter()
+            .any(|h| h.name() == "result" && h.predicate_args() == [Term::Decimal(expected)])
     });
     assert!(has_result, "expected (result 5.0) from half(double(5))");
 }
