@@ -1117,9 +1117,14 @@ pub fn ground_theory_with_limit(
     let mut fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
         FxHashMap::default();
 
-    // Initialize with ground facts
-    for rule in theory.facts() {
-        if !has_variables(rule) {
+    // Initialize with ground facts and heads of ground empty-body rules.
+    // Empty-body rules (strict or defeasible) are unconditionally true and
+    // their heads must be visible to fold pattern matching and rule body
+    // matching during grounding, just like facts.
+    for rule in theory.rules() {
+        if !has_variables(rule)
+            && (rule.is_fact() || (rule.body.is_empty() && rule.rule_type != RuleType::Defeater))
+        {
             let lit = rule.head_literal().clone();
             let key = literal_key(&lit);
             if !fact_keys.contains(&key) {

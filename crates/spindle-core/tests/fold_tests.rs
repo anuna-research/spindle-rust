@@ -700,15 +700,15 @@ fn fold_transitive_dependency_correct_result() {
     // final-pay(alice, 450) via normal rule (350 + 100)
     // grand-total(alice, 450) via fold over final-pay
     assert!(
-        conclusions.iter().any(|c| c.contains("subtotal(alice, 350)")),
+        has_conclusion(&conclusions, "+d subtotal(alice, 350)"),
         "got: {conclusions:?}"
     );
     assert!(
-        conclusions.iter().any(|c| c.contains("final-pay(alice, 450)")),
+        has_conclusion(&conclusions, "+d final-pay(alice, 450)"),
         "got: {conclusions:?}"
     );
     assert!(
-        conclusions.iter().any(|c| c.contains("grand-total(alice, 450)")),
+        has_conclusion(&conclusions, "+d grand-total(alice, 450)"),
         "got: {conclusions:?}"
     );
 }
@@ -806,15 +806,15 @@ fn three_strata_deduplication() {
     // level(alice, 6) (60 div 10 = 6)
     // level-count(alice, 1)
     assert!(
-        conclusions.iter().any(|c| c.contains("total-weighted(alice, 60)")),
+        has_conclusion(&conclusions, "+d total-weighted(alice, 60)"),
         "got: {conclusions:?}"
     );
     assert!(
-        conclusions.iter().any(|c| c.contains("level(alice, 6)")),
+        has_conclusion(&conclusions, "+d level(alice, 6)"),
         "got: {conclusions:?}"
     );
     assert!(
-        conclusions.iter().any(|c| c.contains("level-count(alice, 1)")),
+        has_conclusion(&conclusions, "+d level-count(alice, 1)"),
         "got: {conclusions:?}"
     );
 
@@ -889,5 +889,39 @@ fn reason_from_prepared_multi_stratum() {
     assert!(
         positives.iter().any(|c| c == "+d total-pay(alice, 350)"),
         "reason_from_prepared should handle multi-stratum correctly: {positives:?}"
+    );
+}
+
+// =========================================================================
+// Defeasible proof strength preservation across strata
+// =========================================================================
+
+#[test]
+fn defeasible_not_promoted_across_strata() {
+    // A `normally` rule's conclusion should remain +d even when carried
+    // across a stratum boundary. Previously, defeasible conclusions were
+    // injected as strict facts into later strata, spuriously promoting
+    // them to +D.
+    let conclusions = reason_spl(
+        r#"
+        (given (hours alice 8))
+        (given (rate alice 25))
+        (normally r-pay
+            (and (hours ?emp ?h) (rate ?emp ?r) (bind ?pay (* ?h ?r)))
+            (pay-line ?emp ?pay))
+        (normally r-total
+            (fold ?total 0 + ?pay (pay-line ?emp ?pay))
+            (total-pay ?emp ?total))
+    "#,
+    );
+    // pay-line is derived by a defeasible rule → should be +d
+    assert!(
+        has_conclusion(&conclusions, "+d pay-line(alice, 200)"),
+        "pay-line should be +d: {conclusions:?}"
+    );
+    // total-pay is also defeasible → should be +d
+    assert!(
+        has_conclusion(&conclusions, "+d total-pay(alice, 200)"),
+        "total-pay should be +d: {conclusions:?}"
     );
 }

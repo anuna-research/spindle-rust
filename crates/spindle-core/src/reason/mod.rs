@@ -40,8 +40,10 @@ use crate::grounding::ground_theory_with_limit;
 use crate::index::IndexedTheory;
 use crate::literal::Literal;
 use crate::pipeline::{GroundingOptions, PrepareOptions, StratumInfo, prepare};
+use crate::body::BodyLiteral;
 use crate::rule::Rule;
 use crate::theory::Theory;
+use smallvec::SmallVec;
 
 use self::state::ReasoningState;
 
@@ -177,7 +179,7 @@ fn reason_stratified(
     ctx: &EvalContext<'_>,
     grounding: &GroundingOptions,
 ) -> Result<Vec<Conclusion>> {
-    let mut accumulated_facts: Vec<Literal> = Vec::new();
+    let mut accumulated_facts: Vec<(Literal, bool)> = Vec::new();
     let mut all_conclusions: Vec<Conclusion> = Vec::new();
 
     for stratum in 0..strata.num_strata {
@@ -195,10 +197,20 @@ fn reason_stratified(
         // Reason
         let conclusions = reason_prepared(&grounded)?;
 
-        // Accumulate positive conclusions as facts for next stratum
+        // Accumulate positive conclusions for next stratum, tracking proof strength.
+        // If a literal appears as both +D and +d from the same stratum, keep definite
+        // (since +D subsumes +d).
         for c in &conclusions {
             if c.is_positive() {
-                accumulated_facts.push(c.literal.clone());
+                let is_def = c.conclusion_type.is_definite();
+                let key = c.literal.to_spl();
+                if let Some(existing) = accumulated_facts.iter_mut().find(|(l, _)| l.to_spl() == key) {
+                    if is_def && !existing.1 {
+                        existing.1 = true; // upgrade to definite
+                    }
+                } else {
+                    accumulated_facts.push((c.literal.clone(), is_def));
+                }
             }
         }
 
@@ -222,14 +234,24 @@ fn build_stratum_theory(
     original: &Theory,
     strata: &StratumInfo,
     target_stratum: usize,
-    accumulated_facts: &[Literal],
+    accumulated_facts: &[(Literal, bool)],
 ) -> Theory {
     let mut sub = Theory::new();
 
-    // Add accumulated facts from prior strata
-    for (i, fact) in accumulated_facts.iter().enumerate() {
+    // Add accumulated facts from prior strata, preserving proof strength.
+    // Definite conclusions become facts; defeasible ones become empty-body
+    // defeasible rules so the reasoning engine derives them as +d, not +D.
+    for (i, (literal, is_definite)) in accumulated_facts.iter().enumerate() {
         let label = format!("__strat_fact_{i}");
-        sub.add_rule(Rule::fact(label, fact.clone()));
+        if *is_definite {
+            sub.add_rule(Rule::fact(label, literal.clone()));
+        } else {
+            sub.add_rule(Rule::defeasible(
+                label,
+                SmallVec::<[BodyLiteral; 4]>::new(),
+                literal.clone(),
+            ));
+        }
     }
 
     // Include rules from this stratum AND all prior strata. Lower-stratum
