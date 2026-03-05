@@ -925,3 +925,60 @@ fn defeasible_not_promoted_across_strata() {
         "total-pay should be +d: {conclusions:?}"
     );
 }
+
+// =========================================================================
+// Issue 1: deduplicate_conclusions must preserve both +D and +d
+// =========================================================================
+
+#[test]
+fn dedup_preserves_both_definite_and_defeasible() {
+    // In defeasible logic, +D p implies +d p (subsumption). The reasoning
+    // engine correctly emits both. Multi-stratum deduplication must not
+    // collapse them — they are distinct conclusion types.
+    //
+    // Scenario: given facts (stratum 0) derive a relation via a defeasible
+    // rule, then a fold in stratum 1 aggregates over that derived relation.
+    // Because lower-stratum rules are re-included in stratum 1, the given
+    // facts are re-derived, producing +D and +d duplicates. The dedup must
+    // keep both +D and +d for each literal.
+    let theory = spindle_parser::parse_spl(
+        r#"
+        (given (hours alice 8))
+        (given (rate alice 25))
+        (normally r-pay
+            (and (hours ?emp ?h) (rate ?emp ?r) (bind ?pay (* ?h ?r)))
+            (pay-line ?emp ?pay))
+        (normally r-total
+            (fold ?total 0 + ?pay (pay-line ?emp ?pay))
+            (total-pay ?emp ?total))
+    "#,
+    )
+    .expect("parse failed");
+
+    let conclusions =
+        reason_with_options(&theory, PrepareOptions::default()).expect("reason failed");
+
+    let positives: Vec<String> = conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .map(|c| format!("{c}"))
+        .collect();
+
+    // Given facts should have BOTH +D and +d (subsumption)
+    assert!(
+        positives.iter().any(|c| c == "+D hours(alice, 8)"),
+        "+D hours(alice, 8) missing: {positives:?}"
+    );
+    assert!(
+        positives.iter().any(|c| c == "+d hours(alice, 8)"),
+        "+d hours(alice, 8) missing (dropped by dedup): {positives:?}"
+    );
+    assert!(
+        positives.iter().any(|c| c == "+D rate(alice, 25)"),
+        "+D rate(alice, 25) missing: {positives:?}"
+    );
+    assert!(
+        positives.iter().any(|c| c == "+d rate(alice, 25)"),
+        "+d rate(alice, 25) missing (dropped by dedup): {positives:?}"
+    );
+}

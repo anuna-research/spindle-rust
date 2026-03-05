@@ -33,7 +33,7 @@ pub(crate) mod definite;
 pub(crate) mod facts;
 pub(crate) mod state;
 
-use crate::conclusion::Conclusion;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
 use crate::function_registry::{EvalContext, FunctionRegistry};
 use crate::grounding::ground_theory_with_limit;
@@ -284,40 +284,23 @@ fn build_stratum_theory(
     sub
 }
 
-/// Remove duplicate conclusions, preferring definite over defeasible.
+/// Remove duplicate conclusions across strata.
 ///
 /// Because stratified reasoning re-includes lower-stratum rules, conclusions
 /// from earlier strata are re-derived in later strata. This deduplication
-/// ensures each (literal, polarity) pair appears at most once, keeping the
-/// stronger conclusion type (definite > defeasible).
+/// ensures each (literal, conclusion_type) pair appears at most once.
+///
+/// The key includes the full `ConclusionType` (not just polarity), so that
+/// distinct proof strengths like `+D p` and `+d p` are preserved — these
+/// are semantically different conclusions in defeasible logic.
 fn deduplicate_conclusions(conclusions: &mut Vec<Conclusion>) {
-    use std::collections::HashMap;
+    use std::collections::HashSet;
 
-    // Key: (literal spl, is_positive) -> best conclusion
-    let mut seen: HashMap<(String, bool), usize> = HashMap::new();
-    let mut keep = vec![true; conclusions.len()];
+    let mut seen: HashSet<(String, ConclusionType)> = HashSet::new();
 
-    for (i, c) in conclusions.iter().enumerate() {
-        let key = (c.literal.to_spl(), c.conclusion_type.is_positive());
-        if let Some(&prev_idx) = seen.get(&key) {
-            // Keep the more specific one (definite > defeasible)
-            let prev = &conclusions[prev_idx];
-            if c.conclusion_type.is_definite() && !prev.conclusion_type.is_definite() {
-                keep[prev_idx] = false;
-                seen.insert(key, i);
-            } else {
-                keep[i] = false;
-            }
-        } else {
-            seen.insert(key, i);
-        }
-    }
-
-    let mut i = 0;
-    conclusions.retain(|_| {
-        let r = keep[i];
-        i += 1;
-        r
+    conclusions.retain(|c| {
+        let key = (c.literal.to_spl(), c.conclusion_type);
+        seen.insert(key)
     });
 }
 
