@@ -5,12 +5,11 @@
 //! set of conclusions to identify blocking conditions: missing premises,
 //! defeaters, and contradictions.
 
-use std::collections::HashSet;
 use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::query::matches_query_temporal;
+use crate::query::{is_proven_temporal, matches_literal_temporal, matches_query_temporal};
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -199,11 +198,11 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         return Ok(result);
     }
 
-    // Collect proven literals for checking body satisfaction
-    let proven: HashSet<_> = conclusions
+    // Collect positive conclusions for temporal-aware proven checks
+    let proven_conclusions: Vec<_> = conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
+        .cloned()
         .collect();
 
     let complement = literal.complement();
@@ -212,7 +211,9 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
 
     // Find rules that could derive this literal and why they don't fire
     for rule in theory.rules() {
-        if rule.head_literal() == literal && rule.rule_type != RuleType::Defeater {
+        if matches_literal_temporal(literal, rule.head_literal())
+            && rule.rule_type != RuleType::Defeater
+        {
             found_rule = true;
 
             if result.would_derive.is_none() {
@@ -227,7 +228,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 .collect();
             let missing: Vec<_> = body_lits
                 .iter()
-                .filter(|b| !proven.contains(*b))
+                .filter(|b| !is_proven_temporal(&proven_conclusions, b))
                 .cloned()
                 .collect();
 
@@ -240,14 +241,15 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 // Check for defeater blocking.
                 let mut blocked = false;
                 for attacker in theory.rules() {
-                    if attacker.head_literal() == &complement {
+                    if matches_literal_temporal(&complement, attacker.head_literal()) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
                             .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
                             .collect();
-                        let attacker_body_satisfied =
-                            attacker_body_lits.iter().all(|b| proven.contains(b));
+                        let attacker_body_satisfied = attacker_body_lits
+                            .iter()
+                            .all(|b| is_proven_temporal(&proven_conclusions, b));
                         if !attacker_body_satisfied {
                             continue;
                         }
@@ -301,7 +303,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     // If no rules found at all
     if !found_rule {
         // Check if complement is proven (contradicted)
-        if proven.contains(&complement) {
+        if is_proven_temporal(&proven_conclusions, &complement) {
             result.blocked_by.push(BlockingCondition {
                 blocking_type: BlockingType::Contradicted,
                 rule_label: String::new(),
@@ -687,5 +689,110 @@ mod tests {
         assert!(!result.is_provable()); // now has blockers
         assert!(result.has_blockers());
         assert_eq!(result.get_missing_premises().len(), 1);
+    }
+
+    // =========================================================================
+    // TEMPORAL-AWARE MATCHING TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_why_not_temporal_does_not_conflate_windows() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Fact: p[1,10].
+        // Rule: p[20,30] => q[20,30].
+        // Query: why_not(q[20,30]) — should report missing premise p[20,30],
+        // NOT say it's provable (p[1,10] must not satisfy p[20,30]).
+        let mut theory = Theory::new();
+
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", p_1_10));
+
+        let p_20_30 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+        let q_20_30 = Literal::new(
+            "q",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+
+        theory.add_rule(Rule::defeasible("r1", vec![p_20_30], q_20_30.clone()));
+
+        let result = why_not(&theory, &q_20_30).unwrap();
+        assert!(
+            !result.is_provable(),
+            "q[20,30] should not be provable when only p[1,10] exists"
+        );
+        assert!(
+            result.has_blockers(),
+            "Should have blockers for q[20,30]"
+        );
+        // Check that the missing premise mentions p
+        let missing = result.get_missing_premises();
+        assert!(
+            missing.iter().any(|l| l.name() == "p"),
+            "Missing premises should include p, got: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn test_why_not_temporal_provable_exact_match() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Fact: p[1,10]. Query: why_not(p[1,10]) — should be provable.
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", p_1_10.clone()));
+
+        let result = why_not(&theory, &p_1_10).unwrap();
+        assert!(
+            result.is_provable(),
+            "p[1,10] should be provable when fact p[1,10] exists"
+        );
+    }
+
+    #[test]
+    fn test_why_not_temporal_wildcard_query_matches() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Fact: p[1,10]. Query: why_not(p) (wildcard) — should be provable.
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", p_1_10));
+
+        let result = why_not(&theory, &Literal::simple("p")).unwrap();
+        assert!(
+            result.is_provable(),
+            "Wildcard query p should match p[1,10]"
+        );
     }
 }

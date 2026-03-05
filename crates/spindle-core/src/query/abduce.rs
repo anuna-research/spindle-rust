@@ -9,7 +9,7 @@ use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::query::matches_query_temporal;
+use crate::query::{is_proven_temporal, matches_literal_temporal, matches_query_temporal};
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -131,18 +131,20 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
         return Ok(result);
     }
 
-    // Collect what's already proven
-    let proven: HashSet<_> = conclusions
+    // Collect positive conclusions for temporal-aware proven checks
+    let proven_conclusions: Vec<_> = conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
+        .cloned()
         .collect();
 
     // Find rules that could derive the goal
     let mut solutions: Vec<HashSet<Literal>> = Vec::new();
 
     for rule in theory.rules() {
-        if rule.head_literal() == goal && rule.rule_type != RuleType::Defeater {
+        if matches_literal_temporal(goal, rule.head_literal())
+            && rule.rule_type != RuleType::Defeater
+        {
             // Find missing body literals (only logic literals)
             let body_lits: Vec<Literal> = rule
                 .body
@@ -151,7 +153,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
                 .collect();
             let missing: HashSet<_> = body_lits
                 .into_iter()
-                .filter(|b| !proven.contains(b))
+                .filter(|b| !is_proven_temporal(&proven_conclusions, b))
                 .collect();
 
             if missing.is_empty() {
@@ -186,7 +188,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
         let mut sol = AbductionSolution::new(facts);
         // Track rules used (simplified)
         for rule in theory.rules() {
-            if rule.head_literal() == goal {
+            if matches_literal_temporal(goal, rule.head_literal()) {
                 sol.rules_used.insert(rule.label.clone());
             }
         }
@@ -460,5 +462,111 @@ mod tests {
         let result = AbductionResult::new(Literal::simple("x"));
         let s = result.to_string();
         assert!(s.contains("No hypotheses"));
+    }
+
+    // ==========================================================================
+    // TEMPORAL-AWARE MATCHING TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_abduce_temporal_does_not_conflate_windows() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Fact: q[1,10] is proven.
+        // Rule: q => goal (head has temporal [20,30]).
+        // Querying abduce(goal[20,30]) should NOT consider q[1,10] as satisfying
+        // a body literal q[20,30].
+        let mut theory = Theory::new();
+
+        let q_1_10 = Literal::new(
+            "q",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", q_1_10));
+
+        let q_20_30 = Literal::new(
+            "q",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+        let goal_20_30 = Literal::new(
+            "goal",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+
+        // Rule: q[20,30] => goal[20,30]
+        theory.add_rule(Rule::defeasible("r1", vec![q_20_30.clone()], goal_20_30.clone()));
+
+        let result = abduce(&theory, &goal_20_30, 10).unwrap();
+
+        // goal[20,30] is NOT already provable (q[1,10] != q[20,30] temporally)
+        assert!(
+            !result.is_already_provable(),
+            "goal[20,30] should not be already provable"
+        );
+
+        // The solution should require q[20,30] as a missing hypothesis
+        let sol = result.smallest_solution().unwrap();
+        assert!(
+            sol.facts.iter().any(|l| l.name() == "q"
+                && l.temporal == Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30))),
+            "Should require q[20,30] as hypothesis, got: {:?}",
+            sol.facts
+        );
+    }
+
+    #[test]
+    fn test_abduce_temporal_already_provable_exact_match() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Fact: p[1,10]. Query: abduce(p[1,10]) should be already provable.
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", p_1_10.clone()));
+
+        let result = abduce(&theory, &p_1_10, 10).unwrap();
+        assert!(
+            result.is_already_provable(),
+            "p[1,10] should be already provable when fact p[1,10] exists"
+        );
+    }
+
+    #[test]
+    fn test_abduce_temporal_wildcard_query_matches_any() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        // Fact: p[1,10]. Query: abduce(p) (no temporal = wildcard) should be already provable.
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", p_1_10));
+
+        let result = abduce(&theory, &Literal::simple("p"), 10).unwrap();
+        assert!(
+            result.is_already_provable(),
+            "Wildcard query p should match p[1,10]"
+        );
     }
 }

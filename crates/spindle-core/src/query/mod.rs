@@ -338,6 +338,27 @@ pub fn matches_query_temporal(
     }
 }
 
+/// Check whether `candidate` matches `query` including temporal bounds.
+///
+/// `Literal::PartialEq` intentionally excludes temporal (ADR-005), so code
+/// that compares rule heads or proven-set members against a query literal
+/// must use this function to avoid conflating different temporal windows.
+pub fn matches_literal_temporal(query: &Literal, candidate: &Literal) -> bool {
+    query.name_id() == candidate.name_id()
+        && query.negation == candidate.negation
+        && query.mode == candidate.mode
+        && query.predicate_args() == candidate.predicate_args()
+        && matches_query_temporal(&query.temporal, &candidate.temporal)
+}
+
+/// Check whether any positive conclusion in `conclusions` matches `lit`
+/// with temporal awareness.
+pub fn is_proven_temporal(conclusions: &[Conclusion], lit: &Literal) -> bool {
+    conclusions.iter().any(|c| {
+        c.conclusion_type.is_positive() && matches_literal_temporal(lit, &c.literal)
+    })
+}
+
 /// Query a literal against a theory
 pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
     query_with_options(theory, literal, PrepareOptions::default())
