@@ -19,8 +19,18 @@ Spindle has three numeric types with automatic promotion:
 | Type | Examples | Precision |
 |------|----------|-----------|
 | Integer | `42`, `-7`, `0` | Exact (64-bit signed) |
-| Decimal | `3.14`, `0.001` | Exact (arbitrary precision) |
-| Float | IEEE 754 double | Approximate |
+| Decimal | `3.14`, `0.001` | Exact (up to 28-29 significant digits) |
+| Float | `1.5e2`, `1e-3` | Approximate (IEEE 754 double) |
+
+### When Each Type Is Used
+
+The parser chooses the numeric type based on how you write the literal:
+
+- **Integer**: No decimal point, no exponent. `42`, `-7`, `0`.
+- **Decimal**: Contains a decimal point but no exponent (`e`/`E`). `3.14`, `0.001`, `-0.5`.
+- **Float**: Contains an exponent (`e` or `E`). `1.5e2` (= 150.0), `1e-3` (= 0.001), `2.0E10`.
+
+Decimal is the default for numbers with a decimal point because it gives exact representation. This matters for financial calculations and precise comparisons: `0.1 + 0.2` equals exactly `0.3` in Decimal, but not in floating point. Use scientific notation only when you specifically need IEEE 754 semantics or very large/small magnitudes.
 
 ### Promotion Rules
 
@@ -33,6 +43,8 @@ Integer → Decimal → Float
 - Integer + Integer = Integer
 - Integer + Decimal = Decimal
 - Anything + Float = Float
+
+Once a Float enters a computation, the entire result is Float. Keep this in mind if exact precision matters to your use case.
 
 ### Cross-Type Matching
 
@@ -184,46 +196,90 @@ The expression `(+ ?b ?o)` is evaluated during grounding and the result becomes 
 
 ## Restrictions
 
+Spindle enforces several restrictions on where arithmetic can appear. Each is checked at parse time and produces a clear error message.
+
 ### No Arithmetic in Heads or Facts (REQ-009)
 
+Arithmetic constraints (`bind`, comparisons) are for filtering and computing in rule bodies. They cannot appear as conclusions.
+
 ```lisp
-; INVALID — arithmetic in head
+; INVALID — bind in head position
 (normally r1 (price ?p) (bind ?total (* ?p 1.1)))
 
-; INVALID — bind in a fact
+; INVALID — bind as a fact
 (given (bind ?x 42))
+
+; INVALID — comparison in head position
+(normally r1 bird (> 1 0))
 ```
+
+**Error message:**
+
+```
+Arithmetic predicate 'bind' cannot appear in rule head or fact position (REQ-009)
+```
+
+The same message appears for comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) used as head literals.
 
 ### No Negated Arithmetic (REQ-011)
 
+Arithmetic constraints cannot be wrapped in `not`. This avoids ambiguity about what "not greater than" means in a defeasible logic context.
+
 ```lisp
-; INVALID — cannot negate arithmetic constraints
+; INVALID — cannot negate a comparison
 (normally r1 (and (val ?x) (not (> ?x 100))) (low ?x))
+
+; INVALID — cannot negate bind
+(normally r1 (and bird (not (bind ?x 10))) flies)
+```
+
+**Error message:**
+
+```
+Arithmetic predicate '>' cannot be negated (REQ-011). Use the positive form in the rule body instead.
 ```
 
 Use the complementary comparison instead:
 
 ```lisp
-; CORRECT
+; CORRECT — use <= instead of (not >)
 (normally r1 (and (val ?x) (<= ?x 100)) (low ?x))
 ```
 
 ### No Temporal Variables in Arithmetic (REQ-006)
 
-Temporal variables (from `during` expressions) cannot be used as arithmetic operands.
+Variables bound by `during` expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If a temporal variable appears in an arithmetic expression, the substitution is silently discarded (the rule does not fire for that ground instance).
+
+```lisp
+; The rule below will never produce "shifted" because ?T is temporal
+(given (during (event) 100 200))
+(normally r1
+  (and (during (event) ?T ?U) (bind ?next (+ ?T 1)))
+  (shifted ?next))
+```
 
 ### Reserved Keywords (REQ-008)
 
-Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels:
+Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels. This prevents confusing programs where `+` or `bind` might look like user-defined predicates.
 
 ```
 +  -  *  /  div  rem  abs  min  max  **
 bind  =  !=  <  >  <=  >=
 ```
 
-This also applies to tilde-negated forms (e.g., `~>` is rejected because `>` is reserved).
+The following names are also reserved for future use: `sum`, `count`, `avg`, `round`, `floor`, `ceil`.
+
+**Error message:**
+
+```
+Reserved keyword 'bind' cannot be used as a predicate name (REQ-008)
+```
+
+This also applies to tilde-negated forms (e.g., `~>` is rejected because `>` is reserved) and to rule labels in `prefer` declarations.
 
 ## Error Handling
+
+### Runtime Errors (During Grounding)
 
 | Error | Cause |
 |-------|-------|
@@ -232,5 +288,19 @@ This also applies to tilde-negated forms (e.g., `~>` is rejected because `>` is 
 | Negative base with fractional exponent | `(** -2 0.5)` |
 | Non-finite result | Overflow producing infinity or NaN |
 | Unbound variable | Variable not yet assigned when expression is evaluated |
+| Temporal variable in arithmetic | `(+ ?T 1)` where `?T` is from a `during` |
 
-When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance.
+When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance. No error is raised to the user; the rule is silently skipped for that particular combination of variable bindings.
+
+### Parse-Time Errors
+
+| Error | Cause | Example |
+|-------|-------|---------|
+| Arithmetic in head (REQ-009) | `bind` or comparison used as a conclusion | `(normally r1 p (bind ?x 1))` |
+| Negated arithmetic (REQ-011) | `not` wrapping `bind` or comparison | `(not (> ?x 5))` |
+| Reserved keyword (REQ-008) | Operator used as predicate or label | `(given bind)` |
+| Unknown operator | Unrecognised operator name | `(mod 5 3)` |
+| Wrong arity | Too few or too many arguments | `(div 1)`, `(abs 1 2)` |
+| Invalid operand | Non-numeric, non-variable atom | `(+ bird 1)` |
+
+Parse-time errors halt processing and report the line number and a description of the problem.

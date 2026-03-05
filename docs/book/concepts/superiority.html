@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-21b2214a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,34 +184,29 @@
 <p>Superiority relations resolve conflicts between competing rules.</p>
 <h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
 <p>When two rules conclude opposite things, we have a conflict:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
-r1: bird =&gt; flies
-r2: penguin =&gt; -flies
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
 </code></pre>
-<p>Both r1 and r2 fire. Without superiority, we get <strong>ambiguity</strong> - neither <code>flies</code> nor <code>-flies</code> is provable.</p>
+<p>Both r1 and r2 fire. Without superiority, we get <strong>ambiguity</strong> — neither <code>flies</code> nor <code>(not flies)</code> is provable.</p>
 <h2 id="declaring-superiority"><a class="header" href="#declaring-superiority">Declaring Superiority</a></h2>
-<p>The <code>&gt;</code> operator declares that one rule is superior to another:</p>
-<pre><code class="language-lisp">r2 &gt; r1    # r2 beats r1
+<pre><code class="language-lisp">(prefer r2 r1)    ; r2 beats r1
 </code></pre>
-<p>Now when both rules fire, r2 wins and <code>-flies</code> is provable.</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(prefer r2 r1)
-</code></pre>
+<p>Now when both rules fire, r2 wins and <code>(not flies)</code> is provable.</p>
 <h2 id="superiority-chains"><a class="header" href="#superiority-chains">Superiority Chains</a></h2>
-<p>You can declare chains of superiority:</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">r3 &gt; r2
-r2 &gt; r1
-</code></pre>
-<p><strong>SPL (shorthand):</strong></p>
+<p>Shorthand for multiple superiority relations:</p>
 <pre><code class="language-lisp">(prefer r3 r2 r1)   ; r3 &gt; r2 &gt; r1
 </code></pre>
+<p>Expands to:</p>
+<pre><code class="language-lisp">(prefer r3 r2)
+(prefer r2 r1)
+</code></pre>
 <h2 id="transitivity"><a class="header" href="#transitivity">Transitivity</a></h2>
-<p>Superiority is <strong>not automatically transitive</strong>. If you need <code>r3 &gt; r1</code>, declare it explicitly:</p>
-<pre><code class="language-lisp">r3 &gt; r2
-r2 &gt; r1
-r3 &gt; r1    # Must be explicit
+<p>Superiority is <strong>not automatically transitive</strong>. If you need r3 &gt; r1, declare it explicitly:</p>
+<pre><code class="language-lisp">(prefer r3 r2)
+(prefer r2 r1)
+(prefer r3 r1)    ; Must be explicit
 </code></pre>
 <h2 id="conflict-resolution-algorithm"><a class="header" href="#conflict-resolution-algorithm">Conflict Resolution Algorithm</a></h2>
 <p>When evaluating a defeasible conclusion:</p>
@@ -227,16 +222,16 @@ r3 &gt; r1    # Must be explicit
 <li>If all attacks fail → conclusion is provable</li>
 </ol>
 <h2 id="example-three-way-conflict"><a class="header" href="#example-three-way-conflict">Example: Three-Way Conflict</a></h2>
-<pre><code class="language-lisp">f1: &gt;&gt; a
-f2: &gt;&gt; b
-f3: &gt;&gt; c
+<pre><code class="language-lisp">(given a)
+(given b)
+(given c)
 
-r1: a =&gt; result
-r2: b =&gt; -result
-r3: c =&gt; result
+(normally r1 a result)
+(normally r2 b (not result))
+(normally r3 c result)
 
-r1 &gt; r2    # r1 beats r2
-r3 &gt; r2    # r3 beats r2
+(prefer r1 r2)    ; r1 beats r2
+(prefer r3 r2)    ; r3 beats r2
 </code></pre>
 <p>Analysis:</p>
 <ul>
@@ -247,30 +242,30 @@ r3 &gt; r2    # r3 beats r2
 </ul>
 <h2 id="symmetric-conflicts"><a class="header" href="#symmetric-conflicts">Symmetric Conflicts</a></h2>
 <p>If two rules are equally superior over each other (or neither is superior), ambiguity results:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; trigger
-r1: trigger =&gt; a
-r2: trigger =&gt; -a
-# No superiority
+<pre><code class="language-lisp">(given trigger)
+(normally r1 trigger a)
+(normally r2 trigger (not a))
+; No superiority
 </code></pre>
-<p>Result: Neither <code>a</code> nor <code>-a</code> is provable.</p>
+<p>Result: Neither <code>a</code> nor <code>(not a)</code> is provable.</p>
 <h2 id="defeating-defeaters"><a class="header" href="#defeating-defeaters">Defeating Defeaters</a></h2>
 <p>Defeaters can be overridden by superiority:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; healthy
+<pre><code class="language-lisp">(given bird)
+(given healthy)
 
-r1: bird =&gt; flies
-d1: bird ~&gt; flies      # Defeater blocks flies
-r2: healthy =&gt; flies
+(normally r1 bird flies)
+(except d1 bird flies)          ; Defeater blocks flies
+(normally r2 healthy flies)
 
-r2 &gt; d1                # Healthy birds overcome the defeater
+(prefer r2 d1)                  ; Healthy birds overcome the defeater
 </code></pre>
 <p>If both <code>bird</code> and <code>healthy</code> are true, r2 beats d1 and <code>flies</code> is provable.</p>
 <h2 id="strict-rules-and-superiority"><a class="header" href="#strict-rules-and-superiority">Strict Rules and Superiority</a></h2>
 <p>Strict rules <strong>always win</strong> over defeasible rules, regardless of superiority:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; p
-r1: p -&gt; q           # Strict
-r2: p =&gt; -q          # Defeasible
-r2 &gt; r1              # This has no effect!
+<pre><code class="language-lisp">(given p)
+(always r1 p q)              ; Strict
+(normally r2 p (not q))      ; Defeasible
+(prefer r2 r1)               ; This has no effect!
 </code></pre>
 <p>Result: <code>+D q</code> (strict rule wins)</p>
 <p>Superiority only affects conflicts between:</p>
@@ -282,20 +277,20 @@ r2 &gt; r1              # This has no effect!
 <h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
 <h3 id="use-specificity"><a class="header" href="#use-specificity">Use Specificity</a></h3>
 <p>More specific rules should be superior:</p>
-<pre><code class="language-lisp">r2: penguin =&gt; -flies
-r1: bird =&gt; flies
-r2 &gt; r1    # Penguin is more specific than bird
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)    ; Penguin is more specific than bird
 </code></pre>
 <h3 id="document-reasoning"><a class="header" href="#document-reasoning">Document Reasoning</a></h3>
 <p>Use comments to explain why one rule beats another:</p>
-<pre><code class="language-lisp"># Medical override: confirmed diagnosis beats symptoms
-r_diagnosis &gt; r_symptoms
+<pre><code class="language-lisp">; Medical override: confirmed diagnosis beats symptoms
+(prefer r-diagnosis r-symptoms)
 </code></pre>
 <h3 id="avoid-cycles"><a class="header" href="#avoid-cycles">Avoid Cycles</a></h3>
 <p>Don’t create circular superiority:</p>
-<pre><code class="language-lisp"># BAD - creates a cycle
-r1 &gt; r2
-r2 &gt; r1
+<pre><code class="language-lisp">; BAD — creates a cycle
+(prefer r1 r2)
+(prefer r2 r1)
 </code></pre>
 <p>This leads to undefined behavior.</p>
 

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-21b2214a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,14 +183,7 @@
                         <h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
 <p>Common issues and how to resolve them.</p>
 <h2 id="parse-errors"><a class="header" href="#parse-errors">Parse Errors</a></h2>
-<h3 id="could-not-parse-error"><a class="header" href="#could-not-parse-error">“Could not parse” Error</a></h3>
-<pre><code>Error at line 5: could not parse: bird flies
-</code></pre>
-<p><strong>Cause</strong>: Missing arrow operator.</p>
-<p><strong>Fix</strong>: Add the correct arrow:</p>
-<pre><code class="language-lisp">r1: bird =&gt; flies
-</code></pre>
-<h3 id="unknown-keyword-error-spl"><a class="header" href="#unknown-keyword-error-spl">“Unknown keyword” Error (SPL)</a></h3>
+<h3 id="unknown-keyword-error"><a class="header" href="#unknown-keyword-error">“Unknown keyword” Error</a></h3>
 <pre><code>SPL parse error: Unknown keyword: defeasible
 </code></pre>
 <p><strong>Cause</strong>: Wrong keyword.</p>
@@ -201,13 +194,6 @@
 <li><code>always</code> (not <code>strict</code>)</li>
 <li><code>except</code> (not <code>defeater</code>)</li>
 </ul>
-<h3 id="missing-label-spl"><a class="header" href="#missing-label-spl">Missing Label (SPL)</a></h3>
-<pre><code>Error at line 3: could not parse: &gt;&gt; bird
-</code></pre>
-<p><strong>Cause</strong>: SPL rules require labels.</p>
-<p><strong>Fix</strong>: Add a label:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-</code></pre>
 <h2 id="unexpected-conclusions"><a class="header" href="#unexpected-conclusions">Unexpected Conclusions</a></h2>
 <h3 id="expected-conclusion-missing"><a class="header" href="#expected-conclusion-missing">Expected Conclusion Missing</a></h3>
 <p><strong>Symptom</strong>: A literal you expected to be <code>+d</code> is <code>-d</code>.</p>
@@ -220,20 +206,20 @@
 </li>
 <li>
 <p>Check if the body is satisfied:</p>
-<pre><code class="language-lisp"># Is 'bird' actually proven?
-r1: bird =&gt; flies
+<pre><code class="language-lisp">; Is 'bird' actually proven?
+(normally r1 bird flies)
 </code></pre>
 </li>
 <li>
 <p>Check for conflicts:</p>
 <pre><code class="language-bash"># Look for rules proving the complement
-grep "~flies\|-flies" theory.spl
+grep "(not flies)" theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check superiority:</p>
 <pre><code class="language-bash"># Is there a superior rule blocking?
-grep "&gt;" theory.spl
+grep "prefer" theory.spl
 </code></pre>
 </li>
 </ol>
@@ -243,34 +229,34 @@ grep "&gt;" theory.spl
 <ol>
 <li>
 <p>Find which rule proves it:</p>
-<pre><code class="language-bash">grep "=&gt; literal\|-&gt; literal" theory.spl
+<pre><code class="language-bash">grep "literal" theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check if a defeater is missing:</p>
-<pre><code class="language-lisp"># Add a defeater to block
-d1: exception ~&gt; unexpected_literal
+<pre><code class="language-lisp">; Add a defeater to block
+(except d1 exception unexpected-literal)
 </code></pre>
 </li>
 </ol>
 <h3 id="both-literals-unprovable-ambiguity"><a class="header" href="#both-literals-unprovable-ambiguity">Both Literals Unprovable (Ambiguity)</a></h3>
-<p><strong>Symptom</strong>: Neither <code>q</code> nor <code>~q</code> is <code>+d</code>.</p>
+<p><strong>Symptom</strong>: Neither <code>q</code> nor <code>(not q)</code> is <code>+d</code>.</p>
 <p><strong>Cause</strong>: Conflicting rules without superiority.</p>
 <p><strong>Fix</strong>: Add superiority:</p>
-<pre><code class="language-lisp">r1: a =&gt; q
-r2: b =&gt; ~q
-r1 &gt; r2    # or r2 &gt; r1
+<pre><code class="language-lisp">(normally r1 a q)
+(normally r2 b (not q))
+(prefer r1 r2)    ; or (prefer r2 r1)
 </code></pre>
 <h2 id="superiority-issues"><a class="header" href="#superiority-issues">Superiority Issues</a></h2>
 <h3 id="superiority-not-working"><a class="header" href="#superiority-not-working">Superiority Not Working</a></h3>
-<p><strong>Symptom</strong>: Declared <code>r1 &gt; r2</code> but r2 still wins.</p>
+<p><strong>Symptom</strong>: Declared <code>(prefer r1 r2)</code> but r2 still wins.</p>
 <p><strong>Check</strong>:</p>
 <ol>
 <li>
 <p>Rule labels match exactly:</p>
-<pre><code class="language-lisp">r1: bird =&gt; flies      # Label is "r1"
-r2: penguin =&gt; ~flies  # Label is "r2"
-r1 &gt; r2                # Must match exactly
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r1 r2)                      ; Must match labels exactly
 </code></pre>
 </li>
 <li>
@@ -288,9 +274,9 @@ spindle reason --positive theory.spl | grep "bird\|penguin"
 </li>
 </ol>
 <h3 id="circular-superiority"><a class="header" href="#circular-superiority">Circular Superiority</a></h3>
-<pre><code class="language-lisp"># BAD: creates undefined behavior
-r1 &gt; r2
-r2 &gt; r1
+<pre><code class="language-lisp">; BAD: creates undefined behavior
+(prefer r1 r2)
+(prefer r2 r1)
 </code></pre>
 <p><strong>Fix</strong>: Remove one declaration or restructure rules.</p>
 <h2 id="grounding-issues"><a class="header" href="#grounding-issues">Grounding Issues</a></h2>
@@ -335,14 +321,10 @@ r2 &gt; r1
 <h2 id="file-format-issues"><a class="header" href="#file-format-issues">File Format Issues</a></h2>
 <h3 id="wrong-format-detection"><a class="header" href="#wrong-format-detection">Wrong Format Detection</a></h3>
 <p><strong>Symptom</strong>: File parses incorrectly.</p>
-<p><strong>Fix</strong>: Use correct extension:</p>
-<ul>
-<li><code>.spl</code> for SPL format</li>
-<li><code>.spl</code> for SPL format</li>
-</ul>
+<p><strong>Fix</strong>: Use <code>.spl</code> extension for SPL format.</p>
 <h3 id="encoding-issues"><a class="header" href="#encoding-issues">Encoding Issues</a></h3>
 <p><strong>Symptom</strong>: Special characters cause errors.</p>
-<p><strong>Fix</strong>: Use UTF-8 encoding. The negation symbol <code>¬</code> is supported.</p>
+<p><strong>Fix</strong>: Use UTF-8 encoding.</p>
 <h2 id="conflict-expectations"><a class="header" href="#conflict-expectations">Conflict Expectations</a></h2>
 <h3 id="conflicting-defeasible-rules-both-show-as-provable"><a class="header" href="#conflicting-defeasible-rules-both-show-as-provable">Conflicting Defeasible Rules Both Show As Provable</a></h3>
 <p><strong>Symptom</strong>: You see both <code>+d p</code> and <code>+d ~p</code>.</p>
@@ -380,10 +362,10 @@ r2 &gt; r1
 </code></pre>
 <h3 id="minimal-reproduction"><a class="header" href="#minimal-reproduction">Minimal Reproduction</a></h3>
 <p>Create a minimal theory that reproduces the issue:</p>
-<pre><code class="language-lisp"># Start with just the failing rules
-f1: &gt;&gt; bird
-r1: bird =&gt; flies
-# Add rules until issue appears
+<pre><code class="language-lisp">; Start with just the failing rules
+(given bird)
+(normally r1 bird flies)
+; Add rules until issue appears
 </code></pre>
 <h3 id="use-positive-output"><a class="header" href="#use-positive-output">Use Positive Output</a></h3>
 <p>Focus on what IS proven:</p>
@@ -413,7 +395,7 @@ r1: bird =&gt; flies
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../integration/rust.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guides/changelog.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -427,7 +409,7 @@ r1: bird =&gt; flies
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../integration/rust.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guides/changelog.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-21b2214a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -208,10 +208,89 @@ inf                                ; Positive infinity (never ends)
 <li><strong>Rules</strong>: A rule is active if all its body literals and its head literal are active at <code>t</code>.</li>
 </ol>
 <p>This allows querying the system state at any historical or future point.</p>
+<h2 id="temporal-atom-identity-v030"><a class="header" href="#temporal-atom-identity-v030">Temporal Atom Identity (v0.3.0)</a></h2>
+<p>Starting in v0.3.0 (SPEC-018), temporal atoms with different time bounds are treated as <strong>distinct atoms</strong> during reasoning. Previously, <code>p[1,10]</code> and <code>p[20,30]</code> collapsed to the same internal identifier, which caused incorrect behaviour such as premature rule firing and cross-window satisfaction.</p>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>The internal <code>AtomKey</code> used for indexing now includes temporal bounds as part of atom identity. Two literals that differ only in their temporal intervals produce distinct identifiers:</p>
+<pre><code class="language-lisp">; These are now three distinct atoms:
+(given (during p 1 10))      ; p[1,10]
+(given (during p 20 30))     ; p[20,30]
+(given p)                    ; p (base, no temporal bounds)
+</code></pre>
+<p>This means a rule that requires <code>p</code> in its body will <strong>not</strong> fire when only <code>p[1,10]</code> is proven, because they are different atoms. To connect temporal facts to their base predicates, Spindle uses bridging rules (see below).</p>
+<h3 id="what-changed"><a class="header" href="#what-changed">What Changed</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Before v0.3.0</th><th>After v0.3.0</th></tr>
+</thead>
+<tbody>
+<tr><td><code>p[1,10]</code> and <code>p[20,30]</code> share the same internal ID</td><td>Each gets a distinct ID</td></tr>
+<tr><td>A rule needing <code>p</code> fires when <code>p[1,10]</code> is proven (incorrect)</td><td>Fires only when <code>p</code> (base) is proven</td></tr>
+<tr><td>Query for <code>p[1,10]</code> matches <code>p[20,30]</code> (false positive)</td><td>Matches only <code>p[1,10]</code> exactly</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="temporal-bridging-rules"><a class="header" href="#temporal-bridging-rules">Temporal Bridging Rules</a></h2>
+<p>Because temporal atoms are now distinct from their base predicates, Spindle automatically generates <strong>synthetic bridging rules</strong> that connect temporal facts to their base forms. This ensures backward compatibility: proving a temporal fact still makes the base predicate available to non-temporal rules.</p>
+<h3 id="automatic-bridge-generation"><a class="header" href="#automatic-bridge-generation">Automatic Bridge Generation</a></h3>
+<p>Given a temporal fact like <code>&gt;&gt; p[1,10]</code>, the <code>TemporalBridge</code> pipeline stage generates a strict rule:</p>
+<pre><code>p[1,10] → p
+</code></pre>
+<p>This means: “if <code>p</code> holds during <code>[1,10]</code>, then <code>p</code> holds in general.” The bridge is a <strong>strict</strong> rule (not defeasible), because temporal subsumption is a semantic entailment.</p>
+<h3 id="negation-bridges"><a class="header" href="#negation-bridges">Negation Bridges</a></h3>
+<p>For every positive bridge, a coupled negation bridge is also generated:</p>
+<pre><code>~p[1,10] → ~p
+</code></pre>
+<p>This ensures that evidence against a predicate in any temporal window propagates to the base level, enabling correct ambiguity blocking under skeptical semantics.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p>Consider a theory about employment:</p>
+<pre><code class="language-lisp">; Alice worked at Acme from 2020 to 2022
+(given (during (employed alice acme)
+               (moment "2020-01-01T00:00:00Z")
+               (moment "2022-01-01T00:00:00Z")))
+
+; If employed, then has_income
+(rule r1 (=&gt; (employed alice acme) (has_income alice)))
+</code></pre>
+<p>The <code>TemporalBridge</code> stage automatically generates:</p>
+<pre><code class="language-lisp">; Synthetic bridge (strict):
+; (employed alice acme)[2020,2022] → (employed alice acme)
+</code></pre>
+<p>This allows rule <code>r1</code> to fire, because the bridge proves the base <code>(employed alice acme)</code> from the temporal fact. Without the bridge, <code>r1</code> would never fire since its body expects the base atom.</p>
+<h3 id="bridge-rule-labels"><a class="header" href="#bridge-rule-labels">Bridge Rule Labels</a></h3>
+<p>Bridge rules use a reserved label namespace <code>__bridge::</code> to avoid collisions with user-defined rules:</p>
+<ul>
+<li>Positive bridge: <code>__bridge::&lt;literal_spl&gt;</code></li>
+<li>Negation bridge: <code>__bridge::neg::&lt;literal_spl&gt;</code></li>
+</ul>
+<p>User-defined rules must not use labels starting with <code>__bridge::</code>.</p>
+<h3 id="pipeline-placement"><a class="header" href="#pipeline-placement">Pipeline Placement</a></h3>
+<p>The <code>TemporalBridge</code> stage runs after grounding and before temporal variable validation:</p>
+<pre><code>Validate → WildcardRewrite → Ground → TemporalBridge → TemporalVarValidation → [TemporalFilter]
+</code></pre>
+<p>It is enabled by default. For theories with no temporal atoms, the stage is a no-op.</p>
+<h2 id="temporal-aware-query-operators-v030"><a class="header" href="#temporal-aware-query-operators-v030">Temporal-Aware Query Operators (v0.3.0)</a></h2>
+<p>The query operators <code>query</code>, <code>what_if</code>, <code>why_not</code>, and <code>abduce</code> now use temporal-aware matching when comparing a query literal against conclusions.</p>
+<h3 id="matching-behaviour"><a class="header" href="#matching-behaviour">Matching Behaviour</a></h3>
+<ul>
+<li><strong>Base query</strong> (no temporal bounds): Acts as a wildcard, matching any temporal variant of the predicate. This preserves backward compatibility.</li>
+<li><strong>Temporal query</strong> (with bounds): Requires an exact temporal match.</li>
+</ul>
+<pre><code class="language-lisp">; Given these conclusions after reasoning:
+;   +d p[1,10]
+;   +d p[20,30]
+;   +d p         (via bridging)
+
+; Querying "p" (base) matches all three — wildcard behaviour
+; Querying "p[1,10]" matches only +d p[1,10] — exact temporal match
+; Querying "p[5,15]" matches nothing — no exact match exists
+</code></pre>
+<p>This prevents false positives where querying <code>p[1,10]</code> would previously match <code>p[20,30]</code> because temporal bounds were ignored in comparisons.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
 <li><strong>Timepoint only</strong>: Currently, Spindle supports reasoning <em>at</em> a timepoint. Interval inference (deriving new intervals from rules) is planned for a future release.</li>
-<li><strong>No Allen Relations</strong>: Allen relations (<code>before</code>, <code>after</code>, <code>overlaps</code>, etc.) are not yet supported in the core reasoner.</li>
+<li><strong>No Allen Relations in SPL</strong>: All 13 Allen relations are implemented in the core library (available via the Rust API), but are not yet exposed in SPL syntax. This requires interval variables (e.g., <code>(during p ?t)</code>) which are planned for a future release.</li>
 <li><strong>No Interval Variables</strong>: You cannot bind a variable to a time interval (e.g., <code>(during p ?t)</code> is not supported).</li>
 </ol>
 
@@ -219,7 +298,7 @@ inf                                ; Positive infinity (never ends)
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guides/grounding.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/arithmetic.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -233,7 +312,7 @@ inf                                ; Positive infinity (never ends)
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guides/grounding.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/arithmetic.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

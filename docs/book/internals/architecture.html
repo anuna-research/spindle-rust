@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-21b2214a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,23 +194,56 @@
 <p>The core reasoning engine with these modules:</p>
 <pre><code>spindle-core/src/
 ├── lib.rs              # Crate root, prelude
-├── intern.rs           # String interning
+├── intern.rs           # String interning (SymbolId, LiteralId)
 ├── literal.rs          # Literal representation
 ├── mode.rs             # Modal operators
-├── temporal.rs         # Temporal reasoning
+├── temporal.rs         # Temporal reasoning (Allen relations, TimePoint)
+├── term.rs             # Terms (Symbol, Numeric: Integer/Decimal/Float)
 ├── rule.rs             # Rule types
+├── body.rs             # Body literals (BodyLogicLiteral, BodyArg, ArithConstraint)
 ├── superiority.rs      # Superiority relations
 ├── theory.rs           # Theory container
-├── conclusion.rs       # Conclusion types
-├── index.rs            # Theory indexing
-├── reason.rs           # Standard DL(d) algorithm
-├── grounding.rs        # Variable grounding
+├── conclusion.rs       # Conclusion types (+D, -D, +d, -d)
+├── claims.rs           # Claims blocks (provenance metadata)
+├── index.rs            # Theory indexing (AtomKey, LitId)
+├── arith.rs            # Arithmetic expressions and constraints
+├── grounding.rs        # Variable grounding (bottom-up Datalog)
 ├── worklist.rs         # Worklist data structures
-├── explanation.rs      # Proof trees
 ├── trust.rs            # Trust-weighted reasoning
-├── query.rs            # Query operators
 ├── mining.rs           # Process mining (alpha algorithm)
-└── error.rs            # Error types
+├── error.rs            # Error types
+├── analysis/           # Theory analysis
+│   ├── mod.rs          #   Shared types (ValidationDiagnostic, ConflictReport)
+│   ├── conflicts.rs    #   Conflict detection
+│   ├── superiority.rs  #   Superiority suggestion
+│   └── validation.rs   #   Semantic validation
+├── explanation/        # Explanation system
+│   ├── mod.rs          #   Proof/derivation tree structures
+│   ├── types.rs        #   Core explanation types
+│   └── format/         #   Output formats
+│       ├── mod.rs
+│       ├── natural_language.rs
+│       ├── json.rs
+│       ├── jsonld.rs
+│       └── dot.rs
+├── pipeline/           # Composable preparation pipeline
+│   ├── mod.rs          #   PipelineStage trait, PipelineBuilder, prepare()
+│   ├── validate.rs     #   Validate stage
+│   ├── wildcard.rs     #   WildcardRewrite stage
+│   ├── ground.rs       #   Ground stage
+│   └── temporal.rs     #   TemporalFilter, TemporalVarValidation stages
+├── query/              # Query operators
+│   ├── mod.rs          #   QueryOperator trait
+│   ├── what_if.rs      #   Hypothetical reasoning
+│   ├── why_not.rs      #   Failure explanation
+│   ├── abduce.rs       #   Abduction (hypothesis finding)
+│   └── requires.rs     #   Dependency queries
+└── reason/             # Reasoning engine
+    ├── mod.rs          #   Reasoner trait, StandardReasoner
+    ├── state.rs        #   ReasoningState (worklist, proven sets, counters)
+    ├── facts.rs        #   Fact initialization phase
+    ├── definite.rs     #   Definite (+D/-D) forward chaining
+    └── defeasible.rs   #   Defeasible (+d/-d) forward chaining
 </code></pre>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
 <pre><code>Input (SPL)
@@ -226,18 +259,31 @@
 └─────────────┘
       │
       ▼
+┌─────────────────────────────────────────┐
+│  Pipeline  (composable stages)          │
+│  ┌──────────────────┐                   │
+│  │ TemporalFilter   │ (optional as-of)  │
+│  ├──────────────────┤                   │
+│  │ Validate         │ range restriction │
+│  ├──────────────────┤                   │
+│  │ WildcardRewrite  │ _ → ?_wN          │
+│  ├──────────────────┤                   │
+│  │ Ground           │ variable inst.    │
+│  ├──────────────────┤                   │
+│  │ TemporalVarValid.│ reject unresolved │
+│  ├──────────────────┤                   │
+│  │ TemporalFilter   │ (optional re-filt)│
+│  └──────────────────┘                   │
+└─────────────────────────────────────────┘
+      │
+      ▼
 ┌─────────────┐
-│  Grounding  │  Instantiate variables
+│   Index     │  Build lookup tables (AtomKey, LitId)
 └─────────────┘
       │
       ▼
 ┌─────────────┐
-│   Index     │  Build lookup tables
-└─────────────┘
-      │
-      ▼
-┌─────────────┐
-│  Reasoning  │  DL(d)
+│  Reasoning  │  StandardReasoner — DL(d)
 └─────────────┘
       │
       ▼
@@ -245,6 +291,65 @@
 │ Conclusions │  +D, -D, +d, -d
 └─────────────┘
 </code></pre>
+<h2 id="pipeline-architecture"><a class="header" href="#pipeline-architecture">Pipeline Architecture</a></h2>
+<p>The preparation pipeline transforms a raw <code>Theory</code> into a form ready for
+reasoning. It is built from composable stages, each implementing the
+<code>PipelineStage</code> trait.</p>
+<h3 id="pipelinestage-trait"><a class="header" href="#pipelinestage-trait">PipelineStage Trait</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait PipelineStage: std::fmt::Debug {
+    /// Human-readable name used in diagnostics and tracing.
+    fn name(&amp;self) -&gt; &amp;'static str;
+
+    /// Apply this stage, returning a (possibly transformed) theory.
+    /// Returning Err aborts the pipeline.
+    fn apply(&amp;self, theory: Theory, ctx: &amp;mut PipelineContext) -&gt; Result&lt;Theory&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p>Stages are assembled with <code>PipelineBuilder</code> and run left-to-right:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared_theory, ctx) = pipeline.run(theory)?;
+<span class="boring">}</span></code></pre>
+<h3 id="built-in-stages"><a class="header" href="#built-in-stages">Built-in Stages</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Stage</th><th>Module</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Validate</code></td><td><code>pipeline/validate.rs</code></td><td>Enforces range restriction (head vars must appear in body) and rejects wildcards in rule heads. Both checks are independently configurable.</td></tr>
+<tr><td><code>WildcardRewrite</code></td><td><code>pipeline/wildcard.rs</code></td><td>Rewrites anonymous wildcards (<code>_</code>) to unique fresh variables (<code>?_wN</code>) so each position is distinct during grounding.</td></tr>
+<tr><td><code>Ground</code></td><td><code>pipeline/ground.rs</code></td><td>Bottom-up Datalog grounding. Instantiates rules containing variables via fixpoint iteration over facts, with configurable <code>max_iterations</code> and <code>max_instances</code> limits.</td></tr>
+<tr><td><code>TemporalFilter</code></td><td><code>pipeline/temporal.rs</code></td><td>Removes rules/facts not active at a given reference <code>TimePoint</code> (“as-of” semantics). Omitted by default since it requires a reference time.</td></tr>
+<tr><td><code>TemporalVarValidation</code></td><td><code>pipeline/temporal.rs</code></td><td>Rejects theories with unresolved temporal variables after grounding. Runs in strict mode by default (returns <code>Err</code>); can be set to warning-only.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="pipelinecontext"><a class="header" href="#pipelinecontext">PipelineContext</a></h3>
+<p>A <code>PipelineContext</code> is threaded through all stages, carrying:</p>
+<ul>
+<li><strong><code>diagnostics: Vec&lt;Diagnostic&gt;</code></strong> — Info, Warning, and Error messages
+emitted by stages. Each diagnostic records the stage name and a
+human-readable message.</li>
+<li><strong><code>metadata: HashMap&lt;String, MetadataVal&gt;</code></strong> — Arbitrary key-value data
+for inter-stage communication (e.g., <code>grounding_instances</code>,
+<code>grounding_limit_hit</code>, <code>evaluated_at</code>).</li>
+</ul>
+<h3 id="default-pipeline"><a class="header" href="#default-pipeline">Default Pipeline</a></h3>
+<p><code>Pipeline::default_pipeline()</code> returns <code>Validate → WildcardRewrite → Ground</code>.
+The higher-level <code>prepare()</code> function builds a richer pipeline from
+<code>PrepareOptions</code>, optionally inserting <code>TemporalFilter</code> (before and after
+grounding) and <code>TemporalVarValidation</code>.</p>
 <h2 id="key-design-decisions"><a class="header" href="#key-design-decisions">Key Design Decisions</a></h2>
 <h3 id="string-interning"><a class="header" href="#string-interning">String Interning</a></h3>
 <p>All literal names are interned to reduce memory and enable O(1) comparisons.</p>
@@ -326,27 +431,48 @@ impl LiteralId {
 theory.is_superior("r1", "r2")
 <span class="boring">}</span></code></pre>
 <h2 id="algorithm-implementation"><a class="header" href="#algorithm-implementation">Algorithm Implementation</a></h2>
-<h3 id="standard-dld-reasonrs"><a class="header" href="#standard-dld-reasonrs">Standard DL(d) (reason.rs)</a></h3>
-<pre><code>Phase 1: Initialize with facts
+<h3 id="reasoner-trait"><a class="header" href="#reasoner-trait">Reasoner Trait</a></h3>
+<p>The <code>Reasoner</code> trait abstracts over reasoning backends. One concrete
+implementation is provided:</p>
+<ul>
+<li><strong><code>StandardReasoner</code></strong> — the standard DL(d) forward-chaining algorithm
+(the default and only built-in backend).</li>
+</ul>
+<p>Use <code>select_reasoner("standard")</code> to obtain a boxed trait object for
+runtime backend selection. Additional backends can be added by
+implementing the <code>Reasoner</code> trait.</p>
+<h3 id="standard-dld-reason"><a class="header" href="#standard-dld-reason">Standard DL(d) (reason/)</a></h3>
+<p>The reasoning state (worklist, proven sets, body counters, conclusions) is
+consolidated into <code>ReasoningState</code> in <code>reason/state.rs</code>. The algorithm
+proceeds in three phases, each in its own submodule:</p>
+<pre><code>Phase 1: Fact initialization (reason/facts.rs)
   ├── Add to definite_proven
   ├── Add to defeasible_proven
   └── Add to worklist
 
-Phase 2: Forward chaining
+Phase 2: Definite forward chaining (reason/definite.rs)
   while worklist not empty:
     ├── Pop literal
     ├── Find rules with literal in body
     ├── Decrement body counters
     └── If counter = 0:
         ├── Strict → add +D, +d
-        ├── Defeasible → check blocking, add +d
+        ├── Defeasible → (handled in phase 3)
         └── Defeater → (no conclusion)
 
-Phase 3: Negative conclusions
+Phase 3: Defeasible forward chaining (reason/defeasible.rs)
+  for defeasible rules with all body literals proven:
+    ├── Check ambiguity blocking (complement, team defeat)
+    ├── Check superiority relations
+    └── If unblocked → add +d
+
+Phase 4: Negative conclusions
   for each literal:
     ├── If not in definite_proven → -D
     └── If not in defeasible_proven → -d
 </code></pre>
+<p>Uses <code>LitId</code> (4-byte Copy type) and BitSet for O(1) proven literal checks,
+eliminating heap allocations and hash computations in the hot reasoning loop.</p>
 <h2 id="memory-layout"><a class="header" href="#memory-layout">Memory Layout</a></h2>
 <h3 id="theory"><a class="header" href="#theory">Theory</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -380,19 +506,32 @@ proven: BitSet  // bitmap indexed by LiteralId
 worklist: VecDeque`LiteralId`
 <span class="boring">}</span></code></pre>
 <h2 id="extension-points"><a class="header" href="#extension-points">Extension Points</a></h2>
+<h3 id="adding-a-pipeline-stage"><a class="header" href="#adding-a-pipeline-stage">Adding a Pipeline Stage</a></h3>
+<ol>
+<li>Implement the <code>PipelineStage</code> trait</li>
+<li>Add the struct to <code>pipeline/</code> (new file or existing)</li>
+<li>Re-export from <code>pipeline/mod.rs</code></li>
+<li>Insert into pipelines with <code>PipelineBuilder::stage()</code> or <code>stage_at()</code></li>
+</ol>
 <h3 id="adding-a-new-rule-type"><a class="header" href="#adding-a-new-rule-type">Adding a New Rule Type</a></h3>
 <ol>
 <li>Add variant to <code>RuleType</code> enum</li>
 <li>Update parser (spl.rs)</li>
-<li>Update reasoning logic (reason.rs)</li>
+<li>Update reasoning logic in <code>reason/</code></li>
 <li>Add tests</li>
 </ol>
 <h3 id="adding-a-new-query-operator"><a class="header" href="#adding-a-new-query-operator">Adding a New Query Operator</a></h3>
 <ol>
-<li>Add function to <code>query.rs</code></li>
-<li>Implement the algorithm</li>
+<li>Implement the <code>QueryOperator</code> trait in a new file under <code>query/</code></li>
+<li>Re-export from <code>query/mod.rs</code></li>
 <li>Add to WASM bindings if needed</li>
 <li>Document in guides/queries.md</li>
+</ol>
+<h3 id="adding-a-reasoning-backend"><a class="header" href="#adding-a-reasoning-backend">Adding a Reasoning Backend</a></h3>
+<ol>
+<li>Implement the <code>Reasoner</code> trait</li>
+<li>Register in <code>select_reasoner()</code> for runtime dispatch</li>
+<li>Add tests</li>
 </ol>
 <h3 id="process-mining-pipeline"><a class="header" href="#process-mining-pipeline">Process Mining Pipeline</a></h3>
 <p>The mining module provides:</p>
@@ -409,11 +548,14 @@ worklist: VecDeque`LiteralId`
 </ol>
 <h2 id="testing-strategy"><a class="header" href="#testing-strategy">Testing Strategy</a></h2>
 <pre><code>tests/
-├── Unit tests (per module)
-│   ├── reason.rs - 40+ tests
+├── Unit tests (per module, inline #[cfg(test)])
+│   ├── reason/ - phase-isolated tests
+│   ├── pipeline/ - per-stage tests
+│   ├── query/ - operator tests
 │   └── ...
-├── Integration tests
-│   └── End-to-end CLI/API behavior
+├── Integration tests (crates/spindle-core/tests/)
+│   ├── difftest.rs - proptest random theory gen (500 cases)
+│   └── ...
 ├── Parser tests
 │   └── spl.rs
 └── WASM tests
@@ -424,7 +566,8 @@ worklist: VecDeque`LiteralId`
 <li><strong>Basic reasoning</strong>: facts, rules, chains</li>
 <li><strong>Conflict resolution</strong>: superiority, defeaters</li>
 <li><strong>Edge cases</strong>: cycles, empty, self-reference</li>
-<li><strong>Stress tests</strong>: long chains, wide theories</li>
+<li><strong>Pipeline stages</strong>: validation, grounding, temporal filtering</li>
+<li><strong>Differential testing</strong>: proptest-generated random theories</li>
 </ol>
 <h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
 <div class="table-wrapper">

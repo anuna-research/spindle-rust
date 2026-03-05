@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "searchindex-21b2214a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-78568b9e.js"></script>
+        <script src="toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -408,11 +408,11 @@ fn main() {
 <p>Tweety is a bird. Tweety is a penguin. Birds fly. Penguins don’t fly. Does Tweety fly?</p>
 </blockquote>
 <p>Classical logic produces a contradiction. Defeasible logic resolves it by recognizing that “penguins don’t fly” is a more specific rule that should override “birds fly.”</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
-r1: bird =&gt; flies
-r2: penguin =&gt; -flies
-r2 &gt; r1
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)
 </code></pre>
 <p>Result: Tweety doesn’t fly.</p>
 <h2 id="key-terminology"><a class="header" href="#key-terminology">Key Terminology</a></h2>
@@ -428,6 +428,8 @@ r2 &gt; r1
 <tr><td><strong>Conclusion</strong></td><td>A proven literal with a provability level</td></tr>
 <tr><td><strong>Defeat</strong></td><td>When one rule blocks another’s conclusion</td></tr>
 <tr><td><strong>Superiority</strong></td><td>A preference relation between rules</td></tr>
+<tr><td><strong>Bind</strong></td><td>Assigns a computed arithmetic result to a variable</td></tr>
+<tr><td><strong>Guard</strong></td><td>A comparison constraint that filters rule applicability</td></tr>
 </tbody>
 </table>
 </div>
@@ -441,46 +443,30 @@ r2 &gt; r1
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="rules-and-facts"><a class="header" href="#rules-and-facts">Rules and Facts</a></h1>
 <p>Spindle supports four types of rules, each with different semantics for how conclusions are drawn.</p>
-<h2 id="facts-"><a class="header" href="#facts-">Facts (<code>&gt;&gt;</code>)</a></h2>
+<h2 id="facts-given"><a class="header" href="#facts-given">Facts (<code>given</code>)</a></h2>
 <p>Facts are unconditional truths. They have no body (antecedent) and are always true.</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
-f3: &gt;&gt; -guilty    # Negated fact
-</code></pre>
-<p><strong>SPL:</strong></p>
 <pre><code class="language-lisp">(given bird)
 (given penguin)
-(given (not guilty))
+(given (not guilty))    ; Negated fact
 </code></pre>
 <p>Facts produce <strong>definite conclusions</strong> (<code>+D</code>) that cannot be defeated.</p>
-<h2 id="strict-rules--"><a class="header" href="#strict-rules--">Strict Rules (<code>-&gt;</code>)</a></h2>
+<h2 id="strict-rules-always"><a class="header" href="#strict-rules-always">Strict Rules (<code>always</code>)</a></h2>
 <p>Strict rules express necessary implications. If the body is true, the head <strong>must</strong> be true.</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">r1: penguin -&gt; bird        # All penguins are birds
-r2: human, mortal -&gt; dies  # All mortal humans die
-</code></pre>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(always r1 penguin bird)
-(always r2 (and human mortal) dies)
+<pre><code class="language-lisp">(always r1 penguin bird)              ; All penguins are birds
+(always r2 (and human mortal) dies)   ; All mortal humans die
 </code></pre>
 <p>Strict rules produce <strong>definite conclusions</strong> (<code>+D</code>). They cannot be defeated by defeasible rules.</p>
 <h3 id="when-to-use-strict-rules"><a class="header" href="#when-to-use-strict-rules">When to Use Strict Rules</a></h3>
 <p>Use strict rules for:</p>
 <ul>
-<li>Definitional relationships (<code>penguin -&gt; bird</code>)</li>
-<li>Logical necessities (<code>p, p-&gt;q -&gt; q</code>)</li>
+<li>Definitional relationships (penguins are birds)</li>
+<li>Logical necessities (modus ponens)</li>
 <li>Constraints that have no exceptions</li>
 </ul>
-<h2 id="defeasible-rules-"><a class="header" href="#defeasible-rules-">Defeasible Rules (<code>=&gt;</code>)</a></h2>
+<h2 id="defeasible-rules-normally"><a class="header" href="#defeasible-rules-normally">Defeasible Rules (<code>normally</code>)</a></h2>
 <p>Defeasible rules express typical or default behavior that may have exceptions.</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">r1: bird =&gt; flies           # Birds typically fly
-r2: student =&gt; has_loans    # Students typically have loans
-</code></pre>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(normally r1 bird flies)
-(normally r2 student has_loans)
+<pre><code class="language-lisp">(normally r1 bird flies)            ; Birds typically fly
+(normally r2 student has-loans)     ; Students typically have loans
 </code></pre>
 <p>Defeasible rules produce <strong>defeasible conclusions</strong> (<code>+d</code>) that can be defeated by:</p>
 <ul>
@@ -495,25 +481,21 @@ r2: student =&gt; has_loans    # Students typically have loans
 <li>Typical properties</li>
 <li>Rules of thumb</li>
 </ul>
-<h2 id="defeaters-"><a class="header" href="#defeaters-">Defeaters (<code>~&gt;</code>)</a></h2>
+<h2 id="defeaters-except"><a class="header" href="#defeaters-except">Defeaters (<code>except</code>)</a></h2>
 <p>Defeaters are special rules that <strong>block</strong> conclusions without proving anything themselves.</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">d1: broken_wing ~&gt; flies    # A broken wing blocks "flies"
-</code></pre>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(except d1 broken_wing flies)
+<pre><code class="language-lisp">(except d1 broken-wing flies)    ; A broken wing blocks "flies"
 </code></pre>
 <h3 id="defeater-vs-defeasible-rule"><a class="header" href="#defeater-vs-defeasible-rule">Defeater vs. Defeasible Rule</a></h3>
-<pre><code class="language-lisp"># Defeasible rule: proves -flies
-r1: penguin =&gt; -flies
+<pre><code class="language-lisp">; Defeasible rule: proves (not flies)
+(normally r1 penguin (not flies))
 
-# Defeater: only blocks flies, doesn't prove -flies
-d1: sick ~&gt; flies
+; Defeater: only blocks flies, doesn't prove (not flies)
+(except d1 sick flies)
 </code></pre>
 <p>The difference:</p>
 <ul>
-<li><code>r1</code> can prove <code>-flies</code> if its body is satisfied</li>
-<li><code>d1</code> can only block <code>flies</code>, it never proves <code>-flies</code></li>
+<li><code>r1</code> can prove <code>(not flies)</code> if its body is satisfied</li>
+<li><code>d1</code> can only block <code>flies</code>, it never proves <code>(not flies)</code></li>
 </ul>
 <h3 id="when-to-use-defeaters"><a class="header" href="#when-to-use-defeaters">When to Use Defeaters</a></h3>
 <p>Use defeaters when:</p>
@@ -525,37 +507,31 @@ d1: sick ~&gt; flies
 <h2 id="rule-bodies-antecedents"><a class="header" href="#rule-bodies-antecedents">Rule Bodies (Antecedents)</a></h2>
 <p>Rule bodies can contain:</p>
 <h3 id="single-literal"><a class="header" href="#single-literal">Single Literal</a></h3>
-<pre><code class="language-lisp">r1: bird =&gt; flies
+<pre><code class="language-lisp">(normally r1 bird flies)
 </code></pre>
 <h3 id="multiple-literals-conjunction"><a class="header" href="#multiple-literals-conjunction">Multiple Literals (Conjunction)</a></h3>
-<pre><code class="language-lisp">r1: bird, healthy =&gt; flies
-r2: student, employed =&gt; busy
-</code></pre>
-<p><strong>SPL:</strong></p>
 <pre><code class="language-lisp">(normally r1 (and bird healthy) flies)
+(normally r2 (and student employed) busy)
 </code></pre>
 <h3 id="negated-literals"><a class="header" href="#negated-literals">Negated Literals</a></h3>
-<pre><code class="language-lisp">r1: bird, -penguin =&gt; flies   # Non-penguin birds fly
+<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)   ; Non-penguin birds fly
 </code></pre>
 <h2 id="rule-heads-consequents"><a class="header" href="#rule-heads-consequents">Rule Heads (Consequents)</a></h2>
 <p>Rule heads are single literals that can be:</p>
 <h3 id="positive"><a class="header" href="#positive">Positive</a></h3>
-<pre><code class="language-lisp">r1: bird =&gt; flies
+<pre><code class="language-lisp">(normally r1 bird flies)
 </code></pre>
 <h3 id="negated"><a class="header" href="#negated">Negated</a></h3>
-<pre><code class="language-lisp">r1: penguin =&gt; -flies
+<pre><code class="language-lisp">(normally r1 penguin (not flies))
 </code></pre>
 <h2 id="rule-labels"><a class="header" href="#rule-labels">Rule Labels</a></h2>
 <p>Every rule has a label (identifier) used for:</p>
 <ul>
-<li>Superiority relations (<code>r2 &gt; r1</code>)</li>
+<li>Superiority relations</li>
 <li>Explanations</li>
 <li>Debugging</li>
 </ul>
-<p><strong>SPL:</strong> Labels are required and appear before the colon:</p>
-<pre><code class="language-lisp">my_rule: bird =&gt; flies
-</code></pre>
-<p><strong>SPL:</strong> Labels are optional (auto-generated if omitted):</p>
+<p>Labels are optional (auto-generated if omitted):</p>
 <pre><code class="language-lisp">(normally r1 bird flies)      ; labeled r1
 (normally bird flies)         ; auto-labeled
 </code></pre>
@@ -563,13 +539,13 @@ r2: student, employed =&gt; busy
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Rule Type</th><th>Symbol</th><th>Conclusion</th><th>Can be Defeated?</th></tr>
+<tr><th>Rule Type</th><th>SPL Keyword</th><th>Conclusion</th><th>Can be Defeated?</th></tr>
 </thead>
 <tbody>
-<tr><td>Fact</td><td><code>&gt;&gt;</code></td><td>+D</td><td>No</td></tr>
-<tr><td>Strict</td><td><code>-&gt;</code></td><td>+D</td><td>No</td></tr>
-<tr><td>Defeasible</td><td><code>=&gt;</code></td><td>+d</td><td>Yes</td></tr>
-<tr><td>Defeater</td><td><code>~&gt;</code></td><td>None (blocks only)</td><td>N/A</td></tr>
+<tr><td>Fact</td><td><code>given</code></td><td>+D</td><td>No</td></tr>
+<tr><td>Strict</td><td><code>always</code></td><td>+D</td><td>No</td></tr>
+<tr><td>Defeasible</td><td><code>normally</code></td><td>+d</td><td>Yes</td></tr>
+<tr><td>Defeater</td><td><code>except</code></td><td>None (blocks only)</td><td>N/A</td></tr>
 </tbody>
 </table>
 </div>
@@ -592,15 +568,15 @@ r2: student, employed =&gt; busy
 </div>
 <h2 id="definite-conclusions-d---d"><a class="header" href="#definite-conclusions-d---d">Definite Conclusions (+D / -D)</a></h2>
 <p><strong>Definite provability</strong> uses only facts and strict rules. No defeasible reasoning is involved.</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-r1: bird -&gt; animal    # Strict rule
-r2: bird =&gt; flies     # Defeasible rule
+<pre><code class="language-lisp">(given bird)
+(always r1 bird animal)        ; Strict rule
+(normally r2 bird flies)       ; Defeasible rule
 </code></pre>
 <p>Conclusions:</p>
 <ul>
-<li><code>+D bird</code> - fact</li>
-<li><code>+D animal</code> - via strict rule r1</li>
-<li><code>-D flies</code> - no strict path to prove flies</li>
+<li><code>+D bird</code> — fact</li>
+<li><code>+D animal</code> — via strict rule r1</li>
+<li><code>-D flies</code> — no strict path to prove flies</li>
 </ul>
 <h3 id="when-is-d-useful"><a class="header" href="#when-is-d-useful">When is +D Useful?</a></h3>
 <p>Use definite provability when you need certainty:</p>
@@ -611,13 +587,13 @@ r2: bird =&gt; flies     # Defeasible rule
 </ul>
 <h2 id="defeasible-conclusions-d---d"><a class="header" href="#defeasible-conclusions-d---d">Defeasible Conclusions (+d / -d)</a></h2>
 <p><strong>Defeasible provability</strong> extends definite provability with defeasible rules.</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-r1: bird =&gt; flies
+<pre><code class="language-lisp">(given bird)
+(normally r1 bird flies)
 </code></pre>
 <p>Conclusions:</p>
 <ul>
-<li><code>+d bird</code> - fact (also +D)</li>
-<li><code>+d flies</code> - via defeasible rule r1</li>
+<li><code>+d bird</code> — fact (also +D)</li>
+<li><code>+d flies</code> — via defeasible rule r1</li>
 </ul>
 <h3 id="the-relationship"><a class="header" href="#the-relationship">The Relationship</a></h3>
 <pre><code>+D implies +d
@@ -628,47 +604,47 @@ r1: bird =&gt; flies
 </code></pre>
 <h2 id="conflict-and-ambiguity"><a class="header" href="#conflict-and-ambiguity">Conflict and Ambiguity</a></h2>
 <p>When rules conflict without a superiority relation, neither conclusion is provable:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; trigger
-r1: trigger =&gt; outcome
-r2: trigger =&gt; -outcome
-# No superiority declared
+<pre><code class="language-lisp">(given trigger)
+(normally r1 trigger outcome)
+(normally r2 trigger (not outcome))
+; No superiority declared
 </code></pre>
 <p>Conclusions:</p>
 <ul>
 <li><code>+D trigger</code></li>
-<li><code>-d outcome</code> - blocked by r2</li>
-<li><code>-d -outcome</code> - blocked by r1</li>
+<li><code>-d outcome</code> — blocked by r2</li>
+<li><code>-d -outcome</code> — blocked by r1</li>
 </ul>
-<p>Both outcomes are <strong>ambiguous</strong> - neither can be proven.</p>
+<p>Both outcomes are <strong>ambiguous</strong> — neither can be proven.</p>
 <h2 id="resolved-conflict"><a class="header" href="#resolved-conflict">Resolved Conflict</a></h2>
 <p>With superiority, the conflict is resolved:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; trigger
-r1: trigger =&gt; outcome
-r2: trigger =&gt; -outcome
-r1 &gt; r2
+<pre><code class="language-lisp">(given trigger)
+(normally r1 trigger outcome)
+(normally r2 trigger (not outcome))
+(prefer r1 r2)
 </code></pre>
 <p>Conclusions:</p>
 <ul>
-<li><code>+d outcome</code> - r1 wins</li>
-<li><code>-d -outcome</code> - r2 is defeated</li>
+<li><code>+d outcome</code> — r1 wins</li>
+<li><code>-d -outcome</code> — r2 is defeated</li>
 </ul>
 <h2 id="example-multi-level"><a class="header" href="#example-multi-level">Example: Multi-Level</a></h2>
-<pre><code class="language-lisp">f1: &gt;&gt; a
-r1: a -&gt; b           # Strict: a implies b
-r2: b =&gt; c           # Defeasible: b typically implies c
-r3: b =&gt; -c          # Defeasible: b typically implies -c
-r2 &gt; r3              # r2 wins
+<pre><code class="language-lisp">(given a)
+(always r1 a b)                ; Strict: a implies b
+(normally r2 b c)              ; Defeasible: b typically implies c
+(normally r3 b (not c))        ; Defeasible: b typically implies (not c)
+(prefer r2 r3)                 ; r2 wins
 </code></pre>
 <p>Conclusions:</p>
 <ul>
-<li><code>+D a</code> - fact</li>
-<li><code>+D b</code> - strict from a</li>
-<li><code>+d a</code> - (implied by +D)</li>
-<li><code>+d b</code> - (implied by +D)</li>
-<li><code>+d c</code> - defeasible, r2 wins over r3</li>
-<li><code>-D c</code> - no strict path</li>
-<li><code>-D -c</code> - no strict path</li>
-<li><code>-d -c</code> - r3 defeated</li>
+<li><code>+D a</code> — fact</li>
+<li><code>+D b</code> — strict from a</li>
+<li><code>+d a</code> — (implied by +D)</li>
+<li><code>+d b</code> — (implied by +D)</li>
+<li><code>+d c</code> — defeasible, r2 wins over r3</li>
+<li><code>-D c</code> — no strict path</li>
+<li><code>-D -c</code> — no strict path</li>
+<li><code>-d -c</code> — r3 defeated</li>
 </ul>
 <h2 id="negative-conclusions"><a class="header" href="#negative-conclusions">Negative Conclusions</a></h2>
 <p>Negative conclusions (<code>-D</code>, <code>-d</code>) indicate unprovability:</p>
@@ -715,34 +691,29 @@ r2 &gt; r3              # r2 wins
 <p>Superiority relations resolve conflicts between competing rules.</p>
 <h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
 <p>When two rules conclude opposite things, we have a conflict:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; penguin
-r1: bird =&gt; flies
-r2: penguin =&gt; -flies
+<pre><code class="language-lisp">(given bird)
+(given penguin)
+(normally r1 bird flies)
+(normally r2 penguin (not flies))
 </code></pre>
-<p>Both r1 and r2 fire. Without superiority, we get <strong>ambiguity</strong> - neither <code>flies</code> nor <code>-flies</code> is provable.</p>
+<p>Both r1 and r2 fire. Without superiority, we get <strong>ambiguity</strong> — neither <code>flies</code> nor <code>(not flies)</code> is provable.</p>
 <h2 id="declaring-superiority"><a class="header" href="#declaring-superiority">Declaring Superiority</a></h2>
-<p>The <code>&gt;</code> operator declares that one rule is superior to another:</p>
-<pre><code class="language-lisp">r2 &gt; r1    # r2 beats r1
+<pre><code class="language-lisp">(prefer r2 r1)    ; r2 beats r1
 </code></pre>
-<p>Now when both rules fire, r2 wins and <code>-flies</code> is provable.</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(prefer r2 r1)
-</code></pre>
+<p>Now when both rules fire, r2 wins and <code>(not flies)</code> is provable.</p>
 <h2 id="superiority-chains"><a class="header" href="#superiority-chains">Superiority Chains</a></h2>
-<p>You can declare chains of superiority:</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">r3 &gt; r2
-r2 &gt; r1
-</code></pre>
-<p><strong>SPL (shorthand):</strong></p>
+<p>Shorthand for multiple superiority relations:</p>
 <pre><code class="language-lisp">(prefer r3 r2 r1)   ; r3 &gt; r2 &gt; r1
 </code></pre>
+<p>Expands to:</p>
+<pre><code class="language-lisp">(prefer r3 r2)
+(prefer r2 r1)
+</code></pre>
 <h2 id="transitivity"><a class="header" href="#transitivity">Transitivity</a></h2>
-<p>Superiority is <strong>not automatically transitive</strong>. If you need <code>r3 &gt; r1</code>, declare it explicitly:</p>
-<pre><code class="language-lisp">r3 &gt; r2
-r2 &gt; r1
-r3 &gt; r1    # Must be explicit
+<p>Superiority is <strong>not automatically transitive</strong>. If you need r3 &gt; r1, declare it explicitly:</p>
+<pre><code class="language-lisp">(prefer r3 r2)
+(prefer r2 r1)
+(prefer r3 r1)    ; Must be explicit
 </code></pre>
 <h2 id="conflict-resolution-algorithm"><a class="header" href="#conflict-resolution-algorithm">Conflict Resolution Algorithm</a></h2>
 <p>When evaluating a defeasible conclusion:</p>
@@ -758,16 +729,16 @@ r3 &gt; r1    # Must be explicit
 <li>If all attacks fail → conclusion is provable</li>
 </ol>
 <h2 id="example-three-way-conflict"><a class="header" href="#example-three-way-conflict">Example: Three-Way Conflict</a></h2>
-<pre><code class="language-lisp">f1: &gt;&gt; a
-f2: &gt;&gt; b
-f3: &gt;&gt; c
+<pre><code class="language-lisp">(given a)
+(given b)
+(given c)
 
-r1: a =&gt; result
-r2: b =&gt; -result
-r3: c =&gt; result
+(normally r1 a result)
+(normally r2 b (not result))
+(normally r3 c result)
 
-r1 &gt; r2    # r1 beats r2
-r3 &gt; r2    # r3 beats r2
+(prefer r1 r2)    ; r1 beats r2
+(prefer r3 r2)    ; r3 beats r2
 </code></pre>
 <p>Analysis:</p>
 <ul>
@@ -778,30 +749,30 @@ r3 &gt; r2    # r3 beats r2
 </ul>
 <h2 id="symmetric-conflicts"><a class="header" href="#symmetric-conflicts">Symmetric Conflicts</a></h2>
 <p>If two rules are equally superior over each other (or neither is superior), ambiguity results:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; trigger
-r1: trigger =&gt; a
-r2: trigger =&gt; -a
-# No superiority
+<pre><code class="language-lisp">(given trigger)
+(normally r1 trigger a)
+(normally r2 trigger (not a))
+; No superiority
 </code></pre>
-<p>Result: Neither <code>a</code> nor <code>-a</code> is provable.</p>
+<p>Result: Neither <code>a</code> nor <code>(not a)</code> is provable.</p>
 <h2 id="defeating-defeaters"><a class="header" href="#defeating-defeaters">Defeating Defeaters</a></h2>
 <p>Defeaters can be overridden by superiority:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-f2: &gt;&gt; healthy
+<pre><code class="language-lisp">(given bird)
+(given healthy)
 
-r1: bird =&gt; flies
-d1: bird ~&gt; flies      # Defeater blocks flies
-r2: healthy =&gt; flies
+(normally r1 bird flies)
+(except d1 bird flies)          ; Defeater blocks flies
+(normally r2 healthy flies)
 
-r2 &gt; d1                # Healthy birds overcome the defeater
+(prefer r2 d1)                  ; Healthy birds overcome the defeater
 </code></pre>
 <p>If both <code>bird</code> and <code>healthy</code> are true, r2 beats d1 and <code>flies</code> is provable.</p>
 <h2 id="strict-rules-and-superiority"><a class="header" href="#strict-rules-and-superiority">Strict Rules and Superiority</a></h2>
 <p>Strict rules <strong>always win</strong> over defeasible rules, regardless of superiority:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; p
-r1: p -&gt; q           # Strict
-r2: p =&gt; -q          # Defeasible
-r2 &gt; r1              # This has no effect!
+<pre><code class="language-lisp">(given p)
+(always r1 p q)              ; Strict
+(normally r2 p (not q))      ; Defeasible
+(prefer r2 r1)               ; This has no effect!
 </code></pre>
 <p>Result: <code>+D q</code> (strict rule wins)</p>
 <p>Superiority only affects conflicts between:</p>
@@ -813,20 +784,20 @@ r2 &gt; r1              # This has no effect!
 <h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
 <h3 id="use-specificity"><a class="header" href="#use-specificity">Use Specificity</a></h3>
 <p>More specific rules should be superior:</p>
-<pre><code class="language-lisp">r2: penguin =&gt; -flies
-r1: bird =&gt; flies
-r2 &gt; r1    # Penguin is more specific than bird
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r2 r1)    ; Penguin is more specific than bird
 </code></pre>
 <h3 id="document-reasoning"><a class="header" href="#document-reasoning">Document Reasoning</a></h3>
 <p>Use comments to explain why one rule beats another:</p>
-<pre><code class="language-lisp"># Medical override: confirmed diagnosis beats symptoms
-r_diagnosis &gt; r_symptoms
+<pre><code class="language-lisp">; Medical override: confirmed diagnosis beats symptoms
+(prefer r-diagnosis r-symptoms)
 </code></pre>
 <h3 id="avoid-cycles"><a class="header" href="#avoid-cycles">Avoid Cycles</a></h3>
 <p>Don’t create circular superiority:</p>
-<pre><code class="language-lisp"># BAD - creates a cycle
-r1 &gt; r2
-r2 &gt; r1
+<pre><code class="language-lisp">; BAD — creates a cycle
+(prefer r1 r2)
+(prefer r2 r1)
 </code></pre>
 <p>This leads to undefined behavior.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -842,17 +813,11 @@ r2 &gt; r1
 <h3 id="strong-negation"><a class="header" href="#strong-negation">Strong Negation</a></h3>
 <p>Used in Spindle:</p>
 <ul>
-<li><code>-P</code> (or <code>~P</code>) is a separate proposition</li>
+<li><code>(not P)</code> is a separate proposition</li>
 <li>Must be explicitly proven</li>
-<li>Absence of <code>P</code> does not imply <code>-P</code></li>
+<li>Absence of <code>P</code> does not imply <code>(not P)</code></li>
 </ul>
 <h2 id="syntax"><a class="header" href="#syntax">Syntax</a></h2>
-<p>Both <code>-</code> and <code>~</code> denote negation:</p>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">f1: &gt;&gt; -guilty       # Explicitly not guilty
-r1: penguin =&gt; ~flies
-</code></pre>
-<p><strong>SPL:</strong></p>
 <pre><code class="language-lisp">(given (not guilty))
 (normally r1 penguin (not flies))
 </code></pre>
@@ -865,15 +830,15 @@ r1: penguin =&gt; ~flies
 </thead>
 <tbody>
 <tr><td>True</td><td>P is provable</td><td><code>+d P</code></td></tr>
-<tr><td>False</td><td>-P is provable</td><td><code>+d -P</code></td></tr>
+<tr><td>False</td><td>(not P) is provable</td><td><code>+d -P</code></td></tr>
 <tr><td>Unknown</td><td>Neither provable</td><td><code>-d P</code> and <code>-d -P</code></td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="example-unknown-state"><a class="header" href="#example-unknown-state">Example: Unknown State</a></h2>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-r1: bird =&gt; flies
-# No information about grounded
+<pre><code class="language-lisp">(given bird)
+(normally r1 bird flies)
+; No information about grounded
 </code></pre>
 <p>Conclusions:</p>
 <ul>
@@ -883,36 +848,29 @@ r1: bird =&gt; flies
 </ul>
 <p>The <code>grounded</code> literal is in an <strong>unknown</strong> state.</p>
 <h2 id="complementary-literals"><a class="header" href="#complementary-literals">Complementary Literals</a></h2>
-<p><code>P</code> and <code>-P</code> are <strong>complements</strong>. They interact in specific ways:</p>
+<p><code>P</code> and <code>(not P)</code> are <strong>complements</strong>. They interact in specific ways:</p>
 <h3 id="conflict"><a class="header" href="#conflict">Conflict</a></h3>
-<p>If rules prove both <code>P</code> and <code>-P</code>:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; a
-r1: a =&gt; p
-r2: a =&gt; -p
+<p>If rules prove both <code>P</code> and <code>(not P)</code>:</p>
+<pre><code class="language-lisp">(given a)
+(normally r1 a p)
+(normally r2 a (not p))
 </code></pre>
 <p>Without superiority, neither is provable (ambiguity).</p>
 <h3 id="definite-blocking"><a class="header" href="#definite-blocking">Definite Blocking</a></h3>
-<p>If <code>-P</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; -p        # Definite fact: -p
-r1: a =&gt; p       # Tries to prove p
+<p>If <code>(not P)</code> is <strong>definitely</strong> provable, <code>P</code> cannot be defeasibly provable:</p>
+<pre><code class="language-lisp">(given (not p))              ; Definite fact: (not p)
+(normally r1 a p)            ; Tries to prove p
 </code></pre>
 <p>Even if r1’s body is satisfied, <code>+d p</code> is blocked because <code>+D -p</code>.</p>
 <h2 id="negation-in-rule-bodies"><a class="header" href="#negation-in-rule-bodies">Negation in Rule Bodies</a></h2>
 <p>Negated literals can appear in rule bodies:</p>
-<pre><code class="language-lisp">r1: bird, -penguin =&gt; flies    # Non-penguin birds fly
-r2: student, -employed =&gt; needs_loan
-</code></pre>
-<p><strong>SPL:</strong></p>
-<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)
-</code></pre>
-<h2 id="double-negation"><a class="header" href="#double-negation">Double Negation</a></h2>
-<p><code>--P</code> is equivalent to <code>P</code>:</p>
-<pre><code class="language-lisp">r1: a =&gt; --flies    # Same as: a =&gt; flies
+<pre><code class="language-lisp">(normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
+(normally r2 (and student (not employed)) needs-loan)
 </code></pre>
 <h2 id="consistency"><a class="header" href="#consistency">Consistency</a></h2>
-<p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>-P</code>:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; p
-f2: &gt;&gt; -p
+<p>Spindle does not enforce consistency. A theory can prove both <code>P</code> and <code>(not P)</code>:</p>
+<pre><code class="language-lisp">(given p)
+(given (not p))
 </code></pre>
 <p>Result:</p>
 <ul>
@@ -924,15 +882,15 @@ f2: &gt;&gt; -p
 <p>To detect inconsistency, check for literals where both <code>+D P</code> and <code>+D -P</code> (or <code>+d P</code> and <code>+d -P</code>) are concluded.</p>
 <h2 id="closed-world-assumption"><a class="header" href="#closed-world-assumption">Closed World Assumption</a></h2>
 <p>Spindle does <strong>not</strong> use the Closed World Assumption by default. If you need it, add explicit rules:</p>
-<pre><code class="language-lisp"># CWA for 'guilty': if not proven guilty, then not guilty
-d1: &gt;&gt; -guilty           # Default: not guilty
-r1: evidence =&gt; guilty   # Can be overridden by evidence
-r1 &gt; d1
+<pre><code class="language-lisp">; CWA for 'guilty': if not proven guilty, then not guilty
+(given (not guilty))                    ; Default: not guilty
+(normally r1 evidence guilty)           ; Can be overridden by evidence
+(prefer r1 f1)
 </code></pre>
 <p>This pattern uses a defeatable default.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="spl-format-reference"><a class="header" href="#spl-format-reference">SPL Format Reference</a></h1>
-<p>SPL (Spindle Lisp) is a LISP-based DSL for defeasible logic with support for advanced features like variables, temporal reasoning, and metadata.</p>
+<p>SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DFL syntax with a LISP-based DSL whose s-expression structure makes it straightforward to add new constructs (temporal operators, trust directives, claims blocks, etc.) without grammar ambiguity.</p>
 <h2 id="file-extension"><a class="header" href="#file-extension">File Extension</a></h2>
 <p><code>.spl</code></p>
 <h2 id="comments"><a class="header" href="#comments">Comments</a></h2>
@@ -943,15 +901,51 @@ r1 &gt; d1
 <h2 id="grammar-overview"><a class="header" href="#grammar-overview">Grammar Overview</a></h2>
 <pre><code class="language-ebnf">theory      = statement*
 statement   = fact | rule | prefer | meta
+            | claims | trusts | decays | threshold
+
+; Core
 fact        = "(given" literal ")"
 rule        = "(" keyword label? body head ")"
 keyword     = "always" | "normally" | "except"
 prefer      = "(prefer" label+ ")"
 meta        = "(meta" label property* ")"
+
+; Trust
+claims      = "(claims" source claims-meta* statement* ")"
+claims-meta = ":at" atom | ":sig" atom | ":id" atom | ":note" atom
+trusts      = "(trusts" source number ")"
+decays      = "(decays" source decay-model number ")"
+decay-model = "exponential" | "linear" | "step"
+threshold   = "(threshold" name number ")"
+
+; Temporal
+time-expr   = "(moment" rfc3339-string ")" | integer | "inf" | "-inf"
+during      = "(during" literal time-expr time-expr ")"
+
+; Literals
 literal     = atom | "(" atom arg* ")" | "(not" literal ")"
-body        = literal | "(and" literal+ ")"
+            | during | modal
+modal       = "(" modal-op literal ")"
+modal-op    = "must" | "may" | "forbidden"
+body        = literal | "(and" body-elem+ ")"
+body-elem   = literal | arith-constraint
 atom        = identifier | variable
 variable    = "?" identifier
+source      = atom
+number      = float in [0.0, 1.0]
+
+; Arithmetic (body only)
+arith-constraint = bind | compare
+bind        = "(bind" variable arith-expr ")"
+compare     = "(" cmp-op arith-expr arith-expr ")"
+cmp-op      = "=" | "!=" | "&lt;" | "&gt;" | "&lt;=" | "&gt;="
+arith-expr  = number | variable
+            | "(" nary-op arith-expr+ ")"
+            | "(" bin-op arith-expr arith-expr ")"
+            | "(" unary-op arith-expr ")"
+nary-op     = "+" | "-" | "*" | "/" | "min" | "max"
+bin-op      = "div" | "rem" | "**"
+unary-op    = "abs"
 </code></pre>
 <h2 id="facts"><a class="header" href="#facts">Facts</a></h2>
 <h3 id="simple-facts"><a class="header" href="#simple-facts">Simple Facts</a></h3>
@@ -968,15 +962,15 @@ variable    = "?" identifier
 (given employed alice acme)
 </code></pre>
 <h2 id="rules"><a class="header" href="#rules">Rules</a></h2>
-<h3 id="strict-rules-always"><a class="header" href="#strict-rules-always">Strict Rules (<code>always</code>)</a></h3>
+<h3 id="strict-rules-always-1"><a class="header" href="#strict-rules-always-1">Strict Rules (<code>always</code>)</a></h3>
 <pre><code class="language-lisp">(always r1 penguin bird)
 (always r2 (and human mortal) dies)
 </code></pre>
-<h3 id="defeasible-rules-normally"><a class="header" href="#defeasible-rules-normally">Defeasible Rules (<code>normally</code>)</a></h3>
+<h3 id="defeasible-rules-normally-1"><a class="header" href="#defeasible-rules-normally-1">Defeasible Rules (<code>normally</code>)</a></h3>
 <pre><code class="language-lisp">(normally r1 bird flies)
 (normally r2 penguin (not flies))
 </code></pre>
-<h3 id="defeaters-except"><a class="header" href="#defeaters-except">Defeaters (<code>except</code>)</a></h3>
+<h3 id="defeaters-except-1"><a class="header" href="#defeaters-except-1">Defeaters (<code>except</code>)</a></h3>
 <pre><code class="language-lisp">(except d1 broken-wing flies)
 </code></pre>
 <h3 id="unlabeled-rules"><a class="header" href="#unlabeled-rules">Unlabeled Rules</a></h3>
@@ -1071,7 +1065,158 @@ inf                              ; Positive infinity
   (moment "2023-01-01T00:00:00Z")))
 </code></pre>
 <h3 id="allen-relations"><a class="header" href="#allen-relations">Allen Relations</a></h3>
-<p><em>Not currently supported in Spindle v1.</em></p>
+<blockquote>
+<p><strong>SPL status:</strong> Allen relations are implemented in the core Rust API but are not yet
+usable as SPL predicates. Exposing them requires interval variables (e.g.,
+<code>(during p ?t)</code>), planned for a future release. The Allen <code>during</code> relation
+(interval containment) is distinct from the <a href="#during"><code>during</code> SPL operator</a>
+described above.</p>
+</blockquote>
+<p>Allen’s interval algebra defines exactly 13 mutually exclusive relations between
+two time intervals <strong>X</strong> and <strong>Y</strong>. Every pair of intervals satisfies exactly one.</p>
+<pre><code class="language-text">Relation          X              Y           Inverse
+─────────────────────────────────────────────────────────
+before            ██████                     after
+                              ██████
+
+meets             ██████                     met-by
+                        ██████
+
+overlaps          ██████                     overlapped-by
+                     ██████
+
+starts            ████                       started-by
+                  ██████████
+
+during              ████                     contains
+                  ██████████
+
+finishes              ████                   finished-by
+                  ██████████
+
+equals            ██████████
+                  ██████████                 (self-inverse)
+</code></pre>
+<p>Each relation has a strict inverse (reading the diagram with X and Y swapped),
+giving 6 symmetric pairs plus <code>equals</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Relation</th><th>Inverse</th><th>Condition</th></tr>
+</thead>
+<tbody>
+<tr><td><code>before</code></td><td><code>after</code></td><td>X ends before Y starts (with gap)</td></tr>
+<tr><td><code>meets</code></td><td><code>met-by</code></td><td>X ends exactly where Y starts</td></tr>
+<tr><td><code>overlaps</code></td><td><code>overlapped-by</code></td><td>X starts first, they share some time, Y ends last</td></tr>
+<tr><td><code>starts</code></td><td><code>started-by</code></td><td>Both start together, X ends first</td></tr>
+<tr><td><code>during</code></td><td><code>contains</code></td><td>X is fully enclosed within Y</td></tr>
+<tr><td><code>finishes</code></td><td><code>finished-by</code></td><td>Both end together, X starts later</td></tr>
+<tr><td><code>equals</code></td><td><code>equals</code></td><td>Identical start and end</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="arithmetic-expressions"><a class="header" href="#arithmetic-expressions">Arithmetic Expressions</a></h2>
+<p>Arithmetic expressions can appear in rule bodies as <code>bind</code> constraints, comparison guards, or as arguments to predicates.</p>
+<h3 id="numeric-literals"><a class="header" href="#numeric-literals">Numeric Literals</a></h3>
+<pre><code class="language-lisp">42          ; Integer
+3.14        ; Decimal (arbitrary precision)
+</code></pre>
+<h3 id="operators"><a class="header" href="#operators">Operators</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operator</th><th>Arity</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>+</code></td><td>N-ary</td><td>Addition</td></tr>
+<tr><td><code>-</code></td><td>N-ary</td><td>Subtraction (left fold)</td></tr>
+<tr><td><code>*</code></td><td>N-ary</td><td>Multiplication</td></tr>
+<tr><td><code>/</code></td><td>N-ary</td><td>Division (left fold)</td></tr>
+<tr><td><code>div</code></td><td>Binary</td><td>Integer division (floor)</td></tr>
+<tr><td><code>rem</code></td><td>Binary</td><td>Remainder</td></tr>
+<tr><td><code>**</code></td><td>Binary</td><td>Exponentiation</td></tr>
+<tr><td><code>abs</code></td><td>Unary</td><td>Absolute value</td></tr>
+<tr><td><code>min</code></td><td>N-ary</td><td>Minimum</td></tr>
+<tr><td><code>max</code></td><td>N-ary</td><td>Maximum</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-lisp">(+ 1 2)           ; =&gt; 3
+(* 2 3 4)         ; =&gt; 24
+(- 10 3 2)        ; =&gt; 5 (left fold: 10-3-2)
+(div 7 2)         ; =&gt; 3
+(rem 7 2)         ; =&gt; 1
+(** 2 10)         ; =&gt; 1024
+(abs (- 3 10))    ; =&gt; 7
+(min 5 3 8)       ; =&gt; 3
+</code></pre>
+<h3 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h3>
+<p>Bind a variable to the result of an arithmetic expression:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (price ?p) (tax-rate ?r)
+       (bind ?total (+ ?p (* ?p ?r))))
+  (total ?total))
+</code></pre>
+<h3 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h3>
+<p>Compare two arithmetic expressions:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (age ?x ?a) (&gt; ?a 18))
+  (adult ?x))
+
+(normally r2
+  (and (score ?x ?s) (&lt;= ?s 50))
+  (failing ?x))
+</code></pre>
+<p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
+<h3 id="arithmetic-in-predicate-arguments"><a class="header" href="#arithmetic-in-predicate-arguments">Arithmetic in Predicate Arguments</a></h3>
+<p>Arithmetic expressions can appear as predicate arguments in rule bodies:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (price ?item ?p) (tax-rate ?r))
+  (invoice ?item (+ ?p (* ?p ?r))))
+</code></pre>
+<h3 id="type-promotion"><a class="header" href="#type-promotion">Type Promotion</a></h3>
+<p>Numeric types are promoted during arithmetic: Integer → Decimal → Float.</p>
+<ul>
+<li>Integer + Integer = Integer</li>
+<li>Integer + Decimal = Decimal</li>
+<li>Any + Float = Float</li>
+<li><code>div</code> and <code>rem</code> require integer operands</li>
+</ul>
+<p>Cross-type matching: <code>Integer(2)</code> matches <code>Decimal(2.0)</code> matches <code>Float(2.0)</code>.</p>
+<h3 id="reserved-keywords-req-008"><a class="header" href="#reserved-keywords-req-008">Reserved Keywords (REQ-008)</a></h3>
+<p>The following cannot be used as predicate names or rule labels:</p>
+<pre><code>+  -  *  /  div  rem  abs  min  max  **
+bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
+</code></pre>
+<p>Future reserved: <code>sum</code>, <code>count</code>, <code>avg</code>, <code>round</code>, <code>floor</code>, <code>ceil</code></p>
+<h3 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h3>
+<ul>
+<li>Arithmetic constraints cannot appear in rule heads or facts (REQ-009)</li>
+<li>Arithmetic constraints cannot be negated with <code>not</code> or <code>~</code> (REQ-011)</li>
+<li>Temporal variables cannot be used as arithmetic operands (REQ-006)</li>
+</ul>
+<h2 id="claims"><a class="header" href="#claims">Claims</a></h2>
+<p>The <code>claims</code> block attributes statements to a named source, with optional metadata.</p>
+<pre><code class="language-lisp">(claims agent:alice
+  :at "2024-06-15T12:00:00Z"
+  :sig "abc123"
+  :id "claim-001"
+  :note "sensor reading"
+  (given sunny)
+  (normally r1 sunny (not umbrella)))
+</code></pre>
+<h3 id="syntax-1"><a class="header" href="#syntax-1">Syntax</a></h3>
+<pre><code>(claims source [:at timestamp] [:sig signature] [:id block-id] [:note annotation]
+  statement ...)
+</code></pre>
+<ul>
+<li><strong>source</strong> — an atom identifying the claiming agent (e.g., <code>agent:alice</code>).</li>
+<li><strong>:at</strong> — optional RFC3339 timestamp for when the claim was made.</li>
+<li><strong>:sig</strong> — optional signature string for verification.</li>
+<li><strong>:id</strong> — optional block identifier.</li>
+<li><strong>:note</strong> — optional free-text annotation.</li>
+</ul>
+<p>Statements inside a <code>claims</code> block are ordinary SPL expressions (<code>given</code>, <code>always</code>, <code>normally</code>, <code>except</code>, <code>prefer</code>) that automatically receive source metadata. See the <a href="#trust-weighted-reasoning">Trust &amp; Multi-Agent guide</a> for details.</p>
 <h2 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h2>
 <pre><code class="language-lisp">; The Penguin Example
 
@@ -1111,11 +1256,25 @@ spindle query &lt;LITERAL&gt; [FILE] [OPTIONS]
 spindle explain &lt;LITERAL&gt; [FILE] [OPTIONS]
 spindle why-not &lt;LITERAL&gt; [FILE] [OPTIONS]
 spindle requires &lt;LITERAL&gt; [FILE] [OPTIONS]
+spindle capabilities [OPTIONS]
+spindle explain-code &lt;CODE&gt;
 </code></pre>
 <h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
 <h3 id="reason"><a class="header" href="#reason">reason</a></h3>
 <p>Perform defeasible reasoning on a theory.</p>
 <pre><code class="language-bash">spindle reason examples/penguin.spl
+</code></pre>
+<h4 id="--v2"><a class="header" href="#--v2"><code>--v2</code></a></h4>
+<p>Select JSON schema version v2 (<code>spindle.reason.v2</code>) for the JSON output envelope.
+The v2 schema includes typed term arguments in the <code>literal_struct</code> fields, giving
+downstream consumers richer structure than the v1 flat-string representation.</p>
+<pre><code class="language-bash">spindle reason examples/penguin.spl --json --v2
+</code></pre>
+<p>Without <code>--v2</code>, the default schema is <code>spindle.reason.v1</code>.</p>
+<h4 id="--trust"><a class="header" href="#--trust"><code>--trust</code></a></h4>
+<p>Include trust-weight annotations on each conclusion. When enabled, each conclusion
+carries a <code>trust_degree</code> (0.0–1.0) and optional <code>trust_sources</code> list.</p>
+<pre><code class="language-bash">spindle reason examples/penguin.spl --json --trust
 </code></pre>
 <h3 id="validate"><a class="header" href="#validate">validate</a></h3>
 <p>Check syntax without reasoning.</p>
@@ -1196,10 +1355,10 @@ spindle explain "-flies" examples/penguin.spl --json
 <p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
 <p>Output:</p>
 <pre><code>Explanation for -flies:
-  -flies ← [defeasible] r3: penguin =&gt; -flies
+  -flies ← [defeasible] r3: penguin -&gt; -flies
     penguin ← [fact]
   Blocked alternatives:
-    r1: bird =&gt; flies (defeated by r3 via superiority)
+    r1: bird -&gt; flies (defeated by r3 via superiority)
   Conflict resolutions:
     r3 &gt; r1 (superiority)
 </code></pre>
@@ -1212,9 +1371,9 @@ spindle why-not flies examples/penguin.spl --json
 <p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes <code>is_provable: true</code> and <code>blocked_by</code> will be empty.</p>
 <p>Output:</p>
 <pre><code>Why not flies?
-  Rule r1: bird =&gt; flies
+  Rule r1: bird -&gt; flies
     Status: Defeated
-    Defeated by: r3 (penguin =&gt; -flies) via superiority r3 &gt; r1
+    Defeated by: r3 (penguin -&gt; -flies) via superiority r3 &gt; r1
 </code></pre>
 <p>Possible blocking reasons:</p>
 <div class="table-wrapper">
@@ -1236,12 +1395,74 @@ spindle requires flies examples/penguin.spl --max 5
 spindle requires flies examples/penguin.spl --json
 </code></pre>
 <p>The <code>--max</code> option limits the number of solutions returned (defaults to 10).</p>
+<p>As of the v2 contract (IMPL-011), <code>requires</code> <strong>verifies all candidate solutions
+by default</strong>. Each candidate set of facts is fed back through the reasoning
+engine to confirm it actually makes the goal provable. The JSON output includes
+<code>verification_mode: "verified"</code> and a <code>verification</code> object with
+<code>raw_examined</code>, <code>accepted</code>, and <code>rejected</code> counts. Only accepted solutions
+appear in the <code>solutions</code> array. The JSON envelope uses schema
+<code>spindle.requires.v2</code>.</p>
 <p>Output:</p>
-<pre><code>To derive flies, you could assume:
-  1. { bird, -penguin }
-  2. { flies }
+<pre><code>Verified requirements for flies:
+  1. Add facts: {bird, -penguin}
+  2. Add facts: {flies}
 </code></pre>
-<p>Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.</p>
+<p>Each result is a minimal, verified set of assumptions that, if added to the theory, would make the literal provable.</p>
+<h3 id="capabilities"><a class="header" href="#capabilities">capabilities</a></h3>
+<p>Show the commands, features, and JSON schema versions supported by this build
+of Spindle. Useful for tooling that needs to discover available functionality
+at runtime.</p>
+<pre><code class="language-bash">spindle capabilities
+spindle capabilities --json
+</code></pre>
+<p>Output:</p>
+<pre><code>Spindle Capabilities:
+
+Commands: reason, query, requires, explain, why-not
+
+Features:
+  --stdin: yes
+  --at: yes
+  --json: yes
+  Trust overlay: no
+  Given flags: no
+
+Schema versions:
+  reason: spindle.reason.v1
+  query: spindle.query.v1
+  requires: spindle.requires.v2
+  explain: spindle.explain.v1
+  why-not: spindle.why_not.v1
+</code></pre>
+<p>With <code>--json</code>, the output is a JSON object with schema <code>spindle.capabilities.v1</code>
+containing <code>commands</code>, <code>features</code>, and <code>schemas</code> fields.</p>
+<h3 id="explain-code"><a class="header" href="#explain-code">explain-code</a></h3>
+<p>Look up the meaning and common causes of a stable error code.</p>
+<pre><code class="language-bash">spindle explain-code RULE_NOT_FOUND
+spindle explain-code SPL_PARSE_ERROR
+</code></pre>
+<p>This command does not accept <code>--json</code>; output is always human-readable text.
+Use it to get guidance when a JSON error envelope contains an unfamiliar error
+code.</p>
+<h2 id="json-envelope-schema-versions"><a class="header" href="#json-envelope-schema-versions">JSON Envelope Schema Versions</a></h2>
+<p>Every <code>--json</code> response includes a <code>schema_version</code> field identifying the
+envelope format. The following schema versions are defined:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Schema</th><th>Command</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>spindle.reason.v1</code></td><td><code>reason</code></td><td>Default reason output with flat literal strings</td></tr>
+<tr><td><code>spindle.reason.v2</code></td><td><code>reason --v2</code></td><td>Reason output with typed term arguments</td></tr>
+<tr><td><code>spindle.query.v1</code></td><td><code>query</code></td><td>Query result with status</td></tr>
+<tr><td><code>spindle.explain.v1</code></td><td><code>explain</code></td><td>Proof tree with blocked alternatives</td></tr>
+<tr><td><code>spindle.why_not.v1</code></td><td><code>why-not</code></td><td>Blocking-reason analysis</td></tr>
+<tr><td><code>spindle.requires.v2</code></td><td><code>requires</code></td><td>Verified abduction solutions (v2 contract)</td></tr>
+<tr><td><code>spindle.capabilities.v1</code></td><td><code>capabilities</code></td><td>Feature and schema discovery</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
 <p>Output results in JSON format. Available for all commands, including <code>validate</code> and <code>stats</code>.
@@ -1254,8 +1475,20 @@ spindle --json validate --stdin &lt; examples/penguin.spl
 <p>Parse/usage failures also emit JSON envelopes when <code>--json</code> is present:</p>
 <pre><code class="language-bash">spindle --json
 </code></pre>
+<h3 id="--at-time"><a class="header" href="#--at-time"><code>--at &lt;TIME&gt;</code></a></h3>
+<p>Set the reference time for temporal (“as-of”) reasoning. The value must be an
+ISO 8601 / RFC 3339 timestamp.</p>
+<pre><code class="language-bash">spindle reason --at 2024-06-15T12:00:00Z examples/temporal.spl
+spindle query p --at 2024-06-15T12:00:00Z examples/temporal.spl
+</code></pre>
+<h3 id="--stdin"><a class="header" href="#--stdin"><code>--stdin</code></a></h3>
+<p>Read the theory from standard input instead of a file. Mutually exclusive with
+providing a file path.</p>
+<pre><code class="language-bash">cat examples/penguin.spl | spindle reason --stdin
+spindle --json validate --stdin &lt; examples/penguin.spl
+</code></pre>
 <h3 id="--positive"><a class="header" href="#--positive"><code>--positive</code></a></h3>
-<p>Show only positive conclusions (+D, +d).</p>
+<p>Show only positive conclusions (+D, +d). Applies to the <code>reason</code> command.</p>
 <pre><code class="language-bash">spindle reason --positive examples/penguin.spl
 </code></pre>
 <p>Output:</p>
@@ -1264,6 +1497,11 @@ spindle --json validate --stdin &lt; examples/penguin.spl
 +d bird
 +d penguin
 +d -flies
+</code></pre>
+<h3 id="--debug-errors"><a class="header" href="#--debug-errors"><code>--debug-errors</code></a></h3>
+<p>Show full error details including source chains and unredacted file paths.
+Useful for diagnosing unexpected failures.</p>
+<pre><code class="language-bash">spindle reason examples/penguin.spl --debug-errors
 </code></pre>
 <h2 id="file-format-detection"><a class="header" href="#file-format-detection">File Format Detection</a></h2>
 <p>The CLI auto-detects format by extension:</p>
@@ -1372,7 +1610,7 @@ done
 </code></pre>
 <p>Strict rules add both <code>+D</code> and <code>+d</code>.<br>Defeasible rules add <code>+d</code> only if not blocked.</p>
 <h2 id="conflict-handling"><a class="header" href="#conflict-handling">Conflict Handling</a></h2>
-<p>For a defeasible rule <code>r: body =&gt; q</code>, attackers are rules for <code>~q</code>.</p>
+<p>For a defeasible rule <code>(normally r body q)</code>, attackers are rules for <code>(not q)</code>.</p>
 <p><code>r</code> is blocked when:</p>
 <ol>
 <li>An applicable <strong>defeater</strong> for <code>~q</code> exists, and <code>r</code> is not superior to it.</li>
@@ -1456,8 +1694,8 @@ resolve the conflict.</p>
 <h3 id="step-3-generate-ground-rules"><a class="header" href="#step-3-generate-ground-rules">Step 3: Generate Ground Rules</a></h3>
 <p>Apply substitutions to create ground instances:</p>
 <pre><code class="language-lisp">; Ground instances of r1
-r1_1: parent(alice, bob) =&gt; ancestor(alice, bob)
-r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
+(normally r1_1 (parent alice bob) (ancestor alice bob))
+(normally r1_2 (parent bob charlie) (ancestor bob charlie))
 </code></pre>
 <h3 id="step-4-forward-chaining"><a class="header" href="#step-4-forward-chaining">Step 4: Forward Chaining</a></h3>
 <p>Reason over the ground theory using standard algorithms.</p>
@@ -1533,15 +1771,290 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 <li>Use specific predicates to reduce matching</li>
 <li>Add explicit superiority where grounded conflicts should resolve to one side</li>
 </ul>
-<h2 id="spl-limitations"><a class="header" href="#spl-limitations">SPL Limitations</a></h2>
-<p>The SPL format does <strong>not</strong> support variables. Use SPL for first-order rules:</p>
-<pre><code class="language-lisp"># SPL - no variables, must enumerate manually
-r1: parent_alice_bob =&gt; ancestor_alice_bob
-r2: parent_bob_charlie =&gt; ancestor_bob_charlie
+<h2 id="arithmetic-in-grounded-rules"><a class="header" href="#arithmetic-in-grounded-rules">Arithmetic in Grounded Rules</a></h2>
+<p>Arithmetic expressions are evaluated during grounding after variables are substituted.</p>
+<h3 id="bind-constraints-1"><a class="header" href="#bind-constraints-1">Bind Constraints</a></h3>
+<pre><code class="language-lisp">(given (item widget 25))
+(given (item gadget 10))
+(given (tax-rate 0.1))
+
+(normally r1
+  (and (item ?name ?price) (tax-rate ?rate)
+       (bind ?total (+ ?price (* ?price ?rate))))
+  (total-cost ?name ?total))
 </code></pre>
-<pre><code class="language-lisp">; SPL - single rule with variables
+<p>Grounding:</p>
+<ol>
+<li>Match <code>(item widget 25)</code> and <code>(tax-rate 0.1)</code> → <code>{?name→widget, ?price→25, ?rate→0.1}</code></li>
+<li>Evaluate <code>(+ 25 (* 25 0.1))</code> → <code>27.5</code></li>
+<li>Bind <code>?total → 27.5</code></li>
+<li>Produce <code>(total-cost widget 27.5)</code></li>
+</ol>
+<h3 id="comparison-guards-1"><a class="header" href="#comparison-guards-1">Comparison Guards</a></h3>
+<p>Guards filter substitutions that don’t satisfy the comparison:</p>
+<pre><code class="language-lisp">(given (score alice 85))
+(given (score bob 42))
+
+(normally r1
+  (and (score ?name ?s) (&gt;= ?s 50))
+  (passing ?name))
+</code></pre>
+<p>Only <code>{?name→alice, ?s→85}</code> satisfies <code>(&gt;= 85 50)</code>, so only <code>(passing alice)</code> is derived.</p>
+<h3 id="evaluation-order"><a class="header" href="#evaluation-order">Evaluation Order</a></h3>
+<p>Body literals are evaluated left-to-right. Variables must be bound before they are used in arithmetic:</p>
+<pre><code class="language-lisp">; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
+(normally r1
+  (and (item ?name ?price)
+       (bind ?discounted (* ?price 0.9)))
+  (sale-price ?name ?discounted))
+
+; INCORRECT: ?price is not yet bound when (bind ...) tries to use it
+(normally r-bad
+  (and (bind ?discounted (* ?price 0.9))
+       (item ?name ?price))
+  (sale-price ?name ?discounted))
+</code></pre>
+<h3 id="cross-type-matching"><a class="header" href="#cross-type-matching">Cross-Type Matching</a></h3>
+<p>Numeric terms match across types when values are equal:</p>
+<pre><code class="language-lisp">(given (threshold 100))        ; Integer 100
+(given (score alice 100.0))    ; Decimal 100.0
+
+(normally r1
+  (and (score ?name ?s) (threshold ?t) (&gt;= ?s ?t))
+  (above-threshold ?name))
+</code></pre>
+<p><code>Integer(100)</code> matches <code>Decimal(100.0)</code> in comparisons, so this works as expected.</p>
+<h2 id="variables-vs-manual-enumeration"><a class="header" href="#variables-vs-manual-enumeration">Variables vs. Manual Enumeration</a></h2>
+<p>SPL supports variables, so you can write a single rule:</p>
+<pre><code class="language-lisp">; Single rule with variables
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 </code></pre>
+<p>Without variables, you would need to enumerate all ground instances manually:</p>
+<pre><code class="language-lisp">(normally r1 (parent alice bob) (ancestor alice bob))
+(normally r2 (parent bob charlie) (ancestor bob charlie))
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="arithmetic-expressions-1"><a class="header" href="#arithmetic-expressions-1">Arithmetic Expressions</a></h1>
+<p>Spindle supports arithmetic expressions in rule bodies for numeric computation, variable binding, and comparison guards.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>Arithmetic adds three capabilities to SPL rules:</p>
+<ol>
+<li><strong>Expressions</strong> — compute numeric values from operators and variables</li>
+<li><strong>Bind constraints</strong> — assign computed results to new variables</li>
+<li><strong>Comparison guards</strong> — filter substitutions based on numeric conditions</li>
+</ol>
+<p>All arithmetic is restricted to rule bodies. Arithmetic cannot appear in facts, rule heads, or as standalone statements.</p>
+<h2 id="numeric-types"><a class="header" href="#numeric-types">Numeric Types</a></h2>
+<p>Spindle has three numeric types with automatic promotion:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Examples</th><th>Precision</th></tr>
+</thead>
+<tbody>
+<tr><td>Integer</td><td><code>42</code>, <code>-7</code>, <code>0</code></td><td>Exact (64-bit signed)</td></tr>
+<tr><td>Decimal</td><td><code>3.14</code>, <code>0.001</code></td><td>Exact (up to 28-29 significant digits)</td></tr>
+<tr><td>Float</td><td><code>1.5e2</code>, <code>1e-3</code></td><td>Approximate (IEEE 754 double)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="when-each-type-is-used"><a class="header" href="#when-each-type-is-used">When Each Type Is Used</a></h3>
+<p>The parser chooses the numeric type based on how you write the literal:</p>
+<ul>
+<li><strong>Integer</strong>: No decimal point, no exponent. <code>42</code>, <code>-7</code>, <code>0</code>.</li>
+<li><strong>Decimal</strong>: Contains a decimal point but no exponent (<code>e</code>/<code>E</code>). <code>3.14</code>, <code>0.001</code>, <code>-0.5</code>.</li>
+<li><strong>Float</strong>: Contains an exponent (<code>e</code> or <code>E</code>). <code>1.5e2</code> (= 150.0), <code>1e-3</code> (= 0.001), <code>2.0E10</code>.</li>
+</ul>
+<p>Decimal is the default for numbers with a decimal point because it gives exact representation. This matters for financial calculations and precise comparisons: <code>0.1 + 0.2</code> equals exactly <code>0.3</code> in Decimal, but not in floating point. Use scientific notation only when you specifically need IEEE 754 semantics or very large/small magnitudes.</p>
+<h3 id="promotion-rules"><a class="header" href="#promotion-rules">Promotion Rules</a></h3>
+<p>When mixing types in an operation, values are promoted along the chain:</p>
+<pre><code>Integer → Decimal → Float
+</code></pre>
+<ul>
+<li>Integer + Integer = Integer</li>
+<li>Integer + Decimal = Decimal</li>
+<li>Anything + Float = Float</li>
+</ul>
+<p>Once a Float enters a computation, the entire result is Float. Keep this in mind if exact precision matters to your use case.</p>
+<h3 id="cross-type-matching-1"><a class="header" href="#cross-type-matching-1">Cross-Type Matching</a></h3>
+<p>During grounding, numeric values match across types when equal:</p>
+<pre><code class="language-lisp">(given (limit 100))          ; Integer
+(given (score alice 100.0))  ; Decimal
+
+; ?s (Decimal 100.0) matches ?limit (Integer 100) in the comparison
+(normally r1
+  (and (score ?name ?s) (limit ?limit) (&gt;= ?s ?limit))
+  (at-limit ?name))
+</code></pre>
+<h2 id="operators-1"><a class="header" href="#operators-1">Operators</a></h2>
+<h3 id="n-ary-operators"><a class="header" href="#n-ary-operators">N-ary Operators</a></h3>
+<p>These accept two or more arguments:</p>
+<pre><code class="language-lisp">(+ 1 2 3)       ; =&gt; 6
+(- 10 3 2)      ; =&gt; 5  (left fold: (10-3)-2)
+(* 2 3 4)       ; =&gt; 24
+(/ 100 5 2)     ; =&gt; 10 (left fold: (100/5)/2)
+(min 5 3 8 1)   ; =&gt; 1
+(max 5 3 8 1)   ; =&gt; 8
+</code></pre>
+<p>Subtraction and division use <strong>left fold</strong> semantics: <code>(- a b c)</code> = <code>((a - b) - c)</code>.</p>
+<h3 id="binary-operators"><a class="header" href="#binary-operators">Binary Operators</a></h3>
+<p>These require exactly two arguments:</p>
+<pre><code class="language-lisp">(div 7 2)    ; =&gt; 3   (integer division, floor toward -inf)
+(rem 7 2)    ; =&gt; 1   (remainder)
+(** 2 10)    ; =&gt; 1024 (exponentiation)
+</code></pre>
+<p><code>div</code> and <code>rem</code> require integer operands.</p>
+<h3 id="unary-operator"><a class="header" href="#unary-operator">Unary Operator</a></h3>
+<pre><code class="language-lisp">(abs -5)            ; =&gt; 5
+(abs (- 3 10))      ; =&gt; 7
+</code></pre>
+<h3 id="nesting"><a class="header" href="#nesting">Nesting</a></h3>
+<p>Expressions can be arbitrarily nested:</p>
+<pre><code class="language-lisp">(+ (* ?base ?rate) (abs (- ?adjustment ?threshold)))
+</code></pre>
+<h2 id="bind-constraints-2"><a class="header" href="#bind-constraints-2">Bind Constraints</a></h2>
+<p><code>bind</code> assigns the result of an expression to a variable:</p>
+<pre><code class="language-lisp">(bind ?total (+ ?price ?tax))
+</code></pre>
+<p>The variable must be unbound (not previously assigned in this rule). If it is already bound, the bind succeeds only if the existing value equals the computed result.</p>
+<h3 id="example-computing-derived-values"><a class="header" href="#example-computing-derived-values">Example: Computing Derived Values</a></h3>
+<pre><code class="language-lisp">(given (item widget 25))
+(given (item gadget 10))
+(given (discount 0.15))
+
+(normally calc-price
+  (and (item ?name ?price) (discount ?rate)
+       (bind ?savings (* ?price ?rate))
+       (bind ?final (- ?price ?savings)))
+  (final-price ?name ?final))
+</code></pre>
+<p>Results: <code>(final-price widget 21.25)</code>, <code>(final-price gadget 8.50)</code></p>
+<h2 id="comparison-guards-2"><a class="header" href="#comparison-guards-2">Comparison Guards</a></h2>
+<p>Comparisons filter substitutions:</p>
+<pre><code class="language-lisp">(&gt; ?age 18)
+(&lt;= ?score 100)
+(= ?x ?y)
+(!= ?status 0)
+</code></pre>
+<p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
+<h3 id="example-filtering-by-condition"><a class="header" href="#example-filtering-by-condition">Example: Filtering by Condition</a></h3>
+<pre><code class="language-lisp">(given (employee alice 95000))
+(given (employee bob 45000))
+(given (employee carol 120000))
+
+(normally high-earner
+  (and (employee ?name ?salary) (&gt; ?salary 90000))
+  (senior-band ?name))
+</code></pre>
+<p>Only <code>alice</code> and <code>carol</code> satisfy <code>(&gt; ?salary 90000)</code>.</p>
+<h3 id="comparisons-with-expressions"><a class="header" href="#comparisons-with-expressions">Comparisons with Expressions</a></h3>
+<p>Both sides can be expressions:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (budget ?b) (cost ?item ?c) (tax-rate ?r)
+       (&gt; ?b (+ ?c (* ?c ?r))))
+  (affordable ?item))
+</code></pre>
+<h2 id="evaluation-order-1"><a class="header" href="#evaluation-order-1">Evaluation Order</a></h2>
+<p>Body elements are evaluated <strong>left to right</strong>. Variables must be bound by a preceding literal or bind before they can be used in arithmetic:</p>
+<pre><code class="language-lisp">; CORRECT: ?price is bound before bind uses it
+(normally r1
+  (and (item ?name ?price)
+       (bind ?discounted (* ?price 0.9)))
+  (sale-price ?name ?discounted))
+</code></pre>
+<p>If an arithmetic expression references an unbound variable, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
+<h2 id="arithmetic-in-predicate-arguments-1"><a class="header" href="#arithmetic-in-predicate-arguments-1">Arithmetic in Predicate Arguments</a></h2>
+<p>Arithmetic expressions can appear directly as predicate arguments in the body:</p>
+<pre><code class="language-lisp">(normally r1
+  (and (base ?x ?b) (offset ?x ?o))
+  (result ?x (+ ?b ?o)))
+</code></pre>
+<p>The expression <code>(+ ?b ?o)</code> is evaluated during grounding and the result becomes a concrete term in the head literal.</p>
+<h2 id="restrictions-1"><a class="header" href="#restrictions-1">Restrictions</a></h2>
+<p>Spindle enforces several restrictions on where arithmetic can appear. Each is checked at parse time and produces a clear error message.</p>
+<h3 id="no-arithmetic-in-heads-or-facts-req-009"><a class="header" href="#no-arithmetic-in-heads-or-facts-req-009">No Arithmetic in Heads or Facts (REQ-009)</a></h3>
+<p>Arithmetic constraints (<code>bind</code>, comparisons) are for filtering and computing in rule bodies. They cannot appear as conclusions.</p>
+<pre><code class="language-lisp">; INVALID — bind in head position
+(normally r1 (price ?p) (bind ?total (* ?p 1.1)))
+
+; INVALID — bind as a fact
+(given (bind ?x 42))
+
+; INVALID — comparison in head position
+(normally r1 bird (&gt; 1 0))
+</code></pre>
+<p><strong>Error message:</strong></p>
+<pre><code>Arithmetic predicate 'bind' cannot appear in rule head or fact position (REQ-009)
+</code></pre>
+<p>The same message appears for comparison operators (<code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>) used as head literals.</p>
+<h3 id="no-negated-arithmetic-req-011"><a class="header" href="#no-negated-arithmetic-req-011">No Negated Arithmetic (REQ-011)</a></h3>
+<p>Arithmetic constraints cannot be wrapped in <code>not</code>. This avoids ambiguity about what “not greater than” means in a defeasible logic context.</p>
+<pre><code class="language-lisp">; INVALID — cannot negate a comparison
+(normally r1 (and (val ?x) (not (&gt; ?x 100))) (low ?x))
+
+; INVALID — cannot negate bind
+(normally r1 (and bird (not (bind ?x 10))) flies)
+</code></pre>
+<p><strong>Error message:</strong></p>
+<pre><code>Arithmetic predicate '&gt;' cannot be negated (REQ-011). Use the positive form in the rule body instead.
+</code></pre>
+<p>Use the complementary comparison instead:</p>
+<pre><code class="language-lisp">; CORRECT — use &lt;= instead of (not &gt;)
+(normally r1 (and (val ?x) (&lt;= ?x 100)) (low ?x))
+</code></pre>
+<h3 id="no-temporal-variables-in-arithmetic-req-006"><a class="header" href="#no-temporal-variables-in-arithmetic-req-006">No Temporal Variables in Arithmetic (REQ-006)</a></h3>
+<p>Variables bound by <code>during</code> expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If a temporal variable appears in an arithmetic expression, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
+<pre><code class="language-lisp">; The rule below will never produce "shifted" because ?T is temporal
+(given (during (event) 100 200))
+(normally r1
+  (and (during (event) ?T ?U) (bind ?next (+ ?T 1)))
+  (shifted ?next))
+</code></pre>
+<h3 id="reserved-keywords-req-008-1"><a class="header" href="#reserved-keywords-req-008-1">Reserved Keywords (REQ-008)</a></h3>
+<p>Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels. This prevents confusing programs where <code>+</code> or <code>bind</code> might look like user-defined predicates.</p>
+<pre><code>+  -  *  /  div  rem  abs  min  max  **
+bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
+</code></pre>
+<p>The following names are also reserved for future use: <code>sum</code>, <code>count</code>, <code>avg</code>, <code>round</code>, <code>floor</code>, <code>ceil</code>.</p>
+<p><strong>Error message:</strong></p>
+<pre><code>Reserved keyword 'bind' cannot be used as a predicate name (REQ-008)
+</code></pre>
+<p>This also applies to tilde-negated forms (e.g., <code>~&gt;</code> is rejected because <code>&gt;</code> is reserved) and to rule labels in <code>prefer</code> declarations.</p>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="runtime-errors-during-grounding"><a class="header" href="#runtime-errors-during-grounding">Runtime Errors (During Grounding)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Error</th><th>Cause</th></tr>
+</thead>
+<tbody>
+<tr><td>Division by zero</td><td><code>(/ ?x 0)</code> or <code>(div ?x 0)</code></td></tr>
+<tr><td>Non-integer operand</td><td><code>(div 3.5 2)</code> or <code>(rem 1.5 1)</code></td></tr>
+<tr><td>Negative base with fractional exponent</td><td><code>(** -2 0.5)</code></td></tr>
+<tr><td>Non-finite result</td><td>Overflow producing infinity or NaN</td></tr>
+<tr><td>Unbound variable</td><td>Variable not yet assigned when expression is evaluated</td></tr>
+<tr><td>Temporal variable in arithmetic</td><td><code>(+ ?T 1)</code> where <code>?T</code> is from a <code>during</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance. No error is raised to the user; the rule is silently skipped for that particular combination of variable bindings.</p>
+<h3 id="parse-time-errors"><a class="header" href="#parse-time-errors">Parse-Time Errors</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Error</th><th>Cause</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>Arithmetic in head (REQ-009)</td><td><code>bind</code> or comparison used as a conclusion</td><td><code>(normally r1 p (bind ?x 1))</code></td></tr>
+<tr><td>Negated arithmetic (REQ-011)</td><td><code>not</code> wrapping <code>bind</code> or comparison</td><td><code>(not (&gt; ?x 5))</code></td></tr>
+<tr><td>Reserved keyword (REQ-008)</td><td>Operator used as predicate or label</td><td><code>(given bind)</code></td></tr>
+<tr><td>Unknown operator</td><td>Unrecognised operator name</td><td><code>(mod 5 3)</code></td></tr>
+<tr><td>Wrong arity</td><td>Too few or too many arguments</td><td><code>(div 1)</code>, <code>(abs 1 2)</code></td></tr>
+<tr><td>Invalid operand</td><td>Non-numeric, non-variable atom</td><td><code>(+ bird 1)</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Parse-time errors halt processing and report the line number and a description of the problem.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="temporal-reasoning-1"><a class="header" href="#temporal-reasoning-1">Temporal Reasoning</a></h1>
 <p>Spindle supports timepoint (“as-of”) reasoning, allowing you to reason about facts and rules active at a specific moment in time.</p>
@@ -1571,10 +2084,89 @@ inf                                ; Positive infinity (never ends)
 <li><strong>Rules</strong>: A rule is active if all its body literals and its head literal are active at <code>t</code>.</li>
 </ol>
 <p>This allows querying the system state at any historical or future point.</p>
+<h2 id="temporal-atom-identity-v030"><a class="header" href="#temporal-atom-identity-v030">Temporal Atom Identity (v0.3.0)</a></h2>
+<p>Starting in v0.3.0 (SPEC-018), temporal atoms with different time bounds are treated as <strong>distinct atoms</strong> during reasoning. Previously, <code>p[1,10]</code> and <code>p[20,30]</code> collapsed to the same internal identifier, which caused incorrect behaviour such as premature rule firing and cross-window satisfaction.</p>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>The internal <code>AtomKey</code> used for indexing now includes temporal bounds as part of atom identity. Two literals that differ only in their temporal intervals produce distinct identifiers:</p>
+<pre><code class="language-lisp">; These are now three distinct atoms:
+(given (during p 1 10))      ; p[1,10]
+(given (during p 20 30))     ; p[20,30]
+(given p)                    ; p (base, no temporal bounds)
+</code></pre>
+<p>This means a rule that requires <code>p</code> in its body will <strong>not</strong> fire when only <code>p[1,10]</code> is proven, because they are different atoms. To connect temporal facts to their base predicates, Spindle uses bridging rules (see below).</p>
+<h3 id="what-changed"><a class="header" href="#what-changed">What Changed</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Before v0.3.0</th><th>After v0.3.0</th></tr>
+</thead>
+<tbody>
+<tr><td><code>p[1,10]</code> and <code>p[20,30]</code> share the same internal ID</td><td>Each gets a distinct ID</td></tr>
+<tr><td>A rule needing <code>p</code> fires when <code>p[1,10]</code> is proven (incorrect)</td><td>Fires only when <code>p</code> (base) is proven</td></tr>
+<tr><td>Query for <code>p[1,10]</code> matches <code>p[20,30]</code> (false positive)</td><td>Matches only <code>p[1,10]</code> exactly</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="temporal-bridging-rules"><a class="header" href="#temporal-bridging-rules">Temporal Bridging Rules</a></h2>
+<p>Because temporal atoms are now distinct from their base predicates, Spindle automatically generates <strong>synthetic bridging rules</strong> that connect temporal facts to their base forms. This ensures backward compatibility: proving a temporal fact still makes the base predicate available to non-temporal rules.</p>
+<h3 id="automatic-bridge-generation"><a class="header" href="#automatic-bridge-generation">Automatic Bridge Generation</a></h3>
+<p>Given a temporal fact like <code>&gt;&gt; p[1,10]</code>, the <code>TemporalBridge</code> pipeline stage generates a strict rule:</p>
+<pre><code>p[1,10] → p
+</code></pre>
+<p>This means: “if <code>p</code> holds during <code>[1,10]</code>, then <code>p</code> holds in general.” The bridge is a <strong>strict</strong> rule (not defeasible), because temporal subsumption is a semantic entailment.</p>
+<h3 id="negation-bridges"><a class="header" href="#negation-bridges">Negation Bridges</a></h3>
+<p>For every positive bridge, a coupled negation bridge is also generated:</p>
+<pre><code>~p[1,10] → ~p
+</code></pre>
+<p>This ensures that evidence against a predicate in any temporal window propagates to the base level, enabling correct ambiguity blocking under skeptical semantics.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p>Consider a theory about employment:</p>
+<pre><code class="language-lisp">; Alice worked at Acme from 2020 to 2022
+(given (during (employed alice acme)
+               (moment "2020-01-01T00:00:00Z")
+               (moment "2022-01-01T00:00:00Z")))
+
+; If employed, then has_income
+(rule r1 (=&gt; (employed alice acme) (has_income alice)))
+</code></pre>
+<p>The <code>TemporalBridge</code> stage automatically generates:</p>
+<pre><code class="language-lisp">; Synthetic bridge (strict):
+; (employed alice acme)[2020,2022] → (employed alice acme)
+</code></pre>
+<p>This allows rule <code>r1</code> to fire, because the bridge proves the base <code>(employed alice acme)</code> from the temporal fact. Without the bridge, <code>r1</code> would never fire since its body expects the base atom.</p>
+<h3 id="bridge-rule-labels"><a class="header" href="#bridge-rule-labels">Bridge Rule Labels</a></h3>
+<p>Bridge rules use a reserved label namespace <code>__bridge::</code> to avoid collisions with user-defined rules:</p>
+<ul>
+<li>Positive bridge: <code>__bridge::&lt;literal_spl&gt;</code></li>
+<li>Negation bridge: <code>__bridge::neg::&lt;literal_spl&gt;</code></li>
+</ul>
+<p>User-defined rules must not use labels starting with <code>__bridge::</code>.</p>
+<h3 id="pipeline-placement"><a class="header" href="#pipeline-placement">Pipeline Placement</a></h3>
+<p>The <code>TemporalBridge</code> stage runs after grounding and before temporal variable validation:</p>
+<pre><code>Validate → WildcardRewrite → Ground → TemporalBridge → TemporalVarValidation → [TemporalFilter]
+</code></pre>
+<p>It is enabled by default. For theories with no temporal atoms, the stage is a no-op.</p>
+<h2 id="temporal-aware-query-operators-v030"><a class="header" href="#temporal-aware-query-operators-v030">Temporal-Aware Query Operators (v0.3.0)</a></h2>
+<p>The query operators <code>query</code>, <code>what_if</code>, <code>why_not</code>, and <code>abduce</code> now use temporal-aware matching when comparing a query literal against conclusions.</p>
+<h3 id="matching-behaviour"><a class="header" href="#matching-behaviour">Matching Behaviour</a></h3>
+<ul>
+<li><strong>Base query</strong> (no temporal bounds): Acts as a wildcard, matching any temporal variant of the predicate. This preserves backward compatibility.</li>
+<li><strong>Temporal query</strong> (with bounds): Requires an exact temporal match.</li>
+</ul>
+<pre><code class="language-lisp">; Given these conclusions after reasoning:
+;   +d p[1,10]
+;   +d p[20,30]
+;   +d p         (via bridging)
+
+; Querying "p" (base) matches all three — wildcard behaviour
+; Querying "p[1,10]" matches only +d p[1,10] — exact temporal match
+; Querying "p[5,15]" matches nothing — no exact match exists
+</code></pre>
+<p>This prevents false positives where querying <code>p[1,10]</code> would previously match <code>p[20,30]</code> because temporal bounds were ignored in comparisons.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ol>
 <li><strong>Timepoint only</strong>: Currently, Spindle supports reasoning <em>at</em> a timepoint. Interval inference (deriving new intervals from rules) is planned for a future release.</li>
-<li><strong>No Allen Relations</strong>: Allen relations (<code>before</code>, <code>after</code>, <code>overlaps</code>, etc.) are not yet supported in the core reasoner.</li>
+<li><strong>No Allen Relations in SPL</strong>: All 13 Allen relations are implemented in the core library (available via the Rust API), but are not yet exposed in SPL syntax. This requires interval variables (e.g., <code>(during p ?t)</code>) which are planned for a future release.</li>
 <li><strong>No Interval Variables</strong>: You cannot bind a variable to a time interval (e.g., <code>(during p ?t)</code> is not supported).</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -1591,7 +2183,7 @@ inf                                ; Positive infinity (never ends)
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operator</th><th>SPL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
+<tr><th>Operator</th><th>Display</th><th>SPL Syntax</th><th>Meaning</th></tr>
 </thead>
 <tbody>
 <tr><td>Obligation</td><td><code>[O]</code></td><td><code>(must ...)</code></td><td>The proposition <strong>must</strong> hold</td></tr>
@@ -1600,31 +2192,14 @@ inf                                ; Positive infinity (never ends)
 </tbody>
 </table>
 </div>
-<h3 id="obligation-o"><a class="header" href="#obligation-o">Obligation (<code>[O]</code>)</a></h3>
-<p>An obligation states that something is required. If <code>[O]pay</code> is concluded, then there is an obligation to pay.</p>
-<h3 id="permission-p"><a class="header" href="#permission-p">Permission (<code>[P]</code>)</a></h3>
-<p>A permission states that something is allowed. If <code>[P]access</code> is concluded, then access is permitted.</p>
-<h3 id="forbidden-f"><a class="header" href="#forbidden-f">Forbidden (<code>[F]</code>)</a></h3>
-<p>A prohibition states that something is not allowed. If <code>[F]enter</code> is concluded, then entering is forbidden.</p>
+<h3 id="obligation-must-1"><a class="header" href="#obligation-must-1">Obligation (<code>must</code>)</a></h3>
+<p>An obligation states that something is required. If <code>(must pay)</code> is concluded, then there is an obligation to pay.</p>
+<h3 id="permission-may-1"><a class="header" href="#permission-may-1">Permission (<code>may</code>)</a></h3>
+<p>A permission states that something is allowed. If <code>(may access)</code> is concluded, then access is permitted.</p>
+<h3 id="forbidden-forbidden-1"><a class="header" href="#forbidden-forbidden-1">Forbidden (<code>forbidden</code>)</a></h3>
+<p>A prohibition states that something is not allowed. If <code>(forbidden enter)</code> is concluded, then entering is forbidden.</p>
 <h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
-<p>In SPL, modal operators are written as square-bracketed prefixes on literals:</p>
-<pre><code class="language-lisp"># Modal facts
-f1: &gt;&gt; [O]pay
-f2: &gt;&gt; [P]access
-f3: &gt;&gt; [F]enter
-
-# Modal literals in rules
-r1: signed_contract =&gt; [O]pay
-r2: member =&gt; [P]access
-r3: unauthorized =&gt; [F]enter
-</code></pre>
-<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary SPL literals:</p>
-<pre><code class="language-lisp"># Negated modal literals
-r4: exemption =&gt; -[O]pay
-r5: revoked =&gt; -[P]access
-</code></pre>
-<h2 id="spl-syntax-1"><a class="header" href="#spl-syntax-1">SPL Syntax</a></h2>
-<p>In SPL, modal operators use keyword wrappers:</p>
+<p>Modal operators use keyword wrappers:</p>
 <pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
 (given (must pay))
 (normally r1 signed-contract (must pay))
@@ -1650,27 +2225,7 @@ r5: revoked =&gt; -[P]access
 </code></pre>
 <h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
 <p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
-<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
-<pre><code class="language-lisp"># If you signed a contract, you are obligated to pay
-r1: signed_contract =&gt; [O]pay
-
-# If you are obligated to pay and fail to pay, you are in violation
-r2: [O]pay, -paid =&gt; violation
-
-# Members may access resources
-r3: member =&gt; [P]access
-
-# Unauthorized users are forbidden from entering
-r4: unauthorized =&gt; [F]enter
-
-# An exemption defeats the obligation to pay
-r5: exemption =&gt; -[O]pay
-r5 &gt; r1
-
-# A defeater: pending review blocks the permission
-d1: pending_review ~&gt; [P]access
-</code></pre>
-<h3 id="spl-examples-1"><a class="header" href="#spl-examples-1">SPL Examples</a></h3>
+<h3 id="examples-2"><a class="header" href="#examples-2">Examples</a></h3>
 <pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
 (normally r1 signed-contract (must pay))
 
@@ -1828,7 +2383,7 @@ assert_eq!(format!("{}", forbidden_enter), "[F]enter(restricted_area)");
 </span>use spindle_core::prelude::*;
 use smallvec::smallvec;
 
-// r1: signed_contract =&gt; [O]pay
+// (normally r1 signed-contract (must pay))
 let body = smallvec![Literal::simple("signed_contract")];
 let head = smallvec![Literal::new(
     "pay",
@@ -1839,7 +2394,7 @@ let head = smallvec![Literal::new(
 )];
 let rule = Rule::new("r1", RuleType::Defeasible, body, head);
 
-// r2: [O]pay, ~paid =&gt; violation
+// (normally r2 (and (must pay) (not paid)) violation)
 let body = smallvec![
     Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]),
     Literal::negated("paid"),
@@ -1980,7 +2535,7 @@ set.insert(pay.literal_id());
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="trust-weighted-reasoning"><a class="header" href="#trust-weighted-reasoning">Trust-Weighted Reasoning</a></h1>
 <p>Spindle supports trust-weighted defeasible reasoning, enabling source attribution, trust-weighted conclusions, partial defeat (diminishment), and multi-perspective evaluation.</p>
-<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
 <p>In multi-agent and multi-source environments, not all information is equally reliable. Trust-weighted reasoning extends Spindle’s defeasible logic with:</p>
 <ul>
 <li><strong>Source attribution</strong>: Track which agents or systems contributed facts and rules</li>
@@ -2225,7 +2780,7 @@ assert_eq!(policy.get_effective_trust("agent:session", 86400.0), 0.0);
 <span class="boring">}</span></code></pre>
 <h2 id="weakest-link-trust-model"><a class="header" href="#weakest-link-trust-model">Weakest-Link Trust Model</a></h2>
 <p>The trust degree of a derived conclusion equals the <strong>minimum trust value</strong> encountered along its entire derivation chain. This is the “weakest-link” model: a conclusion is only as trustworthy as the least trusted step that produced it.</p>
-<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
 <p>Given a derivation tree, each node has a trust value from its contributing source. The <code>weakest_link_trust()</code> method recursively computes the minimum:</p>
 <pre><code>       root (0.8)
       /         \
@@ -2618,10 +3173,10 @@ for lr in &amp;learned {
 <h3 id="petri-net-mining-with-metrics"><a class="header" href="#petri-net-mining-with-metrics">Petri Net Mining with Metrics</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use spindle_core::mining::petri_net_to_dfl;
+</span>use spindle_core::mining::petri_net_to_rules;
 
 // Mine rules with minimum support=3, confidence=0.7
-let learned_rules = petri_net_to_dfl(&amp;event_log, 3, 0.7);
+let learned_rules = petri_net_to_rules(&amp;event_log, 3, 0.7);
 
 for lr in &amp;learned_rules {
     println!("{}: support={}, confidence={:.2}, source={}",
@@ -2769,14 +3324,14 @@ let hypotheticals = vec![
 let goal = Literal::negated("flies");
 let result = what_if(&amp;theory, hypotheticals, &amp;goal);
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
 <ol>
 <li>Create a copy of the theory</li>
 <li>Add hypothetical facts</li>
 <li>Reason over the modified theory</li>
 <li>Return new conclusions</li>
 </ol>
-<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
 <p>Original theory:</p>
 <pre><code class="language-lisp">(given bird)
 (normally r1 bird flies)
@@ -2821,7 +3376,7 @@ let explanation = why_not(&amp;theory, &amp;literal);
 </ul>
 </li>
 </ol>
-<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
+<h3 id="example-1-1"><a class="header" href="#example-1-1">Example</a></h3>
 <p>Theory:</p>
 <pre><code class="language-lisp">(given bird)
 (given penguin)
@@ -2878,7 +3433,7 @@ use spindle_core::literal::Literal;
 let goal = Literal::simple("goal");
 let result = abduce(&amp;theory, &amp;goal, max_solutions);
 <span class="boring">}</span></code></pre>
-<h3 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h3>
+<h3 id="how-it-works-2-1"><a class="header" href="#how-it-works-2-1">How It Works</a></h3>
 <ol>
 <li>Start with the goal literal</li>
 <li>Find rules that could prove it</li>
@@ -2923,7 +3478,7 @@ struct AbductionSolution {
 </code></pre>
 <p>Abducing <code>flies</code> might return:</p>
 <ul>
-<li><code>["bird", "healthy"]</code> with a rule <code>r3: bird, healthy =&gt; flies</code> where <code>r3 &gt; r2</code></li>
+<li><code>["bird", "healthy"]</code> with a rule <code>(normally r3 (and bird healthy) flies)</code> where r3 &gt; r2</li>
 <li>Or indicate that <code>flies</code> cannot be achieved given <code>penguin</code></li>
 </ul>
 <h3 id="use-cases-2-1"><a class="header" href="#use-cases-2-1">Use Cases</a></h3>
@@ -2967,11 +3522,11 @@ println!("Minimal fixes: {:?}", solutions);
 
 const spindle = new Spindle();
 spindle.parseSpl(`
-  f1: &gt;&gt; bird
-  f2: &gt;&gt; penguin
-  r1: bird =&gt; flies
-  r2: penguin =&gt; ~flies
-  r2 &gt; r1
+  (given bird)
+  (given penguin)
+  (normally r1 bird flies)
+  (normally r2 penguin (not flies))
+  (prefer r2 r1)
 `);
 
 // What-if
@@ -3036,10 +3591,10 @@ console.log(abduce);
 </ul>
 <h3 id="navigating-proof-trees"><a class="header" href="#navigating-proof-trees">Navigating Proof Trees</a></h3>
 <p>A proof tree reads from conclusion down to facts. At each node, the <code>proof_step</code> tells you which rule was used, and the <code>body_proofs</code> within that step give you the sub-trees for each premise.</p>
-<p>For example, given a theory where <code>penguin</code> is a fact, <code>penguin -&gt; bird</code> is strict, and <code>bird =&gt; flies</code> is defeasible, the proof tree for <code>flies</code> would look like:</p>
-<pre><code>flies [defeasible, r1: bird =&gt; flies]
+<p>For example, given a theory where <code>penguin</code> is a fact, <code>(always s1 penguin bird)</code> is strict, and <code>(normally r1 bird flies)</code> is defeasible, the proof tree for <code>flies</code> would look like:</p>
+<pre><code>flies [defeasible, r1: bird -&gt; flies]
   bird [definite, s1: penguin -&gt; bird]
-    penguin [definite, f1: &gt;&gt; penguin]
+    penguin [definite, f1: penguin]
 </code></pre>
 <p>Each level corresponds to a <code>ProofNode</code> whose <code>proof_step.body_proofs</code> contains the children.</p>
 <h2 id="blocked-alternatives-and-conflict-resolutions"><a class="header" href="#blocked-alternatives-and-conflict-resolutions">Blocked Alternatives and Conflict Resolutions</a></h2>
@@ -3114,7 +3669,7 @@ Conflict Resolutions:
     "proof_step": {
       "rule_label": "r2",
       "rule_type": "defeasible",
-      "rule_text": "penguin =&gt; ~flies",
+      "rule_text": "penguin -&gt; ~flies",
       "body_proofs": [
         {
           "literal": "penguin",
@@ -3122,7 +3677,7 @@ Conflict Resolutions:
           "proof_step": {
             "rule_label": "f1",
             "rule_type": "fact",
-            "rule_text": "&gt;&gt; penguin",
+            "rule_text": "penguin",
             "body_proofs": []
           }
         }
@@ -3251,7 +3806,7 @@ let annots = Annotations::with_entries(vec![
     ("confidence", "0.85"),
 ]);
 
-let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom =&gt; diagnosis")
+let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom -&gt; diagnosis")
     .with_annotations(annots);
 <span class="boring">}</span></code></pre>
 <p>Annotations are preserved across all output formats. In natural language, <code>description</code> and <code>source</code> are printed inline. In JSON-LD, they are mapped to <code>rdfs:comment</code>, <code>prov:wasAttributedTo</code>, and <code>spindle:confidence</code> respectively.</p>
@@ -3326,11 +3881,11 @@ use spindle_core::literal::Literal;
 use spindle_core::rule::RuleType;
 
 // Build a proof tree bottom-up
-let fact_step = ProofStep::new("f1", RuleType::Fact, "&gt;&gt; penguin");
+let fact_step = ProofStep::new("f1", RuleType::Fact, "penguin");
 let fact_node = ProofNode::new(Literal::simple("penguin"), DerivationType::Definite)
     .with_proof_step(fact_step);
 
-let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin =&gt; ~flies")
+let rule_step = ProofStep::new("r2", RuleType::Defeasible, "penguin -&gt; ~flies")
     .with_body_proofs(vec![fact_node]);
 let conclusion_node = ProofNode::new(Literal::negated("flies"), DerivationType::Defeasible)
     .with_proof_step(rule_step);
@@ -3538,7 +4093,7 @@ annots.id = Some("https://example.org/rules/civil-rights-liability".to_string())
 <blockquote>
 <p><strong>Note</strong>: Process mining is currently available through the Rust API only. It is not exposed via the CLI or the WebAssembly bindings.</p>
 </blockquote>
-<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
 <p>Process mining bridges the gap between observed behavior (event logs) and formal models (defeasible logic rules). The pipeline works as follows:</p>
 <pre><code>EventLog -&gt; Footprint -&gt; PetriNet -&gt; LearnedRules
                |                         |
@@ -3948,7 +4503,7 @@ let result = mine_rules(&amp;log, 1, 0.5);
 
 // Discovered rules describe the standard ticket workflow
 for lr in &amp;result.rules {
-    println!("{}: {} =&gt; {}  (support={}, confidence={:.0}%)",
+    println!("{}: {} -&gt; {}  (support={}, confidence={:.0}%)",
         lr.rule.label,
         lr.rule.body.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
         lr.rule.head.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
@@ -4275,14 +4830,7 @@ cargo bench
 <h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
 <p>Common issues and how to resolve them.</p>
 <h2 id="parse-errors"><a class="header" href="#parse-errors">Parse Errors</a></h2>
-<h3 id="could-not-parse-error"><a class="header" href="#could-not-parse-error">“Could not parse” Error</a></h3>
-<pre><code>Error at line 5: could not parse: bird flies
-</code></pre>
-<p><strong>Cause</strong>: Missing arrow operator.</p>
-<p><strong>Fix</strong>: Add the correct arrow:</p>
-<pre><code class="language-lisp">r1: bird =&gt; flies
-</code></pre>
-<h3 id="unknown-keyword-error-spl"><a class="header" href="#unknown-keyword-error-spl">“Unknown keyword” Error (SPL)</a></h3>
+<h3 id="unknown-keyword-error"><a class="header" href="#unknown-keyword-error">“Unknown keyword” Error</a></h3>
 <pre><code>SPL parse error: Unknown keyword: defeasible
 </code></pre>
 <p><strong>Cause</strong>: Wrong keyword.</p>
@@ -4293,13 +4841,6 @@ cargo bench
 <li><code>always</code> (not <code>strict</code>)</li>
 <li><code>except</code> (not <code>defeater</code>)</li>
 </ul>
-<h3 id="missing-label-spl"><a class="header" href="#missing-label-spl">Missing Label (SPL)</a></h3>
-<pre><code>Error at line 3: could not parse: &gt;&gt; bird
-</code></pre>
-<p><strong>Cause</strong>: SPL rules require labels.</p>
-<p><strong>Fix</strong>: Add a label:</p>
-<pre><code class="language-lisp">f1: &gt;&gt; bird
-</code></pre>
 <h2 id="unexpected-conclusions"><a class="header" href="#unexpected-conclusions">Unexpected Conclusions</a></h2>
 <h3 id="expected-conclusion-missing"><a class="header" href="#expected-conclusion-missing">Expected Conclusion Missing</a></h3>
 <p><strong>Symptom</strong>: A literal you expected to be <code>+d</code> is <code>-d</code>.</p>
@@ -4312,20 +4853,20 @@ cargo bench
 </li>
 <li>
 <p>Check if the body is satisfied:</p>
-<pre><code class="language-lisp"># Is 'bird' actually proven?
-r1: bird =&gt; flies
+<pre><code class="language-lisp">; Is 'bird' actually proven?
+(normally r1 bird flies)
 </code></pre>
 </li>
 <li>
 <p>Check for conflicts:</p>
 <pre><code class="language-bash"># Look for rules proving the complement
-grep "~flies\|-flies" theory.spl
+grep "(not flies)" theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check superiority:</p>
 <pre><code class="language-bash"># Is there a superior rule blocking?
-grep "&gt;" theory.spl
+grep "prefer" theory.spl
 </code></pre>
 </li>
 </ol>
@@ -4335,34 +4876,34 @@ grep "&gt;" theory.spl
 <ol>
 <li>
 <p>Find which rule proves it:</p>
-<pre><code class="language-bash">grep "=&gt; literal\|-&gt; literal" theory.spl
+<pre><code class="language-bash">grep "literal" theory.spl
 </code></pre>
 </li>
 <li>
 <p>Check if a defeater is missing:</p>
-<pre><code class="language-lisp"># Add a defeater to block
-d1: exception ~&gt; unexpected_literal
+<pre><code class="language-lisp">; Add a defeater to block
+(except d1 exception unexpected-literal)
 </code></pre>
 </li>
 </ol>
 <h3 id="both-literals-unprovable-ambiguity"><a class="header" href="#both-literals-unprovable-ambiguity">Both Literals Unprovable (Ambiguity)</a></h3>
-<p><strong>Symptom</strong>: Neither <code>q</code> nor <code>~q</code> is <code>+d</code>.</p>
+<p><strong>Symptom</strong>: Neither <code>q</code> nor <code>(not q)</code> is <code>+d</code>.</p>
 <p><strong>Cause</strong>: Conflicting rules without superiority.</p>
 <p><strong>Fix</strong>: Add superiority:</p>
-<pre><code class="language-lisp">r1: a =&gt; q
-r2: b =&gt; ~q
-r1 &gt; r2    # or r2 &gt; r1
+<pre><code class="language-lisp">(normally r1 a q)
+(normally r2 b (not q))
+(prefer r1 r2)    ; or (prefer r2 r1)
 </code></pre>
 <h2 id="superiority-issues"><a class="header" href="#superiority-issues">Superiority Issues</a></h2>
 <h3 id="superiority-not-working"><a class="header" href="#superiority-not-working">Superiority Not Working</a></h3>
-<p><strong>Symptom</strong>: Declared <code>r1 &gt; r2</code> but r2 still wins.</p>
+<p><strong>Symptom</strong>: Declared <code>(prefer r1 r2)</code> but r2 still wins.</p>
 <p><strong>Check</strong>:</p>
 <ol>
 <li>
 <p>Rule labels match exactly:</p>
-<pre><code class="language-lisp">r1: bird =&gt; flies      # Label is "r1"
-r2: penguin =&gt; ~flies  # Label is "r2"
-r1 &gt; r2                # Must match exactly
+<pre><code class="language-lisp">(normally r1 bird flies)
+(normally r2 penguin (not flies))
+(prefer r1 r2)                      ; Must match labels exactly
 </code></pre>
 </li>
 <li>
@@ -4380,9 +4921,9 @@ spindle reason --positive theory.spl | grep "bird\|penguin"
 </li>
 </ol>
 <h3 id="circular-superiority"><a class="header" href="#circular-superiority">Circular Superiority</a></h3>
-<pre><code class="language-lisp"># BAD: creates undefined behavior
-r1 &gt; r2
-r2 &gt; r1
+<pre><code class="language-lisp">; BAD: creates undefined behavior
+(prefer r1 r2)
+(prefer r2 r1)
 </code></pre>
 <p><strong>Fix</strong>: Remove one declaration or restructure rules.</p>
 <h2 id="grounding-issues"><a class="header" href="#grounding-issues">Grounding Issues</a></h2>
@@ -4427,14 +4968,10 @@ r2 &gt; r1
 <h2 id="file-format-issues"><a class="header" href="#file-format-issues">File Format Issues</a></h2>
 <h3 id="wrong-format-detection"><a class="header" href="#wrong-format-detection">Wrong Format Detection</a></h3>
 <p><strong>Symptom</strong>: File parses incorrectly.</p>
-<p><strong>Fix</strong>: Use correct extension:</p>
-<ul>
-<li><code>.spl</code> for SPL format</li>
-<li><code>.spl</code> for SPL format</li>
-</ul>
+<p><strong>Fix</strong>: Use <code>.spl</code> extension for SPL format.</p>
 <h3 id="encoding-issues"><a class="header" href="#encoding-issues">Encoding Issues</a></h3>
 <p><strong>Symptom</strong>: Special characters cause errors.</p>
-<p><strong>Fix</strong>: Use UTF-8 encoding. The negation symbol <code>¬</code> is supported.</p>
+<p><strong>Fix</strong>: Use UTF-8 encoding.</p>
 <h2 id="conflict-expectations"><a class="header" href="#conflict-expectations">Conflict Expectations</a></h2>
 <h3 id="conflicting-defeasible-rules-both-show-as-provable"><a class="header" href="#conflicting-defeasible-rules-both-show-as-provable">Conflicting Defeasible Rules Both Show As Provable</a></h3>
 <p><strong>Symptom</strong>: You see both <code>+d p</code> and <code>+d ~p</code>.</p>
@@ -4472,10 +5009,10 @@ r2 &gt; r1
 </code></pre>
 <h3 id="minimal-reproduction"><a class="header" href="#minimal-reproduction">Minimal Reproduction</a></h3>
 <p>Create a minimal theory that reproduces the issue:</p>
-<pre><code class="language-lisp"># Start with just the failing rules
-f1: &gt;&gt; bird
-r1: bird =&gt; flies
-# Add rules until issue appears
+<pre><code class="language-lisp">; Start with just the failing rules
+(given bird)
+(normally r1 bird flies)
+; Add rules until issue appears
 </code></pre>
 <h3 id="use-positive-output"><a class="header" href="#use-positive-output">Use Positive Output</a></h3>
 <p>Focus on what IS proven:</p>
@@ -4497,6 +5034,70 @@ r1: bird =&gt; flies
 <li>Report at: https://codeberg.org/anuna/spindle-rust/issues</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
+<p>All notable changes to Spindle-Rust are documented here.
+For the full changelog with migration notes, see <a href="https://codeberg.org/anuna/spindle-rust/src/branch/main/CHANGELOG.md">CHANGELOG.md</a> in the repository root.</p>
+<h2 id="v030-2026-03-04"><a class="header" href="#v030-2026-03-04">v0.3.0 (2026-03-04)</a></h2>
+<h3 id="added"><a class="header" href="#added">Added</a></h3>
+<ul>
+<li><strong>SPEC-017 Arithmetic Module</strong>: full arithmetic expression support in rule bodies.
+<ul>
+<li>Three numeric term types: <code>Integer</code>, <code>Decimal</code> (arbitrary-precision via <code>rust_decimal</code>), <code>Float</code> (<code>FiniteFloat</code> wrapper rejecting NaN/Inf).</li>
+<li>Automatic type promotion chain: Integer -&gt; Decimal -&gt; Float.</li>
+<li><code>ArithExpr</code> AST with n-ary ops (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>min</code>, <code>max</code>), binary ops (<code>div</code>, <code>rem</code>, <code>**</code>), and unary ops (<code>abs</code>).</li>
+<li><code>bind</code> variable binding and comparison guards (<code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>) in rule bodies.</li>
+<li>Cross-type numeric matching in grounding (e.g., <code>Integer(2)</code> matches <code>Decimal(2.0)</code>).</li>
+<li>SPL parser extended with arithmetic expression, numeric literal, and guard parsing.</li>
+<li>Parse-time rejection of arithmetic in heads, negated arithmetic, and reserved keywords.</li>
+</ul>
+</li>
+<li><strong>SPEC-018 Temporal Atom Identity</strong>: atoms with different temporal bounds are now treated as distinct during reasoning.
+<ul>
+<li>Synthetic bridging rules connect temporally-scoped variants.</li>
+<li>Core query operators (<code>what_if</code>, <code>why_not</code>, <code>requires</code>) upgraded to temporal-aware matching.</li>
+</ul>
+</li>
+<li><strong>v2 JSON output</strong> (REQ-012): <code>--v2</code> CLI flag and <code>reasonV2</code> WASM method emitting typed <code>Term</code> arguments in schema <code>spindle.reason.v2</code>.</li>
+</ul>
+<h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
+<ul>
+<li><strong>Breaking</strong>: <code>From&lt;NumericValue&gt; for Term</code> replaced with <code>TryFrom</code>; non-finite floats now return errors.</li>
+<li><code>Literal::predicate_ids</code> and <code>Substitution::terms</code> migrated from <code>SymbolId</code> to <code>Term</code>.</li>
+<li><code>RuleBody</code> migrated from <code>SmallVec&lt;[Literal; 4]&gt;</code> to <code>SmallVec&lt;[BodyLiteral; 4]&gt;</code>.</li>
+</ul>
+<h3 id="fixed"><a class="header" href="#fixed">Fixed</a></h3>
+<ul>
+<li><code>FiniteFloat</code> serde deserialization validates invariants, preventing non-canonical or non-finite values.</li>
+<li>SPL round-trip for arithmetic expressions preserved correctly.</li>
+<li>Tilde-negated reserved keywords (<code>~&gt;</code>, <code>~bind</code>, etc.) rejected in list-form literals.</li>
+<li>Negative base with fractional exponent rejected in <code>decimal_pow</code>.</li>
+<li>Temporal bounds preserved in body normalization.</li>
+</ul>
+<h2 id="v020-2026-02-26"><a class="header" href="#v020-2026-02-26">v0.2.0 (2026-02-26)</a></h2>
+<h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
+<ul>
+<li><strong>IMPL-011 Verified <code>requires</code></strong>: <code>requires</code> command now verifies abduction solutions by default.
+<ul>
+<li>New core API: <code>requires_with_options(theory, goal, options)</code> with <code>RequiresOptions</code>, <code>RequiresResult</code>, <code>RequiresSearchStatus</code>, <code>RequiresVerificationStats</code>.</li>
+<li>New CLI contract schema: <code>spindle.requires.v2</code>.</li>
+</ul>
+</li>
+<li><strong>Release tooling</strong>: <code>release.sh</code> script with pre-flight validation checks and <code>make release</code> target.</li>
+<li>Pre-1.0 semver policy documented.</li>
+</ul>
+<h3 id="changed-1"><a class="header" href="#changed-1">Changed</a></h3>
+<ul>
+<li><code>requires --json</code> emits <code>spindle.requires.v2</code> schema only.</li>
+<li><code>spindle capabilities --json</code> advertises <code>schemas.requires = spindle.requires.v2</code>.</li>
+<li>Core <code>requires()</code> compatibility wrapper delegates to verified logic.</li>
+</ul>
+<h3 id="fixed-1"><a class="header" href="#fixed-1">Fixed</a></h3>
+<ul>
+<li>Eliminated false-positive <code>requires</code> candidates that fail under full defeasible reasoning.</li>
+<li>Corrected <code>BudgetExhausted</code> classification for duplicate raw-candidate edge cases.</li>
+<li>Defensive collision handling for injected verification fact labels.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="rust-library-guide"><a class="header" href="#rust-library-guide">Rust Library Guide</a></h1>
 <p>This guide covers using Spindle as a Rust library.</p>
 <h2 id="installation-3"><a class="header" href="#installation-3">Installation</a></h2>
@@ -4508,7 +5109,7 @@ spindle-parser = { git = "https://codeberg.org/anuna/spindle-rust", package = "s
 <h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
 <pre class="playground"><code class="language-rust">use spindle_core::prelude::*;
 
-fn main() {
+fn main() -&gt; Result&lt;()&gt; {
     let mut theory = Theory::new();
 
     // Add facts
@@ -4523,13 +5124,15 @@ fn main() {
     theory.add_superiority(&amp;r2, &amp;r1);
 
     // Reason
-    let conclusions = theory.reason();
+    let conclusions = theory.reason()?;
 
     for c in &amp;conclusions {
         if c.conclusion_type.is_positive() {
             println!("{}", c);
         }
     }
+
+    Ok(())
 }</code></pre>
 <h2 id="creating-theories"><a class="header" href="#creating-theories">Creating Theories</a></h2>
 <h3 id="programmatic-construction"><a class="header" href="#programmatic-construction">Programmatic Construction</a></h3>
@@ -4562,21 +5165,6 @@ theory.add_superiority(&amp;r2, &amp;r1);
 </span>use spindle_parser::parse_spl;
 
 let spl = r#"
-    f1: &gt;&gt; bird
-    f2: &gt;&gt; penguin
-    r1: bird =&gt; flies
-    r2: penguin =&gt; ~flies
-    r2 &gt; r1
-"#;
-
-let theory = parse_spl(spl)?;
-<span class="boring">}</span></code></pre>
-<h3 id="parsing-spl-1"><a class="header" href="#parsing-spl-1">Parsing SPL</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use spindle_parser::parse_spl;
-
-let spl = r#"
     (given bird)
     (given penguin)
     (normally r1 bird flies)
@@ -4592,13 +5180,13 @@ let theory = parse_spl(spl)?;
 </span><span class="boring">fn main() {
 </span>use spindle_core::reason::reason;
 
-let conclusions = reason(&amp;theory);
+let conclusions = reason(&amp;theory)?;
 <span class="boring">}</span></code></pre>
 <h3 id="convenience-method"><a class="header" href="#convenience-method">Convenience Method</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Uses standard algorithm
-let conclusions = theory.reason();
+let conclusions = theory.reason()?;
 <span class="boring">}</span></code></pre>
 <h2 id="working-with-conclusions"><a class="header" href="#working-with-conclusions">Working with Conclusions</a></h2>
 <h3 id="conclusion-types"><a class="header" href="#conclusion-types">Conclusion Types</a></h3>
@@ -4653,6 +5241,82 @@ if is_provable(&amp;conclusions, "flies") {
     println!("It flies!");
 }
 <span class="boring">}</span></code></pre>
+<h2 id="terms"><a class="header" href="#terms">Terms</a></h2>
+<p>The <code>Term</code> enum represents typed values that appear as arguments in literals
+and as results of arithmetic expressions. Four variants cover the value space:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::term::{Term, FiniteFloat, NumericValue};
+use spindle_core::intern::{SymbolId, intern};
+use rust_decimal::Decimal;
+
+// Symbol — an interned string identifier
+let sym = Term::Symbol(intern("alice"));
+
+// Integer — a 64-bit signed integer
+let int = Term::Integer(42);
+
+// Decimal — an arbitrary-precision decimal (exact representation)
+let dec = Term::Decimal(Decimal::new(314, 2)); // 3.14
+
+// Float — a canonicalized finite IEEE 754 f64
+let flt = Term::Float(FiniteFloat::new(2.718).unwrap());
+<span class="boring">}</span></code></pre>
+<h3 id="convenience-conversions"><a class="header" href="#convenience-conversions">Convenience Conversions</a></h3>
+<p>Terms implement <code>From</code> for common types, so you can use <code>.into()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let t: Term = 42i64.into();               // Term::Integer(42)
+let t: Term = Decimal::ONE.into();         // Term::Decimal(1)
+let t: Term = intern("bob").into();        // Term::Symbol(...)
+let t: Term = FiniteFloat::new(1.0)
+    .unwrap().into();                      // Term::Float(1.0)
+<span class="boring">}</span></code></pre>
+<h3 id="numeric-checks-and-cross-type-equality"><a class="header" href="#numeric-checks-and-cross-type-equality">Numeric Checks and Cross-Type Equality</a></h3>
+<p><code>Term::is_numeric()</code> returns <code>true</code> for Integer, Decimal, and Float variants.
+<code>Term::numeric_eq()</code> supports cross-type comparison with widening promotion
+(Integer -&gt; Decimal -&gt; Float):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let a = Term::Integer(2);
+let b = Term::Decimal(Decimal::new(20, 1)); // 2.0
+assert!(a.numeric_eq(&amp;b)); // true — same mathematical value
+
+let c = Term::Float(FiniteFloat::new(2.0).unwrap());
+assert!(a.numeric_eq(&amp;c)); // true
+<span class="boring">}</span></code></pre>
+<p>Symbols are never numerically equal to anything (including other symbols).</p>
+<h3 id="numericvalue"><a class="header" href="#numericvalue">NumericValue</a></h3>
+<p><code>NumericValue</code> is a guaranteed-numeric counterpart to <code>Term</code> (no <code>Symbol</code>
+variant). Convert with <code>Term::to_numeric_value()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let term = Term::Integer(10);
+if let Some(nv) = term.to_numeric_value() {
+    println!("Numeric: {}", nv); // "10"
+}
+
+// Convert back (Float variant rejects NaN/Inf)
+let back: Term = NumericValue::Integer(10).try_into().unwrap();
+<span class="boring">}</span></code></pre>
+<h3 id="finitefloat"><a class="header" href="#finitefloat">FiniteFloat</a></h3>
+<p><code>FiniteFloat</code> wraps <code>f64</code> with two invariants: it rejects NaN and infinity,
+and normalizes <code>-0.0</code> to <code>+0.0</code>. This makes it safe to use as a hash-map key
+with stable <code>Eq</code> and <code>Hash</code> implementations.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let f = FiniteFloat::new(3.14).unwrap();
+assert_eq!(f.value(), 3.14);
+
+// NaN and infinity are rejected
+assert!(FiniteFloat::new(f64::NAN).is_none());
+assert!(FiniteFloat::new(f64::INFINITY).is_none());
+
+// Negative zero normalizes to positive zero
+let a = FiniteFloat::new(0.0).unwrap();
+let b = FiniteFloat::new(-0.0).unwrap();
+assert_eq!(a, b);
+<span class="boring">}</span></code></pre>
 <h2 id="literals-1"><a class="header" href="#literals-1">Literals</a></h2>
 <h3 id="creating-literals"><a class="header" href="#creating-literals">Creating Literals</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -4705,6 +5369,167 @@ theory.add_rule(rule);
     println!("Head: {:?}", rule.head);
 }
 <span class="boring">}</span></code></pre>
+<h2 id="pipeline"><a class="header" href="#pipeline">Pipeline</a></h2>
+<p>The preparation pipeline transforms a raw <code>Theory</code> into a form ready for
+reasoning. It is built from composable stages assembled via <code>PipelineBuilder</code>.</p>
+<h3 id="default-pipeline"><a class="header" href="#default-pipeline">Default Pipeline</a></h3>
+<p>The simplest way to prepare a theory uses <code>prepare()</code> with default options:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{prepare, PrepareOptions};
+
+let result = prepare(&amp;theory, PrepareOptions::default())?;
+let prepared_theory = result.theory;
+<span class="boring">}</span></code></pre>
+<h3 id="pipelinebuilder"><a class="header" href="#pipelinebuilder">PipelineBuilder</a></h3>
+<p>For fine-grained control, build a custom pipeline from individual stages:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared_theory, ctx) = pipeline.run(theory)?;
+<span class="boring">}</span></code></pre>
+<p>Stages run left-to-right. Each stage receives the theory produced by the
+previous stage and a shared <code>PipelineContext</code>.</p>
+<p>You can insert a stage at a specific position with <code>stage_at()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground, TemporalFilter};
+use spindle_core::temporal::TimePoint;
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .stage_at(0, TemporalFilter { reference_time: TimePoint::Moment(1700000000000) })
+    .build();
+<span class="boring">}</span></code></pre>
+<h3 id="built-in-stages"><a class="header" href="#built-in-stages">Built-in Stages</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Stage</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Validate</code></td><td>Enforces range restriction and rejects wildcards in rule heads. Both checks are independently configurable.</td></tr>
+<tr><td><code>WildcardRewrite</code></td><td>Rewrites anonymous wildcards (<code>_</code>) to unique fresh variables (<code>?_wN</code>).</td></tr>
+<tr><td><code>Ground</code></td><td>Bottom-up Datalog grounding. Configurable <code>max_iterations</code> and <code>max_instances</code> limits.</td></tr>
+<tr><td><code>TemporalFilter</code></td><td>Removes rules/facts not active at a given reference <code>TimePoint</code>.</td></tr>
+<tr><td><code>TemporalVarValidation</code></td><td>Rejects theories with unresolved temporal variables after grounding.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="configuring-stages"><a class="header" href="#configuring-stages">Configuring Stages</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Validate, Ground};
+
+// Disable range restriction check
+let validate = Validate {
+    enforce_range_restricted: false,
+    reject_wildcard_in_head: true,
+};
+
+// Increase grounding limits
+let ground = Ground {
+    max_iterations: 200,
+    max_instances: 50000,
+};
+<span class="boring">}</span></code></pre>
+<h3 id="implementing-custom-stages"><a class="header" href="#implementing-custom-stages">Implementing Custom Stages</a></h3>
+<p>Any type implementing the <code>PipelineStage</code> trait can be added to a pipeline:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{PipelineStage, PipelineContext, Severity, Diagnostic};
+use spindle_core::theory::Theory;
+use spindle_core::error::Result;
+
+#[derive(Debug)]
+struct LogRuleCount;
+
+impl PipelineStage for LogRuleCount {
+    fn name(&amp;self) -&gt; &amp;'static str { "LogRuleCount" }
+
+    fn apply(&amp;self, theory: Theory, ctx: &amp;mut PipelineContext) -&gt; Result&lt;Theory&gt; {
+        ctx.diagnostics.push(Diagnostic {
+            severity: Severity::Info,
+            stage: self.name(),
+            message: format!("Theory has {} rules", theory.rules().len()),
+        });
+        Ok(theory)
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="pipelinecontext-and-diagnostics"><a class="header" href="#pipelinecontext-and-diagnostics">PipelineContext and Diagnostics</a></h3>
+<p>A <code>PipelineContext</code> is threaded through all stages, collecting diagnostics and
+inter-stage metadata.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground, Severity, MetadataVal};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared, ctx) = pipeline.run(theory)?;
+
+// Inspect diagnostics
+for diag in &amp;ctx.diagnostics {
+    match diag.severity {
+        Severity::Error   =&gt; eprintln!("[{}] ERROR: {}", diag.stage, diag.message),
+        Severity::Warning =&gt; eprintln!("[{}] WARN:  {}", diag.stage, diag.message),
+        Severity::Info    =&gt; println!("[{}] INFO:  {}", diag.stage, diag.message),
+    }
+}
+
+// Read metadata set by stages (e.g., grounding statistics)
+if let Some(MetadataVal::Usize(n)) = ctx.metadata.get("grounding_instances") {
+    println!("Grounding produced {} instances", n);
+}
+if let Some(MetadataVal::Bool(true)) = ctx.metadata.get("grounding_limit_hit") {
+    eprintln!("Warning: grounding limit was reached");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="prepareoptions"><a class="header" href="#prepareoptions">PrepareOptions</a></h3>
+<p>The <code>prepare()</code> function builds a full pipeline from <code>PrepareOptions</code>,
+including optional temporal filtering and grounding configuration:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{prepare, PrepareOptions, GroundingOptions, ValidationOptions};
+use spindle_core::temporal::TimePoint;
+
+let opts = PrepareOptions {
+    reference_time: Some(TimePoint::Moment(1700000000000)),
+    grounding: GroundingOptions {
+        enabled: true,
+        max_iterations: 100,
+        max_instances: 10000,
+    },
+    validation: ValidationOptions {
+        enforce_range_restricted: true,
+        reject_wildcard_in_head: true,
+    },
+    trust_policy: None,
+};
+
+let result = prepare(&amp;theory, opts)?;
+
+// Access the prepared theory and grounding statistics
+let theory = result.theory;
+println!("Grounded: {}", result.grounding_report.performed);
+println!("Instances: {}", result.grounding_report.instances);
+if result.grounding_report.limit_hit {
+    eprintln!("Grounding stopped early due to limits");
+}
+<span class="boring">}</span></code></pre>
 <h2 id="query-operators-1"><a class="header" href="#query-operators-1">Query Operators</a></h2>
 <h3 id="what-if"><a class="header" href="#what-if">What-If</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -4717,9 +5542,12 @@ let hypotheticals = vec![
 ];
 let goal = Literal::negated("flies");
 
-let result = what_if(&amp;theory, hypotheticals, &amp;goal);
+let result = what_if(&amp;theory, hypotheticals, &amp;goal)?;
 if result.is_provable() {
     println!("Would be provable with those facts");
+}
+for lit in result.newly_provable() {
+    println!("Newly provable: {}", lit);
 }
 <span class="boring">}</span></code></pre>
 <h3 id="why-not-1"><a class="header" href="#why-not-1">Why-Not</a></h3>
@@ -4729,7 +5557,7 @@ if result.is_provable() {
 use spindle_core::literal::Literal;
 
 let literal = Literal::simple("flies");
-let explanation = why_not(&amp;theory, &amp;literal);
+let explanation = why_not(&amp;theory, &amp;literal)?;
 for blocker in &amp;explanation.blocked_by {
     println!("Blocked by: {}", blocker.explanation);
 }
@@ -4741,23 +5569,21 @@ for blocker in &amp;explanation.blocked_by {
 use spindle_core::literal::Literal;
 
 let goal = Literal::simple("goal");
-let result = abduce(&amp;theory, &amp;goal, 3);
+let result = abduce(&amp;theory, &amp;goal, 3)?;
 for solution in &amp;result.solutions {
     println!("Solution: {:?}", solution.facts);
 }
 <span class="boring">}</span></code></pre>
-<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_core::error::{SpindleError, Result};
-use spindle_parser::ParseError;
+use spindle_parser::parse_spl;
 
 fn load_theory(path: &amp;str) -&gt; Result&lt;Theory&gt; {
     let content = std::fs::read_to_string(path)?;
 
     if path.ends_with(".spl") {
-        parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
-    } else if path.ends_with(".spl") {
         parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
     } else {
         Err(SpindleError::Parse("Unknown format".to_string()))
@@ -4812,7 +5638,7 @@ fn main() -&gt; Result&lt;()&gt; {
     theory.add_fact("current_user_admin");
 
     // Reason
-    let conclusions = theory.reason();
+    let conclusions = theory.reason()?;
 
     // Check permissions
     let can_delete = conclusions.iter().any(|c| {
@@ -4893,11 +5719,11 @@ const spindle = await setup();
 const spindle = new Spindle();
 
 spindle.parseSpl(`
-    f1: &gt;&gt; bird
-    f2: &gt;&gt; penguin
-    r1: bird =&gt; flies
-    r2: penguin =&gt; ~flies
-    r2 &gt; r1
+    (given bird)
+    (given penguin)
+    (normally r1 bird flies)
+    (normally r2 penguin (not flies))
+    (prefer r2 r1)
 `);
 
 const conclusions = spindle.reason();
@@ -4928,12 +5754,6 @@ spindle.addDefeater(["broken_wing"], "flies");
 </code></pre>
 <h3 id="parsing"><a class="header" href="#parsing">Parsing</a></h3>
 <pre><code class="language-typescript">// Parse SPL
-spindle.parseSpl(`
-    f1: &gt;&gt; bird
-    r1: bird =&gt; flies
-`);
-
-// Parse SPL
 spindle.parseSpl(`
     (given bird)
     (normally r1 bird flies)
@@ -5030,15 +5850,15 @@ async function reasonAboutPenguins() {
 
     // Build theory
     spindle.parseSpl(`
-        f1: &gt;&gt; bird
-        f2: &gt;&gt; penguin
+        (given bird)
+        (given penguin)
 
-        r1: bird =&gt; flies
-        r2: bird =&gt; has_feathers
-        r3: penguin =&gt; ~flies
-        r4: penguin =&gt; swims
+        (normally r1 bird flies)
+        (normally r2 bird has-feathers)
+        (normally r3 penguin (not flies))
+        (normally r4 penguin swims)
 
-        r3 &gt; r1
+        (prefer r3 r1)
     `);
 
     // Reason
@@ -5152,23 +5972,56 @@ function ReasoningComponent() {
 <p>The core reasoning engine with these modules:</p>
 <pre><code>spindle-core/src/
 ├── lib.rs              # Crate root, prelude
-├── intern.rs           # String interning
+├── intern.rs           # String interning (SymbolId, LiteralId)
 ├── literal.rs          # Literal representation
 ├── mode.rs             # Modal operators
-├── temporal.rs         # Temporal reasoning
+├── temporal.rs         # Temporal reasoning (Allen relations, TimePoint)
+├── term.rs             # Terms (Symbol, Numeric: Integer/Decimal/Float)
 ├── rule.rs             # Rule types
+├── body.rs             # Body literals (BodyLogicLiteral, BodyArg, ArithConstraint)
 ├── superiority.rs      # Superiority relations
 ├── theory.rs           # Theory container
-├── conclusion.rs       # Conclusion types
-├── index.rs            # Theory indexing
-├── reason.rs           # Standard DL(d) algorithm
-├── grounding.rs        # Variable grounding
+├── conclusion.rs       # Conclusion types (+D, -D, +d, -d)
+├── claims.rs           # Claims blocks (provenance metadata)
+├── index.rs            # Theory indexing (AtomKey, LitId)
+├── arith.rs            # Arithmetic expressions and constraints
+├── grounding.rs        # Variable grounding (bottom-up Datalog)
 ├── worklist.rs         # Worklist data structures
-├── explanation.rs      # Proof trees
 ├── trust.rs            # Trust-weighted reasoning
-├── query.rs            # Query operators
 ├── mining.rs           # Process mining (alpha algorithm)
-└── error.rs            # Error types
+├── error.rs            # Error types
+├── analysis/           # Theory analysis
+│   ├── mod.rs          #   Shared types (ValidationDiagnostic, ConflictReport)
+│   ├── conflicts.rs    #   Conflict detection
+│   ├── superiority.rs  #   Superiority suggestion
+│   └── validation.rs   #   Semantic validation
+├── explanation/        # Explanation system
+│   ├── mod.rs          #   Proof/derivation tree structures
+│   ├── types.rs        #   Core explanation types
+│   └── format/         #   Output formats
+│       ├── mod.rs
+│       ├── natural_language.rs
+│       ├── json.rs
+│       ├── jsonld.rs
+│       └── dot.rs
+├── pipeline/           # Composable preparation pipeline
+│   ├── mod.rs          #   PipelineStage trait, PipelineBuilder, prepare()
+│   ├── validate.rs     #   Validate stage
+│   ├── wildcard.rs     #   WildcardRewrite stage
+│   ├── ground.rs       #   Ground stage
+│   └── temporal.rs     #   TemporalFilter, TemporalVarValidation stages
+├── query/              # Query operators
+│   ├── mod.rs          #   QueryOperator trait
+│   ├── what_if.rs      #   Hypothetical reasoning
+│   ├── why_not.rs      #   Failure explanation
+│   ├── abduce.rs       #   Abduction (hypothesis finding)
+│   └── requires.rs     #   Dependency queries
+└── reason/             # Reasoning engine
+    ├── mod.rs          #   Reasoner trait, StandardReasoner
+    ├── state.rs        #   ReasoningState (worklist, proven sets, counters)
+    ├── facts.rs        #   Fact initialization phase
+    ├── definite.rs     #   Definite (+D/-D) forward chaining
+    └── defeasible.rs   #   Defeasible (+d/-d) forward chaining
 </code></pre>
 <h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
 <pre><code>Input (SPL)
@@ -5184,18 +6037,31 @@ function ReasoningComponent() {
 └─────────────┘
       │
       ▼
+┌─────────────────────────────────────────┐
+│  Pipeline  (composable stages)          │
+│  ┌──────────────────┐                   │
+│  │ TemporalFilter   │ (optional as-of)  │
+│  ├──────────────────┤                   │
+│  │ Validate         │ range restriction │
+│  ├──────────────────┤                   │
+│  │ WildcardRewrite  │ _ → ?_wN          │
+│  ├──────────────────┤                   │
+│  │ Ground           │ variable inst.    │
+│  ├──────────────────┤                   │
+│  │ TemporalVarValid.│ reject unresolved │
+│  ├──────────────────┤                   │
+│  │ TemporalFilter   │ (optional re-filt)│
+│  └──────────────────┘                   │
+└─────────────────────────────────────────┘
+      │
+      ▼
 ┌─────────────┐
-│  Grounding  │  Instantiate variables
+│   Index     │  Build lookup tables (AtomKey, LitId)
 └─────────────┘
       │
       ▼
 ┌─────────────┐
-│   Index     │  Build lookup tables
-└─────────────┘
-      │
-      ▼
-┌─────────────┐
-│  Reasoning  │  DL(d)
+│  Reasoning  │  StandardReasoner — DL(d)
 └─────────────┘
       │
       ▼
@@ -5203,6 +6069,65 @@ function ReasoningComponent() {
 │ Conclusions │  +D, -D, +d, -d
 └─────────────┘
 </code></pre>
+<h2 id="pipeline-architecture"><a class="header" href="#pipeline-architecture">Pipeline Architecture</a></h2>
+<p>The preparation pipeline transforms a raw <code>Theory</code> into a form ready for
+reasoning. It is built from composable stages, each implementing the
+<code>PipelineStage</code> trait.</p>
+<h3 id="pipelinestage-trait"><a class="header" href="#pipelinestage-trait">PipelineStage Trait</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait PipelineStage: std::fmt::Debug {
+    /// Human-readable name used in diagnostics and tracing.
+    fn name(&amp;self) -&gt; &amp;'static str;
+
+    /// Apply this stage, returning a (possibly transformed) theory.
+    /// Returning Err aborts the pipeline.
+    fn apply(&amp;self, theory: Theory, ctx: &amp;mut PipelineContext) -&gt; Result&lt;Theory&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p>Stages are assembled with <code>PipelineBuilder</code> and run left-to-right:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared_theory, ctx) = pipeline.run(theory)?;
+<span class="boring">}</span></code></pre>
+<h3 id="built-in-stages-1"><a class="header" href="#built-in-stages-1">Built-in Stages</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Stage</th><th>Module</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Validate</code></td><td><code>pipeline/validate.rs</code></td><td>Enforces range restriction (head vars must appear in body) and rejects wildcards in rule heads. Both checks are independently configurable.</td></tr>
+<tr><td><code>WildcardRewrite</code></td><td><code>pipeline/wildcard.rs</code></td><td>Rewrites anonymous wildcards (<code>_</code>) to unique fresh variables (<code>?_wN</code>) so each position is distinct during grounding.</td></tr>
+<tr><td><code>Ground</code></td><td><code>pipeline/ground.rs</code></td><td>Bottom-up Datalog grounding. Instantiates rules containing variables via fixpoint iteration over facts, with configurable <code>max_iterations</code> and <code>max_instances</code> limits.</td></tr>
+<tr><td><code>TemporalFilter</code></td><td><code>pipeline/temporal.rs</code></td><td>Removes rules/facts not active at a given reference <code>TimePoint</code> (“as-of” semantics). Omitted by default since it requires a reference time.</td></tr>
+<tr><td><code>TemporalVarValidation</code></td><td><code>pipeline/temporal.rs</code></td><td>Rejects theories with unresolved temporal variables after grounding. Runs in strict mode by default (returns <code>Err</code>); can be set to warning-only.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="pipelinecontext"><a class="header" href="#pipelinecontext">PipelineContext</a></h3>
+<p>A <code>PipelineContext</code> is threaded through all stages, carrying:</p>
+<ul>
+<li><strong><code>diagnostics: Vec&lt;Diagnostic&gt;</code></strong> — Info, Warning, and Error messages
+emitted by stages. Each diagnostic records the stage name and a
+human-readable message.</li>
+<li><strong><code>metadata: HashMap&lt;String, MetadataVal&gt;</code></strong> — Arbitrary key-value data
+for inter-stage communication (e.g., <code>grounding_instances</code>,
+<code>grounding_limit_hit</code>, <code>evaluated_at</code>).</li>
+</ul>
+<h3 id="default-pipeline-1"><a class="header" href="#default-pipeline-1">Default Pipeline</a></h3>
+<p><code>Pipeline::default_pipeline()</code> returns <code>Validate → WildcardRewrite → Ground</code>.
+The higher-level <code>prepare()</code> function builds a richer pipeline from
+<code>PrepareOptions</code>, optionally inserting <code>TemporalFilter</code> (before and after
+grounding) and <code>TemporalVarValidation</code>.</p>
 <h2 id="key-design-decisions"><a class="header" href="#key-design-decisions">Key Design Decisions</a></h2>
 <h3 id="string-interning-1"><a class="header" href="#string-interning-1">String Interning</a></h3>
 <p>All literal names are interned to reduce memory and enable O(1) comparisons.</p>
@@ -5284,27 +6209,48 @@ impl LiteralId {
 theory.is_superior("r1", "r2")
 <span class="boring">}</span></code></pre>
 <h2 id="algorithm-implementation"><a class="header" href="#algorithm-implementation">Algorithm Implementation</a></h2>
-<h3 id="standard-dld-reasonrs"><a class="header" href="#standard-dld-reasonrs">Standard DL(d) (reason.rs)</a></h3>
-<pre><code>Phase 1: Initialize with facts
+<h3 id="reasoner-trait"><a class="header" href="#reasoner-trait">Reasoner Trait</a></h3>
+<p>The <code>Reasoner</code> trait abstracts over reasoning backends. One concrete
+implementation is provided:</p>
+<ul>
+<li><strong><code>StandardReasoner</code></strong> — the standard DL(d) forward-chaining algorithm
+(the default and only built-in backend).</li>
+</ul>
+<p>Use <code>select_reasoner("standard")</code> to obtain a boxed trait object for
+runtime backend selection. Additional backends can be added by
+implementing the <code>Reasoner</code> trait.</p>
+<h3 id="standard-dld-reason"><a class="header" href="#standard-dld-reason">Standard DL(d) (reason/)</a></h3>
+<p>The reasoning state (worklist, proven sets, body counters, conclusions) is
+consolidated into <code>ReasoningState</code> in <code>reason/state.rs</code>. The algorithm
+proceeds in three phases, each in its own submodule:</p>
+<pre><code>Phase 1: Fact initialization (reason/facts.rs)
   ├── Add to definite_proven
   ├── Add to defeasible_proven
   └── Add to worklist
 
-Phase 2: Forward chaining
+Phase 2: Definite forward chaining (reason/definite.rs)
   while worklist not empty:
     ├── Pop literal
     ├── Find rules with literal in body
     ├── Decrement body counters
     └── If counter = 0:
         ├── Strict → add +D, +d
-        ├── Defeasible → check blocking, add +d
+        ├── Defeasible → (handled in phase 3)
         └── Defeater → (no conclusion)
 
-Phase 3: Negative conclusions
+Phase 3: Defeasible forward chaining (reason/defeasible.rs)
+  for defeasible rules with all body literals proven:
+    ├── Check ambiguity blocking (complement, team defeat)
+    ├── Check superiority relations
+    └── If unblocked → add +d
+
+Phase 4: Negative conclusions
   for each literal:
     ├── If not in definite_proven → -D
     └── If not in defeasible_proven → -d
 </code></pre>
+<p>Uses <code>LitId</code> (4-byte Copy type) and BitSet for O(1) proven literal checks,
+eliminating heap allocations and hash computations in the hot reasoning loop.</p>
 <h2 id="memory-layout"><a class="header" href="#memory-layout">Memory Layout</a></h2>
 <h3 id="theory"><a class="header" href="#theory">Theory</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -5338,19 +6284,32 @@ proven: BitSet  // bitmap indexed by LiteralId
 worklist: VecDeque`LiteralId`
 <span class="boring">}</span></code></pre>
 <h2 id="extension-points"><a class="header" href="#extension-points">Extension Points</a></h2>
+<h3 id="adding-a-pipeline-stage"><a class="header" href="#adding-a-pipeline-stage">Adding a Pipeline Stage</a></h3>
+<ol>
+<li>Implement the <code>PipelineStage</code> trait</li>
+<li>Add the struct to <code>pipeline/</code> (new file or existing)</li>
+<li>Re-export from <code>pipeline/mod.rs</code></li>
+<li>Insert into pipelines with <code>PipelineBuilder::stage()</code> or <code>stage_at()</code></li>
+</ol>
 <h3 id="adding-a-new-rule-type"><a class="header" href="#adding-a-new-rule-type">Adding a New Rule Type</a></h3>
 <ol>
 <li>Add variant to <code>RuleType</code> enum</li>
 <li>Update parser (spl.rs)</li>
-<li>Update reasoning logic (reason.rs)</li>
+<li>Update reasoning logic in <code>reason/</code></li>
 <li>Add tests</li>
 </ol>
 <h3 id="adding-a-new-query-operator"><a class="header" href="#adding-a-new-query-operator">Adding a New Query Operator</a></h3>
 <ol>
-<li>Add function to <code>query.rs</code></li>
-<li>Implement the algorithm</li>
+<li>Implement the <code>QueryOperator</code> trait in a new file under <code>query/</code></li>
+<li>Re-export from <code>query/mod.rs</code></li>
 <li>Add to WASM bindings if needed</li>
 <li>Document in guides/queries.md</li>
+</ol>
+<h3 id="adding-a-reasoning-backend"><a class="header" href="#adding-a-reasoning-backend">Adding a Reasoning Backend</a></h3>
+<ol>
+<li>Implement the <code>Reasoner</code> trait</li>
+<li>Register in <code>select_reasoner()</code> for runtime dispatch</li>
+<li>Add tests</li>
 </ol>
 <h3 id="process-mining-pipeline"><a class="header" href="#process-mining-pipeline">Process Mining Pipeline</a></h3>
 <p>The mining module provides:</p>
@@ -5367,11 +6326,14 @@ worklist: VecDeque`LiteralId`
 </ol>
 <h2 id="testing-strategy"><a class="header" href="#testing-strategy">Testing Strategy</a></h2>
 <pre><code>tests/
-├── Unit tests (per module)
-│   ├── reason.rs - 40+ tests
+├── Unit tests (per module, inline #[cfg(test)])
+│   ├── reason/ - phase-isolated tests
+│   ├── pipeline/ - per-stage tests
+│   ├── query/ - operator tests
 │   └── ...
-├── Integration tests
-│   └── End-to-end CLI/API behavior
+├── Integration tests (crates/spindle-core/tests/)
+│   ├── difftest.rs - proptest random theory gen (500 cases)
+│   └── ...
 ├── Parser tests
 │   └── spl.rs
 └── WASM tests
@@ -5382,7 +6344,8 @@ worklist: VecDeque`LiteralId`
 <li><strong>Basic reasoning</strong>: facts, rules, chains</li>
 <li><strong>Conflict resolution</strong>: superiority, defeaters</li>
 <li><strong>Edge cases</strong>: cycles, empty, self-reference</li>
-<li><strong>Stress tests</strong>: long chains, wide theories</li>
+<li><strong>Pipeline stages</strong>: validation, grounding, temporal filtering</li>
+<li><strong>Differential testing</strong>: proptest-generated random theories</li>
 </ol>
 <h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
 <div class="table-wrapper">
