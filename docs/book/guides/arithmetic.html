@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
+            window.path_to_searchindex_js = "../searchindex-7f5232d0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a7fb0bbf.js"></script>
@@ -330,6 +330,9 @@
   (result ?x (+ ?b ?o)))
 </code></pre>
 <p>The expression <code>(+ ?b ?o)</code> is evaluated during grounding and the result becomes a concrete term in the head literal.</p>
+<h2 id="temporal-operator-overloads"><a class="header" href="#temporal-operator-overloads">Temporal Operator Overloads</a></h2>
+<p>The operators <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>min</code>, and <code>max</code> are also overloaded for temporal types (Date, Time, Datetime, Duration). For example, <code>Datetime + Duration</code> yields a Datetime, and <code>Date - Date</code> yields an Integer day count.</p>
+<p>See the <a href="temporal.html#temporal-arithmetic">Temporal Reasoning guide</a> for the full dispatch table, rules, and examples.</p>
 <h2 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h2>
 <h3 id="no-arithmetic-in-heads-or-facts-req-009"><a class="header" href="#no-arithmetic-in-heads-or-facts-req-009">No Arithmetic in Heads or Facts (REQ-009)</a></h3>
 <pre><code class="language-lisp">; INVALID — arithmetic in head

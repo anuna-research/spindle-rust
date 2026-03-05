@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
+            window.path_to_searchindex_js = "../searchindex-7f5232d0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a7fb0bbf.js"></script>
@@ -414,6 +414,113 @@ giving 6 symmetric pairs plus <code>equals</code>:</p>
 </tbody>
 </table>
 </div>
+<h2 id="datetime-types"><a class="header" href="#datetime-types">Date/Time Types</a></h2>
+<p>SPL provides five temporal value types for calendar and clock arithmetic. Temporal literals use a <code>#</code> prefix to distinguish them from symbols.</p>
+<h3 id="literal-syntax"><a class="header" href="#literal-syntax">Literal Syntax</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Syntax</th><th>Example</th><th>Internal</th></tr>
+</thead>
+<tbody>
+<tr><td>Date</td><td><code>#d:YYYY-MM-DD</code></td><td><code>#d:2025-07-15</code></td><td>Calendar date</td></tr>
+<tr><td>Time</td><td><code>#t:HH:MM</code></td><td><code>#t:09:00</code></td><td>Minutes since midnight (0–1439)</td></tr>
+<tr><td>Datetime</td><td><code>#dt:YYYY-MM-DDTHH:MM±HH:MM</code></td><td><code>#dt:2025-07-15T14:00+10:00</code></td><td>Timezone-aware instant</td></tr>
+<tr><td>Duration</td><td><code>#dur:&lt;components&gt;</code></td><td><code>#dur:1d6h30m</code></td><td>Signed minutes</td></tr>
+<tr><td>Offset</td><td><code>#off:±HH:MM</code> or <code>#off:Z</code></td><td><code>#off:+10:00</code></td><td>Signed minutes east of UTC</td></tr>
+</tbody>
+</table>
+</div>
+<p>Datetime also accepts <code>Z</code> for UTC: <code>#dt:2025-07-15T14:00Z</code>.</p>
+<p>Duration components are <code>d</code> (days = 1440 min), <code>h</code> (hours = 60 min), <code>m</code> (minutes). At least one component is required. Equal total minutes are equal: <code>#dur:1d12h</code> = <code>#dur:36h</code>.</p>
+<h3 id="grammar-fragment"><a class="header" href="#grammar-fragment">Grammar Fragment</a></h3>
+<pre><code class="language-ebnf">temporal    = date | time | datetime | duration | offset
+date        = "#d:" YYYY "-" MM "-" DD
+time        = "#t:" HH ":" MM
+datetime    = "#dt:" YYYY "-" MM "-" DD "T" HH ":" MM offset-suffix
+offset-suffix = "Z" | ("+" | "-") HH ":" MM
+duration    = "#dur:" ["-"] component+
+component   = digits ("d" | "h" | "m")
+offset      = "#off:" ("Z" | ("+" | "-") HH ":" MM)
+</code></pre>
+<h3 id="equality-and-ordering"><a class="header" href="#equality-and-ordering">Equality and Ordering</a></h3>
+<ul>
+<li><strong>Date, Time, Duration, Offset</strong>: Structural equality and natural ordering.</li>
+<li><strong>Datetime</strong>: Equality and ordering compare by <strong>instant</strong> (UTC equivalent). Two Datetimes representing the same moment in different offsets are equal.</li>
+</ul>
+<h2 id="temporal-functions"><a class="header" href="#temporal-functions">Temporal Functions</a></h2>
+<p>Temporal functions are available in <code>bind</code> expressions within rule bodies.</p>
+<h3 id="construction"><a class="header" href="#construction">Construction</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>datetime</code></td><td><code>(Date, Time, Offset) → Datetime</code></td><td>Compose a Datetime from parts</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-lisp">(bind ?dt (datetime #d:2025-07-15 #t:14:00 #off:+10:00))  ; =&gt; #dt:2025-07-15T14:00+10:00
+</code></pre>
+<h3 id="extraction"><a class="header" href="#extraction">Extraction</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>date-of</code></td><td><code>(Datetime) → Date</code></td><td>Extract local date</td></tr>
+<tr><td><code>time-of</code></td><td><code>(Datetime) → Time</code></td><td>Extract local time</td></tr>
+<tr><td><code>day-of-week</code></td><td><code>(Date | Datetime) → Symbol</code></td><td><code>:monday</code> .. <code>:sunday</code></td></tr>
+<tr><td><code>year-of</code></td><td><code>(Date | Datetime) → Integer</code></td><td>Year component</td></tr>
+<tr><td><code>month-of</code></td><td><code>(Date | Datetime) → Integer</code></td><td>Month (1–12)</td></tr>
+<tr><td><code>day-of-month</code></td><td><code>(Date | Datetime) → Integer</code></td><td>Day (1–31)</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-lisp">(bind ?d (date-of ?dt))                  ; =&gt; #d:2025-07-15
+(bind ?dow (day-of-week #d:2025-07-14))  ; =&gt; :monday
+(bind ?y (year-of #d:2025-12-25))        ; =&gt; 2025
+</code></pre>
+<h3 id="difference"><a class="header" href="#difference">Difference</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>hours-between</code></td><td><code>(Datetime, Datetime) → Decimal</code></td><td>Signed hours (dt2 − dt1)</td></tr>
+<tr><td><code>minutes-between</code></td><td><code>(Datetime, Datetime) → Integer</code></td><td>Signed minutes (dt2 − dt1)</td></tr>
+<tr><td><code>days-between</code></td><td><code>(Date, Date) → Integer</code></td><td>Signed days (date2 − date1)</td></tr>
+<tr><td><code>duration-hours</code></td><td><code>(Duration) → Decimal</code></td><td>Total hours</td></tr>
+<tr><td><code>duration-minutes</code></td><td><code>(Duration) → Integer</code></td><td>Total minutes</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-lisp">(bind ?d (days-between #d:2025-07-01 #d:2025-07-15))  ; =&gt; 14
+(bind ?h (duration-hours #dur:1h30m))                   ; =&gt; 1.5
+</code></pre>
+<h3 id="calendar-arithmetic"><a class="header" href="#calendar-arithmetic">Calendar Arithmetic</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>add-months</code></td><td><code>(Date, Integer) → Date</code></td><td>Add calendar months (day clamped)</td></tr>
+<tr><td><code>add-years</code></td><td><code>(Date, Integer) → Date</code></td><td>Add calendar years (day clamped)</td></tr>
+<tr><td><code>months-between</code></td><td><code>(Date, Date) → Integer</code></td><td>Complete calendar months</td></tr>
+<tr><td><code>years-between</code></td><td><code>(Date, Date) → Integer</code></td><td>Complete calendar years</td></tr>
+</tbody>
+</table>
+</div>
+<p>Day clamping: when the target month has fewer days, the day is clamped to the last valid day. <code>add-months(#d:2025-01-31, 1)</code> → <code>#d:2025-02-28</code>.</p>
+<pre><code class="language-lisp">(bind ?review (add-months #d:2025-01-31 1))              ; =&gt; #d:2025-02-28
+(bind ?y (years-between #d:2023-03-01 #d:2025-03-01))   ; =&gt; 2
+</code></pre>
+<h3 id="temporal-operator-overloads"><a class="header" href="#temporal-operator-overloads">Temporal Operator Overloads</a></h3>
+<p>The arithmetic operators <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>min</code>, and <code>max</code> are overloaded for temporal types. See the <a href="../guides/temporal.html#temporal-arithmetic">Temporal Reasoning guide</a> for the full dispatch table and examples.</p>
 <h2 id="arithmetic-expressions"><a class="header" href="#arithmetic-expressions">Arithmetic Expressions</a></h2>
 <p>Arithmetic expressions can appear in rule bodies as <code>bind</code> constraints, comparison guards, or as arguments to predicates.</p>
 <h3 id="numeric-literals"><a class="header" href="#numeric-literals">Numeric Literals</a></h3>

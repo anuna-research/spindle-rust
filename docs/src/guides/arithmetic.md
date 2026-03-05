@@ -215,6 +215,12 @@ Arithmetic expressions can appear directly as predicate arguments in the body:
 
 The expression `(+ ?b ?o)` is evaluated during grounding and the result becomes a concrete term in the head literal.
 
+## Temporal Operator Overloads
+
+The operators `+`, `-`, `*`, `/`, `min`, and `max` are also overloaded for temporal types (Date, Time, Datetime, Duration). For example, `Datetime + Duration` yields a Datetime, and `Date - Date` yields an Integer day count.
+
+See the [Temporal Reasoning guide](temporal.md#temporal-arithmetic) for the full dispatch table, rules, and examples.
+
 ## Restrictions
 
 ### No Arithmetic in Heads or Facts (REQ-009)

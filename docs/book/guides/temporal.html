@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-e2b8706a.js";
+            window.path_to_searchindex_js = "../searchindex-7f5232d0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-a7fb0bbf.js"></script>
@@ -214,6 +214,198 @@ inf                                ; Positive infinity (never ends)
 <li><strong>No Allen Relations in SPL</strong>: All 13 Allen relations are implemented in the core library (available via the Rust API), but are not yet exposed in SPL syntax. This requires interval variables (e.g., <code>(during p ?t)</code>) which are planned for a future release.</li>
 <li><strong>No Interval Variables</strong>: You cannot bind a variable to a time interval (e.g., <code>(during p ?t)</code> is not supported).</li>
 </ol>
+<hr>
+<h2 id="date-and-time-types"><a class="header" href="#date-and-time-types">Date and Time Types</a></h2>
+<p>Spindle provides five temporal value types for calendar and clock reasoning. These are distinct from the <code>during</code>/<code>moment</code> system above — they represent typed values that can appear as predicate arguments, in comparisons, and in <code>bind</code> expressions.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Prefix</th><th>What it represents</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>Date</td><td><code>#d:</code></td><td>A calendar date (no time)</td><td><code>#d:2025-07-15</code></td></tr>
+<tr><td>Time</td><td><code>#t:</code></td><td>Time of day (minute precision)</td><td><code>#t:09:00</code></td></tr>
+<tr><td>Datetime</td><td><code>#dt:</code></td><td>A timezone-aware instant</td><td><code>#dt:2025-07-15T14:00+10:00</code></td></tr>
+<tr><td>Duration</td><td><code>#dur:</code></td><td>A signed span of time</td><td><code>#dur:8h30m</code></td></tr>
+<tr><td>Offset</td><td><code>#off:</code></td><td>UTC offset for constructing Datetimes</td><td><code>#off:+10:00</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Date</strong> is a pure calendar date with no time or timezone. Use it for scheduling, leave accrual, and calendar-based rules.</p>
+<p><strong>Time</strong> represents a clock reading at minute precision (0–1439 minutes since midnight). Use it for shift classification (e.g., “is this a night shift?”).</p>
+<p><strong>Datetime</strong> is a full instant — a date, time, and UTC offset combined. Two Datetimes at different offsets that represent the same moment are equal. Use it when you need to compare or measure across timezones.</p>
+<p><strong>Duration</strong> is a signed span in minutes. Duration components are <code>d</code> (1440 min), <code>h</code> (60 min), <code>m</code> (1 min). <code>#dur:1d6h30m</code> = 1×1440 + 6×60 + 30 = 1830 minutes. Equal totals are equal: <code>#dur:2h</code> = <code>#dur:120m</code>.</p>
+<p><strong>Offset</strong> represents a fixed UTC offset. <code>#off:Z</code> is UTC (offset 0). <code>#off:+10:00</code> is AEST. Use it with the <code>datetime</code> constructor.</p>
+<h3 id="temporal-literals-in-facts-and-rules"><a class="header" href="#temporal-literals-in-facts-and-rules">Temporal Literals in Facts and Rules</a></h3>
+<p>Temporal values appear anywhere a term can — as fact arguments, in rule heads, and in rule bodies:</p>
+<pre><code class="language-lisp">(given (shift-date alice #d:2025-07-15))
+(given (shift-start alice #t:09:00))
+(given (shift-end alice #t:17:00))
+(given (meeting-dur #dur:1h30m))
+</code></pre>
+<h2 id="temporal-functions"><a class="header" href="#temporal-functions">Temporal Functions</a></h2>
+<p>Temporal functions are called inside <code>bind</code> expressions in rule bodies.</p>
+<h3 id="construction-building-a-datetime"><a class="header" href="#construction-building-a-datetime">Construction: Building a Datetime</a></h3>
+<p>The <code>datetime</code> function combines a Date, Time, and Offset:</p>
+<pre><code class="language-lisp">(bind ?dt (datetime #d:2025-07-15 #t:14:00 #off:+10:00))
+; =&gt; #dt:2025-07-15T14:00+10:00
+</code></pre>
+<h3 id="extraction-pulling-apart-values"><a class="header" href="#extraction-pulling-apart-values">Extraction: Pulling Apart Values</a></h3>
+<pre><code class="language-lisp">(bind ?d (date-of ?dt))                  ; =&gt; #d:2025-07-15
+(bind ?t (time-of ?dt))                  ; =&gt; #t:14:00
+(bind ?dow (day-of-week #d:2025-07-14))  ; =&gt; :monday
+(bind ?y (year-of #d:2025-12-25))        ; =&gt; 2025
+(bind ?m (month-of #d:2025-12-25))       ; =&gt; 12
+(bind ?day (day-of-month #d:2025-12-25)) ; =&gt; 25
+</code></pre>
+<p><code>day-of-week</code>, <code>year-of</code>, <code>month-of</code>, and <code>day-of-month</code> also accept Datetime arguments — they extract the local date component first.</p>
+<h3 id="differences-measuring-spans"><a class="header" href="#differences-measuring-spans">Differences: Measuring Spans</a></h3>
+<pre><code class="language-lisp">(bind ?days (days-between #d:2025-07-01 #d:2025-07-15))     ; =&gt; 14
+(bind ?mins (minutes-between ?dt-start ?dt-end))             ; =&gt; signed integer
+(bind ?hrs  (hours-between ?dt-start ?dt-end))               ; =&gt; signed decimal
+</code></pre>
+<p>The sign convention is <code>second − first</code>: positive when the second argument is later.</p>
+<p>To inspect a Duration value:</p>
+<pre><code class="language-lisp">(bind ?h (duration-hours #dur:1h30m))    ; =&gt; 1.5 (Decimal)
+(bind ?m (duration-minutes #dur:1h30m))  ; =&gt; 90 (Integer)
+</code></pre>
+<h3 id="calendar-arithmetic-months-and-years"><a class="header" href="#calendar-arithmetic-months-and-years">Calendar Arithmetic: Months and Years</a></h3>
+<p><code>add-months</code> and <code>add-years</code> move a date forward or backward by calendar months/years. When the target month has fewer days than the source, the day is <strong>clamped</strong> to the last valid day:</p>
+<pre><code class="language-lisp">(bind ?d (add-months #d:2025-01-31 1))   ; =&gt; #d:2025-02-28 (clamped from 31)
+(bind ?d (add-years #d:2024-02-29 1))    ; =&gt; #d:2025-02-28 (2025 is not a leap year)
+</code></pre>
+<p><code>months-between</code> and <code>years-between</code> count <strong>complete</strong> calendar months/years:</p>
+<pre><code class="language-lisp">(bind ?m (months-between #d:2025-01-31 #d:2025-02-28))  ; =&gt; 0 (Feb has no 31st)
+(bind ?y (years-between #d:2023-03-01 #d:2025-03-01))   ; =&gt; 2
+</code></pre>
+<h2 id="temporal-arithmetic"><a class="header" href="#temporal-arithmetic">Temporal Arithmetic</a></h2>
+<p>The standard arithmetic operators <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code> are overloaded for temporal types.</p>
+<h3 id="addition-"><a class="header" href="#addition-">Addition (<code>+</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Left</th><th>Right</th><th>Result</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>Datetime</td><td>Duration</td><td>Datetime</td><td>Advance by duration</td></tr>
+<tr><td>Date</td><td>Duration</td><td>Date</td><td>Duration must be whole days</td></tr>
+<tr><td>Duration</td><td>Duration</td><td>Duration</td><td>Sum of durations</td></tr>
+</tbody>
+</table>
+</div>
+<p>Addition is commutative — <code>Duration + Datetime</code> also works.</p>
+<pre><code class="language-lisp">(bind ?end (+ ?start-dt #dur:8h))         ; Datetime + Duration → Datetime
+(bind ?total (+ #dur:2h #dur:1h30m))      ; Duration + Duration → #dur:3h30m
+</code></pre>
+<h3 id="subtraction--"><a class="header" href="#subtraction--">Subtraction (<code>-</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Left</th><th>Right</th><th>Result</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>Datetime</td><td>Duration</td><td>Datetime</td><td>Retreat by duration</td></tr>
+<tr><td>Datetime</td><td>Datetime</td><td>Duration</td><td>Signed difference in minutes</td></tr>
+<tr><td>Date</td><td>Duration</td><td>Date</td><td>Duration must be whole days</td></tr>
+<tr><td>Date</td><td>Date</td><td>Integer</td><td>Signed days</td></tr>
+<tr><td>Duration</td><td>Duration</td><td>Duration</td><td>Difference</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-lisp">(bind ?diff (- ?dt-end ?dt-start))        ; Datetime − Datetime → Duration
+(bind ?days (- #d:2025-07-15 #d:2025-07-01))  ; Date − Date → 14
+</code></pre>
+<h3 id="scaling--and-"><a class="header" href="#scaling--and-">Scaling (<code>*</code> and <code>/</code>)</a></h3>
+<p>Duration can be scaled by a numeric factor:</p>
+<pre><code class="language-lisp">(bind ?double (* #dur:4h 2))             ; =&gt; #dur:8h
+(bind ?half (/ #dur:4h 2))               ; =&gt; #dur:2h
+(bind ?ratio (/ #dur:8h #dur:2h))        ; Duration / Duration → 4 (Decimal)
+</code></pre>
+<p><code>Duration * Duration</code> is an error. <code>Number / Duration</code> is an error.</p>
+<h3 id="min-and-max"><a class="header" href="#min-and-max"><code>min</code> and <code>max</code></a></h3>
+<p><code>min</code> and <code>max</code> work with temporal values of the <strong>same type</strong>:</p>
+<pre><code class="language-lisp">(bind ?earliest (min ?date-a ?date-b))
+(bind ?latest-dt (max ?dt1 ?dt2 ?dt3))
+</code></pre>
+<p>Mixing types (e.g., <code>(min ?date ?time)</code>) is an error.</p>
+<h2 id="comparisons"><a class="header" href="#comparisons">Comparisons</a></h2>
+<p>The comparison operators <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code> work with temporal values. Both operands must be the <strong>same type</strong>:</p>
+<pre><code class="language-lisp">(&lt; ?time #t:06:00)           ; Is this before 6 AM?
+(&gt;= ?date #d:2025-01-01)     ; Is this date in 2025 or later?
+</code></pre>
+<p>Datetime comparisons are by <strong>instant</strong> — they compare the UTC-equivalent moment, so cross-timezone comparisons work correctly:</p>
+<pre><code class="language-lisp">; AEST 09:00 (UTC 23:00 previous day) is before SGT 09:00 (UTC 01:00)
+(given (ev a #dt:2025-07-15T09:00+10:00))
+(given (ev b #dt:2025-07-15T09:00+08:00))
+(normally r1
+  (and (ev a ?dt-a) (ev b ?dt-b) (&lt; ?dt-a ?dt-b))
+  (a-before-b))
+; =&gt; a-before-b is derived
+</code></pre>
+<h2 id="worked-example-shift-scheduling"><a class="header" href="#worked-example-shift-scheduling">Worked Example: Shift Scheduling</a></h2>
+<p>A complete example combining temporal facts, extraction, arithmetic, and comparisons:</p>
+<pre><code class="language-lisp">; Facts: employee shift data
+(given (shift-date alice #d:2025-07-14))
+(given (shift-start alice #t:05:00))
+(given (shift-end alice #t:13:00))
+(given (shift-date bob #d:2025-07-14))
+(given (shift-start bob #t:09:00))
+(given (shift-end bob #t:17:00))
+
+; Rule 1: classify early shifts (start before 06:00)
+(normally r-early
+  (and (shift-start ?who ?time) (&lt; ?time #t:06:00))
+  (early-shift ?who))
+
+; Rule 2: extract day of week from shift date
+(normally r-day
+  (and (shift-date ?who ?date)
+       (bind ?day (day-of-week ?date)))
+  (works-on ?who ?day))
+
+; Rule 3: compute shift duration
+(normally r-dur
+  (and (shift-start ?who ?start)
+       (shift-end ?who ?end)
+       (bind ?dur-mins (- ?end ?start))
+       (bind ?dur-hrs (/ ?dur-mins 60)))
+  (shift-hours ?who ?dur-hrs))
+
+; Results:
+; early-shift(alice) — alice starts at 05:00
+; works-on(alice, :monday) — 2025-07-14 is Monday
+; works-on(bob, :monday)
+; shift-hours(alice, 8)  — 13:00 - 05:00 = 480 min = 8 hrs
+; shift-hours(bob, 8)    — 17:00 - 09:00 = 480 min = 8 hrs
+</code></pre>
+<h3 id="fold-with-durations"><a class="header" href="#fold-with-durations">Fold with Durations</a></h3>
+<p>Duration values work with <code>fold</code> for aggregation:</p>
+<pre><code class="language-lisp">(given (task a #dur:2h))
+(given (task b #dur:1h30m))
+(given (task c #dur:45m))
+
+(normally r-total
+  (fold ?sum #dur:0m + ?d (task ?name ?d))
+  (total-duration ?sum))
+; =&gt; total-duration(#dur:4h15m)  (120 + 90 + 45 = 255 minutes)
+</code></pre>
+<h2 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Restriction</th><th>Example</th><th>Error</th></tr>
+</thead>
+<tbody>
+<tr><td>Comparisons require same type</td><td><code>(&lt; #d:2025-01-01 #t:09:00)</code></td><td>Type error</td></tr>
+<tr><td>Date ± Duration requires whole days</td><td><code>(+ #d:2025-01-01 #dur:2h)</code></td><td>Duration must be multiple of 1440 minutes</td></tr>
+<tr><td>No Date + Time cross-type arithmetic</td><td><code>(+ #d:2025-01-01 #t:09:00)</code></td><td>Type error — use <code>datetime</code> constructor</td></tr>
+<tr><td>Duration × Duration not supported</td><td><code>(* #dur:2h #dur:3h)</code></td><td>Type error</td></tr>
+<tr><td>Number / Duration not supported</td><td><code>(/ 10 #dur:2h)</code></td><td>Type error</td></tr>
+<tr><td><code>min</code>/<code>max</code> require same temporal type</td><td><code>(min #d:2025-01-01 #t:09:00)</code></td><td>Type error — mixed temporal types</td></tr>
+</tbody>
+</table>
+</div>
+<p>When any of these occur during grounding, the substitution is discarded — the rule does not fire for that ground instance.</p>
 
                     </main>
 

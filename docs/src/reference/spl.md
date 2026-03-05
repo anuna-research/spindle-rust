@@ -322,6 +322,108 @@ giving 6 symmetric pairs plus `equals`:
 | `finishes` | `finished-by` | Both end together, X starts later |
 | `equals` | `equals` | Identical start and end |
 
+## Date/Time Types
+
+SPL provides five temporal value types for calendar and clock arithmetic. Temporal literals use a `#` prefix to distinguish them from symbols.
+
+### Literal Syntax
+
+| Type | Syntax | Example | Internal |
+|------|--------|---------|----------|
+| Date | `#d:YYYY-MM-DD` | `#d:2025-07-15` | Calendar date |
+| Time | `#t:HH:MM` | `#t:09:00` | Minutes since midnight (0–1439) |
+| Datetime | `#dt:YYYY-MM-DDTHH:MM±HH:MM` | `#dt:2025-07-15T14:00+10:00` | Timezone-aware instant |
+| Duration | `#dur:<components>` | `#dur:1d6h30m` | Signed minutes |
+| Offset | `#off:±HH:MM` or `#off:Z` | `#off:+10:00` | Signed minutes east of UTC |
+
+Datetime also accepts `Z` for UTC: `#dt:2025-07-15T14:00Z`.
+
+Duration components are `d` (days = 1440 min), `h` (hours = 60 min), `m` (minutes). At least one component is required. Equal total minutes are equal: `#dur:1d12h` = `#dur:36h`.
+
+### Grammar Fragment
+
+```ebnf
+temporal    = date | time | datetime | duration | offset
+date        = "#d:" YYYY "-" MM "-" DD
+time        = "#t:" HH ":" MM
+datetime    = "#dt:" YYYY "-" MM "-" DD "T" HH ":" MM offset-suffix
+offset-suffix = "Z" | ("+" | "-") HH ":" MM
+duration    = "#dur:" ["-"] component+
+component   = digits ("d" | "h" | "m")
+offset      = "#off:" ("Z" | ("+" | "-") HH ":" MM)
+```
+
+### Equality and Ordering
+
+- **Date, Time, Duration, Offset**: Structural equality and natural ordering.
+- **Datetime**: Equality and ordering compare by **instant** (UTC equivalent). Two Datetimes representing the same moment in different offsets are equal.
+
+## Temporal Functions
+
+Temporal functions are available in `bind` expressions within rule bodies.
+
+### Construction
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `datetime` | `(Date, Time, Offset) → Datetime` | Compose a Datetime from parts |
+
+```lisp
+(bind ?dt (datetime #d:2025-07-15 #t:14:00 #off:+10:00))  ; => #dt:2025-07-15T14:00+10:00
+```
+
+### Extraction
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `date-of` | `(Datetime) → Date` | Extract local date |
+| `time-of` | `(Datetime) → Time` | Extract local time |
+| `day-of-week` | `(Date \| Datetime) → Symbol` | `:monday` .. `:sunday` |
+| `year-of` | `(Date \| Datetime) → Integer` | Year component |
+| `month-of` | `(Date \| Datetime) → Integer` | Month (1–12) |
+| `day-of-month` | `(Date \| Datetime) → Integer` | Day (1–31) |
+
+```lisp
+(bind ?d (date-of ?dt))                  ; => #d:2025-07-15
+(bind ?dow (day-of-week #d:2025-07-14))  ; => :monday
+(bind ?y (year-of #d:2025-12-25))        ; => 2025
+```
+
+### Difference
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `hours-between` | `(Datetime, Datetime) → Decimal` | Signed hours (dt2 − dt1) |
+| `minutes-between` | `(Datetime, Datetime) → Integer` | Signed minutes (dt2 − dt1) |
+| `days-between` | `(Date, Date) → Integer` | Signed days (date2 − date1) |
+| `duration-hours` | `(Duration) → Decimal` | Total hours |
+| `duration-minutes` | `(Duration) → Integer` | Total minutes |
+
+```lisp
+(bind ?d (days-between #d:2025-07-01 #d:2025-07-15))  ; => 14
+(bind ?h (duration-hours #dur:1h30m))                   ; => 1.5
+```
+
+### Calendar Arithmetic
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `add-months` | `(Date, Integer) → Date` | Add calendar months (day clamped) |
+| `add-years` | `(Date, Integer) → Date` | Add calendar years (day clamped) |
+| `months-between` | `(Date, Date) → Integer` | Complete calendar months |
+| `years-between` | `(Date, Date) → Integer` | Complete calendar years |
+
+Day clamping: when the target month has fewer days, the day is clamped to the last valid day. `add-months(#d:2025-01-31, 1)` → `#d:2025-02-28`.
+
+```lisp
+(bind ?review (add-months #d:2025-01-31 1))              ; => #d:2025-02-28
+(bind ?y (years-between #d:2023-03-01 #d:2025-03-01))   ; => 2
+```
+
+### Temporal Operator Overloads
+
+The arithmetic operators `+`, `-`, `*`, `/`, `min`, and `max` are overloaded for temporal types. See the [Temporal Reasoning guide](../guides/temporal.md#temporal-arithmetic) for the full dispatch table and examples.
+
 ## Arithmetic Expressions
 
 Arithmetic expressions can appear in rule bodies as `bind` constraints, comparison guards, or as arguments to predicates.

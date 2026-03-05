@@ -5,7 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 
-## [Unreleased]
+## [0.4.0]
+
+### Added
+- **Extension function mechanism** (Phase 1+2): pluggable `FunctionRegistry` with
+  `ExtensionFunction` trait. All built-in arithmetic operators (`+`, `-`, `*`, `/`,
+  `div`, `rem`, `**`, `abs`, `min`, `max`, `round`, `floor`, `ceil`) migrated from
+  hard-coded dispatch to registered extension functions.
+- **Fold aggregation**: `(fold ?result identity reducer extract pattern)` construct
+  for aggregating values across matching facts. Supports `required` identity for
+  aggregates where an empty set is meaningless. Works with all numeric and temporal types.
+- **Stratified reasoning**: automatic stratification for programs containing fold.
+  Fold patterns are evaluated bottom-up by stratum, ensuring stable aggregation
+  results. Temporal features cannot be combined with multi-stratum fold programs.
+- **Date/time types**: five new `Term` variants — `Date`, `Time`, `Datetime`,
+  `Duration`, `Offset` — with literal syntax (`#d:`, `#t:`, `#dt:`, `#dur:`, `#off:`).
+- **Temporal functions**: 16 extension functions for date/time operations:
+  - Construction: `datetime`
+  - Extraction: `date-of`, `time-of`, `day-of-week`, `year-of`, `month-of`, `day-of-month`
+  - Difference: `hours-between`, `minutes-between`, `days-between`, `duration-hours`, `duration-minutes`
+  - Calendar arithmetic: `add-months`, `add-years`, `months-between`, `years-between`
+- **Temporal operator overloads**: `+`, `-`, `*`, `/`, `min`, `max` extended to
+  work with temporal types (e.g., `Datetime + Duration → Datetime`,
+  `Date - Date → Integer`, `Duration * Number → Duration`).
+- **Temporal comparisons**: `<`, `>`, `<=`, `>=` work with same-type temporal values.
+  Datetime comparisons are by instant (UTC-equivalent), enabling cross-timezone ordering.
+
+### Changed
+- Version bumped to `0.4.0` (minor bump for new types and functions under pre-1.0 semver).
+- `Term` `PartialEq`, `Eq`, and `Hash` are now manually implemented to support
+  `DateTime<FixedOffset>` (compares by UTC instant, hashes by timestamp).
+
+### Fixed
+- Datetime `Hash`/`Eq` consistency: values representing the same instant at different
+  offsets now hash identically and compare as equal.
+- Runtime arity guards added to all built-in `eval()` methods.
+- CLI and WASM stratification bypass resolved.
+- Fold/stratification validation and bug fixes.
+
+## [0.3.0]
 
 ### Added
 - **Arithmetic module** (SPEC-017): full arithmetic expression support in SPL.
