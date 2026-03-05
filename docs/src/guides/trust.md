@@ -890,16 +890,24 @@ spindle reason --trust review.spl
 Conclusions:
 
   +D no_vulnerabilities (trust: 0.95) [agent:security]
-  +D tests_pass (trust: 0.85) [agent:coder]
   +D lint_clean (trust: 0.85) [agent:coder]
   +D manual_review_ok (trust: 0.80) [agent:qa]
+  +D tests_pass (trust: 0.85) [agent:coder]
+  +d no_vulnerabilities (trust: 0.95) [agent:security]
+  +d manual_review_ok (trust: 0.80) [agent:qa]
+  +d lint_clean (trust: 0.85) [agent:coder]
+  +d tests_pass (trust: 0.85) [agent:coder]
   +d security_clear (trust: 0.95) [agent:security]
-  +d code_ready (trust: 0.85) [agent:coder]
   +d qa_approved (trust: 0.80) [agent:qa]
-  +d ready_to_deploy (trust: 0.80)
+  +d code_ready (trust: 0.85) [agent:coder]
+  +d ready_to_deploy (trust: 0.00) [agent:coder, agent:qa, agent:security]
+  -D qa_approved (trust: 0.00)
+  -D code_ready (trust: 0.00)
+  -D security_clear (trust: 0.00)
+  -D ready_to_deploy (trust: 0.00)
 ```
 
-The deployment conclusion (`ready_to_deploy`) has trust 0.80 — it meets the `deploy` threshold (0.8) and can proceed.
+Each fact retains its source's trust degree. Derived conclusions like `security_clear` inherit trust from their source's claims block. The `ready_to_deploy` rule is defined outside any `claims` block, so it has no source attribution and receives a trust degree of `0.00` — to fix this, wrap the deployment rule in its own claims block or assign it to a fully trusted system source.
 
 ## Limitations
 
