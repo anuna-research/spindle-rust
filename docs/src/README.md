@@ -9,7 +9,7 @@ This project is part of the SPINdle family:
 
 ## What is Defeasible Logic?
 
-Defeasible logic is a **non-monotonic reasoning** system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.
+Defeasible logic is a [**non-monotonic reasoning**](https://www.youtube.com/watch?v=Ozipf13jRr4&t=1066) system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.
 
 ```spl
 ; The classic "Tweety" example
