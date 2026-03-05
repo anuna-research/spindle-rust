@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-55a70f2f.js";
+            window.path_to_searchindex_js = "searchindex-dc62d1a7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-25a1a19c.js"></script>
@@ -1016,6 +1016,14 @@ has-feathers
 <pre><code class="language-spl">(normally healthy-birds-fly (and bird healthy) flies)
 (normally busy-students (and student employed) busy)
 </code></pre>
+<h3 id="why-there-is-no-or"><a class="header" href="#why-there-is-no-or">Why there is no <code>or</code></a></h3>
+<p>Defeasible logic does not support disjunction in rule bodies. This is by design, not a missing feature — the proof theory (Nute/Billington/Antoniou) defines derivation over conjunctive rules only. Adding <code>or</code> would break the well-defined defeat and superiority semantics that make defeasible reasoning tractable.</p>
+<p>Instead, express disjunction as separate rules that conclude the same head:</p>
+<pre><code class="language-spl">; "If rain or snow, take umbrella"
+(normally rain-means-umbrella rain take-umbrella)
+(normally snow-means-umbrella snow take-umbrella)
+</code></pre>
+<p>Each rule independently supports the same conclusion. If either <code>rain</code> or <code>snow</code> is provable, <code>take-umbrella</code> follows. This is the standard encoding of disjunctive conditions in defeasible logic, and it preserves per-rule defeat — you can override one path without affecting the other.</p>
 <h2 id="variables"><a class="header" href="#variables">Variables</a></h2>
 <p>Variables start with <code>?</code>:</p>
 <pre><code class="language-spl">(given (parent alice bob))

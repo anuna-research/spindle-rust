@@ -161,6 +161,20 @@ Use `and` for multiple conditions:
 (normally busy-students (and student employed) busy)
 ```
 
+### Why there is no `or`
+
+Defeasible logic does not support disjunction in rule bodies. This is by design, not a missing feature — the proof theory (Nute/Billington/Antoniou) defines derivation over conjunctive rules only. Adding `or` would break the well-defined defeat and superiority semantics that make defeasible reasoning tractable.
+
+Instead, express disjunction as separate rules that conclude the same head:
+
+```spl
+; "If rain or snow, take umbrella"
+(normally rain-means-umbrella rain take-umbrella)
+(normally snow-means-umbrella snow take-umbrella)
+```
+
+Each rule independently supports the same conclusion. If either `rain` or `snow` is provable, `take-umbrella` follows. This is the standard encoding of disjunctive conditions in defeasible logic, and it preserves per-rule defeat — you can override one path without affecting the other.
+
 ## Variables
 
 Variables start with `?`:
