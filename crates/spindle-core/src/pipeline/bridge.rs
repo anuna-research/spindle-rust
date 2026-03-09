@@ -7,7 +7,7 @@
 //! - **Positive bridge:** `q[s,e] → base(q)` — a temporal fact implies its base.
 //! - **Negation bridge:** `~q[s,e] → ~base(q)` — coupled negation propagation.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use smallvec::smallvec;
 
@@ -15,7 +15,6 @@ use super::{Diagnostic, PipelineContext, PipelineStage, Severity};
 use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::reason::reason_prepared;
 use crate::rule::{Rule, RuleType};
 use crate::temporal::Temporal;
 use crate::theory::Theory;
@@ -62,7 +61,15 @@ struct BridgeOrigin {
 struct BridgeSeed {
     positive: Literal,
     positive_origin: Option<BridgeOrigin>,
+    positive_non_strict_origin: Option<BridgeOrigin>,
     negative_origin: Option<BridgeOrigin>,
+    negative_non_strict_origin: Option<BridgeOrigin>,
+}
+
+#[derive(Debug, Clone)]
+struct DefiniteProof {
+    literal: Literal,
+    origin: Option<BridgeOrigin>,
 }
 
 /// Return canonical bridge key + polarity for structurally valid bridge rules.
@@ -173,53 +180,199 @@ fn existing_bridge_is_strong_enough(existing: Option<RuleType>, required: RuleTy
     existing.is_some_and(|present| rule_strength(present) >= rule_strength(required))
 }
 
-fn supported_bridge_origins(theory: &Theory) -> Result<HashMap<String, BridgeSeed>> {
-    let conclusions = reason_prepared(theory)?;
-    let mut seeds = HashMap::new();
+fn atemporal_base_literal(literal: &Literal) -> Literal {
+    Literal::from_ids(
+        literal.interned_name(),
+        literal.negation,
+        literal.mode.clone(),
+        Temporal::empty(),
+        literal.predicate_args().to_vec(),
+    )
+}
 
-    for conclusion in conclusions {
-        if !conclusion.is_positive() || conclusion.literal.temporal.is_empty() {
+fn prove_definite_literal(
+    proven: &mut HashMap<String, DefiniteProof>,
+    worklist: &mut VecDeque<Literal>,
+    literal: Literal,
+    origin: Option<BridgeOrigin>,
+    theory: &Theory,
+) {
+    let key = literal.to_spl();
+    if let Some(existing) = proven.get_mut(&key) {
+        if let Some(candidate_origin) = origin
+            && should_replace_origin(existing.origin.as_ref(), &candidate_origin, theory)
+        {
+            existing.origin = Some(candidate_origin);
+        }
+        return;
+    }
+
+    proven.insert(
+        key,
+        DefiniteProof {
+            literal: literal.clone(),
+            origin,
+        },
+    );
+    worklist.push_back(literal);
+}
+
+fn strict_origin(rule: &Rule) -> BridgeOrigin {
+    BridgeOrigin {
+        template_label: rule.template_label().to_string(),
+        rule_type: RuleType::Strict,
+    }
+}
+
+fn supported_strict_bridge_origins(
+    theory: &Theory,
+    seeds: &HashMap<String, BridgeSeed>,
+) -> HashMap<String, BridgeSeed> {
+    let mut strict_bridge_candidates: HashSet<String> = HashSet::new();
+    for seed in seeds.values() {
+        if seed
+            .positive_origin
+            .as_ref()
+            .is_some_and(|origin| origin.rule_type == RuleType::Strict)
+        {
+            strict_bridge_candidates.insert(seed.positive.to_spl());
+        }
+        if seed
+            .negative_origin
+            .as_ref()
+            .is_some_and(|origin| origin.rule_type == RuleType::Strict)
+        {
+            strict_bridge_candidates.insert(seed.positive.complement().to_spl());
+        }
+    }
+    if strict_bridge_candidates.is_empty() {
+        return HashMap::new();
+    }
+
+    let mut rules_by_body: HashMap<String, Vec<&Rule>> = HashMap::new();
+    let mut body_remaining: HashMap<&str, usize> = HashMap::new();
+    for rule in theory.rules() {
+        if rule.rule_type != RuleType::Strict || rule.body.is_empty() {
             continue;
         }
 
-        let Some(rule_label) = conclusion.rule_label.as_deref() else {
+        let Some(body_literals) = rule
+            .body
+            .iter()
+            .map(|body| body.as_logic().map(BodyLogicLiteral::to_literal))
+            .collect::<Option<Vec<_>>>()
+        else {
             continue;
         };
-        let template_label = theory
-            .get_rule(rule_label)
-            .map(Rule::template_label)
-            .unwrap_or(rule_label)
-            .to_string();
-        let positive = if conclusion.literal.negation {
-            conclusion.literal.complement()
+
+        body_remaining.insert(rule.label.as_str(), body_literals.len());
+        for body_literal in body_literals {
+            rules_by_body
+                .entry(body_literal.to_spl())
+                .or_default()
+                .push(rule);
+        }
+    }
+
+    let mut proven: HashMap<String, DefiniteProof> = HashMap::new();
+    let mut worklist = VecDeque::new();
+    for rule in theory.rules() {
+        if rule.body.is_empty() && matches!(rule.rule_type, RuleType::Fact | RuleType::Strict) {
+            prove_definite_literal(
+                &mut proven,
+                &mut worklist,
+                rule.head_literal().clone(),
+                Some(strict_origin(rule)),
+                theory,
+            );
+        }
+    }
+
+    while let Some(literal) = worklist.pop_front() {
+        let key = literal.to_spl();
+        if !literal.temporal.is_empty() && strict_bridge_candidates.contains(&key) {
+            prove_definite_literal(
+                &mut proven,
+                &mut worklist,
+                atemporal_base_literal(&literal),
+                None,
+                theory,
+            );
+        }
+
+        if let Some(rules) = rules_by_body.get(&key) {
+            for rule in rules {
+                let remaining = body_remaining
+                    .get_mut(rule.label.as_str())
+                    .expect("strict rule body counter should exist");
+                if *remaining == 0 {
+                    continue;
+                }
+
+                *remaining -= 1;
+                if *remaining == 0 {
+                    prove_definite_literal(
+                        &mut proven,
+                        &mut worklist,
+                        rule.head_literal().clone(),
+                        Some(strict_origin(rule)),
+                        theory,
+                    );
+                }
+            }
+        }
+    }
+
+    let mut supported = HashMap::new();
+    for proof in proven.into_values() {
+        if proof.literal.temporal.is_empty() {
+            continue;
+        }
+        let Some(origin) = proof.origin else {
+            continue;
+        };
+
+        let positive = if proof.literal.negation {
+            proof.literal.complement()
         } else {
-            conclusion.literal.clone()
+            proof.literal.clone()
         };
         let key = positive.to_spl();
-        let seed = seeds.entry(key).or_insert_with(|| BridgeSeed {
+        let seed = supported.entry(key).or_insert_with(|| BridgeSeed {
             positive,
             positive_origin: None,
+            positive_non_strict_origin: None,
             negative_origin: None,
+            negative_non_strict_origin: None,
         });
-        let slot = if conclusion.literal.negation {
+        let slot = if proof.literal.negation {
             &mut seed.negative_origin
         } else {
             &mut seed.positive_origin
-        };
-        let origin = BridgeOrigin {
-            template_label,
-            rule_type: if conclusion.is_definite() {
-                RuleType::Strict
-            } else {
-                RuleType::Defeasible
-            },
         };
         if should_replace_origin(slot.as_ref(), &origin, theory) {
             *slot = Some(origin);
         }
     }
 
-    Ok(seeds)
+    supported
+}
+
+fn select_bridge_origin(
+    supported_primary: Option<BridgeOrigin>,
+    supported_other: Option<BridgeOrigin>,
+    non_strict_primary: Option<BridgeOrigin>,
+    non_strict_other: Option<BridgeOrigin>,
+    fallback_primary: Option<BridgeOrigin>,
+    fallback_other: Option<BridgeOrigin>,
+) -> BridgeOrigin {
+    supported_primary
+        .or(supported_other)
+        .or(non_strict_primary)
+        .or(non_strict_other)
+        .or(fallback_primary)
+        .or(fallback_other)
+        .expect("bridge seed must have at least one origin")
 }
 
 fn reserve_bridge_label(reserved: &mut HashSet<String>, preferred: String) -> String {
@@ -287,7 +440,9 @@ impl PipelineStage for TemporalBridge {
                 let seed = seeds.entry(key).or_insert_with(|| BridgeSeed {
                     positive,
                     positive_origin: None,
+                    positive_non_strict_origin: None,
                     negative_origin: None,
+                    negative_non_strict_origin: None,
                 });
                 let slot = if head_lit.negation {
                     &mut seed.negative_origin
@@ -299,23 +454,21 @@ impl PipelineStage for TemporalBridge {
                     rule_type: bridge_rule_type(rule.rule_type),
                 };
                 if should_replace_origin(slot.as_ref(), &candidate_origin, &theory) {
-                    *slot = Some(candidate_origin);
+                    *slot = Some(candidate_origin.clone());
+                }
+                if candidate_origin.rule_type != RuleType::Strict {
+                    let non_strict_slot = if head_lit.negation {
+                        &mut seed.negative_non_strict_origin
+                    } else {
+                        &mut seed.positive_non_strict_origin
+                    };
+                    if should_replace_origin(non_strict_slot.as_ref(), &candidate_origin, &theory) {
+                        *non_strict_slot = Some(candidate_origin);
+                    }
                 }
             }
         }
-        for (key, supported_seed) in supported_bridge_origins(&theory)? {
-            let seed = seeds.entry(key).or_insert_with(|| BridgeSeed {
-                positive: supported_seed.positive,
-                positive_origin: None,
-                negative_origin: None,
-            });
-            if let Some(origin) = supported_seed.positive_origin {
-                seed.positive_origin = Some(origin);
-            }
-            if let Some(origin) = supported_seed.negative_origin {
-                seed.negative_origin = Some(origin);
-            }
-        }
+        let supported_strict = supported_strict_bridge_origins(&theory, &seeds);
 
         let mut reserved_labels: HashSet<String> =
             theory.rules().map(|rule| rule.label.clone()).collect();
@@ -323,16 +476,23 @@ impl PipelineStage for TemporalBridge {
         for (key, seed) in seeds {
             let presence = existing.get(&key).copied().unwrap_or_default();
             let positive = &seed.positive;
-            let pos_origin = seed
-                .positive_origin
-                .clone()
-                .or_else(|| seed.negative_origin.clone())
-                .expect("bridge seed must have at least one origin");
-            let neg_origin = seed
-                .negative_origin
-                .clone()
-                .or_else(|| seed.positive_origin.clone())
-                .expect("bridge seed must have at least one origin");
+            let supported_seed = supported_strict.get(&key);
+            let pos_origin = select_bridge_origin(
+                supported_seed.and_then(|supported| supported.positive_origin.clone()),
+                supported_seed.and_then(|supported| supported.negative_origin.clone()),
+                seed.positive_non_strict_origin.clone(),
+                seed.negative_non_strict_origin.clone(),
+                seed.positive_origin.clone(),
+                seed.negative_origin.clone(),
+            );
+            let neg_origin = select_bridge_origin(
+                supported_seed.and_then(|supported| supported.negative_origin.clone()),
+                supported_seed.and_then(|supported| supported.positive_origin.clone()),
+                seed.negative_non_strict_origin.clone(),
+                seed.positive_non_strict_origin.clone(),
+                seed.negative_origin.clone(),
+                seed.positive_origin.clone(),
+            );
 
             if !existing_bridge_is_strong_enough(presence.positive, pos_origin.rule_type) {
                 // --- Positive bridge: q[s,e] → q ---
@@ -1106,6 +1266,88 @@ mod tests {
         assert!(
             has_neg_p,
             "the superior atemporal attacker should still defeat the bridged defeasible support"
+        );
+    }
+
+    #[test]
+    fn bridge_strength_can_upgrade_after_another_bridge_in_same_pass() {
+        let mut theory = Theory::new();
+
+        let p_temporal = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+        let q_temporal = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("q"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+
+        theory.add_rule(Rule::fact("p_fact", p_temporal.clone()));
+        theory.add_rule(Rule::strict(
+            "q_strict",
+            vec![Literal::simple("p")],
+            q_temporal.clone(),
+        ));
+        theory.add_rule(Rule::defeasible(
+            "q_defeasible",
+            vec![Literal::simple("b")],
+            q_temporal.clone(),
+        ));
+        theory.add_fact("b");
+        theory.add_strict_rule(&["q"], "r");
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let q_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.head.len() == 1
+                    && !rule.head[0].negation
+                    && rule.head[0].name() == "q"
+                    && rule.head[0].temporal.is_empty()
+                    && rule.body.len() == 1
+                    && rule.body[0]
+                        .as_logic()
+                        .is_some_and(|bl| !bl.negation && bl.to_literal() == q_temporal)
+            })
+            .expect("expected synthesized bridge for q[1,10] -> q");
+        assert_eq!(
+            q_bridge.rule_type,
+            RuleType::Strict,
+            "q bridge should strengthen to strict once p[1,10] -> p enables the strict q origin"
+        );
+        assert_eq!(
+            q_bridge.template_label.as_deref(),
+            Some("q_strict"),
+            "the strengthened bridge should inherit the actually supporting strict origin"
+        );
+
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let has_definite_q = conclusions.iter().any(|conclusion| {
+            conclusion.literal.name() == "q"
+                && !conclusion.literal.negation
+                && conclusion.literal.temporal.is_empty()
+                && conclusion.conclusion_type == ConclusionType::DefinitelyProvable
+        });
+        let has_definite_r = conclusions.iter().any(|conclusion| {
+            conclusion.literal.name() == "r"
+                && !conclusion.literal.negation
+                && conclusion.conclusion_type == ConclusionType::DefinitelyProvable
+        });
+        assert!(
+            has_definite_q,
+            "the bridged base q should become definitely provable"
+        );
+        assert!(
+            has_definite_r,
+            "downstream strict rules should still fire through the strengthened q bridge"
         );
     }
 
