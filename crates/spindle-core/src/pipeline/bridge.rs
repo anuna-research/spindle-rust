@@ -47,8 +47,8 @@ pub struct TemporalBridge;
 
 #[derive(Debug, Clone, Copy, Default)]
 struct BridgePresence {
-    positive: bool,
-    negative: bool,
+    positive: Option<RuleType>,
+    negative: Option<RuleType>,
 }
 
 #[derive(Debug, Clone)]
@@ -70,7 +70,7 @@ struct BridgeSeed {
 /// - a single body literal and a single head literal
 /// - exactly one logic body literal with non-empty temporal bounds
 /// - exactly one atemporal head literal with same atom/mode/args and same polarity
-fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool)> {
+fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool, RuleType)> {
     if rule.body.len() != 1 || rule.head.len() != 1 {
         return None;
     }
@@ -105,7 +105,7 @@ fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool)> {
     } else {
         body_lit
     };
-    Some((positive.to_spl(), body.negation))
+    Some((positive.to_spl(), body.negation, rule.rule_type))
 }
 
 fn template_label_priority(label: &str, theory: &Theory) -> (bool, bool, bool) {
@@ -129,6 +129,47 @@ fn should_replace_template_label(current: Option<&str>, candidate: &str, theory:
     let current_priority = template_label_priority(current, theory);
     candidate_priority > current_priority
         || (candidate_priority == current_priority && candidate < current)
+}
+
+fn rule_strength(rule_type: RuleType) -> u8 {
+    match rule_type {
+        RuleType::Fact | RuleType::Strict => 3,
+        RuleType::Defeasible => 2,
+        RuleType::Defeater => 1,
+    }
+}
+
+fn should_replace_origin(
+    current: Option<&BridgeOrigin>,
+    candidate: &BridgeOrigin,
+    theory: &Theory,
+) -> bool {
+    let Some(current) = current else {
+        return true;
+    };
+
+    let candidate_strength = rule_strength(candidate.rule_type);
+    let current_strength = rule_strength(current.rule_type);
+    candidate_strength > current_strength
+        || (candidate_strength == current_strength
+            && should_replace_template_label(
+                Some(current.template_label.as_str()),
+                &candidate.template_label,
+                theory,
+            ))
+}
+
+fn update_strongest_bridge(slot: &mut Option<RuleType>, candidate: RuleType) {
+    if slot
+        .as_ref()
+        .is_none_or(|current| rule_strength(candidate) > rule_strength(*current))
+    {
+        *slot = Some(candidate);
+    }
+}
+
+fn existing_bridge_is_strong_enough(existing: Option<RuleType>, required: RuleType) -> bool {
+    existing.is_some_and(|present| rule_strength(present) >= rule_strength(required))
 }
 
 fn reserve_bridge_label(reserved: &mut HashSet<String>, preferred: String) -> String {
@@ -163,12 +204,12 @@ impl PipelineStage for TemporalBridge {
         // Track which bridge variants (positive/negative) already exist.
         let mut existing: HashMap<String, BridgePresence> = HashMap::new();
         for rule in theory.rules() {
-            if let Some((key, is_negative)) = existing_bridge_signature(rule) {
+            if let Some((key, is_negative, rule_type)) = existing_bridge_signature(rule) {
                 let entry = existing.entry(key).or_default();
                 if is_negative {
-                    entry.negative = true;
+                    update_strongest_bridge(&mut entry.negative, rule_type);
                 } else {
-                    entry.positive = true;
+                    update_strongest_bridge(&mut entry.positive, rule_type);
                 }
             }
         }
@@ -203,15 +244,12 @@ impl PipelineStage for TemporalBridge {
                 } else {
                     &mut seed.positive_origin
                 };
-                if should_replace_template_label(
-                    slot.as_ref().map(|origin| origin.template_label.as_str()),
-                    &template_label,
-                    &theory,
-                ) {
-                    *slot = Some(BridgeOrigin {
-                        template_label: template_label.clone(),
-                        rule_type: bridge_rule_type(rule.rule_type),
-                    });
+                let candidate_origin = BridgeOrigin {
+                    template_label: template_label.clone(),
+                    rule_type: bridge_rule_type(rule.rule_type),
+                };
+                if should_replace_origin(slot.as_ref(), &candidate_origin, &theory) {
+                    *slot = Some(candidate_origin);
                 }
             }
         }
@@ -233,7 +271,7 @@ impl PipelineStage for TemporalBridge {
                 .or_else(|| seed.positive_origin.clone())
                 .expect("bridge seed must have at least one origin");
 
-            if !presence.positive {
+            if !existing_bridge_is_strong_enough(presence.positive, pos_origin.rule_type) {
                 // --- Positive bridge: q[s,e] → q ---
                 let pos_label =
                     reserve_bridge_label(&mut reserved_labels, format!("__bridge::{key}"));
@@ -265,7 +303,7 @@ impl PipelineStage for TemporalBridge {
                 bridges.push(pos_rule);
             }
 
-            if !presence.negative {
+            if !existing_bridge_is_strong_enough(presence.negative, neg_origin.rule_type) {
                 // --- Negation bridge: ~q[s,e] → ~q ---
                 let neg_label =
                     reserve_bridge_label(&mut reserved_labels, format!("__bridge::neg::{key}"));
@@ -821,6 +859,126 @@ mod tests {
             base.degree
         );
         assert!(base.sources.contains(&Source::new("alice")));
+    }
+
+    #[test]
+    fn synthesized_bridges_prefer_strongest_origin_rule_type_before_metadata() {
+        let mut theory = Theory::new();
+
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("fact_origin", temporal_head.clone()));
+        theory.add_rule(Rule::defeasible(
+            "meta_origin",
+            vec![Literal::simple("a")],
+            temporal_head.clone(),
+        ));
+        theory.add_fact("a");
+        theory.add_meta_string("meta_origin", "source", "alice");
+        theory.add_strict_rule(&["p"], "q");
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let pos_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.head.len() == 1
+                    && !rule.head[0].negation
+                    && rule.head[0].name() == "p"
+                    && rule.head[0].temporal.is_empty()
+                    && rule.body.len() == 1
+                    && rule.body[0]
+                        .as_logic()
+                        .is_some_and(|bl| !bl.negation && bl.to_literal() == temporal_head)
+            })
+            .expect("expected synthesized positive bridge");
+        assert_eq!(
+            pos_bridge.rule_type,
+            RuleType::Strict,
+            "the strongest available temporal origin must determine bridge strength"
+        );
+        assert_eq!(
+            pos_bridge.template_label.as_deref(),
+            Some("fact_origin"),
+            "weaker rules with richer metadata must not replace a strict origin"
+        );
+
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let has_definite_q = conclusions.iter().any(|conclusion| {
+            conclusion.literal.name() == "q"
+                && !conclusion.literal.negation
+                && conclusion.conclusion_type == ConclusionType::DefinitelyProvable
+        });
+        assert!(
+            has_definite_q,
+            "strict downstream rules should still fire through the synthesized bridge"
+        );
+    }
+
+    #[test]
+    fn weaker_existing_bridge_does_not_block_required_strict_bridge_generation() {
+        let mut theory = Theory::new();
+
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+        let base_head = Literal::simple("p");
+
+        theory.add_rule(Rule::fact("fact_origin", temporal_head.clone()));
+        theory.add_rule(Rule::defeasible(
+            "manual_bridge",
+            vec![temporal_head.clone()],
+            base_head.clone(),
+        ));
+        theory.add_strict_rule(&["p"], "q");
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let has_strict_bridge = bridged.rules().any(|rule| {
+            rule.rule_type == RuleType::Strict
+                && rule.head.len() == 1
+                && rule.head[0] == base_head
+                && rule.body.len() == 1
+                && rule.body[0]
+                    .as_logic()
+                    .is_some_and(|bl| !bl.negation && bl.to_literal() == temporal_head)
+        });
+        assert!(
+            has_strict_bridge,
+            "a weaker pre-existing bridge must not suppress strict bridge synthesis"
+        );
+
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let has_definite_p = conclusions.iter().any(|conclusion| {
+            conclusion.literal.name() == "p"
+                && !conclusion.literal.negation
+                && conclusion.literal.temporal.is_empty()
+                && conclusion.conclusion_type == ConclusionType::DefinitelyProvable
+        });
+        let has_definite_q = conclusions.iter().any(|conclusion| {
+            conclusion.literal.name() == "q"
+                && !conclusion.literal.negation
+                && conclusion.conclusion_type == ConclusionType::DefinitelyProvable
+        });
+        assert!(
+            has_definite_p,
+            "the temporal fact should still make base p definitely provable"
+        );
+        assert!(
+            has_definite_q,
+            "strict rules depending on p should still fire after bridge synthesis"
+        );
     }
 
     /// Helper: create a temporal fact `>> name [start, end].`

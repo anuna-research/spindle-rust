@@ -6,6 +6,7 @@
 
 use std::collections::HashSet;
 use std::fmt;
+use std::slice;
 
 use crate::error::Result;
 use crate::literal::Literal;
@@ -18,11 +19,88 @@ use crate::theory::Theory;
 // TYPES
 // =============================================================================
 
+fn same_temporal_literal(left: &Literal, right: &Literal) -> bool {
+    left.name_id() == right.name_id()
+        && left.negation == right.negation
+        && left.mode == right.mode
+        && left.temporal == right.temporal
+        && left.predicate_args() == right.predicate_args()
+}
+
+/// Ordered set of abduced facts that preserves temporal distinctions.
+#[derive(Debug, Clone, Default)]
+pub struct AbducedFacts {
+    facts: Vec<Literal>,
+}
+
+impl AbducedFacts {
+    /// Build a deduplicated fact set with deterministic ordering.
+    pub fn new(facts: impl IntoIterator<Item = Literal>) -> Self {
+        let mut deduped = Vec::new();
+        for fact in facts {
+            if !deduped
+                .iter()
+                .any(|existing| same_temporal_literal(existing, &fact))
+            {
+                deduped.push(fact);
+            }
+        }
+        deduped.sort_by_cached_key(Literal::to_spl);
+        Self { facts: deduped }
+    }
+
+    /// Check whether the set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.facts.is_empty()
+    }
+
+    /// Number of distinct abduced facts.
+    pub fn len(&self) -> usize {
+        self.facts.len()
+    }
+
+    /// Iterate over facts in deterministic order.
+    pub fn iter(&self) -> slice::Iter<'_, Literal> {
+        self.facts.iter()
+    }
+
+    /// Check whether a fact matching `literal` is present.
+    pub fn contains(&self, literal: &Literal) -> bool {
+        self.facts
+            .iter()
+            .any(|fact| matches_literal_temporal(literal, fact))
+    }
+}
+
+impl FromIterator<Literal> for AbducedFacts {
+    fn from_iter<T: IntoIterator<Item = Literal>>(iter: T) -> Self {
+        Self::new(iter)
+    }
+}
+
+impl IntoIterator for AbducedFacts {
+    type Item = Literal;
+    type IntoIter = std::vec::IntoIter<Literal>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.facts.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a AbducedFacts {
+    type Item = &'a Literal;
+    type IntoIter = slice::Iter<'a, Literal>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// A solution to an abduction problem
 #[derive(Debug, Clone)]
 pub struct AbductionSolution {
     /// Facts that need to be assumed
-    pub facts: HashSet<Literal>,
+    pub facts: AbducedFacts,
     /// Rules that would be used in the derivation
     pub rules_used: HashSet<String>,
     /// Confidence score (if trust-weighted)
@@ -31,9 +109,9 @@ pub struct AbductionSolution {
 
 impl AbductionSolution {
     /// Create a new abduction solution
-    pub fn new(facts: HashSet<Literal>) -> Self {
+    pub fn new(facts: impl IntoIterator<Item = Literal>) -> Self {
         Self {
-            facts,
+            facts: facts.into_iter().collect(),
             rules_used: HashSet::new(),
             confidence: 1.0,
         }
@@ -125,9 +203,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
     });
 
     if is_provable {
-        result
-            .solutions
-            .push(AbductionSolution::new(HashSet::new()));
+        result.solutions.push(AbductionSolution::new(Vec::new()));
         return Ok(result);
     }
 
@@ -135,7 +211,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
     let proven = ProvenSet::from_conclusions(&conclusions);
 
     // Find rules that could derive the goal
-    let mut solutions: Vec<HashSet<Literal>> = Vec::new();
+    let mut solutions: Vec<AbducedFacts> = Vec::new();
 
     for rule in theory.rules() {
         if matches_literal_temporal(goal, rule.head_literal())
@@ -147,7 +223,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
                 .iter()
                 .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
                 .collect();
-            let missing: HashSet<_> = body_lits
+            let missing: AbducedFacts = body_lits
                 .into_iter()
                 .filter(|b| !proven.contains(b))
                 .collect();
@@ -171,9 +247,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
     // If no direct rules, try to find indirect paths (simplified)
     if solutions.is_empty() {
         // Add the goal itself as a hypothesis (trivial solution)
-        let mut trivial = HashSet::new();
-        trivial.insert(goal.clone());
-        solutions.push(trivial);
+        solutions.push(AbducedFacts::new([goal.clone()]));
     }
 
     // Sort by size (smallest first) and limit
@@ -567,6 +641,76 @@ mod tests {
         assert!(
             result.is_already_provable(),
             "Wildcard query p should match p[1,10]"
+        );
+    }
+
+    #[test]
+    fn test_abduce_preserves_distinct_temporal_premises_in_single_solution() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let p_20_30 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![p_1_10.clone(), p_20_30.clone()],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+        assert_eq!(
+            sol.size(),
+            2,
+            "abduction must retain both temporal premises instead of collapsing them"
+        );
+        assert!(
+            sol.facts
+                .iter()
+                .any(|lit| matches_literal_temporal(&p_1_10, lit)),
+            "expected p[1,10] in abduced facts, got {:?}",
+            sol.facts
+        );
+        assert!(
+            sol.facts
+                .iter()
+                .any(|lit| matches_literal_temporal(&p_20_30, lit)),
+            "expected p[20,30] in abduced facts, got {:?}",
+            sol.facts
+        );
+
+        let required = crate::query::requires(&theory, &Literal::simple("q")).unwrap();
+        assert_eq!(
+            required.len(),
+            2,
+            "requires() should verify the two-premise temporal explanation"
+        );
+        assert!(
+            required
+                .iter()
+                .any(|lit| matches_literal_temporal(&p_1_10, lit)),
+            "expected p[1,10] in requires() result, got {:?}",
+            required
+        );
+        assert!(
+            required
+                .iter()
+                .any(|lit| matches_literal_temporal(&p_20_30, lit)),
+            "expected p[20,30] in requires() result, got {:?}",
+            required
         );
     }
 }

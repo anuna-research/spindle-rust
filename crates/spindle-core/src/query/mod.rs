@@ -39,7 +39,7 @@ use crate::theory::Theory;
 use crate::trust::{TrustPolicy, TrustValue};
 
 pub mod abduce;
-pub use abduce::{AbductionResult, AbductionSolution, abduce};
+pub use abduce::{AbducedFacts, AbductionResult, AbductionSolution, abduce};
 
 pub mod requires;
 pub use requires::{
