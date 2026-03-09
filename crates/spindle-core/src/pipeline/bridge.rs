@@ -15,6 +15,7 @@ use super::{Diagnostic, PipelineContext, PipelineStage, Severity};
 use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::reason::reason_prepared;
 use crate::rule::{Rule, RuleType};
 use crate::temporal::Temporal;
 use crate::theory::Theory;
@@ -172,6 +173,55 @@ fn existing_bridge_is_strong_enough(existing: Option<RuleType>, required: RuleTy
     existing.is_some_and(|present| rule_strength(present) >= rule_strength(required))
 }
 
+fn supported_bridge_origins(theory: &Theory) -> Result<HashMap<String, BridgeSeed>> {
+    let conclusions = reason_prepared(theory)?;
+    let mut seeds = HashMap::new();
+
+    for conclusion in conclusions {
+        if !conclusion.is_positive() || conclusion.literal.temporal.is_empty() {
+            continue;
+        }
+
+        let Some(rule_label) = conclusion.rule_label.as_deref() else {
+            continue;
+        };
+        let template_label = theory
+            .get_rule(rule_label)
+            .map(Rule::template_label)
+            .unwrap_or(rule_label)
+            .to_string();
+        let positive = if conclusion.literal.negation {
+            conclusion.literal.complement()
+        } else {
+            conclusion.literal.clone()
+        };
+        let key = positive.to_spl();
+        let seed = seeds.entry(key).or_insert_with(|| BridgeSeed {
+            positive,
+            positive_origin: None,
+            negative_origin: None,
+        });
+        let slot = if conclusion.literal.negation {
+            &mut seed.negative_origin
+        } else {
+            &mut seed.positive_origin
+        };
+        let origin = BridgeOrigin {
+            template_label,
+            rule_type: if conclusion.is_definite() {
+                RuleType::Strict
+            } else {
+                RuleType::Defeasible
+            },
+        };
+        if should_replace_origin(slot.as_ref(), &origin, theory) {
+            *slot = Some(origin);
+        }
+    }
+
+    Ok(seeds)
+}
+
 fn reserve_bridge_label(reserved: &mut HashSet<String>, preferred: String) -> String {
     if reserved.insert(preferred.clone()) {
         return preferred;
@@ -251,6 +301,19 @@ impl PipelineStage for TemporalBridge {
                 if should_replace_origin(slot.as_ref(), &candidate_origin, &theory) {
                     *slot = Some(candidate_origin);
                 }
+            }
+        }
+        for (key, supported_seed) in supported_bridge_origins(&theory)? {
+            let seed = seeds.entry(key).or_insert_with(|| BridgeSeed {
+                positive: supported_seed.positive,
+                positive_origin: None,
+                negative_origin: None,
+            });
+            if let Some(origin) = supported_seed.positive_origin {
+                seed.positive_origin = Some(origin);
+            }
+            if let Some(origin) = supported_seed.negative_origin {
+                seed.negative_origin = Some(origin);
             }
         }
 
@@ -978,6 +1041,71 @@ mod tests {
         assert!(
             has_definite_q,
             "strict rules depending on p should still fire after bridge synthesis"
+        );
+    }
+
+    #[test]
+    fn unsupported_strict_temporal_origin_does_not_upgrade_bridge_strength() {
+        let mut theory = Theory::new();
+
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+        theory.add_fact("b");
+        theory.add_fact("c");
+        theory.add_rule(Rule::strict(
+            "r_strict",
+            vec![Literal::simple("a")],
+            temporal_head.clone(),
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_def",
+            vec![Literal::simple("b")],
+            temporal_head.clone(),
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_neg",
+            vec![Literal::simple("c")],
+            Literal::negated("p"),
+        ));
+        theory.add_superiority("r_neg", "r_def");
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let pos_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.head.len() == 1
+                    && !rule.head[0].negation
+                    && rule.head[0].name() == "p"
+                    && rule.head[0].temporal.is_empty()
+                    && rule.body.len() == 1
+                    && rule.body[0]
+                        .as_logic()
+                        .is_some_and(|bl| !bl.negation && bl.to_literal() == temporal_head)
+            })
+            .expect("expected synthesized positive bridge");
+        assert_eq!(
+            pos_bridge.rule_type,
+            RuleType::Defeasible,
+            "an unsupported strict temporal rule must not upgrade the bridge strength"
+        );
+
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let has_neg_p = conclusions.iter().any(|conclusion| {
+            conclusion.literal.name() == "p"
+                && conclusion.literal.negation
+                && conclusion.literal.temporal.is_empty()
+                && conclusion.conclusion_type == ConclusionType::DefeasiblyProvable
+        });
+        assert!(
+            has_neg_p,
+            "the superior atemporal attacker should still defeat the bridged defeasible support"
         );
     }
 

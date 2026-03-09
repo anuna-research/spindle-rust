@@ -19,15 +19,20 @@ use crate::theory::Theory;
 // TYPES
 // =============================================================================
 
-fn same_temporal_literal(left: &Literal, right: &Literal) -> bool {
+fn same_literal_shape(left: &Literal, right: &Literal) -> bool {
     left.name_id() == right.name_id()
         && left.negation == right.negation
         && left.mode == right.mode
-        && left.temporal == right.temporal
         && left.predicate_args() == right.predicate_args()
 }
 
-/// Ordered set of abduced facts that preserves temporal distinctions.
+fn fact_covers(candidate: &Literal, required: &Literal) -> bool {
+    same_literal_shape(candidate, required)
+        && (required.temporal.is_empty() || candidate.temporal == required.temporal)
+}
+
+/// Ordered set of abduced facts that preserves distinct temporal windows
+/// while removing wildcard premises already covered by concrete ones.
 #[derive(Debug, Clone, Default)]
 pub struct AbducedFacts {
     facts: Vec<Literal>,
@@ -38,12 +43,11 @@ impl AbducedFacts {
     pub fn new(facts: impl IntoIterator<Item = Literal>) -> Self {
         let mut deduped = Vec::new();
         for fact in facts {
-            if !deduped
-                .iter()
-                .any(|existing| same_temporal_literal(existing, &fact))
-            {
-                deduped.push(fact);
+            if deduped.iter().any(|existing| fact_covers(existing, &fact)) {
+                continue;
             }
+            deduped.retain(|existing| !fact_covers(&fact, existing));
+            deduped.push(fact);
         }
         deduped.sort_by_cached_key(Literal::to_spl);
         Self { facts: deduped }
@@ -710,6 +714,63 @@ mod tests {
                 .iter()
                 .any(|lit| matches_literal_temporal(&p_20_30, lit)),
             "expected p[20,30] in requires() result, got {:?}",
+            required
+        );
+    }
+
+    #[test]
+    fn test_abduce_collapses_wildcard_and_exact_temporal_premises_to_minimal_solution() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        let p_any = Literal::simple("p");
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![p_any, p_1_10.clone()],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+        assert_eq!(
+            sol.size(),
+            1,
+            "wildcard and exact temporal premises should collapse to the minimal explanation"
+        );
+        assert!(
+            sol.facts
+                .iter()
+                .any(|lit| matches_literal_temporal(&p_1_10, lit)),
+            "expected p[1,10] in abduced facts, got {:?}",
+            sol.facts
+        );
+        assert!(
+            !sol.facts
+                .iter()
+                .any(|lit| lit.name() == "p" && lit.temporal.is_empty()),
+            "the wildcard premise should be removed once p[1,10] is present, got {:?}",
+            sol.facts
+        );
+
+        let required = crate::query::requires(&theory, &Literal::simple("q")).unwrap();
+        assert_eq!(
+            required.len(),
+            1,
+            "requires() should also return the minimal temporal explanation"
+        );
+        assert!(
+            required
+                .iter()
+                .any(|lit| matches_literal_temporal(&p_1_10, lit)),
+            "expected p[1,10] in requires() result, got {:?}",
             required
         );
     }
