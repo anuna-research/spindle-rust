@@ -6,7 +6,7 @@ Spindle supports first-order variables using Datalog-style bottom-up grounding.
 
 Variables are prefixed with `?`:
 
-```lisp
+```spl
 ?x
 ?person
 ?any_value
@@ -14,7 +14,7 @@ Variables are prefixed with `?`:
 
 ## Basic Example
 
-```lisp
+```spl
 ; Facts with predicates
 (given (parent alice bob))
 (given (parent bob charlie))
@@ -31,7 +31,7 @@ The rule `r1` matches against facts:
 
 A classic example - computing ancestors:
 
-```lisp
+```spl
 ; Base facts
 (given (parent alice bob))
 (given (parent bob charlie))
@@ -58,7 +58,7 @@ A classic example - computing ancestors:
 
 Extract all predicate instances from facts:
 
-```lisp
+```spl
 (given (parent alice bob))   →  parent(alice, bob)
 (given (parent bob charlie)) →  parent(bob, charlie)
 ```
@@ -67,7 +67,7 @@ Extract all predicate instances from facts:
 
 For each rule, find all substitutions that satisfy the body:
 
-```lisp
+```spl
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 ```
 
@@ -79,7 +79,7 @@ Substitutions:
 
 Apply substitutions to create ground instances:
 
-```lisp
+```spl
 ; Ground instances of r1
 (normally r1_1 (parent alice bob) (ancestor alice bob))
 (normally r1_2 (parent bob charlie) (ancestor bob charlie))
@@ -91,7 +91,7 @@ Reason over the ground theory using standard algorithms.
 
 ## Multiple Variables
 
-```lisp
+```spl
 (given (edge a b))
 (given (edge b c))
 (given (edge c d))
@@ -108,7 +108,7 @@ The join `(edge ?x ?y)` ∧ `(edge ?y ?z)` requires matching on `?y`:
 
 Use `_` when you don't care about a value:
 
-```lisp
+```spl
 (normally r1 (parent _ ?y) (has-parent ?y))
 ```
 
@@ -118,7 +118,7 @@ This matches any parent relationship.
 
 Variables are scoped to their rule:
 
-```lisp
+```spl
 ; ?x in r1 is independent of ?x in r2
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 (normally r2 (friend ?x ?y) (knows ?x ?y))
@@ -128,7 +128,7 @@ Variables are scoped to their rule:
 
 All head variables must appear in the body (**range-restricted**):
 
-```lisp
+```spl
 ; VALID: ?x and ?y appear in body
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 
@@ -142,7 +142,7 @@ Unsafe rules would generate infinite ground instances.
 
 Negated predicates in the body:
 
-```lisp
+```spl
 (given (bird tweety))
 (given (penguin tweety))
 (given (bird eddie))
@@ -157,7 +157,7 @@ Negated predicates in the body:
 
 Superiority applies to the **rule template**, affecting all ground instances:
 
-```lisp
+```spl
 (given (bird tweety))
 (given (penguin tweety))
 
@@ -189,7 +189,7 @@ Arithmetic expressions are evaluated during grounding after variables are substi
 
 ### Bind Constraints
 
-```lisp
+```spl
 (given (item widget 25))
 (given (item gadget 10))
 (given (tax-rate 0.1))
@@ -210,7 +210,7 @@ Grounding:
 
 Guards filter substitutions that don't satisfy the comparison:
 
-```lisp
+```spl
 (given (score alice 85))
 (given (score bob 42))
 
@@ -225,7 +225,7 @@ Only `{?name→alice, ?s→85}` satisfies `(>= 85 50)`, so only `(passing alice)
 
 Body literals are evaluated left-to-right. Variables must be bound before they are used in arithmetic:
 
-```lisp
+```spl
 ; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
 (normally r1
   (and (item ?name ?price)
@@ -243,7 +243,7 @@ Body literals are evaluated left-to-right. Variables must be bound before they a
 
 Numeric terms match across types when values are equal:
 
-```lisp
+```spl
 (given (threshold 100))        ; Integer 100
 (given (score alice 100.0))    ; Decimal 100.0
 
@@ -258,14 +258,14 @@ Numeric terms match across types when values are equal:
 
 SPL supports variables, so you can write a single rule:
 
-```lisp
+```spl
 ; Single rule with variables
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 ```
 
 Without variables, you would need to enumerate all ground instances manually:
 
-```lisp
+```spl
 (normally r1 (parent alice bob) (ancestor alice bob))
 (normally r2 (parent bob charlie) (ancestor bob charlie))
 ```

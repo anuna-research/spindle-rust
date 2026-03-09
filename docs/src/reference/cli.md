@@ -17,6 +17,8 @@ spindle query <LITERAL> [FILE] [OPTIONS]
 spindle explain <LITERAL> [FILE] [OPTIONS]
 spindle why-not <LITERAL> [FILE] [OPTIONS]
 spindle requires <LITERAL> [FILE] [OPTIONS]
+spindle capabilities [OPTIONS]
+spindle explain-code <CODE>
 ```
 
 ## Commands
@@ -27,6 +29,27 @@ Perform defeasible reasoning on a theory.
 
 ```bash
 spindle reason examples/penguin.spl
+```
+
+#### `--v2`
+
+Select JSON schema version v2 (`spindle.reason.v2`) for the JSON output envelope.
+The v2 schema includes typed term arguments in the `literal_struct` fields, giving
+downstream consumers richer structure than the v1 flat-string representation.
+
+```bash
+spindle reason examples/penguin.spl --json --v2
+```
+
+Without `--v2`, the default schema is `spindle.reason.v1`.
+
+#### `--trust`
+
+Include trust-weight annotations on each conclusion. When enabled, each conclusion
+carries a `trust_degree` (0.0--1.0) and optional `trust_sources` list.
+
+```bash
+spindle reason examples/penguin.spl --json --trust
 ```
 
 ### validate
@@ -185,14 +208,85 @@ spindle requires flies examples/penguin.spl --json
 
 The `--max` option limits the number of solutions returned (defaults to 10).
 
+As of the v2 contract (IMPL-011), `requires` **verifies all candidate solutions
+by default**. Each candidate set of facts is fed back through the reasoning
+engine to confirm it actually makes the goal provable. The JSON output includes
+`verification_mode: "verified"` and a `verification` object with
+`raw_examined`, `accepted`, and `rejected` counts. Only accepted solutions
+appear in the `solutions` array. The JSON envelope uses schema
+`spindle.requires.v2`.
+
 Output:
 ```
-To derive flies, you could assume:
-  1. { bird, -penguin }
-  2. { flies }
+Verified requirements for flies:
+  1. Add facts: {bird, -penguin}
+  2. Add facts: {flies}
 ```
 
-Each result is a minimal set of assumptions that, if added to the theory, would make the literal provable.
+Each result is a minimal, verified set of assumptions that, if added to the theory, would make the literal provable.
+
+### capabilities
+
+Show the commands, features, and JSON schema versions supported by this build
+of Spindle. Useful for tooling that needs to discover available functionality
+at runtime.
+
+```bash
+spindle capabilities
+spindle capabilities --json
+```
+
+Output:
+```
+Spindle Capabilities:
+
+Commands: reason, query, requires, explain, why-not
+
+Features:
+  --stdin: yes
+  --at: yes
+  --json: yes
+  Trust overlay: no
+  Given flags: no
+
+Schema versions:
+  reason: spindle.reason.v1
+  query: spindle.query.v1
+  requires: spindle.requires.v2
+  explain: spindle.explain.v1
+  why-not: spindle.why_not.v1
+```
+
+With `--json`, the output is a JSON object with schema `spindle.capabilities.v1`
+containing `commands`, `features`, and `schemas` fields.
+
+### explain-code
+
+Look up the meaning and common causes of a stable error code.
+
+```bash
+spindle explain-code RULE_NOT_FOUND
+spindle explain-code SPL_PARSE_ERROR
+```
+
+This command does not accept `--json`; output is always human-readable text.
+Use it to get guidance when a JSON error envelope contains an unfamiliar error
+code.
+
+## JSON Envelope Schema Versions
+
+Every `--json` response includes a `schema_version` field identifying the
+envelope format. The following schema versions are defined:
+
+| Schema | Command | Description |
+|--------|---------|-------------|
+| `spindle.reason.v1` | `reason` | Default reason output with flat literal strings |
+| `spindle.reason.v2` | `reason --v2` | Reason output with typed term arguments |
+| `spindle.query.v1` | `query` | Query result with status |
+| `spindle.explain.v1` | `explain` | Proof tree with blocked alternatives |
+| `spindle.why_not.v1` | `why-not` | Blocking-reason analysis |
+| `spindle.requires.v2` | `requires` | Verified abduction solutions (v2 contract) |
+| `spindle.capabilities.v1` | `capabilities` | Feature and schema discovery |
 
 ## Options
 
@@ -214,9 +308,29 @@ Parse/usage failures also emit JSON envelopes when `--json` is present:
 spindle --json
 ```
 
+### `--at <TIME>`
+
+Set the reference time for temporal ("as-of") reasoning. The value must be an
+ISO 8601 / RFC 3339 timestamp.
+
+```bash
+spindle reason --at 2024-06-15T12:00:00Z examples/temporal.spl
+spindle query p --at 2024-06-15T12:00:00Z examples/temporal.spl
+```
+
+### `--stdin`
+
+Read the theory from standard input instead of a file. Mutually exclusive with
+providing a file path.
+
+```bash
+cat examples/penguin.spl | spindle reason --stdin
+spindle --json validate --stdin < examples/penguin.spl
+```
+
 ### `--positive`
 
-Show only positive conclusions (+D, +d).
+Show only positive conclusions (+D, +d). Applies to the `reason` command.
 
 ```bash
 spindle reason --positive examples/penguin.spl
@@ -229,6 +343,15 @@ Output:
 +d bird
 +d penguin
 +d -flies
+```
+
+### `--debug-errors`
+
+Show full error details including source chains and unredacted file paths.
+Useful for diagnosing unexpected failures.
+
+```bash
+spindle reason examples/penguin.spl --debug-errors
 ```
 
 ## File Format Detection

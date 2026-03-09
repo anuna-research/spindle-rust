@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -595,7 +595,7 @@ let result = mine_rules(&amp;log, 1, 0.5);
 
 // Discovered rules describe the standard ticket workflow
 for lr in &amp;result.rules {
-    println!("{}: {} =&gt; {}  (support={}, confidence={:.0}%)",
+    println!("{}: {} -&gt; {}  (support={}, confidence={:.0}%)",
         lr.rule.label,
         lr.rule.body.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
         lr.rule.head.iter().map(|l| l.name()).collect::&lt;Vec&lt;_&gt;&gt;().join(", "),
@@ -717,6 +717,7 @@ for c in &amp;result.conflicts {
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

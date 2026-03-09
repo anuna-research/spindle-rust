@@ -36,7 +36,7 @@ user:admin        - An administrative user
 
 The `claims` block attributes statements to a source identity:
 
-```lisp
+```spl
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
@@ -67,7 +67,7 @@ Claims blocks cannot be nested.
 
 Multiple agents contribute claims about a pull request:
 
-```lisp
+```spl
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
   :note "Automated security scan results"
@@ -162,7 +162,7 @@ Trust policies can be declared directly in SPL source files using three directiv
 
 Assigns a trust value to a source identifier:
 
-```lisp
+```spl
 (trusts agent:security 0.95)
 (trusts agent:coder 0.9)
 (trusts system:policy 1.0)
@@ -175,7 +175,7 @@ Values must be in the range `[0.0, 1.0]`.
 
 Attaches a time-based decay model to a source. The decay model reduces trust as assertions age:
 
-```lisp
+```spl
 ; Trust halves every hour (3600 seconds)
 (decays agent:sensor exponential 3600.0)
 
@@ -192,7 +192,7 @@ See [Decay Models](#decay-models) for formula details.
 
 Defines a named threshold for decision-making:
 
-```lisp
+```spl
 (threshold action 0.7)
 (threshold warn 0.5)
 (threshold log 0.3)
@@ -200,7 +200,7 @@ Defines a named threshold for decision-making:
 
 ### Complete SPL Example
 
-```lisp
+```spl
 ; Trust configuration
 (trusts agent:security 0.95)
 (trusts agent:coder 0.9)
@@ -769,7 +769,7 @@ for lr in &learned_rules {
 
 In a code review pipeline, multiple agents contribute assessments with varying trust levels:
 
-```lisp
+```spl
 ; Security scanner has high credibility for vulnerability findings
 (claims agent:security
   :at "2026-01-20T09:00:00Z"
@@ -844,7 +844,7 @@ This example demonstrates the complete trust workflow from theory definition thr
 
 **1. Define a theory with trust directives** (`review.spl`):
 
-```lisp
+```spl
 ; Trust configuration
 (trusts agent:security 0.95)
 (trusts agent:coder 0.85)
@@ -872,11 +872,22 @@ This example demonstrates the complete trust workflow from theory definition thr
   (given manual_review_ok)
   (normally qa1 manual_review_ok qa_approved))
 
-; Deployment rule: all three must agree
-(normally deploy1
-  (and security_clear code_ready qa_approved)
-  ready_to_deploy)
+; Deployment rule: attributed to a system policy source
+; Every rule must be inside a claims block to participate in trust.
+; Rules outside claims blocks have no source and receive trust 0.0.
+(trusts system:policy 1.0)
+(claims system:policy
+  (normally deploy1
+    (and security_clear code_ready qa_approved)
+    ready_to_deploy))
 ```
+
+> **Important:** The default trust for unsourced rules is `0.0`. Any rule
+> defined outside a `claims` block has no source attribution and will receive
+> a trust degree of zero — making it the weakest link in any derivation chain
+> that passes through it. Always wrap rules in a `claims` block when using
+> trust-weighted reasoning. For structural or policy rules that are axiomatic,
+> attribute them to a fully-trusted system source like `system:policy`.
 
 **2. Run with trust output**:
 
@@ -889,17 +900,25 @@ spindle reason --trust review.spl
 ```
 Conclusions:
 
-  +D no_vulnerabilities (trust: 0.95) [agent:security]
-  +D tests_pass (trust: 0.85) [agent:coder]
   +D lint_clean (trust: 0.85) [agent:coder]
   +D manual_review_ok (trust: 0.80) [agent:qa]
-  +d security_clear (trust: 0.95) [agent:security]
+  +D no_vulnerabilities (trust: 0.95) [agent:security]
+  +D tests_pass (trust: 0.85) [agent:coder]
+  +d lint_clean (trust: 0.85) [agent:coder]
+  +d tests_pass (trust: 0.85) [agent:coder]
+  +d no_vulnerabilities (trust: 0.95) [agent:security]
+  +d manual_review_ok (trust: 0.80) [agent:qa]
   +d code_ready (trust: 0.85) [agent:coder]
+  +d security_clear (trust: 0.95) [agent:security]
   +d qa_approved (trust: 0.80) [agent:qa]
-  +d ready_to_deploy (trust: 0.80)
+  +d ready_to_deploy (trust: 0.80) [agent:coder, agent:qa, agent:security, system:policy]
+  -D ready_to_deploy (trust: 0.00)
+  -D security_clear (trust: 0.00)
+  -D code_ready (trust: 0.00)
+  -D qa_approved (trust: 0.00)
 ```
 
-The deployment conclusion (`ready_to_deploy`) has trust 0.80 — it meets the `deploy` threshold (0.8) and can proceed.
+The deployment conclusion (`ready_to_deploy`) has trust `0.80` — the weakest link across the derivation chain: `min(1.0, 0.95, 0.85, 0.80) = 0.80`. This meets the `deploy` threshold (0.8) and can proceed.
 
 ## Limitations
 

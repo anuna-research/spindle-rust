@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,12 +184,12 @@
 <p>Spindle supports first-order variables using Datalog-style bottom-up grounding.</p>
 <h2 id="variable-syntax"><a class="header" href="#variable-syntax">Variable Syntax</a></h2>
 <p>Variables are prefixed with <code>?</code>:</p>
-<pre><code class="language-lisp">?x
+<pre><code class="language-spl">?x
 ?person
 ?any_value
 </code></pre>
 <h2 id="basic-example"><a class="header" href="#basic-example">Basic Example</a></h2>
-<pre><code class="language-lisp">; Facts with predicates
+<pre><code class="language-spl">; Facts with predicates
 (given (parent alice bob))
 (given (parent bob charlie))
 
@@ -203,7 +203,7 @@
 </ul>
 <h2 id="transitive-closure"><a class="header" href="#transitive-closure">Transitive Closure</a></h2>
 <p>A classic example - computing ancestors:</p>
-<pre><code class="language-lisp">; Base facts
+<pre><code class="language-spl">; Base facts
 (given (parent alice bob))
 (given (parent bob charlie))
 (given (parent charlie david))
@@ -226,12 +226,12 @@
 <h2 id="how-grounding-works"><a class="header" href="#how-grounding-works">How Grounding Works</a></h2>
 <h3 id="step-1-collect-ground-facts"><a class="header" href="#step-1-collect-ground-facts">Step 1: Collect Ground Facts</a></h3>
 <p>Extract all predicate instances from facts:</p>
-<pre><code class="language-lisp">(given (parent alice bob))   →  parent(alice, bob)
+<pre><code class="language-spl">(given (parent alice bob))   →  parent(alice, bob)
 (given (parent bob charlie)) →  parent(bob, charlie)
 </code></pre>
 <h3 id="step-2-match-rule-bodies"><a class="header" href="#step-2-match-rule-bodies">Step 2: Match Rule Bodies</a></h3>
 <p>For each rule, find all substitutions that satisfy the body:</p>
-<pre><code class="language-lisp">(normally r1 (parent ?x ?y) (ancestor ?x ?y))
+<pre><code class="language-spl">(normally r1 (parent ?x ?y) (ancestor ?x ?y))
 </code></pre>
 <p>Substitutions:</p>
 <ul>
@@ -240,14 +240,14 @@
 </ul>
 <h3 id="step-3-generate-ground-rules"><a class="header" href="#step-3-generate-ground-rules">Step 3: Generate Ground Rules</a></h3>
 <p>Apply substitutions to create ground instances:</p>
-<pre><code class="language-lisp">; Ground instances of r1
-r1_1: parent(alice, bob) =&gt; ancestor(alice, bob)
-r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
+<pre><code class="language-spl">; Ground instances of r1
+(normally r1_1 (parent alice bob) (ancestor alice bob))
+(normally r1_2 (parent bob charlie) (ancestor bob charlie))
 </code></pre>
 <h3 id="step-4-forward-chaining"><a class="header" href="#step-4-forward-chaining">Step 4: Forward Chaining</a></h3>
 <p>Reason over the ground theory using standard algorithms.</p>
 <h2 id="multiple-variables"><a class="header" href="#multiple-variables">Multiple Variables</a></h2>
-<pre><code class="language-lisp">(given (edge a b))
+<pre><code class="language-spl">(given (edge a b))
 (given (edge b c))
 (given (edge c d))
 
@@ -260,18 +260,18 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 </ul>
 <h2 id="wildcard-variable"><a class="header" href="#wildcard-variable">Wildcard Variable</a></h2>
 <p>Use <code>_</code> when you don’t care about a value:</p>
-<pre><code class="language-lisp">(normally r1 (parent _ ?y) (has-parent ?y))
+<pre><code class="language-spl">(normally r1 (parent _ ?y) (has-parent ?y))
 </code></pre>
 <p>This matches any parent relationship.</p>
 <h2 id="variable-scope"><a class="header" href="#variable-scope">Variable Scope</a></h2>
 <p>Variables are scoped to their rule:</p>
-<pre><code class="language-lisp">; ?x in r1 is independent of ?x in r2
+<pre><code class="language-spl">; ?x in r1 is independent of ?x in r2
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 (normally r2 (friend ?x ?y) (knows ?x ?y))
 </code></pre>
 <h2 id="safety-requirement"><a class="header" href="#safety-requirement">Safety Requirement</a></h2>
 <p>All head variables must appear in the body (<strong>range-restricted</strong>):</p>
-<pre><code class="language-lisp">; VALID: ?x and ?y appear in body
+<pre><code class="language-spl">; VALID: ?x and ?y appear in body
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 
 ; INVALID: ?z not in body (unsafe)
@@ -280,7 +280,7 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 <p>Unsafe rules would generate infinite ground instances.</p>
 <h2 id="negation-with-variables"><a class="header" href="#negation-with-variables">Negation with Variables</a></h2>
 <p>Negated predicates in the body:</p>
-<pre><code class="language-lisp">(given (bird tweety))
+<pre><code class="language-spl">(given (bird tweety))
 (given (penguin tweety))
 (given (bird eddie))
 
@@ -290,7 +290,7 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 <p><strong>Important</strong>: The negated predicate must be <strong>ground</strong> after substitution. Spindle uses stratified negation.</p>
 <h2 id="grounding-with-superiority"><a class="header" href="#grounding-with-superiority">Grounding with Superiority</a></h2>
 <p>Superiority applies to the <strong>rule template</strong>, affecting all ground instances:</p>
-<pre><code class="language-lisp">(given (bird tweety))
+<pre><code class="language-spl">(given (bird tweety))
 (given (penguin tweety))
 
 (normally r1 (bird ?x) (flies ?x))
@@ -318,14 +318,67 @@ r1_2: parent(bob, charlie) =&gt; ancestor(bob, charlie)
 <li>Use specific predicates to reduce matching</li>
 <li>Add explicit superiority where grounded conflicts should resolve to one side</li>
 </ul>
-<h2 id="spl-limitations"><a class="header" href="#spl-limitations">SPL Limitations</a></h2>
-<p>The SPL format does <strong>not</strong> support variables. Use SPL for first-order rules:</p>
-<pre><code class="language-lisp"># SPL - no variables, must enumerate manually
-r1: parent_alice_bob =&gt; ancestor_alice_bob
-r2: parent_bob_charlie =&gt; ancestor_bob_charlie
+<h2 id="arithmetic-in-grounded-rules"><a class="header" href="#arithmetic-in-grounded-rules">Arithmetic in Grounded Rules</a></h2>
+<p>Arithmetic expressions are evaluated during grounding after variables are substituted.</p>
+<h3 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h3>
+<pre><code class="language-spl">(given (item widget 25))
+(given (item gadget 10))
+(given (tax-rate 0.1))
+
+(normally r1
+  (and (item ?name ?price) (tax-rate ?rate)
+       (bind ?total (+ ?price (* ?price ?rate))))
+  (total-cost ?name ?total))
 </code></pre>
-<pre><code class="language-lisp">; SPL - single rule with variables
+<p>Grounding:</p>
+<ol>
+<li>Match <code>(item widget 25)</code> and <code>(tax-rate 0.1)</code> → <code>{?name→widget, ?price→25, ?rate→0.1}</code></li>
+<li>Evaluate <code>(+ 25 (* 25 0.1))</code> → <code>27.5</code></li>
+<li>Bind <code>?total → 27.5</code></li>
+<li>Produce <code>(total-cost widget 27.5)</code></li>
+</ol>
+<h3 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h3>
+<p>Guards filter substitutions that don’t satisfy the comparison:</p>
+<pre><code class="language-spl">(given (score alice 85))
+(given (score bob 42))
+
+(normally r1
+  (and (score ?name ?s) (&gt;= ?s 50))
+  (passing ?name))
+</code></pre>
+<p>Only <code>{?name→alice, ?s→85}</code> satisfies <code>(&gt;= 85 50)</code>, so only <code>(passing alice)</code> is derived.</p>
+<h3 id="evaluation-order"><a class="header" href="#evaluation-order">Evaluation Order</a></h3>
+<p>Body literals are evaluated left-to-right. Variables must be bound before they are used in arithmetic:</p>
+<pre><code class="language-spl">; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
+(normally r1
+  (and (item ?name ?price)
+       (bind ?discounted (* ?price 0.9)))
+  (sale-price ?name ?discounted))
+
+; INCORRECT: ?price is not yet bound when (bind ...) tries to use it
+(normally r-bad
+  (and (bind ?discounted (* ?price 0.9))
+       (item ?name ?price))
+  (sale-price ?name ?discounted))
+</code></pre>
+<h3 id="cross-type-matching"><a class="header" href="#cross-type-matching">Cross-Type Matching</a></h3>
+<p>Numeric terms match across types when values are equal:</p>
+<pre><code class="language-spl">(given (threshold 100))        ; Integer 100
+(given (score alice 100.0))    ; Decimal 100.0
+
+(normally r1
+  (and (score ?name ?s) (threshold ?t) (&gt;= ?s ?t))
+  (above-threshold ?name))
+</code></pre>
+<p><code>Integer(100)</code> matches <code>Decimal(100.0)</code> in comparisons, so this works as expected.</p>
+<h2 id="variables-vs-manual-enumeration"><a class="header" href="#variables-vs-manual-enumeration">Variables vs. Manual Enumeration</a></h2>
+<p>SPL supports variables, so you can write a single rule:</p>
+<pre><code class="language-spl">; Single rule with variables
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
+</code></pre>
+<p>Without variables, you would need to enumerate all ground instances manually:</p>
+<pre><code class="language-spl">(normally r1 (parent alice bob) (ancestor alice bob))
+(normally r2 (parent bob charlie) (ancestor bob charlie))
 </code></pre>
 
                     </main>
@@ -336,7 +389,7 @@ r2: parent_bob_charlie =&gt; ancestor_bob_charlie
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../guides/temporal.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guides/arithmetic.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -350,7 +403,7 @@ r2: parent_bob_charlie =&gt; ancestor_bob_charlie
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../guides/temporal.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guides/arithmetic.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -379,6 +432,7 @@ r2: parent_bob_charlie =&gt; ancestor_bob_charlie
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

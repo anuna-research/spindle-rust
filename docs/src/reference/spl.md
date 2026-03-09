@@ -10,7 +10,7 @@ SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DF
 
 Semicolon to end of line:
 
-```lisp
+```spl
 ; This is a comment
 (given bird)  ; Inline comment
 ```
@@ -71,7 +71,7 @@ unary-op    = "abs"
 
 ### Simple Facts
 
-```lisp
+```spl
 (given bird)
 (given penguin)
 (given (not guilty))
@@ -79,14 +79,14 @@ unary-op    = "abs"
 
 ### Predicate Facts
 
-```lisp
+```spl
 (given (parent alice bob))
 (given (employed alice acme))
 ```
 
 ### Flat Predicate Syntax
 
-```lisp
+```spl
 (given parent alice bob)     ; Same as (given (parent alice bob))
 (given employed alice acme)
 ```
@@ -95,29 +95,29 @@ unary-op    = "abs"
 
 ### Strict Rules (`always`)
 
-```lisp
-(always r1 penguin bird)
-(always r2 (and human mortal) dies)
+```spl
+(always penguins-are-birds penguin bird)
+(always mortals-die (and human mortal) dies)
 ```
 
 ### Defeasible Rules (`normally`)
 
-```lisp
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
+```spl
+(normally birds-fly bird flies)
+(normally penguins-dont-fly penguin (not flies))
 ```
 
 ### Defeaters (`except`)
 
-```lisp
-(except d1 broken-wing flies)
+```spl
+(except broken-wing-blocks-flight broken-wing flies)
 ```
 
 ### Unlabeled Rules
 
 Labels are optional (auto-generated):
 
-```lisp
+```spl
 (normally bird flies)        ; Gets label like "r1"
 (always penguin bird)        ; Gets label like "s1"
 ```
@@ -126,7 +126,7 @@ Labels are optional (auto-generated):
 
 ### Simple
 
-```lisp
+```spl
 bird
 flies
 has-feathers
@@ -134,19 +134,19 @@ has-feathers
 
 ### Negated
 
-```lisp
+```spl
 (not flies)
 (not (parent alice bob))
 ```
 
 Or with prefix:
-```lisp
+```spl
 ~flies
 ```
 
 ### Predicates with Arguments
 
-```lisp
+```spl
 (parent alice bob)
 (employed ?x acme)
 (ancestor ?x ?z)
@@ -156,58 +156,72 @@ Or with prefix:
 
 Use `and` for multiple conditions:
 
-```lisp
-(normally r1 (and bird healthy) flies)
-(normally r2 (and student employed) busy)
+```spl
+(normally healthy-birds-fly (and bird healthy) flies)
+(normally busy-students (and student employed) busy)
 ```
+
+### Why there is no `or`
+
+Defeasible logic does not support disjunction in rule bodies. This is by design, not a missing feature — the proof theory (Nute/Billington/Antoniou) defines derivation over conjunctive rules only. Adding `or` would break the well-defined defeat and superiority semantics that make defeasible reasoning tractable.
+
+Instead, express disjunction as separate rules that conclude the same head:
+
+```spl
+; "If rain or snow, take umbrella"
+(normally rain-means-umbrella rain take-umbrella)
+(normally snow-means-umbrella snow take-umbrella)
+```
+
+Each rule independently supports the same conclusion. If either `rain` or `snow` is provable, `take-umbrella` follows. This is the standard encoding of disjunctive conditions in defeasible logic, and it preserves per-rule defeat — you can override one path without affecting the other.
 
 ## Variables
 
 Variables start with `?`:
 
-```lisp
+```spl
 (given (parent alice bob))
 (given (parent bob charlie))
 
 ; Transitive closure
-(normally r1 (parent ?x ?y) (ancestor ?x ?y))
-(normally r2 (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
+(normally parent-is-ancestor (parent ?x ?y) (ancestor ?x ?y))
+(normally ancestor-chain (and (parent ?x ?y) (ancestor ?y ?z)) (ancestor ?x ?z))
 ```
 
 ### Wildcard
 
 Use `_` to match anything:
 
-```lisp
-(normally r1 (parent _ ?y) (has-parent ?y))
+```spl
+(normally has-any-parent (parent _ ?y) (has-parent ?y))
 ```
 
 ## Superiority
 
 ### Two Rules
 
-```lisp
-(prefer r2 r1)    ; r2 > r1
+```spl
+(prefer penguins-dont-fly birds-fly)
 ```
 
 ### Chain
 
-```lisp
-(prefer r3 r2 r1)  ; r3 > r2 > r1
+```spl
+(prefer emergency-override safety-protocol standard-rule)
 ```
 
 Expands to:
-```lisp
-(prefer r3 r2)
-(prefer r2 r1)
+```spl
+(prefer emergency-override safety-protocol)
+(prefer safety-protocol standard-rule)
 ```
 
 ## Metadata
 
 Attach metadata to rules:
 
-```lisp
-(meta r1
+```spl
+(meta birds-fly
   (description "Birds normally fly")
   (confidence 0.9)
   (source "ornithology-handbook"))
@@ -215,7 +229,7 @@ Attach metadata to rules:
 
 ### Properties
 
-```lisp
+```spl
 (meta rule-label
   (key "string value")
   (key2 ("list" "of" "values")))
@@ -225,20 +239,20 @@ Attach metadata to rules:
 
 ### Obligation (`must`)
 
-```lisp
-(normally signed-contract (must pay))
+```spl
+(normally contract-requires-payment signed-contract (must pay))
 ```
 
 ### Permission (`may`)
 
-```lisp
-(normally member (may access))
+```spl
+(normally members-may-access member (may access))
 ```
 
 ### Forbidden (`forbidden`)
 
-```lisp
-(normally unauthorized (forbidden enter))
+```spl
+(normally no-entry-unauthorized unauthorized (forbidden enter))
 ```
 
 ## Temporal Reasoning
@@ -247,7 +261,7 @@ Attach metadata to rules:
 
 Supported time formats:
 
-```lisp
+```spl
 (moment "2024-06-15T14:30:00Z")  ; RFC3339 / ISO 8601
 1718461800000                    ; Epoch milliseconds
 inf                              ; Positive infinity
@@ -258,7 +272,7 @@ inf                              ; Positive infinity
 
 ### During
 
-```lisp
+```spl
 (given (during bird 1 10))
 (given (during (employed alice acme)
   (moment "2020-01-01T00:00:00Z")
@@ -320,7 +334,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 
 ### Numeric Literals
 
-```lisp
+```spl
 42          ; Integer
 3.14        ; Decimal (arbitrary precision)
 ```
@@ -340,7 +354,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 | `min` | N-ary | Minimum |
 | `max` | N-ary | Maximum |
 
-```lisp
+```spl
 (+ 1 2)           ; => 3
 (* 2 3 4)         ; => 24
 (- 10 3 2)        ; => 5 (left fold: 10-3-2)
@@ -355,8 +369,8 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 
 Bind a variable to the result of an arithmetic expression:
 
-```lisp
-(normally r1
+```spl
+(normally compute-total
   (and (price ?p) (tax-rate ?r)
        (bind ?total (+ ?p (* ?p ?r))))
   (total ?total))
@@ -366,12 +380,12 @@ Bind a variable to the result of an arithmetic expression:
 
 Compare two arithmetic expressions:
 
-```lisp
-(normally r1
+```spl
+(normally adult-by-age
   (and (age ?x ?a) (> ?a 18))
   (adult ?x))
 
-(normally r2
+(normally failing-score
   (and (score ?x ?s) (<= ?s 50))
   (failing ?x))
 ```
@@ -382,8 +396,8 @@ Available operators: `=`, `!=`, `<`, `>`, `<=`, `>=`
 
 Arithmetic expressions can appear as predicate arguments in rule bodies:
 
-```lisp
-(normally r1
+```spl
+(normally compute-invoice
   (and (price ?item ?p) (tax-rate ?r))
   (invoice ?item (+ ?p (* ?p ?r))))
 ```
@@ -420,14 +434,14 @@ Future reserved: `sum`, `count`, `avg`, `round`, `floor`, `ceil`
 
 The `claims` block attributes statements to a named source, with optional metadata.
 
-```lisp
+```spl
 (claims agent:alice
   :at "2024-06-15T12:00:00Z"
   :sig "abc123"
   :id "claim-001"
   :note "sensor reading"
   (given sunny)
-  (normally r1 sunny (not umbrella)))
+  (normally no-umbrella-when-sunny sunny (not umbrella)))
 ```
 
 ### Syntax
@@ -447,7 +461,7 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 
 ## Complete Example
 
-```lisp
+```spl
 ; The Penguin Example
 
 ; Facts
@@ -455,22 +469,22 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 (given penguin)
 
 ; Strict rule
-(always s1 penguin bird)
+(always penguins-are-birds penguin bird)
 
 ; Defeasible rules
-(normally r1 bird flies)
-(normally r2 bird has-feathers)
-(normally r3 penguin (not flies))
-(normally r4 penguin swims)
+(normally birds-fly bird flies)
+(normally birds-have-feathers bird has-feathers)
+(normally penguins-dont-fly penguin (not flies))
+(normally penguins-swim penguin swims)
 
-; Superiority
-(prefer r3 r1)
+; Superiority — specificity
+(prefer penguins-dont-fly birds-fly)
 
 ; Defeater
-(except d1 broken-wing flies)
+(except broken-wing-blocks-flight broken-wing flies)
 
 ; Metadata
-(meta r1 (description "Birds typically fly"))
-(meta r3 (description "Penguins are an exception"))
+(meta birds-fly (description "Birds typically fly"))
+(meta penguins-dont-fly (description "Penguins are an exception"))
 ```
 

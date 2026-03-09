@@ -15,7 +15,7 @@ Spindle computes four types of conclusions, representing different levels of pro
 
 **Definite provability** uses only facts and strict rules. No defeasible reasoning is involved.
 
-```lisp
+```spl
 (given bird)
 (always r1 bird animal)        ; Strict rule
 (normally r2 bird flies)       ; Defeasible rule
@@ -37,7 +37,7 @@ Use definite provability when you need certainty:
 
 **Defeasible provability** extends definite provability with defeasible rules.
 
-```lisp
+```spl
 (given bird)
 (normally r1 bird flies)
 ```
@@ -60,7 +60,7 @@ Conclusions:
 
 When rules conflict without a superiority relation, neither conclusion is provable:
 
-```lisp
+```spl
 (given trigger)
 (normally r1 trigger outcome)
 (normally r2 trigger (not outcome))
@@ -78,7 +78,7 @@ Both outcomes are **ambiguous** — neither can be proven.
 
 With superiority, the conflict is resolved:
 
-```lisp
+```spl
 (given trigger)
 (normally r1 trigger outcome)
 (normally r2 trigger (not outcome))
@@ -91,7 +91,7 @@ Conclusions:
 
 ## Example: Multi-Level
 
-```lisp
+```spl
 (given a)
 (always r1 a b)                ; Strict: a implies b
 (normally r2 b c)              ; Defeasible: b typically implies c

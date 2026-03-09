@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,7 +191,7 @@ spindle-parser = { git = "https://codeberg.org/anuna/spindle-rust", package = "s
 <h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
 <pre class="playground"><code class="language-rust">use spindle_core::prelude::*;
 
-fn main() {
+fn main() -&gt; Result&lt;()&gt; {
     let mut theory = Theory::new();
 
     // Add facts
@@ -206,13 +206,15 @@ fn main() {
     theory.add_superiority(&amp;r2, &amp;r1);
 
     // Reason
-    let conclusions = theory.reason();
+    let conclusions = theory.reason()?;
 
     for c in &amp;conclusions {
         if c.conclusion_type.is_positive() {
             println!("{}", c);
         }
     }
+
+    Ok(())
 }</code></pre>
 <h2 id="creating-theories"><a class="header" href="#creating-theories">Creating Theories</a></h2>
 <h3 id="programmatic-construction"><a class="header" href="#programmatic-construction">Programmatic Construction</a></h3>
@@ -245,21 +247,6 @@ theory.add_superiority(&amp;r2, &amp;r1);
 </span>use spindle_parser::parse_spl;
 
 let spl = r#"
-    f1: &gt;&gt; bird
-    f2: &gt;&gt; penguin
-    r1: bird =&gt; flies
-    r2: penguin =&gt; ~flies
-    r2 &gt; r1
-"#;
-
-let theory = parse_spl(spl)?;
-<span class="boring">}</span></code></pre>
-<h3 id="parsing-spl-1"><a class="header" href="#parsing-spl-1">Parsing SPL</a></h3>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use spindle_parser::parse_spl;
-
-let spl = r#"
     (given bird)
     (given penguin)
     (normally r1 bird flies)
@@ -275,13 +262,13 @@ let theory = parse_spl(spl)?;
 </span><span class="boring">fn main() {
 </span>use spindle_core::reason::reason;
 
-let conclusions = reason(&amp;theory);
+let conclusions = reason(&amp;theory)?;
 <span class="boring">}</span></code></pre>
 <h3 id="convenience-method"><a class="header" href="#convenience-method">Convenience Method</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// Uses standard algorithm
-let conclusions = theory.reason();
+let conclusions = theory.reason()?;
 <span class="boring">}</span></code></pre>
 <h2 id="working-with-conclusions"><a class="header" href="#working-with-conclusions">Working with Conclusions</a></h2>
 <h3 id="conclusion-types"><a class="header" href="#conclusion-types">Conclusion Types</a></h3>
@@ -336,6 +323,82 @@ if is_provable(&amp;conclusions, "flies") {
     println!("It flies!");
 }
 <span class="boring">}</span></code></pre>
+<h2 id="terms"><a class="header" href="#terms">Terms</a></h2>
+<p>The <code>Term</code> enum represents typed values that appear as arguments in literals
+and as results of arithmetic expressions. Four variants cover the value space:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::term::{Term, FiniteFloat, NumericValue};
+use spindle_core::intern::{SymbolId, intern};
+use rust_decimal::Decimal;
+
+// Symbol — an interned string identifier
+let sym = Term::Symbol(intern("alice"));
+
+// Integer — a 64-bit signed integer
+let int = Term::Integer(42);
+
+// Decimal — an arbitrary-precision decimal (exact representation)
+let dec = Term::Decimal(Decimal::new(314, 2)); // 3.14
+
+// Float — a canonicalized finite IEEE 754 f64
+let flt = Term::Float(FiniteFloat::new(2.718).unwrap());
+<span class="boring">}</span></code></pre>
+<h3 id="convenience-conversions"><a class="header" href="#convenience-conversions">Convenience Conversions</a></h3>
+<p>Terms implement <code>From</code> for common types, so you can use <code>.into()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let t: Term = 42i64.into();               // Term::Integer(42)
+let t: Term = Decimal::ONE.into();         // Term::Decimal(1)
+let t: Term = intern("bob").into();        // Term::Symbol(...)
+let t: Term = FiniteFloat::new(1.0)
+    .unwrap().into();                      // Term::Float(1.0)
+<span class="boring">}</span></code></pre>
+<h3 id="numeric-checks-and-cross-type-equality"><a class="header" href="#numeric-checks-and-cross-type-equality">Numeric Checks and Cross-Type Equality</a></h3>
+<p><code>Term::is_numeric()</code> returns <code>true</code> for Integer, Decimal, and Float variants.
+<code>Term::numeric_eq()</code> supports cross-type comparison with widening promotion
+(Integer -&gt; Decimal -&gt; Float):</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let a = Term::Integer(2);
+let b = Term::Decimal(Decimal::new(20, 1)); // 2.0
+assert!(a.numeric_eq(&amp;b)); // true — same mathematical value
+
+let c = Term::Float(FiniteFloat::new(2.0).unwrap());
+assert!(a.numeric_eq(&amp;c)); // true
+<span class="boring">}</span></code></pre>
+<p>Symbols are never numerically equal to anything (including other symbols).</p>
+<h3 id="numericvalue"><a class="header" href="#numericvalue">NumericValue</a></h3>
+<p><code>NumericValue</code> is a guaranteed-numeric counterpart to <code>Term</code> (no <code>Symbol</code>
+variant). Convert with <code>Term::to_numeric_value()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let term = Term::Integer(10);
+if let Some(nv) = term.to_numeric_value() {
+    println!("Numeric: {}", nv); // "10"
+}
+
+// Convert back (Float variant rejects NaN/Inf)
+let back: Term = NumericValue::Integer(10).try_into().unwrap();
+<span class="boring">}</span></code></pre>
+<h3 id="finitefloat"><a class="header" href="#finitefloat">FiniteFloat</a></h3>
+<p><code>FiniteFloat</code> wraps <code>f64</code> with two invariants: it rejects NaN and infinity,
+and normalizes <code>-0.0</code> to <code>+0.0</code>. This makes it safe to use as a hash-map key
+with stable <code>Eq</code> and <code>Hash</code> implementations.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let f = FiniteFloat::new(3.14).unwrap();
+assert_eq!(f.value(), 3.14);
+
+// NaN and infinity are rejected
+assert!(FiniteFloat::new(f64::NAN).is_none());
+assert!(FiniteFloat::new(f64::INFINITY).is_none());
+
+// Negative zero normalizes to positive zero
+let a = FiniteFloat::new(0.0).unwrap();
+let b = FiniteFloat::new(-0.0).unwrap();
+assert_eq!(a, b);
+<span class="boring">}</span></code></pre>
 <h2 id="literals"><a class="header" href="#literals">Literals</a></h2>
 <h3 id="creating-literals"><a class="header" href="#creating-literals">Creating Literals</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -388,6 +451,167 @@ theory.add_rule(rule);
     println!("Head: {:?}", rule.head);
 }
 <span class="boring">}</span></code></pre>
+<h2 id="pipeline"><a class="header" href="#pipeline">Pipeline</a></h2>
+<p>The preparation pipeline transforms a raw <code>Theory</code> into a form ready for
+reasoning. It is built from composable stages assembled via <code>PipelineBuilder</code>.</p>
+<h3 id="default-pipeline"><a class="header" href="#default-pipeline">Default Pipeline</a></h3>
+<p>The simplest way to prepare a theory uses <code>prepare()</code> with default options:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{prepare, PrepareOptions};
+
+let result = prepare(&amp;theory, PrepareOptions::default())?;
+let prepared_theory = result.theory;
+<span class="boring">}</span></code></pre>
+<h3 id="pipelinebuilder"><a class="header" href="#pipelinebuilder">PipelineBuilder</a></h3>
+<p>For fine-grained control, build a custom pipeline from individual stages:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared_theory, ctx) = pipeline.run(theory)?;
+<span class="boring">}</span></code></pre>
+<p>Stages run left-to-right. Each stage receives the theory produced by the
+previous stage and a shared <code>PipelineContext</code>.</p>
+<p>You can insert a stage at a specific position with <code>stage_at()</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground, TemporalFilter};
+use spindle_core::temporal::TimePoint;
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .stage_at(0, TemporalFilter { reference_time: TimePoint::Moment(1700000000000) })
+    .build();
+<span class="boring">}</span></code></pre>
+<h3 id="built-in-stages"><a class="header" href="#built-in-stages">Built-in Stages</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Stage</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Validate</code></td><td>Enforces range restriction and rejects wildcards in rule heads. Both checks are independently configurable.</td></tr>
+<tr><td><code>WildcardRewrite</code></td><td>Rewrites anonymous wildcards (<code>_</code>) to unique fresh variables (<code>?_wN</code>).</td></tr>
+<tr><td><code>Ground</code></td><td>Bottom-up Datalog grounding. Configurable <code>max_iterations</code> and <code>max_instances</code> limits.</td></tr>
+<tr><td><code>TemporalFilter</code></td><td>Removes rules/facts not active at a given reference <code>TimePoint</code>.</td></tr>
+<tr><td><code>TemporalVarValidation</code></td><td>Rejects theories with unresolved temporal variables after grounding.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="configuring-stages"><a class="header" href="#configuring-stages">Configuring Stages</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Validate, Ground};
+
+// Disable range restriction check
+let validate = Validate {
+    enforce_range_restricted: false,
+    reject_wildcard_in_head: true,
+};
+
+// Increase grounding limits
+let ground = Ground {
+    max_iterations: 200,
+    max_instances: 50000,
+};
+<span class="boring">}</span></code></pre>
+<h3 id="implementing-custom-stages"><a class="header" href="#implementing-custom-stages">Implementing Custom Stages</a></h3>
+<p>Any type implementing the <code>PipelineStage</code> trait can be added to a pipeline:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{PipelineStage, PipelineContext, Severity, Diagnostic};
+use spindle_core::theory::Theory;
+use spindle_core::error::Result;
+
+#[derive(Debug)]
+struct LogRuleCount;
+
+impl PipelineStage for LogRuleCount {
+    fn name(&amp;self) -&gt; &amp;'static str { "LogRuleCount" }
+
+    fn apply(&amp;self, theory: Theory, ctx: &amp;mut PipelineContext) -&gt; Result&lt;Theory&gt; {
+        ctx.diagnostics.push(Diagnostic {
+            severity: Severity::Info,
+            stage: self.name(),
+            message: format!("Theory has {} rules", theory.rules().len()),
+        });
+        Ok(theory)
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="pipelinecontext-and-diagnostics"><a class="header" href="#pipelinecontext-and-diagnostics">PipelineContext and Diagnostics</a></h3>
+<p>A <code>PipelineContext</code> is threaded through all stages, collecting diagnostics and
+inter-stage metadata.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground, Severity, MetadataVal};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared, ctx) = pipeline.run(theory)?;
+
+// Inspect diagnostics
+for diag in &amp;ctx.diagnostics {
+    match diag.severity {
+        Severity::Error   =&gt; eprintln!("[{}] ERROR: {}", diag.stage, diag.message),
+        Severity::Warning =&gt; eprintln!("[{}] WARN:  {}", diag.stage, diag.message),
+        Severity::Info    =&gt; println!("[{}] INFO:  {}", diag.stage, diag.message),
+    }
+}
+
+// Read metadata set by stages (e.g., grounding statistics)
+if let Some(MetadataVal::Usize(n)) = ctx.metadata.get("grounding_instances") {
+    println!("Grounding produced {} instances", n);
+}
+if let Some(MetadataVal::Bool(true)) = ctx.metadata.get("grounding_limit_hit") {
+    eprintln!("Warning: grounding limit was reached");
+}
+<span class="boring">}</span></code></pre>
+<h3 id="prepareoptions"><a class="header" href="#prepareoptions">PrepareOptions</a></h3>
+<p>The <code>prepare()</code> function builds a full pipeline from <code>PrepareOptions</code>,
+including optional temporal filtering and grounding configuration:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use spindle_core::pipeline::{prepare, PrepareOptions, GroundingOptions, ValidationOptions};
+use spindle_core::temporal::TimePoint;
+
+let opts = PrepareOptions {
+    reference_time: Some(TimePoint::Moment(1700000000000)),
+    grounding: GroundingOptions {
+        enabled: true,
+        max_iterations: 100,
+        max_instances: 10000,
+    },
+    validation: ValidationOptions {
+        enforce_range_restricted: true,
+        reject_wildcard_in_head: true,
+    },
+    trust_policy: None,
+};
+
+let result = prepare(&amp;theory, opts)?;
+
+// Access the prepared theory and grounding statistics
+let theory = result.theory;
+println!("Grounded: {}", result.grounding_report.performed);
+println!("Instances: {}", result.grounding_report.instances);
+if result.grounding_report.limit_hit {
+    eprintln!("Grounding stopped early due to limits");
+}
+<span class="boring">}</span></code></pre>
 <h2 id="query-operators"><a class="header" href="#query-operators">Query Operators</a></h2>
 <h3 id="what-if"><a class="header" href="#what-if">What-If</a></h3>
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -400,9 +624,12 @@ let hypotheticals = vec![
 ];
 let goal = Literal::negated("flies");
 
-let result = what_if(&amp;theory, hypotheticals, &amp;goal);
+let result = what_if(&amp;theory, hypotheticals, &amp;goal)?;
 if result.is_provable() {
     println!("Would be provable with those facts");
+}
+for lit in result.newly_provable() {
+    println!("Newly provable: {}", lit);
 }
 <span class="boring">}</span></code></pre>
 <h3 id="why-not"><a class="header" href="#why-not">Why-Not</a></h3>
@@ -412,7 +639,7 @@ if result.is_provable() {
 use spindle_core::literal::Literal;
 
 let literal = Literal::simple("flies");
-let explanation = why_not(&amp;theory, &amp;literal);
+let explanation = why_not(&amp;theory, &amp;literal)?;
 for blocker in &amp;explanation.blocked_by {
     println!("Blocked by: {}", blocker.explanation);
 }
@@ -424,7 +651,7 @@ for blocker in &amp;explanation.blocked_by {
 use spindle_core::literal::Literal;
 
 let goal = Literal::simple("goal");
-let result = abduce(&amp;theory, &amp;goal, 3);
+let result = abduce(&amp;theory, &amp;goal, 3)?;
 for solution in &amp;result.solutions {
     println!("Solution: {:?}", solution.facts);
 }
@@ -433,14 +660,12 @@ for solution in &amp;result.solutions {
 <pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use spindle_core::error::{SpindleError, Result};
-use spindle_parser::ParseError;
+use spindle_parser::parse_spl;
 
 fn load_theory(path: &amp;str) -&gt; Result&lt;Theory&gt; {
     let content = std::fs::read_to_string(path)?;
 
     if path.ends_with(".spl") {
-        parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
-    } else if path.ends_with(".spl") {
         parse_spl(&amp;content).map_err(|e| SpindleError::Parse(e.to_string()))
     } else {
         Err(SpindleError::Parse("Unknown format".to_string()))
@@ -495,7 +720,7 @@ fn main() -&gt; Result&lt;()&gt; {
     theory.add_fact("current_user_admin");
 
     // Reason
-    let conclusions = theory.reason();
+    let conclusions = theory.reason()?;
 
     // Check permissions
     let can_delete = conclusions.iter().any(|c| {
@@ -516,7 +741,7 @@ fn main() -&gt; Result&lt;()&gt; {
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guides/troubleshooting.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/changelog.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -530,7 +755,7 @@ fn main() -&gt; Result&lt;()&gt; {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guides/troubleshooting.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/changelog.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
@@ -563,6 +788,7 @@ fn main() -&gt; Result&lt;()&gt; {
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

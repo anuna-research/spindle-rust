@@ -17,7 +17,7 @@ Used in Spindle:
 
 ## Syntax
 
-```lisp
+```spl
 (given (not guilty))
 (normally r1 penguin (not flies))
 ```
@@ -34,7 +34,7 @@ For any literal `P`, the outcome can be:
 
 ## Example: Unknown State
 
-```lisp
+```spl
 (given bird)
 (normally r1 bird flies)
 ; No information about grounded
@@ -53,7 +53,7 @@ The `grounded` literal is in an **unknown** state.
 
 ### Conflict
 If rules prove both `P` and `(not P)`:
-```lisp
+```spl
 (given a)
 (normally r1 a p)
 (normally r2 a (not p))
@@ -62,7 +62,7 @@ Without superiority, neither is provable (ambiguity).
 
 ### Definite Blocking
 If `(not P)` is **definitely** provable, `P` cannot be defeasibly provable:
-```lisp
+```spl
 (given (not p))              ; Definite fact: (not p)
 (normally r1 a p)            ; Tries to prove p
 ```
@@ -72,7 +72,7 @@ Even if r1's body is satisfied, `+d p` is blocked because `+D -p`.
 
 Negated literals can appear in rule bodies:
 
-```lisp
+```spl
 (normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
 (normally r2 (and student (not employed)) needs-loan)
 ```
@@ -81,7 +81,7 @@ Negated literals can appear in rule bodies:
 
 Spindle does not enforce consistency. A theory can prove both `P` and `(not P)`:
 
-```lisp
+```spl
 (given p)
 (given (not p))
 ```
@@ -100,7 +100,7 @@ To detect inconsistency, check for literals where both `+D P` and `+D -P` (or `+
 
 Spindle does **not** use the Closed World Assumption by default. If you need it, add explicit rules:
 
-```lisp
+```spl
 ; CWA for 'guilty': if not proven guilty, then not guilty
 (given (not guilty))                    ; Default: not guilty
 (normally r1 evidence guilty)           ; Can be overridden by evidence
