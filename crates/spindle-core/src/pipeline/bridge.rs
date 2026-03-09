@@ -10,7 +10,7 @@
 //! Bridge rules are strict and fire during Phase 1 (definite closure) of SDL,
 //! requiring zero modifications to the defeasible reasoning module.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use smallvec::smallvec;
 
@@ -18,7 +18,7 @@ use super::{Diagnostic, PipelineContext, PipelineStage, Severity};
 use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::rule::Rule;
+use crate::rule::{Rule, RuleType};
 use crate::temporal::Temporal;
 use crate::theory::Theory;
 
@@ -31,7 +31,8 @@ use crate::theory::Theory;
 /// 1. `q[s,e] → q` (positive bridge)
 /// 2. `~q[s,e] → ~q` (negation bridge)
 ///
-/// Deduplication is by bridge label, which encodes the literal's SPL rendering.
+/// Deduplication is by bridge structure (temporal body + matching atemporal head)
+/// keyed by the positive temporal literal's SPL rendering.
 ///
 /// # Insertion point
 ///
@@ -43,37 +44,93 @@ use crate::theory::Theory;
 #[derive(Debug, Clone, Default)]
 pub struct TemporalBridge;
 
+#[derive(Debug, Clone, Copy, Default)]
+struct BridgePresence {
+    positive: bool,
+    negative: bool,
+}
+
+#[derive(Debug, Clone)]
+struct BridgeSeed {
+    positive: Literal,
+    template_label: String,
+}
+
+/// Return canonical bridge key + polarity for structurally valid bridge rules.
+///
+/// A valid temporal bridge has:
+/// - strict rule type
+/// - exactly one logic body literal with non-empty temporal bounds
+/// - exactly one atemporal head literal with same atom/mode/args and same polarity
+fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool)> {
+    if rule.rule_type != RuleType::Strict || rule.body.len() != 1 || rule.head.len() != 1 {
+        return None;
+    }
+
+    let body = rule.body[0].as_logic()?;
+    if body.temporal.is_empty() {
+        return None;
+    }
+
+    let body_terms: Vec<_> = body
+        .predicate_args()
+        .iter()
+        .map(|arg| match arg {
+            BodyArg::Term(term) => Some(term.clone()),
+            BodyArg::Arith(_) => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+
+    let head = &rule.head[0];
+    if !head.temporal.is_empty()
+        || head.name_id() != body.name_id()
+        || head.negation != body.negation
+        || head.mode != body.mode
+        || head.predicate_args() != body_terms.as_slice()
+    {
+        return None;
+    }
+
+    let body_lit = body.to_literal();
+    let positive = if body_lit.negation {
+        body_lit.complement()
+    } else {
+        body_lit
+    };
+    Some((positive.to_spl(), body.negation))
+}
+
 impl PipelineStage for TemporalBridge {
     fn name(&self) -> &'static str {
         "temporal_bridge"
     }
 
     fn apply(&self, mut theory: Theory, ctx: &mut PipelineContext) -> Result<Theory> {
-        // Collect distinct temporal head literals. We use the SPL rendering
-        // as the deduplication key since it encodes functor, args, mode,
-        // negation, and temporal bounds.
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut bridges: Vec<Rule> = Vec::new();
-
-        // Pre-seed seen set from pre-existing __bridge:: labels so we never
-        // regenerate a bridge that already exists in the theory.
+        // Track which bridge variants (positive/negative) already exist.
+        let mut existing: HashMap<String, BridgePresence> = HashMap::new();
         for rule in theory.rules() {
-            if let Some(spl_key) = rule.label.strip_prefix("__bridge::") {
-                // Strip the optional "neg::" prefix to recover the canonical key
-                let canonical = spl_key.strip_prefix("neg::").unwrap_or(spl_key);
-                seen.insert(canonical.to_string());
+            if let Some((key, is_negative)) = existing_bridge_signature(rule) {
+                let entry = existing.entry(key).or_default();
+                if is_negative {
+                    entry.negative = true;
+                } else {
+                    entry.positive = true;
+                }
             }
         }
 
+        // Collect one seed per distinct temporal atom, with deterministic
+        // template-label choice (prefer labels that actually have metadata).
+        let mut seeds: HashMap<String, BridgeSeed> = HashMap::new();
         for rule in theory.rules() {
-            for head_lit in rule.head.iter() {
+            let template_label = rule.template_label().to_string();
+            let candidate_has_meta = theory.get_meta(&template_label).is_some();
+
+            for head_lit in &rule.head {
                 if head_lit.temporal.is_empty() {
                     continue;
                 }
 
-                // Build a canonical key from the *positive* form so that we
-                // generate one pair (positive + negation) per distinct atom,
-                // regardless of whether the head was negated.
                 let positive = if head_lit.negation {
                     head_lit.complement()
                 } else {
@@ -81,12 +138,34 @@ impl PipelineStage for TemporalBridge {
                 };
                 let key = positive.to_spl();
 
-                if !seen.insert(key) {
-                    continue;
+                if let Some(seed) = seeds.get_mut(&key) {
+                    let seed_has_meta = theory.get_meta(&seed.template_label).is_some();
+                    if (candidate_has_meta && !seed_has_meta)
+                        || (candidate_has_meta == seed_has_meta
+                            && template_label < seed.template_label)
+                    {
+                        seed.template_label = template_label.clone();
+                    }
+                } else {
+                    seeds.insert(
+                        key,
+                        BridgeSeed {
+                            positive,
+                            template_label: template_label.clone(),
+                        },
+                    );
                 }
+            }
+        }
 
+        let mut bridges: Vec<Rule> = Vec::new();
+        for (key, seed) in seeds {
+            let presence = existing.get(&key).copied().unwrap_or_default();
+            let positive = &seed.positive;
+
+            if !presence.positive {
                 // --- Positive bridge: q[s,e] → q ---
-                let pos_label = format!("__bridge::{}", positive.to_spl());
+                let pos_label = format!("__bridge::{key}");
                 let pos_body = smallvec![BodyLiteral::Logic(BodyLogicLiteral::from_ids(
                     positive.interned_name(),
                     false,
@@ -105,10 +184,14 @@ impl PipelineStage for TemporalBridge {
                     Temporal::empty(),
                     positive.predicate_args().to_vec(),
                 );
-                bridges.push(Rule::strict(pos_label, pos_body, pos_head));
+                let mut pos_rule = Rule::strict(pos_label, pos_body, pos_head);
+                pos_rule.template_label = Some(seed.template_label.clone());
+                bridges.push(pos_rule);
+            }
 
+            if !presence.negative {
                 // --- Negation bridge: ~q[s,e] → ~q ---
-                let neg_label = format!("__bridge::neg::{}", positive.to_spl());
+                let neg_label = format!("__bridge::neg::{key}");
                 let neg_body = smallvec![BodyLiteral::Logic(BodyLogicLiteral::from_ids(
                     positive.interned_name(),
                     true,
@@ -127,7 +210,9 @@ impl PipelineStage for TemporalBridge {
                     Temporal::empty(),
                     positive.predicate_args().to_vec(),
                 );
-                bridges.push(Rule::strict(neg_label, neg_body, neg_head));
+                let mut neg_rule = Rule::strict(neg_label, neg_body, neg_head);
+                neg_rule.template_label = Some(seed.template_label.clone());
+                bridges.push(neg_rule);
             }
         }
 
@@ -151,9 +236,13 @@ impl PipelineStage for TemporalBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::conclusion::ConclusionType;
     use crate::pipeline::PipelineContext;
+    use crate::pipeline::compute_weighted_conclusions;
+    use crate::reason::reason_prepared;
     use crate::rule::RuleType;
     use crate::temporal::TimePoint;
+    use crate::trust::{Source, TrustPolicy};
 
     #[test]
     fn no_op_for_non_temporal_theory() {
@@ -296,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn skips_generation_when_bridge_labels_already_exist() {
+    fn skips_generation_when_structural_bridges_already_exist() {
         let mut theory = Theory::new();
 
         let head = Literal::from_ids(
@@ -316,16 +405,24 @@ mod tests {
             smallvec::smallvec![head.clone()],
         ));
 
-        // Pre-add a bridge rule with the expected label
+        // Pre-add valid bridge rules with the expected labels
         let pos_label = format!("__bridge::{spl_key}");
-        let dummy_head = Literal::from_ids(
+        let pos_head = Literal::from_ids(
             crate::literal::InternedLiteralName::intern("p"),
             false,
             crate::mode::Mode::empty(),
             Temporal::empty(),
             vec![],
         );
-        theory.add_rule(Rule::strict(pos_label, smallvec![], dummy_head.clone()));
+        let pos_body = smallvec![BodyLiteral::Logic(BodyLogicLiteral::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            head.temporal.clone(),
+            vec![],
+        ))];
+        theory.add_rule(Rule::strict(pos_label, pos_body, pos_head));
+
         let neg_label = format!("__bridge::neg::{spl_key}");
         let neg_head = Literal::from_ids(
             crate::literal::InternedLiteralName::intern("p"),
@@ -334,7 +431,14 @@ mod tests {
             Temporal::empty(),
             vec![],
         );
-        theory.add_rule(Rule::strict(neg_label, smallvec![], neg_head));
+        let neg_body = smallvec![BodyLiteral::Logic(BodyLogicLiteral::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            true,
+            crate::mode::Mode::empty(),
+            head.temporal.clone(),
+            vec![],
+        ))];
+        theory.add_rule(Rule::strict(neg_label, neg_body, neg_head));
 
         let original_count = theory.rule_count();
         let mut ctx = PipelineContext::default();
@@ -342,6 +446,118 @@ mod tests {
 
         // No new bridges should be generated since they already exist
         assert_eq!(result.rule_count(), original_count);
+    }
+
+    #[test]
+    fn user_labeled_bridge_prefix_does_not_block_required_generation() {
+        let mut theory = Theory::new();
+
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(10), TimePoint::from_millis(20)),
+            vec![],
+        );
+        let spl_key = temporal_head.to_spl();
+        let expected_base = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::empty(),
+            vec![],
+        );
+
+        // Real temporal fact that requires bridge generation
+        theory.add_rule(Rule::new(
+            "f1",
+            RuleType::Fact,
+            Vec::<Literal>::new(),
+            smallvec::smallvec![temporal_head.clone()],
+        ));
+
+        // User-authored rule spoofing a bridge label but not bridge structure
+        theory.add_rule(Rule::strict(
+            format!("__bridge::{spl_key}"),
+            smallvec![],
+            Literal::simple("sentinel"),
+        ));
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        // Ensure a real bridge exists: p[10,20] -> p
+        let has_real_bridge = bridged.rules().any(|rule| {
+            rule.rule_type == RuleType::Strict
+                && rule.head.len() == 1
+                && rule.head[0] == expected_base
+                && rule.body.len() == 1
+                && rule.body[0]
+                    .as_logic()
+                    .is_some_and(|bl| bl.to_literal() == temporal_head)
+        });
+        assert!(
+            has_real_bridge,
+            "user labels with __bridge:: prefix must not suppress actual bridge generation"
+        );
+
+        // Runtime behavior check: base literal must be definitely provable
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let base_proved = conclusions.iter().any(|c| {
+            c.literal == expected_base
+                && c.conclusion_type == ConclusionType::DefinitelyProvable
+                && c.is_positive()
+        });
+        assert!(
+            base_proved,
+            "base literal p should be derived through bridge"
+        );
+    }
+
+    #[test]
+    fn synthesized_bridge_rules_preserve_source_trust() {
+        let mut theory = Theory::new();
+
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(100), TimePoint::from_millis(200)),
+            vec![],
+        );
+        theory.add_rule(Rule::new(
+            "f1",
+            RuleType::Fact,
+            Vec::<Literal>::new(),
+            smallvec::smallvec![temporal_head],
+        ));
+        theory.add_meta_string("f1", "source", "alice");
+        *theory.trust_policy_mut() = TrustPolicy::new(0.5).with_trust("alice", 0.9);
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let weighted =
+            compute_weighted_conclusions(&conclusions, &bridged, bridged.trust_policy(), None);
+
+        let base = weighted
+            .iter()
+            .find(|wc| {
+                wc.literal.name() == "p"
+                    && wc.literal.temporal.is_empty()
+                    && wc.conclusion_type == ConclusionType::DefinitelyProvable
+            })
+            .expect("expected +D base conclusion for p");
+
+        assert!(
+            (base.degree - 0.9).abs() < 1e-10,
+            "bridged base literal should inherit source trust 0.9, got {}",
+            base.degree
+        );
+        assert!(
+            base.sources.contains(&Source::new("alice")),
+            "bridged base literal should retain source attribution"
+        );
     }
 
     /// Helper: create a temporal fact `>> name [start, end].`
