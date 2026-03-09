@@ -50,6 +50,7 @@ fn arb_bin_op() -> impl Strategy<Value = BinArithOp> {
     ]
 }
 
+#[allow(dead_code)]
 fn arb_cmp_op() -> impl Strategy<Value = CmpOp> {
     prop_oneof![
         Just(CmpOp::Eq),
