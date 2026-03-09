@@ -774,4 +774,57 @@ mod tests {
             required
         );
     }
+
+    #[test]
+    fn test_abduce_does_not_treat_temporal_only_support_as_base_premise() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_rule(Rule::defeasible(
+            "r_temp",
+            vec![Literal::simple("a")],
+            p_1_10,
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_neg",
+            vec![Literal::simple("b")],
+            Literal::negated("p"),
+        ));
+        theory.add_rule(Rule::strict(
+            "r_goal",
+            vec![Literal::simple("p")],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(
+            sol.size(),
+            1,
+            "abduction should identify the missing base premise instead of falling back to {{q}}"
+        );
+        assert!(
+            sol.facts
+                .iter()
+                .any(|lit| lit.name() == "p" && lit.temporal.is_empty() && !lit.negation),
+            "expected missing base premise p in abduced facts, got {:?}",
+            sol.facts
+        );
+        assert!(
+            sol.facts.iter().all(|lit| lit.name() != "q"),
+            "abduction must not fall back to the trivial {{q}} solution when rule body p is missing, got {:?}",
+            sol.facts
+        );
+    }
 }

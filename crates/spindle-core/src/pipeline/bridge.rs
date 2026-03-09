@@ -367,10 +367,10 @@ fn select_bridge_origin(
     fallback_other: Option<BridgeOrigin>,
 ) -> BridgeOrigin {
     supported_primary
-        .or(supported_other)
         .or(non_strict_primary)
-        .or(non_strict_other)
         .or(fallback_primary)
+        .or(supported_other)
+        .or(non_strict_other)
         .or(fallback_other)
         .expect("bridge seed must have at least one origin")
 }
@@ -1348,6 +1348,55 @@ mod tests {
         assert!(
             has_definite_r,
             "downstream strict rules should still fire through the strengthened q bridge"
+        );
+    }
+
+    #[test]
+    fn bridge_strengths_remain_independent_across_polarities() {
+        let mut theory = Theory::new();
+
+        let p_temporal = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+
+        theory.add_rule(Rule::fact("pos_fact", p_temporal.clone()));
+        theory.add_fact("a");
+        theory.add_rule(Rule::defeasible(
+            "neg_def",
+            vec![Literal::simple("a")],
+            p_temporal.complement(),
+        ));
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let neg_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.head.len() == 1
+                    && rule.head[0].negation
+                    && rule.head[0].name() == "p"
+                    && rule.head[0].temporal.is_empty()
+                    && rule.body.len() == 1
+                    && rule.body[0]
+                        .as_logic()
+                        .is_some_and(|bl| bl.negation && bl.to_literal() == p_temporal.complement())
+            })
+            .expect("expected synthesized bridge for ~p[1,10] -> ~p");
+
+        assert_eq!(
+            neg_bridge.rule_type,
+            RuleType::Defeasible,
+            "negative bridge strength must come from negative support, not from the opposite polarity"
+        );
+        assert_eq!(
+            neg_bridge.template_label.as_deref(),
+            Some("neg_def"),
+            "negative bridge attribution must stay with the negative origin"
         );
     }
 

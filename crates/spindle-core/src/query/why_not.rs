@@ -852,4 +852,55 @@ mod tests {
             result.blocked_by
         );
     }
+
+    #[test]
+    fn test_why_not_reports_missing_base_premise_when_only_temporal_variant_exists() {
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        let p_1_10 = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_rule(Rule::defeasible(
+            "r_temp",
+            vec![Literal::simple("a")],
+            p_1_10,
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_neg",
+            vec![Literal::simple("b")],
+            Literal::negated("p"),
+        ));
+        theory.add_rule(Rule::strict(
+            "r_goal",
+            vec![Literal::simple("p")],
+            Literal::simple("q"),
+        ));
+
+        let result = why_not(&theory, &Literal::simple("q")).unwrap();
+        let missing = result.get_missing_premises();
+
+        assert!(
+            missing
+                .iter()
+                .any(|lit| lit.name() == "p" && lit.temporal.is_empty() && !lit.negation),
+            "expected missing base premise p, got {:?}",
+            missing
+        );
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .all(|blocker| blocker.blocking_type == BlockingType::MissingPremise),
+            "q should be blocked by an unsatisfied body, not by contradiction: {:?}",
+            result.blocked_by
+        );
+    }
 }

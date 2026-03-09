@@ -405,7 +405,7 @@ impl TemporalLitKey {
 ///
 /// Uses two internal sets:
 /// - `base`: keyed by `Literal`'s default Eq/Hash (excludes temporal) for
-///   wildcard queries (empty temporal on the query side).
+///   actual atemporal conclusions only.
 /// - `temporal`: keyed by `TemporalLitKey` (includes temporal) for exact
 ///   temporal matching.
 pub struct ProvenSet {
@@ -423,14 +423,16 @@ impl ProvenSet {
         let mut base = HashSet::with_capacity(positive.len());
         let mut temporal = HashSet::with_capacity(positive.len());
         for c in positive {
-            base.insert(c.literal.clone());
+            if c.literal.temporal.is_empty() {
+                base.insert(c.literal.clone());
+            }
             temporal.insert(TemporalLitKey::from_literal(&c.literal));
         }
         Self { base, temporal }
     }
 
-    /// Check whether `lit` is proven, respecting temporal wildcard semantics:
-    /// - If `lit.temporal` is empty → wildcard, matches any temporal variant (O(1) via `base`).
+    /// Check whether `lit` is proven:
+    /// - If `lit.temporal` is empty → require an actual atemporal/base conclusion (O(1) via `base`).
     /// - If `lit.temporal` is non-empty → exact match required (O(1) via `temporal`).
     pub fn contains(&self, lit: &Literal) -> bool {
         if lit.temporal.is_empty() {
