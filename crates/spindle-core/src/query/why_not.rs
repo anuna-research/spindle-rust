@@ -9,7 +9,7 @@ use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::query::{is_proven_temporal, matches_literal_temporal, matches_query_temporal};
+use crate::query::{ProvenSet, matches_literal_temporal, matches_query_temporal};
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -198,12 +198,8 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
         return Ok(result);
     }
 
-    // Collect positive conclusions for temporal-aware proven checks
-    let proven_conclusions: Vec<_> = conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .cloned()
-        .collect();
+    // Build O(1) proven set for temporal-aware lookups
+    let proven = ProvenSet::from_conclusions(&conclusions);
 
     let complement = literal.complement();
     let mut result = WhyNotResult::new(literal.clone());
@@ -228,7 +224,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 .collect();
             let missing: Vec<_> = body_lits
                 .iter()
-                .filter(|b| !is_proven_temporal(&proven_conclusions, b))
+                .filter(|b| !proven.contains(b))
                 .cloned()
                 .collect();
 
@@ -247,9 +243,8 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                             .iter()
                             .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
                             .collect();
-                        let attacker_body_satisfied = attacker_body_lits
-                            .iter()
-                            .all(|b| is_proven_temporal(&proven_conclusions, b));
+                        let attacker_body_satisfied =
+                            attacker_body_lits.iter().all(|b| proven.contains(b));
                         if !attacker_body_satisfied {
                             continue;
                         }
@@ -303,7 +298,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     // If no rules found at all
     if !found_rule {
         // Check if complement is proven (contradicted)
-        if is_proven_temporal(&proven_conclusions, &complement) {
+        if proven.contains(&complement) {
             result.blocked_by.push(BlockingCondition {
                 blocking_type: BlockingType::Contradicted,
                 rule_label: String::new(),

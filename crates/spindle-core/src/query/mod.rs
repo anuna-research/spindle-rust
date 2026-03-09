@@ -21,15 +21,19 @@ pub mod why_not;
 
 pub use why_not::{BlockingCondition, BlockingType, WhyNotResult, why_not};
 
+use std::collections::HashSet;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
 use crate::index::IndexedTheory;
-use crate::literal::Literal;
+use crate::literal::{InternedLiteralName, Literal};
+use crate::mode::Mode;
 use crate::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
 use crate::reason::{Reasoner, reason_with_options};
-use crate::temporal::TimePoint;
+use crate::temporal::{Temporal, TimePoint};
+use crate::term::Term;
 use crate::theory::MetaValue;
 use crate::theory::Theory;
 use crate::trust::{TrustPolicy, TrustValue};
@@ -351,8 +355,97 @@ pub fn matches_literal_temporal(query: &Literal, candidate: &Literal) -> bool {
         && matches_query_temporal(&query.temporal, &candidate.temporal)
 }
 
+/// A literal key that includes temporal bounds in its equality and hash,
+/// unlike `Literal` whose `PartialEq`/`Hash` intentionally exclude temporal
+/// (ADR-005).
+#[derive(Debug, Clone)]
+struct TemporalLitKey {
+    name_id: InternedLiteralName,
+    negation: bool,
+    mode: Mode,
+    temporal: Temporal,
+    args: Vec<Term>,
+}
+
+impl PartialEq for TemporalLitKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.name_id == other.name_id
+            && self.negation == other.negation
+            && self.mode == other.mode
+            && self.temporal == other.temporal
+            && self.args == other.args
+    }
+}
+
+impl Eq for TemporalLitKey {}
+
+impl Hash for TemporalLitKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name_id.hash(state);
+        self.negation.hash(state);
+        self.mode.hash(state);
+        self.temporal.hash(state);
+        self.args.hash(state);
+    }
+}
+
+impl TemporalLitKey {
+    fn from_literal(lit: &Literal) -> Self {
+        Self {
+            name_id: InternedLiteralName(lit.name_id()),
+            negation: lit.negation,
+            mode: lit.mode.clone(),
+            temporal: lit.temporal.clone(),
+            args: lit.predicate_args().to_vec(),
+        }
+    }
+}
+
+/// O(1) lookup set for proven literals with temporal awareness.
+///
+/// Uses two internal sets:
+/// - `base`: keyed by `Literal`'s default Eq/Hash (excludes temporal) for
+///   wildcard queries (empty temporal on the query side).
+/// - `temporal`: keyed by `TemporalLitKey` (includes temporal) for exact
+///   temporal matching.
+pub struct ProvenSet {
+    base: HashSet<Literal>,
+    temporal: HashSet<TemporalLitKey>,
+}
+
+impl ProvenSet {
+    /// Build from positive conclusions.
+    pub fn from_conclusions(conclusions: &[Conclusion]) -> Self {
+        let positive: Vec<_> = conclusions
+            .iter()
+            .filter(|c| c.conclusion_type.is_positive())
+            .collect();
+        let mut base = HashSet::with_capacity(positive.len());
+        let mut temporal = HashSet::with_capacity(positive.len());
+        for c in positive {
+            base.insert(c.literal.clone());
+            temporal.insert(TemporalLitKey::from_literal(&c.literal));
+        }
+        Self { base, temporal }
+    }
+
+    /// Check whether `lit` is proven, respecting temporal wildcard semantics:
+    /// - If `lit.temporal` is empty → wildcard, matches any temporal variant (O(1) via `base`).
+    /// - If `lit.temporal` is non-empty → exact match required (O(1) via `temporal`).
+    pub fn contains(&self, lit: &Literal) -> bool {
+        if lit.temporal.is_empty() {
+            self.base.contains(lit)
+        } else {
+            self.temporal.contains(&TemporalLitKey::from_literal(lit))
+        }
+    }
+}
+
 /// Check whether any positive conclusion in `conclusions` matches `lit`
 /// with temporal awareness.
+///
+/// **Prefer [`ProvenSet`]** when checking multiple literals against the same
+/// conclusion set — it provides O(1) per lookup instead of O(n).
 pub fn is_proven_temporal(conclusions: &[Conclusion], lit: &Literal) -> bool {
     conclusions
         .iter()
