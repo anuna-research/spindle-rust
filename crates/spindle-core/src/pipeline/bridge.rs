@@ -1,14 +1,11 @@
 //! Temporal bridge pipeline stage.
 //!
 //! Implements [`TemporalBridge`], which scans rule heads for temporal literals
-//! and generates strict bridging rules that connect temporal atoms to their
-//! atemporal base forms:
+//! and generates bridging rules that connect temporal atoms to their atemporal
+//! base forms while preserving the originating rule strength:
 //!
 //! - **Positive bridge:** `q[s,e] → base(q)` — a temporal fact implies its base.
 //! - **Negation bridge:** `~q[s,e] → ~base(q)` — coupled negation propagation.
-//!
-//! Bridge rules are strict and fire during Phase 1 (definite closure) of SDL,
-//! requiring zero modifications to the defeasible reasoning module.
 
 use std::collections::{HashMap, HashSet};
 
@@ -26,10 +23,14 @@ use crate::theory::Theory;
 /// literals to their atemporal base forms.
 ///
 /// For each distinct temporal head literal `q[s,e]` found across all rules,
-/// two strict rules are added:
+/// two bridge rules are added:
 ///
 /// 1. `q[s,e] → q` (positive bridge)
 /// 2. `~q[s,e] → ~q` (negation bridge)
+///
+/// Each synthesized bridge preserves the originating rule strength:
+/// facts/strict rules produce strict bridges, defeasible rules produce
+/// defeasible bridges, and defeaters produce defeater bridges.
 ///
 /// Deduplication is by bridge structure (temporal body + matching atemporal head)
 /// keyed by the positive temporal literal's SPL rendering.
@@ -51,20 +52,26 @@ struct BridgePresence {
 }
 
 #[derive(Debug, Clone)]
+struct BridgeOrigin {
+    template_label: String,
+    rule_type: RuleType,
+}
+
+#[derive(Debug, Clone)]
 struct BridgeSeed {
     positive: Literal,
-    positive_template_label: Option<String>,
-    negative_template_label: Option<String>,
+    positive_origin: Option<BridgeOrigin>,
+    negative_origin: Option<BridgeOrigin>,
 }
 
 /// Return canonical bridge key + polarity for structurally valid bridge rules.
 ///
 /// A valid temporal bridge has:
-/// - strict rule type
+/// - a single body literal and a single head literal
 /// - exactly one logic body literal with non-empty temporal bounds
 /// - exactly one atemporal head literal with same atom/mode/args and same polarity
 fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool)> {
-    if rule.rule_type != RuleType::Strict || rule.body.len() != 1 || rule.head.len() != 1 {
+    if rule.body.len() != 1 || rule.head.len() != 1 {
         return None;
     }
 
@@ -139,6 +146,14 @@ fn reserve_bridge_label(reserved: &mut HashSet<String>, preferred: String) -> St
     }
 }
 
+fn bridge_rule_type(source_rule_type: RuleType) -> RuleType {
+    match source_rule_type {
+        RuleType::Fact | RuleType::Strict => RuleType::Strict,
+        RuleType::Defeasible => RuleType::Defeasible,
+        RuleType::Defeater => RuleType::Defeater,
+    }
+}
+
 impl PipelineStage for TemporalBridge {
     fn name(&self) -> &'static str {
         "temporal_bridge"
@@ -180,16 +195,23 @@ impl PipelineStage for TemporalBridge {
 
                 let seed = seeds.entry(key).or_insert_with(|| BridgeSeed {
                     positive,
-                    positive_template_label: None,
-                    negative_template_label: None,
+                    positive_origin: None,
+                    negative_origin: None,
                 });
                 let slot = if head_lit.negation {
-                    &mut seed.negative_template_label
+                    &mut seed.negative_origin
                 } else {
-                    &mut seed.positive_template_label
+                    &mut seed.positive_origin
                 };
-                if should_replace_template_label(slot.as_deref(), &template_label, &theory) {
-                    *slot = Some(template_label.clone());
+                if should_replace_template_label(
+                    slot.as_ref().map(|origin| origin.template_label.as_str()),
+                    &template_label,
+                    &theory,
+                ) {
+                    *slot = Some(BridgeOrigin {
+                        template_label: template_label.clone(),
+                        rule_type: bridge_rule_type(rule.rule_type),
+                    });
                 }
             }
         }
@@ -200,14 +222,16 @@ impl PipelineStage for TemporalBridge {
         for (key, seed) in seeds {
             let presence = existing.get(&key).copied().unwrap_or_default();
             let positive = &seed.positive;
-            let pos_template_label = seed
-                .positive_template_label
+            let pos_origin = seed
+                .positive_origin
                 .clone()
-                .or_else(|| seed.negative_template_label.clone());
-            let neg_template_label = seed
-                .negative_template_label
+                .or_else(|| seed.negative_origin.clone())
+                .expect("bridge seed must have at least one origin");
+            let neg_origin = seed
+                .negative_origin
                 .clone()
-                .or_else(|| seed.positive_template_label.clone());
+                .or_else(|| seed.positive_origin.clone())
+                .expect("bridge seed must have at least one origin");
 
             if !presence.positive {
                 // --- Positive bridge: q[s,e] → q ---
@@ -231,8 +255,13 @@ impl PipelineStage for TemporalBridge {
                     Temporal::empty(),
                     positive.predicate_args().to_vec(),
                 );
-                let mut pos_rule = Rule::strict(pos_label, pos_body, pos_head);
-                pos_rule.template_label = pos_template_label.clone();
+                let mut pos_rule = Rule::new(
+                    pos_label,
+                    pos_origin.rule_type,
+                    pos_body,
+                    smallvec![pos_head],
+                );
+                pos_rule.template_label = Some(pos_origin.template_label.clone());
                 bridges.push(pos_rule);
             }
 
@@ -258,8 +287,13 @@ impl PipelineStage for TemporalBridge {
                     Temporal::empty(),
                     positive.predicate_args().to_vec(),
                 );
-                let mut neg_rule = Rule::strict(neg_label, neg_body, neg_head);
-                neg_rule.template_label = neg_template_label.clone();
+                let mut neg_rule = Rule::new(
+                    neg_label,
+                    neg_origin.rule_type,
+                    neg_body,
+                    smallvec![neg_head],
+                );
+                neg_rule.template_label = Some(neg_origin.template_label.clone());
                 bridges.push(neg_rule);
             }
         }
@@ -851,6 +885,45 @@ mod tests {
         );
     }
 
+    #[test]
+    fn defeasible_temporal_heads_generate_defeasible_bridges() {
+        let mut theory = Theory::new();
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            true,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(1), TimePoint::from_millis(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::new(
+            "r_neg",
+            RuleType::Defeasible,
+            vec![Literal::simple("b")],
+            smallvec::smallvec![temporal_head],
+        ));
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let neg_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.label.starts_with("__bridge::neg::")
+                    && rule.head.len() == 1
+                    && rule.head[0].name() == "p"
+                    && rule.head[0].negation
+                    && rule.head[0].temporal.is_empty()
+            })
+            .expect("expected synthesized negative bridge");
+
+        assert_eq!(
+            neg_bridge.rule_type,
+            RuleType::Defeasible,
+            "bridges from defeasible temporal heads must remain defeasible"
+        );
+        assert_eq!(neg_bridge.template_label.as_deref(), Some("r_neg"));
+    }
+
     // --- TEST-009: Negation bridge generated ---
     // Trace: REQ-004
     #[test]
@@ -884,6 +957,49 @@ mod tests {
         assert!(
             !body_lit.temporal.is_empty(),
             "Negation bridge body must be temporal"
+        );
+    }
+
+    #[test]
+    fn inferior_defeasible_temporal_attacker_does_not_become_strict_blocker() {
+        let mut theory = Theory::new();
+
+        theory.add_fact("a");
+        theory.add_fact("b");
+        let r_p = theory.add_defeasible_rule(&["a"], "p");
+        theory.add_rule(Rule::new(
+            "r_neg",
+            RuleType::Defeasible,
+            vec![Literal::simple("b")],
+            vec![Literal::new(
+                "p",
+                true,
+                crate::mode::Mode::empty(),
+                Temporal::from_bounds(1, 10),
+                vec![],
+            )],
+        ));
+        theory.add_superiority(&r_p, "r_neg");
+        theory.add_defeasible_rule(&["p"], "q");
+
+        let conclusions = crate::reason::reason(&theory).unwrap();
+
+        let has_p = conclusions.iter().any(|conclusion| {
+            conclusion.conclusion_type == ConclusionType::DefeasiblyProvable
+                && conclusion.literal.name() == "p"
+                && !conclusion.literal.negation
+                && conclusion.literal.temporal.is_empty()
+        });
+        let has_q = conclusions.iter().any(|conclusion| {
+            conclusion.conclusion_type == ConclusionType::DefeasiblyProvable
+                && conclusion.literal.name() == "q"
+                && !conclusion.literal.negation
+        });
+
+        assert!(has_p, "superior atemporal rule should still derive p");
+        assert!(
+            has_q,
+            "an inferior temporal attacker must not block q through a strict bridge"
         );
     }
 
