@@ -504,7 +504,11 @@ mod tests {
         );
 
         // Rule: q[20,30] => goal[20,30]
-        theory.add_rule(Rule::defeasible("r1", vec![q_20_30.clone()], goal_20_30.clone()));
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![q_20_30.clone()],
+            goal_20_30.clone(),
+        ));
 
         let result = abduce(&theory, &goal_20_30, 10).unwrap();
 

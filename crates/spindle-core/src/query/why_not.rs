@@ -737,10 +737,7 @@ mod tests {
             !result.is_provable(),
             "q[20,30] should not be provable when only p[1,10] exists"
         );
-        assert!(
-            result.has_blockers(),
-            "Should have blockers for q[20,30]"
-        );
+        assert!(result.has_blockers(), "Should have blockers for q[20,30]");
         // Check that the missing premise mentions p
         let missing = result.get_missing_premises();
         assert!(

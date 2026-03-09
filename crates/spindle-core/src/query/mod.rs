@@ -354,9 +354,9 @@ pub fn matches_literal_temporal(query: &Literal, candidate: &Literal) -> bool {
 /// Check whether any positive conclusion in `conclusions` matches `lit`
 /// with temporal awareness.
 pub fn is_proven_temporal(conclusions: &[Conclusion], lit: &Literal) -> bool {
-    conclusions.iter().any(|c| {
-        c.conclusion_type.is_positive() && matches_literal_temporal(lit, &c.literal)
-    })
+    conclusions
+        .iter()
+        .any(|c| c.conclusion_type.is_positive() && matches_literal_temporal(lit, &c.literal))
 }
 
 /// Query a literal against a theory
