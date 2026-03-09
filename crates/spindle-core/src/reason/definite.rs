@@ -10,7 +10,7 @@
 //! preventing order-dependent bugs where a defeasible rule fires before
 //! the strict chain that should block it has completed.
 
-use crate::conclusion::Conclusion;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -22,7 +22,7 @@ use super::state::ReasoningState;
 ///
 /// Only processes `RuleType::Strict` rules. All other rule types are skipped.
 pub(crate) fn forward_chain_strict(
-    _theory: &Theory,
+    theory: &Theory,
     indexed: &IndexedTheory<'_>,
     state: &mut ReasoningState<'_>,
 ) {
@@ -50,6 +50,13 @@ pub(crate) fn forward_chain_strict(
                                 .with_rule(&rule.label),
                         );
                         state.try_enqueue(head_id, head_lit);
+                    } else {
+                        state.maybe_replace_rule_label(
+                            &head_lit,
+                            ConclusionType::DefinitelyProvable,
+                            &rule.label,
+                            theory,
+                        );
                     }
                 }
             }

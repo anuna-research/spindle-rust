@@ -101,15 +101,27 @@ fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool)> {
     Some((positive.to_spl(), body.negation))
 }
 
+fn template_label_priority(label: &str, theory: &Theory) -> (bool, bool, bool) {
+    let Some(meta) = theory.get_meta(label) else {
+        return (false, false, false);
+    };
+
+    (
+        meta.properties.contains_key("source"),
+        meta.properties.contains_key("timestamp"),
+        !meta.properties.is_empty(),
+    )
+}
+
 fn should_replace_template_label(current: Option<&str>, candidate: &str, theory: &Theory) -> bool {
     let Some(current) = current else {
         return true;
     };
 
-    let candidate_has_meta = theory.get_meta(candidate).is_some();
-    let current_has_meta = theory.get_meta(current).is_some();
-    (candidate_has_meta && !current_has_meta)
-        || (candidate_has_meta == current_has_meta && candidate < current)
+    let candidate_priority = template_label_priority(candidate, theory);
+    let current_priority = template_label_priority(current, theory);
+    candidate_priority > current_priority
+        || (candidate_priority == current_priority && candidate < current)
 }
 
 fn reserve_bridge_label(reserved: &mut HashSet<String>, preferred: String) -> String {
@@ -147,8 +159,9 @@ impl PipelineStage for TemporalBridge {
         }
 
         // Collect one seed per distinct temporal atom, with deterministic
-        // template-label choice per polarity (prefer labels that actually
-        // have metadata, then lexicographically smaller labels).
+        // template-label choice per polarity (prefer trust-relevant metadata
+        // such as source/timestamp, then other metadata, then lexicographically
+        // smaller labels).
         let mut seeds: HashMap<String, BridgeSeed> = HashMap::new();
         for rule in theory.rules() {
             let template_label = rule.template_label().to_string();
@@ -710,6 +723,70 @@ mod tests {
             base.sources.contains(&Source::new("alice")),
             "bridged base literal should retain source attribution"
         );
+    }
+
+    #[test]
+    fn synthesized_bridges_prefer_source_bearing_template_labels() {
+        let mut theory = Theory::new();
+
+        let temporal_head = Literal::from_ids(
+            crate::literal::InternedLiteralName::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::from_millis(100), TimePoint::from_millis(200)),
+            vec![],
+        );
+        theory.add_rule(Rule::new(
+            "a_meta",
+            RuleType::Fact,
+            Vec::<Literal>::new(),
+            smallvec::smallvec![temporal_head.clone()],
+        ));
+        theory.add_rule(Rule::new(
+            "z_source",
+            RuleType::Fact,
+            Vec::<Literal>::new(),
+            smallvec::smallvec![temporal_head],
+        ));
+        theory.add_meta_string("a_meta", "priority", "high");
+        theory.add_meta_string("z_source", "source", "alice");
+        *theory.trust_policy_mut() = TrustPolicy::new(0.5).with_trust("alice", 0.9);
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let pos_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.head.len() == 1
+                    && !rule.head[0].negation
+                    && rule.head[0].name() == "p"
+                    && rule.head[0].temporal.is_empty()
+                    && rule.body.len() == 1
+                    && rule.body[0].as_logic().is_some_and(|bl| !bl.negation)
+            })
+            .expect("expected synthesized positive bridge");
+        assert_eq!(pos_bridge.template_label.as_deref(), Some("z_source"));
+
+        let conclusions = reason_prepared(&bridged).unwrap();
+        let weighted =
+            compute_weighted_conclusions(&conclusions, &bridged, bridged.trust_policy(), None);
+        let base = weighted
+            .iter()
+            .find(|wc| {
+                wc.literal.name() == "p"
+                    && !wc.literal.negation
+                    && wc.literal.temporal.is_empty()
+                    && wc.conclusion_type == ConclusionType::DefinitelyProvable
+            })
+            .expect("expected +D p");
+
+        assert!(
+            (base.degree - 0.9).abs() < 1e-10,
+            "bridge should inherit Alice's trust rather than default trust, got {}",
+            base.degree
+        );
+        assert!(base.sources.contains(&Source::new("alice")));
     }
 
     /// Helper: create a temporal fact `>> name [start, end].`

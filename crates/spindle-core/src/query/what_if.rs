@@ -15,7 +15,7 @@ use crate::reason::reason;
 use crate::rule::Rule;
 use crate::theory::Theory;
 
-use super::{QueryResult, QueryStatus};
+use super::{QueryResult, QueryStatus, TemporalLitKey, matches_literal_temporal};
 
 // =============================================================================
 // TYPES
@@ -92,17 +92,19 @@ fn conclusion_strength(ct: ConclusionType) -> u8 {
 
 fn strongest_conclusions_by_literal(
     conclusions: &[crate::conclusion::Conclusion],
-) -> HashMap<Literal, ConclusionType> {
+) -> HashMap<TemporalLitKey, (Literal, ConclusionType)> {
     let mut by_lit = HashMap::new();
     for conc in conclusions {
+        let key = TemporalLitKey::from_literal(&conc.literal);
         by_lit
-            .entry(conc.literal.clone())
-            .and_modify(|old| {
+            .entry(key)
+            .and_modify(|(lit, old)| {
                 if conclusion_strength(conc.conclusion_type) > conclusion_strength(*old) {
+                    *lit = conc.literal.clone();
                     *old = conc.conclusion_type;
                 }
             })
-            .or_insert(conc.conclusion_type);
+            .or_insert_with(|| (conc.literal.clone(), conc.conclusion_type));
     }
     by_lit
 }
@@ -136,7 +138,7 @@ pub fn what_if(
     let baseline_provable: HashSet<_> = baseline
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
+        .map(|c| TemporalLitKey::from_literal(&c.literal))
         .collect();
 
     // Create modified theory with hypotheticals using unique labels
@@ -155,7 +157,7 @@ pub fn what_if(
     let goal_complement = goal.complement();
     let mut result = QueryResult::new(goal.clone(), QueryStatus::Unknown);
     for conc in &modified_conclusions {
-        if conc.literal == *goal && conc.conclusion_type.is_positive() {
+        if conc.conclusion_type.is_positive() && matches_literal_temporal(goal, &conc.literal) {
             result = QueryResult::new(goal.clone(), QueryStatus::Provable)
                 .with_conclusion_type(conc.conclusion_type);
             break;
@@ -163,7 +165,9 @@ pub fn what_if(
     }
     if result.status == QueryStatus::Unknown {
         for conc in &modified_conclusions {
-            if conc.literal == goal_complement && conc.conclusion_type.is_positive() {
+            if conc.conclusion_type.is_positive()
+                && matches_literal_temporal(&goal_complement, &conc.literal)
+            {
                 result = QueryResult::new(goal.clone(), QueryStatus::Refuted);
                 break;
             }
@@ -171,10 +175,18 @@ pub fn what_if(
     }
 
     // Find new conclusions
+    let mut seen_new = HashSet::new();
     let new_conclusions: Vec<Literal> = modified_conclusions
         .iter()
-        .filter(|c| c.conclusion_type.is_positive() && !baseline_provable.contains(&c.literal))
-        .map(|c| c.literal.clone())
+        .filter(|c| c.conclusion_type.is_positive())
+        .filter_map(|c| {
+            let key = TemporalLitKey::from_literal(&c.literal);
+            if baseline_provable.contains(&key) || !seen_new.insert(key) {
+                None
+            } else {
+                Some(c.literal.clone())
+            }
+        })
         .collect();
 
     // Track changed conclusions by comparing strongest status per literal.
@@ -184,14 +196,14 @@ pub fn what_if(
     let baseline_by_lit = strongest_conclusions_by_literal(&baseline);
     let modified_by_lit = strongest_conclusions_by_literal(&modified_conclusions);
 
-    let mut all_literals: HashSet<Literal> = baseline_by_lit.keys().cloned().collect();
+    let mut all_literals: HashSet<TemporalLitKey> = baseline_by_lit.keys().cloned().collect();
     all_literals.extend(modified_by_lit.keys().cloned());
     for lit in all_literals {
-        if let (Some(&old_type), Some(&new_type)) =
+        if let (Some((_, old_type)), Some((new_lit, new_type))) =
             (baseline_by_lit.get(&lit), modified_by_lit.get(&lit))
             && old_type != new_type
         {
-            changed_conclusions.push((lit, old_type, new_type));
+            changed_conclusions.push((new_lit.clone(), *old_type, *new_type));
         }
     }
 

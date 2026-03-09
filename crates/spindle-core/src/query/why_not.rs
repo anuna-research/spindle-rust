@@ -169,6 +169,18 @@ impl fmt::Display for WhyNotResult {
     }
 }
 
+fn matches_attacker_literal(query: &Literal, candidate: &Literal, rule_type: RuleType) -> bool {
+    if rule_type == RuleType::Defeater {
+        query.name_id() == candidate.name_id()
+            && query.negation == candidate.negation
+            && query.mode == candidate.mode
+            && query.predicate_args() == candidate.predicate_args()
+            && query.temporal == candidate.temporal
+    } else {
+        matches_literal_temporal(query, candidate)
+    }
+}
+
 // =============================================================================
 // WHY-NOT OPERATOR
 // =============================================================================
@@ -237,7 +249,11 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 // Check for defeater blocking.
                 let mut blocked = false;
                 for attacker in theory.rules() {
-                    if matches_literal_temporal(&complement, attacker.head_literal()) {
+                    if matches_attacker_literal(
+                        &complement,
+                        attacker.head_literal(),
+                        attacker.rule_type,
+                    ) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
@@ -785,6 +801,55 @@ mod tests {
         assert!(
             result.is_provable(),
             "Wildcard query p should match p[1,10]"
+        );
+    }
+
+    #[test]
+    fn test_why_not_ignores_temporal_only_attackers_for_base_query() {
+        use crate::mode::Mode;
+        use crate::rule::Rule;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f_a", Literal::simple("a")));
+        theory.add_rule(Rule::defeasible(
+            "r_q",
+            vec![Literal::simple("a")],
+            Literal::simple("q"),
+        ));
+        theory.add_rule(Rule::fact("f_neg", Literal::negated("q")));
+        theory.add_rule(Rule::defeater(
+            "d_temp",
+            vec![Literal::simple("a")],
+            Literal::new(
+                "q",
+                true,
+                Mode::empty(),
+                Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+                vec![],
+            ),
+        ));
+
+        let result = why_not(&theory, &Literal::simple("q")).unwrap();
+
+        assert!(
+            !result.is_provable(),
+            "q should be blocked by the base ~q fact"
+        );
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_rule.as_deref() == Some("f_neg")),
+            "expected blocker from the atemporal complement fact"
+        );
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .all(|b| b.blocking_rule.as_deref() != Some("d_temp")),
+            "temporal-only defeater should not be reported as blocking base q: {:?}",
+            result.blocked_by
         );
     }
 }

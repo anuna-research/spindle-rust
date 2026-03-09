@@ -41,6 +41,26 @@ use crate::theory::Theory;
 
 use self::state::ReasoningState;
 
+pub(super) fn should_prefer_rule_label(current: &str, candidate: &str, theory: &Theory) -> bool {
+    let label_priority = |label: &str| {
+        theory
+            .get_meta(label)
+            .map(|meta| {
+                (
+                    meta.properties.contains_key("source"),
+                    meta.properties.contains_key("timestamp"),
+                    !meta.properties.is_empty(),
+                )
+            })
+            .unwrap_or((false, false, false))
+    };
+
+    let candidate_priority = label_priority(candidate);
+    let current_priority = label_priority(current);
+    candidate_priority > current_priority
+        || (candidate_priority == current_priority && candidate < current)
+}
+
 // ---------------------------------------------------------------------------
 // Reasoner trait
 // ---------------------------------------------------------------------------

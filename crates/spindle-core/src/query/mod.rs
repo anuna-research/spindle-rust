@@ -1068,6 +1068,81 @@ mod tests {
         assert!(result.is_provable());
     }
 
+    #[test]
+    fn test_what_if_temporal_goal_requires_exact_window() {
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "p",
+                false,
+                Mode::empty(),
+                Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+                vec![],
+            ),
+        ));
+
+        let goal = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(Literal::simple("irrelevant"))],
+            &goal,
+        )
+        .unwrap();
+
+        assert!(
+            !result.is_provable(),
+            "p[20,30] should not be treated as provable from baseline p[1,10]"
+        );
+    }
+
+    #[test]
+    fn test_what_if_new_conclusions_distinguish_temporal_windows() {
+        use crate::mode::Mode;
+        use crate::temporal::{Temporal, TimePoint};
+
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "p",
+                false,
+                Mode::empty(),
+                Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+                vec![],
+            ),
+        ));
+
+        let new_window = Literal::new(
+            "p",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(20), TimePoint::Moment(30)),
+            vec![],
+        );
+        let result = what_if(
+            &theory,
+            vec![HypotheticalClaim::new(new_window.clone())],
+            &new_window,
+        )
+        .unwrap();
+
+        assert!(result.is_provable());
+        assert!(
+            result.new_conclusions.iter().any(|lit| lit == &new_window),
+            "new_conclusions should include the newly introduced temporal window"
+        );
+    }
+
     // ==========================================================================
     // INTEGRATION TESTS - Cross-Operator Consistency
     // ==========================================================================

@@ -470,17 +470,48 @@ fn parse_iso8601_millis(ts: &str) -> Option<i64> {
 /// Select the best positive conclusion for trust chain traversal.
 ///
 /// Prefers `+D` (definitely provable) over `+d` (defeasibly provable) since
-/// definite proofs are stronger. Among same type, prefers conclusions that
-/// have a `rule_label` set so the derivation chain can be traced.
-fn best_conclusion<'a>(conclusions: &[&'a Conclusion]) -> Option<&'a Conclusion> {
-    conclusions.iter().copied().max_by_key(|c| {
-        let type_rank = if c.conclusion_type == ConclusionType::DefinitelyProvable {
+/// definite proofs are stronger. Among same-type conclusions, prefers entries
+/// with traceable rule labels and then the higher effective rule trust.
+fn best_conclusion<'a>(
+    conclusions: &[&'a Conclusion],
+    theory: &Theory,
+    policy: &TrustPolicy,
+    reference_time: Option<TimePoint>,
+) -> Option<&'a Conclusion> {
+    conclusions.iter().copied().max_by(|left, right| {
+        let left_type_rank = if left.conclusion_type == ConclusionType::DefinitelyProvable {
             1
         } else {
             0
         };
-        let label_rank = if c.rule_label.is_some() { 1 } else { 0 };
-        (type_rank, label_rank)
+        let right_type_rank = if right.conclusion_type == ConclusionType::DefinitelyProvable {
+            1
+        } else {
+            0
+        };
+        left_type_rank
+            .cmp(&right_type_rank)
+            .then_with(|| left.rule_label.is_some().cmp(&right.rule_label.is_some()))
+            .then_with(|| {
+                let left_trust = left
+                    .rule_label
+                    .as_deref()
+                    .map(|label| resolve_rule_trust(label, theory, policy, reference_time).0)
+                    .unwrap_or(policy.default_trust);
+                let right_trust = right
+                    .rule_label
+                    .as_deref()
+                    .map(|label| resolve_rule_trust(label, theory, policy, reference_time).0)
+                    .unwrap_or(policy.default_trust);
+                left_trust.total_cmp(&right_trust)
+            })
+            .then_with(|| {
+                right
+                    .rule_label
+                    .as_deref()
+                    .unwrap_or("")
+                    .cmp(left.rule_label.as_deref().unwrap_or(""))
+            })
     })
 }
 
@@ -526,7 +557,8 @@ fn build_trust_tree(
                 None => continue,
             };
             if let Some(body_conclusions) = positive_conclusions.get(&body_key)
-                && let Some(best) = best_conclusion(body_conclusions)
+                && let Some(best) =
+                    best_conclusion(body_conclusions, theory, policy, reference_time)
             {
                 let child = build_trust_tree(
                     &body_lit,

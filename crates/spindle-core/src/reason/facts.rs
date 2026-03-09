@@ -13,7 +13,7 @@
 //! ([`super::defeasible::resolve_defeasible`]), not here, because they
 //! require the full ambiguity blocking check.
 
-use crate::conclusion::Conclusion;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::IndexedTheory;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -45,6 +45,12 @@ pub(crate) fn initialize_facts<'a>(
 
         // Skip duplicate facts -- only process each literal once
         if state.enqueued.contains(lit_id) {
+            state.maybe_replace_rule_label(
+                &lit,
+                ConclusionType::DefinitelyProvable,
+                &fact.label,
+                theory,
+            );
             continue;
         }
         state.enqueued.insert(lit_id);
@@ -67,6 +73,13 @@ pub(crate) fn initialize_facts<'a>(
                 state.definite_proven.insert(head_id);
                 state.add_conclusion(
                     Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
+                );
+            } else {
+                state.maybe_replace_rule_label(
+                    &head_lit,
+                    ConclusionType::DefinitelyProvable,
+                    &rule.label,
+                    theory,
                 );
             }
             if !state.enqueued.contains(head_id) {

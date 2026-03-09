@@ -26,7 +26,10 @@ use crate::index::{IndexedTheory, LitId};
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
-use super::state::{LiteralBitSet, ReasoningState};
+use super::{
+    should_prefer_rule_label,
+    state::{LiteralBitSet, ReasoningState},
+};
 
 /// Run Phase 2 (defeasible fixed-point) and Phase 3 (negative emission).
 pub(crate) fn resolve_defeasible(
@@ -478,14 +481,14 @@ fn try_prove_defeasible(
         }
     } else {
         // For duplicate supporters with the same grounded head literal, keep the
-        // lexicographically-smallest label for deterministic attribution.
+        // strongest attribution label deterministically.
         let mut supporters_by_literal: BTreeMap<String, &crate::rule::Rule> = BTreeMap::new();
         for supporter in applicable_supporters {
             let literal_key = supporter.head_literal().to_spl();
             supporters_by_literal
                 .entry(literal_key)
                 .and_modify(|selected| {
-                    if supporter.label.as_str() < selected.label.as_str() {
+                    if should_prefer_rule_label(&selected.label, &supporter.label, theory) {
                         *selected = supporter;
                     }
                 })

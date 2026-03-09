@@ -9,9 +9,10 @@ use std::collections::VecDeque;
 use fixedbitset::FixedBitSet;
 use rustc_hash::FxHashMap;
 
-use crate::conclusion::Conclusion;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::LitId;
 use crate::literal::Literal;
+use crate::theory::Theory;
 
 /// A bit set optimized for tracking proven literals.
 ///
@@ -151,6 +152,29 @@ impl<'a> ReasoningState<'a> {
     #[inline]
     pub(crate) fn add_conclusion(&mut self, conclusion: Conclusion) {
         self.conclusions.push(conclusion);
+    }
+
+    pub(crate) fn maybe_replace_rule_label(
+        &mut self,
+        literal: &Literal,
+        conclusion_type: ConclusionType,
+        new_label: &str,
+        theory: &Theory,
+    ) {
+        if let Some(existing) = self.conclusions.iter_mut().find(|conclusion| {
+            conclusion.conclusion_type == conclusion_type
+                && conclusion.literal.to_spl() == literal.to_spl()
+        }) {
+            match existing.rule_label.as_deref() {
+                Some(current) if super::should_prefer_rule_label(current, new_label, theory) => {
+                    existing.rule_label = Some(new_label.to_string());
+                }
+                None => {
+                    existing.rule_label = Some(new_label.to_string());
+                }
+                Some(_) => {}
+            }
+        }
     }
 
     /// Try to enqueue a literal into the Phase 1 worklist if not already enqueued.
