@@ -1,0 +1,287 @@
+;; Plan: Update docs/book for v0.3.0
+;; Based on gap analysis of main branch vs. current documentation
+
+(meta plan
+  (id "DOCS-030")
+  (title "Update Documentation for v0.3.0")
+  (version "1.0.0")
+  (status "active")
+  (created "2026-03-06")
+  (author "agent:orchestrator")
+  (description "Update docs/book/ to reflect SPEC-017 arithmetic, SPEC-018 temporal atom identity, pipeline architecture, requires v2, capabilities command, and v0.3.0 version bump"))
+
+;; Agents — parallel writers for independent doc sections
+(given agent-writer-available)
+
+;; ─── Tasks ───────────────────────────────────────────────────────────
+
+;; Phase 1: Critical updates (no dependencies)
+(given task-temporal)
+(given no-deps-temporal)
+(given task-architecture)
+(given no-deps-architecture)
+(given task-cli)
+(given no-deps-cli)
+(given task-arithmetic)
+(given no-deps-arithmetic)
+
+;; Phase 2: Depends on understanding architecture + temporal
+(given task-rust-integration)
+(given task-changelog)
+(given no-deps-changelog)
+
+;; Phase 3: Final — rebuild book + update SUMMARY
+(given task-summary)
+(given task-rebuild)
+
+;; ─── Task Metadata ───────────────────────────────────────────────────
+
+(meta task-temporal
+  (description "Update guides/temporal.md with SPEC-018 temporal atom identity, bridging rules, and temporal-aware query matching")
+  (acceptance "Covers TemporalBridge synthetic rules, AtomKey identity fix, temporal-aware abduce/why_not, with examples"))
+
+(meta task-architecture
+  (description "Update internals/architecture.md with composable PipelineStage trait, TemporalBridge stage, pipeline builder, and current module layout")
+  (acceptance "Pipeline section shows all stages including TemporalBridge; module map matches actual crate structure"))
+
+(meta task-cli
+  (description "Update reference/cli.md with --v2 flag, capabilities command, JSON schema versions (v1/v2), and requires v2 default behavior")
+  (acceptance "All CLI subcommands documented including capabilities; --v2 semantics explained; JSON envelope versions listed"))
+
+(meta task-arithmetic
+  (description "Polish guides/arithmetic.md with Float vs Decimal distinction, error examples for restriction violations, and REQ cross-references")
+  (acceptance "Explains when Float vs Decimal is used; shows error messages for head-arithmetic, negated-arithmetic, temporal-var violations"))
+
+(meta task-rust-integration
+  (description "Update integration/rust.md with PipelineBuilder examples, new Term/NumericValue types, and custom pipeline composition")
+  (acceptance "Shows PipelineBuilder usage, Term enum with Integer/Decimal/Float, and at least one custom pipeline example"))
+
+(meta task-changelog
+  (description "Create a CHANGELOG section in README or docs covering 0.2.0 to 0.3.0 changes")
+  (acceptance "Lists SPEC-017, SPEC-018, requires v2, temporal bridging, version bump with brief descriptions"))
+
+(meta task-summary
+  (description "Update docs/src/SUMMARY.md if any new pages were added")
+  (acceptance "SUMMARY.md includes all doc pages that exist in docs/src/"))
+
+(meta task-rebuild
+  (description "Rebuild the mdbook output in docs/book/ from updated sources")
+  (acceptance "mdbook build succeeds with no errors; docs/book/ contains updated HTML"))
+
+;; ─── Readiness Rules ─────────────────────────────────────────────────
+
+;; Phase 1: all independent, ready immediately
+(normally r-ready-temporal
+  (and task-temporal no-deps-temporal)
+  ready-temporal)
+
+(normally r-ready-architecture
+  (and task-architecture no-deps-architecture)
+  ready-architecture)
+
+(normally r-ready-cli
+  (and task-cli no-deps-cli)
+  ready-cli)
+
+(normally r-ready-arithmetic
+  (and task-arithmetic no-deps-arithmetic)
+  ready-arithmetic)
+
+(normally r-ready-changelog
+  (and task-changelog no-deps-changelog)
+  ready-changelog)
+
+;; Phase 2: rust-integration depends on architecture understanding
+(normally r-ready-rust-integration
+  (and task-rust-integration completed-architecture)
+  ready-rust-integration)
+
+;; Phase 3: summary depends on all content tasks
+(normally r-ready-summary
+  (and task-summary completed-temporal completed-architecture completed-cli completed-arithmetic completed-rust-integration completed-changelog)
+  ready-summary)
+
+;; Phase 3: rebuild depends on summary
+(normally r-ready-rebuild
+  (and task-rebuild completed-summary)
+  ready-rebuild)
+
+;; ─── Assignment Rules ────────────────────────────────────────────────
+
+(normally r-assign-temporal
+  (and ready-temporal agent-writer-available)
+  assign-to-temporal-writer)
+
+(normally r-assign-architecture
+  (and ready-architecture agent-writer-available)
+  assign-to-architecture-writer)
+
+(normally r-assign-cli
+  (and ready-cli agent-writer-available)
+  assign-to-cli-writer)
+
+(normally r-assign-arithmetic
+  (and ready-arithmetic agent-writer-available)
+  assign-to-arithmetic-writer)
+
+(normally r-assign-changelog
+  (and ready-changelog agent-writer-available)
+  assign-to-changelog-writer)
+
+(normally r-assign-rust-integration
+  (and ready-rust-integration agent-writer-available)
+  assign-to-rust-integration-writer)
+
+(normally r-assign-summary
+  (and ready-summary agent-writer-available)
+  assign-to-summary-writer)
+
+(normally r-assign-rebuild
+  (and ready-rebuild agent-writer-available)
+  assign-to-rebuild-writer)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:34:23Z"
+  (given claim-v1-temporal)
+  (normally r-cl-state-v1-temporal claim-v1-temporal state-claimed-v1-temporal)
+  (normally r-cl-chain-v1-temporal state-claimed-v1-temporal claimed-temporal)
+)
+
+;; Propagation rules: failures in 'temporal' block downstream tasks
+(normally r-propagate-summary-from-temporal-failed failed-temporal upstream-blocked-summary)
+(normally r-propagate-summary-from-temporal-permanently-failed permanently-failed-temporal upstream-blocked-summary)
+(normally r-propagate-summary-from-temporal-stale-v1 stale-v1-temporal upstream-blocked-summary)
+(normally r-propagate-summary-from-temporal-timeout-v1 timeout-v1-temporal upstream-blocked-summary)
+(normally r-propagate-summary-from-temporal-blocked upstream-blocked-temporal upstream-blocked-summary)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-rebuild-from-summary-blocked upstream-blocked-summary upstream-blocked-rebuild)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:34:23Z"
+  (given claim-v1-architecture)
+  (normally r-cl-state-v1-architecture claim-v1-architecture state-claimed-v1-architecture)
+  (normally r-cl-chain-v1-architecture state-claimed-v1-architecture claimed-architecture)
+)
+
+;; Propagation rules: failures in 'architecture' block downstream tasks
+(normally r-propagate-rust-integration-from-architecture-failed failed-architecture upstream-blocked-rust-integration)
+(normally r-propagate-rust-integration-from-architecture-permanently-failed permanently-failed-architecture upstream-blocked-rust-integration)
+(normally r-propagate-rust-integration-from-architecture-stale-v1 stale-v1-architecture upstream-blocked-rust-integration)
+(normally r-propagate-rust-integration-from-architecture-timeout-v1 timeout-v1-architecture upstream-blocked-rust-integration)
+(normally r-propagate-rust-integration-from-architecture-blocked upstream-blocked-architecture upstream-blocked-rust-integration)
+(normally r-propagate-summary-from-architecture-failed failed-architecture upstream-blocked-summary)
+(normally r-propagate-summary-from-architecture-permanently-failed permanently-failed-architecture upstream-blocked-summary)
+(normally r-propagate-summary-from-architecture-stale-v1 stale-v1-architecture upstream-blocked-summary)
+(normally r-propagate-summary-from-architecture-timeout-v1 timeout-v1-architecture upstream-blocked-summary)
+(normally r-propagate-summary-from-architecture-blocked upstream-blocked-architecture upstream-blocked-summary)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-summary-from-rust-integration-blocked upstream-blocked-rust-integration upstream-blocked-summary)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:34:23Z"
+  (given claim-v1-cli)
+  (normally r-cl-state-v1-cli claim-v1-cli state-claimed-v1-cli)
+  (normally r-cl-chain-v1-cli state-claimed-v1-cli claimed-cli)
+)
+
+;; Propagation rules: failures in 'cli' block downstream tasks
+(normally r-propagate-summary-from-cli-failed failed-cli upstream-blocked-summary)
+(normally r-propagate-summary-from-cli-permanently-failed permanently-failed-cli upstream-blocked-summary)
+(normally r-propagate-summary-from-cli-stale-v1 stale-v1-cli upstream-blocked-summary)
+(normally r-propagate-summary-from-cli-timeout-v1 timeout-v1-cli upstream-blocked-summary)
+(normally r-propagate-summary-from-cli-blocked upstream-blocked-cli upstream-blocked-summary)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:34:23Z"
+  (given claim-v1-arithmetic)
+  (normally r-cl-state-v1-arithmetic claim-v1-arithmetic state-claimed-v1-arithmetic)
+  (normally r-cl-chain-v1-arithmetic state-claimed-v1-arithmetic claimed-arithmetic)
+)
+
+;; Propagation rules: failures in 'arithmetic' block downstream tasks
+(normally r-propagate-summary-from-arithmetic-failed failed-arithmetic upstream-blocked-summary)
+(normally r-propagate-summary-from-arithmetic-permanently-failed permanently-failed-arithmetic upstream-blocked-summary)
+(normally r-propagate-summary-from-arithmetic-stale-v1 stale-v1-arithmetic upstream-blocked-summary)
+(normally r-propagate-summary-from-arithmetic-timeout-v1 timeout-v1-arithmetic upstream-blocked-summary)
+(normally r-propagate-summary-from-arithmetic-blocked upstream-blocked-arithmetic upstream-blocked-summary)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:34:23Z"
+  (given claim-v1-changelog)
+  (normally r-cl-state-v1-changelog claim-v1-changelog state-claimed-v1-changelog)
+  (normally r-cl-chain-v1-changelog state-claimed-v1-changelog claimed-changelog)
+)
+
+;; Propagation rules: failures in 'changelog' block downstream tasks
+(normally r-propagate-summary-from-changelog-failed failed-changelog upstream-blocked-summary)
+(normally r-propagate-summary-from-changelog-permanently-failed permanently-failed-changelog upstream-blocked-summary)
+(normally r-propagate-summary-from-changelog-stale-v1 stale-v1-changelog upstream-blocked-summary)
+(normally r-propagate-summary-from-changelog-timeout-v1 timeout-v1-changelog upstream-blocked-summary)
+(normally r-propagate-summary-from-changelog-blocked upstream-blocked-changelog upstream-blocked-summary)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:36:22Z"
+  (given completed-changelog))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:36:37Z"
+  (given completed-cli))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:36:42Z"
+  (given completed-temporal))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:36:48Z"
+  (given completed-arithmetic))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:37:06Z"
+  (given completed-architecture))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:37:12Z"
+  (given claim-v1-rust-integration)
+  (normally r-cl-state-v1-rust-integration claim-v1-rust-integration state-claimed-v1-rust-integration)
+  (normally r-cl-chain-v1-rust-integration state-claimed-v1-rust-integration claimed-rust-integration)
+)
+
+;; Propagation rules: failures in 'rust-integration' block downstream tasks
+(normally r-propagate-summary-from-rust-integration-failed failed-rust-integration upstream-blocked-summary)
+(normally r-propagate-summary-from-rust-integration-permanently-failed permanently-failed-rust-integration upstream-blocked-summary)
+(normally r-propagate-summary-from-rust-integration-stale-v1 stale-v1-rust-integration upstream-blocked-summary)
+(normally r-propagate-summary-from-rust-integration-timeout-v1 timeout-v1-rust-integration upstream-blocked-summary)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:40:13Z"
+  (given completed-rust-integration))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:40:20Z"
+  (given claim-v1-summary)
+  (normally r-cl-state-v1-summary claim-v1-summary state-claimed-v1-summary)
+  (normally r-cl-chain-v1-summary state-claimed-v1-summary claimed-summary)
+)
+
+;; Propagation rules: failures in 'summary' block downstream tasks
+(normally r-propagate-rebuild-from-summary-failed failed-summary upstream-blocked-rebuild)
+(normally r-propagate-rebuild-from-summary-permanently-failed permanently-failed-summary upstream-blocked-rebuild)
+(normally r-propagate-rebuild-from-summary-stale-v1 stale-v1-summary upstream-blocked-rebuild)
+(normally r-propagate-rebuild-from-summary-timeout-v1 timeout-v1-summary upstream-blocked-rebuild)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:40:34Z"
+  (given completed-summary))
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:40:37Z"
+  (given claim-v1-rebuild)
+  (normally r-cl-state-v1-rebuild claim-v1-rebuild state-claimed-v1-rebuild)
+  (normally r-cl-chain-v1-rebuild state-claimed-v1-rebuild claimed-rebuild)
+)
+
+(claims agent:orchestrator
+  :at "2026-03-05T22:40:50Z"
+  (given completed-rebuild))

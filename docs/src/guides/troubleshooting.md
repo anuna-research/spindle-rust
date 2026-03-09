@@ -32,7 +32,7 @@ SPL parse error: Unknown keyword: defeasible
    ```
 
 2. Check if the body is satisfied:
-   ```lisp
+   ```spl
    ; Is 'bird' actually proven?
    (normally r1 bird flies)
    ```
@@ -61,7 +61,7 @@ SPL parse error: Unknown keyword: defeasible
    ```
 
 2. Check if a defeater is missing:
-   ```lisp
+   ```spl
    ; Add a defeater to block
    (except d1 exception unexpected-literal)
    ```
@@ -73,7 +73,7 @@ SPL parse error: Unknown keyword: defeasible
 **Cause**: Conflicting rules without superiority.
 
 **Fix**: Add superiority:
-```lisp
+```spl
 (normally r1 a q)
 (normally r2 b (not q))
 (prefer r1 r2)    ; or (prefer r2 r1)
@@ -88,7 +88,7 @@ SPL parse error: Unknown keyword: defeasible
 **Check**:
 
 1. Rule labels match exactly:
-   ```lisp
+   ```spl
    (normally r1 bird flies)
    (normally r2 penguin (not flies))
    (prefer r1 r2)                      ; Must match labels exactly
@@ -106,7 +106,7 @@ SPL parse error: Unknown keyword: defeasible
 
 ### Circular Superiority
 
-```lisp
+```spl
 ; BAD: creates undefined behavior
 (prefer r1 r2)
 (prefer r2 r1)
@@ -123,7 +123,7 @@ SPL parse error: Unknown keyword: defeasible
 **Check**:
 
 1. Facts use predicates:
-   ```lisp
+   ```spl
    ; Wrong: not a predicate
    (given parent-alice-bob)
 
@@ -132,7 +132,7 @@ SPL parse error: Unknown keyword: defeasible
    ```
 
 2. Variable positions match:
-   ```lisp
+   ```spl
    ; Fact: (parent alice bob)
    ;              ?x    ?y
 
@@ -141,7 +141,7 @@ SPL parse error: Unknown keyword: defeasible
    ```
 
 3. All head variables appear in body:
-   ```lisp
+   ```spl
    ; INVALID: ?z not in body
    (normally r1 (parent ?x ?y) (triple ?x ?y ?z))
    ```
@@ -216,7 +216,7 @@ spindle validate theory.spl && spindle reason theory.spl
 ### Minimal Reproduction
 
 Create a minimal theory that reproduces the issue:
-```lisp
+```spl
 ; Start with just the failing rules
 (given bird)
 (normally r1 bird flies)

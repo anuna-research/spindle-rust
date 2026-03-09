@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -205,7 +205,7 @@ let result = what_if(&amp;theory, hypotheticals, &amp;goal);
 </ol>
 <h3 id="example"><a class="header" href="#example">Example</a></h3>
 <p>Original theory:</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (normally r1 bird flies)
 (normally r2 wounded (not flies))
 (prefer r2 r1)
@@ -250,7 +250,7 @@ let explanation = why_not(&amp;theory, &amp;literal);
 </ol>
 <h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
 <p>Theory:</p>
-<pre><code class="language-lisp">(given bird)
+<pre><code class="language-spl">(given bird)
 (given penguin)
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
@@ -315,7 +315,7 @@ let result = abduce(&amp;theory, &amp;goal, max_solutions);
 </ol>
 <h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
 <p>Theory:</p>
-<pre><code class="language-lisp">(normally r1 bird flies)
+<pre><code class="language-spl">(normally r1 bird flies)
 (normally r2 penguin (not flies))
 (normally r3 (and bird healthy) strong-flyer)
 (prefer r2 r1)
@@ -343,14 +343,14 @@ struct AbductionSolution {
 <span class="boring">}</span></code></pre>
 <h3 id="handling-conflicts"><a class="header" href="#handling-conflicts">Handling Conflicts</a></h3>
 <p>Abduction considers superiority:</p>
-<pre><code class="language-lisp">(given penguin)
+<pre><code class="language-spl">(given penguin)
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
 (prefer r2 r1)
 </code></pre>
 <p>Abducing <code>flies</code> might return:</p>
 <ul>
-<li><code>["bird", "healthy"]</code> with a rule <code>r3: bird, healthy =&gt; flies</code> where <code>r3 &gt; r2</code></li>
+<li><code>["bird", "healthy"]</code> with a rule <code>(normally r3 (and bird healthy) flies)</code> where r3 &gt; r2</li>
 <li>Or indicate that <code>flies</code> cannot be achieved given <code>penguin</code></li>
 </ul>
 <h3 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h3>
@@ -394,11 +394,11 @@ println!("Minimal fixes: {:?}", solutions);
 
 const spindle = new Spindle();
 spindle.parseSpl(`
-  f1: &gt;&gt; bird
-  f2: &gt;&gt; penguin
-  r1: bird =&gt; flies
-  r2: penguin =&gt; ~flies
-  r2 &gt; r1
+  (given bird)
+  (given penguin)
+  (normally r1 bird flies)
+  (normally r2 penguin (not flies))
+  (prefer r2 r1)
 `);
 
 // What-if
@@ -472,6 +472,7 @@ console.log(abduce);
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

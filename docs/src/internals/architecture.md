@@ -20,23 +20,56 @@ The core reasoning engine with these modules:
 ```
 spindle-core/src/
 ├── lib.rs              # Crate root, prelude
-├── intern.rs           # String interning
+├── intern.rs           # String interning (SymbolId, LiteralId)
 ├── literal.rs          # Literal representation
 ├── mode.rs             # Modal operators
-├── temporal.rs         # Temporal reasoning
+├── temporal.rs         # Temporal reasoning (Allen relations, TimePoint)
+├── term.rs             # Terms (Symbol, Numeric: Integer/Decimal/Float)
 ├── rule.rs             # Rule types
+├── body.rs             # Body literals (BodyLogicLiteral, BodyArg, ArithConstraint)
 ├── superiority.rs      # Superiority relations
 ├── theory.rs           # Theory container
-├── conclusion.rs       # Conclusion types
-├── index.rs            # Theory indexing
-├── reason.rs           # Standard DL(d) algorithm
-├── grounding.rs        # Variable grounding
+├── conclusion.rs       # Conclusion types (+D, -D, +d, -d)
+├── claims.rs           # Claims blocks (provenance metadata)
+├── index.rs            # Theory indexing (AtomKey, LitId)
+├── arith.rs            # Arithmetic expressions and constraints
+├── grounding.rs        # Variable grounding (bottom-up Datalog)
 ├── worklist.rs         # Worklist data structures
-├── explanation.rs      # Proof trees
 ├── trust.rs            # Trust-weighted reasoning
-├── query.rs            # Query operators
 ├── mining.rs           # Process mining (alpha algorithm)
-└── error.rs            # Error types
+├── error.rs            # Error types
+├── analysis/           # Theory analysis
+│   ├── mod.rs          #   Shared types (ValidationDiagnostic, ConflictReport)
+│   ├── conflicts.rs    #   Conflict detection
+│   ├── superiority.rs  #   Superiority suggestion
+│   └── validation.rs   #   Semantic validation
+├── explanation/        # Explanation system
+│   ├── mod.rs          #   Proof/derivation tree structures
+│   ├── types.rs        #   Core explanation types
+│   └── format/         #   Output formats
+│       ├── mod.rs
+│       ├── natural_language.rs
+│       ├── json.rs
+│       ├── jsonld.rs
+│       └── dot.rs
+├── pipeline/           # Composable preparation pipeline
+│   ├── mod.rs          #   PipelineStage trait, PipelineBuilder, prepare()
+│   ├── validate.rs     #   Validate stage
+│   ├── wildcard.rs     #   WildcardRewrite stage
+│   ├── ground.rs       #   Ground stage
+│   └── temporal.rs     #   TemporalFilter, TemporalVarValidation stages
+├── query/              # Query operators
+│   ├── mod.rs          #   QueryOperator trait
+│   ├── what_if.rs      #   Hypothetical reasoning
+│   ├── why_not.rs      #   Failure explanation
+│   ├── abduce.rs       #   Abduction (hypothesis finding)
+│   └── requires.rs     #   Dependency queries
+└── reason/             # Reasoning engine
+    ├── mod.rs          #   Reasoner trait, StandardReasoner
+    ├── state.rs        #   ReasoningState (worklist, proven sets, counters)
+    ├── facts.rs        #   Fact initialization phase
+    ├── definite.rs     #   Definite (+D/-D) forward chaining
+    └── defeasible.rs   #   Defeasible (+d/-d) forward chaining
 ```
 
 ## Data Flow
@@ -55,18 +88,31 @@ Input (SPL)
 └─────────────┘
       │
       ▼
+┌─────────────────────────────────────────┐
+│  Pipeline  (composable stages)          │
+│  ┌──────────────────┐                   │
+│  │ TemporalFilter   │ (optional as-of)  │
+│  ├──────────────────┤                   │
+│  │ Validate         │ range restriction │
+│  ├──────────────────┤                   │
+│  │ WildcardRewrite  │ _ → ?_wN          │
+│  ├──────────────────┤                   │
+│  │ Ground           │ variable inst.    │
+│  ├──────────────────┤                   │
+│  │ TemporalVarValid.│ reject unresolved │
+│  ├──────────────────┤                   │
+│  │ TemporalFilter   │ (optional re-filt)│
+│  └──────────────────┘                   │
+└─────────────────────────────────────────┘
+      │
+      ▼
 ┌─────────────┐
-│  Grounding  │  Instantiate variables
+│   Index     │  Build lookup tables (AtomKey, LitId)
 └─────────────┘
       │
       ▼
 ┌─────────────┐
-│   Index     │  Build lookup tables
-└─────────────┘
-      │
-      ▼
-┌─────────────┐
-│  Reasoning  │  DL(d)
+│  Reasoning  │  StandardReasoner — DL(d)
 └─────────────┘
       │
       ▼
@@ -74,6 +120,67 @@ Input (SPL)
 │ Conclusions │  +D, -D, +d, -d
 └─────────────┘
 ```
+
+## Pipeline Architecture
+
+The preparation pipeline transforms a raw `Theory` into a form ready for
+reasoning. It is built from composable stages, each implementing the
+`PipelineStage` trait.
+
+### PipelineStage Trait
+
+```rust
+pub trait PipelineStage: std::fmt::Debug {
+    /// Human-readable name used in diagnostics and tracing.
+    fn name(&self) -> &'static str;
+
+    /// Apply this stage, returning a (possibly transformed) theory.
+    /// Returning Err aborts the pipeline.
+    fn apply(&self, theory: Theory, ctx: &mut PipelineContext) -> Result<Theory>;
+}
+```
+
+Stages are assembled with `PipelineBuilder` and run left-to-right:
+
+```rust
+use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
+
+let pipeline = Pipeline::builder()
+    .stage(Validate::default())
+    .stage(WildcardRewrite)
+    .stage(Ground::default())
+    .build();
+
+let (prepared_theory, ctx) = pipeline.run(theory)?;
+```
+
+### Built-in Stages
+
+| Stage | Module | Purpose |
+|-------|--------|---------|
+| `Validate` | `pipeline/validate.rs` | Enforces range restriction (head vars must appear in body) and rejects wildcards in rule heads. Both checks are independently configurable. |
+| `WildcardRewrite` | `pipeline/wildcard.rs` | Rewrites anonymous wildcards (`_`) to unique fresh variables (`?_wN`) so each position is distinct during grounding. |
+| `Ground` | `pipeline/ground.rs` | Bottom-up Datalog grounding. Instantiates rules containing variables via fixpoint iteration over facts, with configurable `max_iterations` and `max_instances` limits. |
+| `TemporalFilter` | `pipeline/temporal.rs` | Removes rules/facts not active at a given reference `TimePoint` ("as-of" semantics). Omitted by default since it requires a reference time. |
+| `TemporalVarValidation` | `pipeline/temporal.rs` | Rejects theories with unresolved temporal variables after grounding. Runs in strict mode by default (returns `Err`); can be set to warning-only. |
+
+### PipelineContext
+
+A `PipelineContext` is threaded through all stages, carrying:
+
+- **`diagnostics: Vec<Diagnostic>`** — Info, Warning, and Error messages
+  emitted by stages. Each diagnostic records the stage name and a
+  human-readable message.
+- **`metadata: HashMap<String, MetadataVal>`** — Arbitrary key-value data
+  for inter-stage communication (e.g., `grounding_instances`,
+  `grounding_limit_hit`, `evaluated_at`).
+
+### Default Pipeline
+
+`Pipeline::default_pipeline()` returns `Validate → WildcardRewrite → Ground`.
+The higher-level `prepare()` function builds a richer pipeline from
+`PrepareOptions`, optionally inserting `TemporalFilter` (before and after
+grounding) and `TemporalVarValidation`.
 
 ## Key Design Decisions
 
@@ -164,29 +271,54 @@ theory.is_superior("r1", "r2")
 
 ## Algorithm Implementation
 
-### Standard DL(d) (reason.rs)
+### Reasoner Trait
+
+The `Reasoner` trait abstracts over reasoning backends. One concrete
+implementation is provided:
+
+- **`StandardReasoner`** — the standard DL(d) forward-chaining algorithm
+  (the default and only built-in backend).
+
+Use `select_reasoner("standard")` to obtain a boxed trait object for
+runtime backend selection. Additional backends can be added by
+implementing the `Reasoner` trait.
+
+### Standard DL(d) (reason/)
+
+The reasoning state (worklist, proven sets, body counters, conclusions) is
+consolidated into `ReasoningState` in `reason/state.rs`. The algorithm
+proceeds in three phases, each in its own submodule:
 
 ```
-Phase 1: Initialize with facts
+Phase 1: Fact initialization (reason/facts.rs)
   ├── Add to definite_proven
   ├── Add to defeasible_proven
   └── Add to worklist
 
-Phase 2: Forward chaining
+Phase 2: Definite forward chaining (reason/definite.rs)
   while worklist not empty:
     ├── Pop literal
     ├── Find rules with literal in body
     ├── Decrement body counters
     └── If counter = 0:
         ├── Strict → add +D, +d
-        ├── Defeasible → check blocking, add +d
+        ├── Defeasible → (handled in phase 3)
         └── Defeater → (no conclusion)
 
-Phase 3: Negative conclusions
+Phase 3: Defeasible forward chaining (reason/defeasible.rs)
+  for defeasible rules with all body literals proven:
+    ├── Check ambiguity blocking (complement, team defeat)
+    ├── Check superiority relations
+    └── If unblocked → add +d
+
+Phase 4: Negative conclusions
   for each literal:
     ├── If not in definite_proven → -D
     └── If not in defeasible_proven → -d
 ```
+
+Uses `LitId` (4-byte Copy type) and BitSet for O(1) proven literal checks,
+eliminating heap allocations and hash computations in the hot reasoning loop.
 
 ## Memory Layout
 
@@ -225,19 +357,32 @@ worklist: VecDeque`LiteralId`
 
 ## Extension Points
 
+### Adding a Pipeline Stage
+
+1. Implement the `PipelineStage` trait
+2. Add the struct to `pipeline/` (new file or existing)
+3. Re-export from `pipeline/mod.rs`
+4. Insert into pipelines with `PipelineBuilder::stage()` or `stage_at()`
+
 ### Adding a New Rule Type
 
 1. Add variant to `RuleType` enum
 2. Update parser (spl.rs)
-3. Update reasoning logic (reason.rs)
+3. Update reasoning logic in `reason/`
 4. Add tests
 
 ### Adding a New Query Operator
 
-1. Add function to `query.rs`
-2. Implement the algorithm
+1. Implement the `QueryOperator` trait in a new file under `query/`
+2. Re-export from `query/mod.rs`
 3. Add to WASM bindings if needed
 4. Document in guides/queries.md
+
+### Adding a Reasoning Backend
+
+1. Implement the `Reasoner` trait
+2. Register in `select_reasoner()` for runtime dispatch
+3. Add tests
 
 ### Process Mining Pipeline
 
@@ -256,11 +401,14 @@ The mining module provides:
 
 ```
 tests/
-├── Unit tests (per module)
-│   ├── reason.rs - 40+ tests
+├── Unit tests (per module, inline #[cfg(test)])
+│   ├── reason/ - phase-isolated tests
+│   ├── pipeline/ - per-stage tests
+│   ├── query/ - operator tests
 │   └── ...
-├── Integration tests
-│   └── End-to-end CLI/API behavior
+├── Integration tests (crates/spindle-core/tests/)
+│   ├── difftest.rs - proptest random theory gen (500 cases)
+│   └── ...
 ├── Parser tests
 │   └── spl.rs
 └── WASM tests
@@ -272,7 +420,8 @@ tests/
 1. **Basic reasoning**: facts, rules, chains
 2. **Conflict resolution**: superiority, defeaters
 3. **Edge cases**: cycles, empty, self-reference
-4. **Stress tests**: long chains, wide theories
+4. **Pipeline stages**: validation, grounding, temporal filtering
+5. **Differential testing**: proptest-generated random theories
 
 ## Performance Characteristics
 

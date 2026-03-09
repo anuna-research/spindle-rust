@@ -29,7 +29,7 @@ let result = what_if(&theory, hypotheticals, &goal);
 ### Example
 
 Original theory:
-```lisp
+```spl
 (given bird)
 (normally r1 bird flies)
 (normally r2 wounded (not flies))
@@ -78,7 +78,7 @@ let explanation = why_not(&theory, &literal);
 ### Example
 
 Theory:
-```lisp
+```spl
 (given bird)
 (given penguin)
 (normally r1 bird flies)
@@ -151,7 +151,7 @@ let result = abduce(&theory, &goal, max_solutions);
 ### Example
 
 Theory:
-```lisp
+```spl
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
 (normally r3 (and bird healthy) strong-flyer)
@@ -185,7 +185,7 @@ struct AbductionSolution {
 
 Abduction considers superiority:
 
-```lisp
+```spl
 (given penguin)
 (normally r1 bird flies)
 (normally r2 penguin (not flies))

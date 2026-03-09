@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-78568b9e.js"></script>
+        <script src="toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,22 +184,37 @@
 <p><strong>Spindle-Rust</strong> is a Rust implementation of the SPINdle defeasible logic reasoning engine.</p>
 <p>This project is part of the SPINdle family:</p>
 <ul>
-<li><strong><a href="http://spindle.data61.csiro.au/">SPINdle</a></strong> - The original Java implementation by NICTA (now Data61/CSIRO)</li>
-<li><strong><a href="https://codeberg.org/anuna/spindle-racket">spindle-racket</a></strong> - A comprehensive Racket port with trust-weighted reasoning</li>
+<li><strong><a href="https://research.csiro.au/bpli/tools/spindle/">SPINdle</a></strong> (<a href="https://sourceforge.net/projects/spindlereasoner/">source</a>) - The original Java implementation by NICTA (now Data61/CSIRO)</li>
+<li><strong><a href="https://codeberg.org/anuna/spindle-racket">spindle-racket</a></strong> - A comprehensive Racket port of SPINdle Java v2.2.4, with trust-weighted reasoning</li>
 <li><strong>spindle-rust</strong> - This Rust port, based on spindle-racket v1.7.0</li>
 </ul>
 <h2 id="what-is-defeasible-logic"><a class="header" href="#what-is-defeasible-logic">What is Defeasible Logic?</a></h2>
-<p>Defeasible logic is a <strong>non-monotonic reasoning</strong> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.</p>
-<pre><code class="language-lisp">; The classic "Tweety" example
-(given bird)
-(given penguin)
+<p>Defeasible logic is a <a href="https://www.youtube.com/watch?v=Ozipf13jRr4&amp;t=1066"><strong>non-monotonic reasoning</strong></a> system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is <strong>tractable</strong> — for propositional theories, inference runs in linear time relative to the size of the theory (Maher, 2001). With first-order variables, a grounding phase instantiates rules against known facts before reasoning begins; the grounding step can be exponential in rule body size (as with Datalog), but reasoning over the ground theory remains polynomial. This makes defeasible logic practical where other non-monotonic formalisms are intractable.</p>
+<pre><code class="language-spl">; The classic "Tweety" example
+(given bird tweety)              ; Tweety is a bird
+(given penguin tweety)           ; Tweety is a penguin
 
-(normally r1 bird flies)           ; Birds typically fly
-(normally r2 penguin (not flies))  ; Penguins don't fly
+(normally birds-fly              ; Birds typically fly
+  (bird ?x) (flies ?x))
 
-(prefer r2 r1)                     ; Penguin rule beats bird rule
+(normally penguins-dont-fly      ; Penguins don't fly
+  (penguin ?x) (not (flies ?x)))
+
+(prefer penguins-dont-fly birds-fly)  ; Specificity: more specific rule prevails
 </code></pre>
-<p><strong>Result:</strong> <code>-flies</code> is provable (Tweety doesn’t fly).</p>
+<p><strong>Result:</strong></p>
+<pre><code>Conclusions:
+
+  +D penguin(tweety)
+  +D bird(tweety)
+  +d penguin(tweety)
+  +d bird(tweety)
+  +d ~flies(tweety)
+  -D flies(tweety)
+  -d flies(tweety)
+  -D ~flies(tweety)
+</code></pre>
+<p>Tweety is defeasibly proven not to fly (<code>+d ~flies(tweety)</code>), because <code>penguins-dont-fly</code> defeats <code>birds-fly</code>.</p>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <ul>
 <li><strong>Four rule types:</strong> facts, strict rules, defeasible rules, and defeaters</li>
@@ -257,7 +272,7 @@ spindle-parser = { path = "crates/spindle-parser" }
 </div>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
-<li><a href="http://spindle.data61.csiro.au/">SPINdle Project</a> - Original Java implementation by NICTA/Data61</li>
+<li><a href="https://research.csiro.au/bpli/tools/spindle/">SPINdle Project</a> - Original Java implementation by NICTA/Data61</li>
 <li>Nute, D. (1994). “Defeasible Logic” - Foundational paper on defeasible logic</li>
 <li><a href="https://codeberg.org/anuna/spindle-racket">spindle-racket</a> - Racket implementation this port is based on</li>
 </ul>
@@ -309,6 +324,7 @@ spindle-parser = { path = "crates/spindle-parser" }
         <script src="book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="src/spl-highlight-4621e734.js"></script>
 
 
 

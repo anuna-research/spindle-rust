@@ -25,7 +25,7 @@ time spindle reason theory.spl > /dev/null
 
 Larger bodies = more matching work:
 
-```lisp
+```spl
 ; Slower: 5-way join
 (normally r1 (and a b c d e) result)
 
@@ -38,7 +38,7 @@ Larger bodies = more matching work:
 
 ### Use Specific Predicates
 
-```lisp
+```spl
 ; Slower: matches all 'thing' facts
 (normally r1 (thing ?x) (processed ?x))
 
@@ -50,7 +50,7 @@ Larger bodies = more matching work:
 
 Variables can cause combinatorial explosion:
 
-```lisp
+```spl
 ; If there are 100 'node' facts, this creates 10,000 ground rules
 (normally r1 (and (node ?x) (node ?y)) (pair ?x ?y))
 
@@ -109,7 +109,7 @@ let indexed = IndexedTheory::build(theory);
 
 Fewer conflicts = faster resolution:
 
-```lisp
+```spl
 ; Many potential conflicts
 (normally r1 a result)
 (normally r2 b ~result)
@@ -130,7 +130,7 @@ Fewer conflicts = faster resolution:
 
 Unresolved conflicts cause ambiguity propagation:
 
-```lisp
+```spl
 ; Bad: no superiority, causes ambiguity checks
 (normally r1 a q)
 (normally r2 b ~q)

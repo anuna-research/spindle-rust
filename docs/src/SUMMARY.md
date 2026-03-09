@@ -29,6 +29,7 @@
 - [Process Mining](guides/mining.md)
 - [Performance Tuning](guides/performance.md)
 - [Troubleshooting](guides/troubleshooting.md)
+- [Changelog](guides/changelog.md)
 
 # Integration
 

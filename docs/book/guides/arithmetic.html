@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>CLI Reference - Spindle-Rust</title>
+        <title>Arithmetic Expressions - Spindle-Rust</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://codeberg.org/anuna/spindle-rust" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/reference/cli.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://codeberg.org/anuna/spindle-rust/_edit/main/docs/src/guides/arithmetic.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,355 +180,237 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
-<p>The <code>spindle</code> command-line tool for reasoning about defeasible logic theories.</p>
-<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
-<pre><code class="language-bash">cargo install --path crates/spindle-cli
-</code></pre>
-<h2 id="synopsis"><a class="header" href="#synopsis">Synopsis</a></h2>
-<pre><code class="language-bash">spindle &lt;COMMAND&gt; [OPTIONS]
-spindle reason [OPTIONS] [FILE]
-spindle query &lt;LITERAL&gt; [FILE] [OPTIONS]
-spindle explain &lt;LITERAL&gt; [FILE] [OPTIONS]
-spindle why-not &lt;LITERAL&gt; [FILE] [OPTIONS]
-spindle requires &lt;LITERAL&gt; [FILE] [OPTIONS]
-spindle capabilities [OPTIONS]
-spindle explain-code &lt;CODE&gt;
-</code></pre>
-<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
-<h3 id="reason"><a class="header" href="#reason">reason</a></h3>
-<p>Perform defeasible reasoning on a theory.</p>
-<pre><code class="language-bash">spindle reason examples/penguin.spl
-</code></pre>
-<h4 id="--v2"><a class="header" href="#--v2"><code>--v2</code></a></h4>
-<p>Select JSON schema version v2 (<code>spindle.reason.v2</code>) for the JSON output envelope.
-The v2 schema includes typed term arguments in the <code>literal_struct</code> fields, giving
-downstream consumers richer structure than the v1 flat-string representation.</p>
-<pre><code class="language-bash">spindle reason examples/penguin.spl --json --v2
-</code></pre>
-<p>Without <code>--v2</code>, the default schema is <code>spindle.reason.v1</code>.</p>
-<h4 id="--trust"><a class="header" href="#--trust"><code>--trust</code></a></h4>
-<p>Include trust-weight annotations on each conclusion. When enabled, each conclusion
-carries a <code>trust_degree</code> (0.0–1.0) and optional <code>trust_sources</code> list.</p>
-<pre><code class="language-bash">spindle reason examples/penguin.spl --json --trust
-</code></pre>
-<h3 id="validate"><a class="header" href="#validate">validate</a></h3>
-<p>Check syntax without reasoning.</p>
-<pre><code class="language-bash">spindle validate examples/penguin.spl
-spindle --json validate --stdin &lt; examples/penguin.spl
-</code></pre>
-<p>Output on success:</p>
-<pre><code>Valid theory file
-</code></pre>
-<p>With <code>--json</code> success output:</p>
-<pre><code class="language-json">{
-  "valid": true,
-  "diagnostics": []
-}
-</code></pre>
-<p>Output on error:</p>
-<pre><code>Error at line 5: could not parse: invalid =&gt; syntax
-</code></pre>
-<h3 id="stats"><a class="header" href="#stats">stats</a></h3>
-<p>Show theory statistics.</p>
-<pre><code class="language-bash">spindle stats examples/penguin.spl
-spindle --json stats --stdin &lt; examples/penguin.spl
-</code></pre>
-<p>Output:</p>
-<pre><code>Theory Statistics:
-  Facts:       2
-  Strict:      1
-  Defeasible:  4
-  Defeaters:   1
-  Superiority: 1
-  Total rules: 8
-</code></pre>
-<p>With <code>--json</code> success output:</p>
-<pre><code class="language-json">{
-  "stats": {
-    "total_rules": 8,
-    "facts": 2,
-    "strict": 1,
-    "defeasible": 4,
-    "defeaters": 1,
-    "superiorities": 1
-  },
-  "diagnostics": []
-}
-</code></pre>
-<h3 id="query"><a class="header" href="#query">query</a></h3>
-<p>Query if a literal holds in the theory.</p>
-<pre><code class="language-bash">spindle query flies examples/penguin.spl
-spindle query "~flies" examples/penguin.spl
-spindle query "(not flies)" examples/penguin.spl
-spindle query flies examples/penguin.spl --json
-</code></pre>
-<p>The literal argument supports multiple formats: <code>p</code>, <code>~p</code>, <code>(not p)</code>, or complex SPL expressions.</p>
-<p>Returns a <code>QueryStatus</code>:</p>
+                        <h1 id="arithmetic-expressions"><a class="header" href="#arithmetic-expressions">Arithmetic Expressions</a></h1>
+<p>Spindle supports arithmetic expressions in rule bodies for numeric computation, variable binding, and comparison guards.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Arithmetic adds three capabilities to SPL rules:</p>
+<ol>
+<li><strong>Expressions</strong> — compute numeric values from operators and variables</li>
+<li><strong>Bind constraints</strong> — assign computed results to new variables</li>
+<li><strong>Comparison guards</strong> — filter substitutions based on numeric conditions</li>
+</ol>
+<p>All arithmetic is restricted to rule bodies. Arithmetic cannot appear in facts, rule heads, or as standalone statements.</p>
+<h2 id="numeric-types"><a class="header" href="#numeric-types">Numeric Types</a></h2>
+<p>Spindle has three numeric types with automatic promotion:</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Status</th><th>Meaning</th></tr>
+<tr><th>Type</th><th>Examples</th><th>Precision</th></tr>
 </thead>
 <tbody>
-<tr><td>Provable</td><td>The literal is defeasibly provable</td></tr>
-<tr><td>Refuted</td><td>The negation of the literal is provable</td></tr>
-<tr><td>Unknown</td><td>Neither the literal nor its negation is provable</td></tr>
+<tr><td>Integer</td><td><code>42</code>, <code>-7</code>, <code>0</code></td><td>Exact (64-bit signed)</td></tr>
+<tr><td>Decimal</td><td><code>3.14</code>, <code>0.001</code></td><td>Exact (up to 28-29 significant digits)</td></tr>
+<tr><td>Float</td><td><code>1.5e2</code>, <code>1e-3</code></td><td>Approximate (IEEE 754 double)</td></tr>
 </tbody>
 </table>
 </div>
-<p>Output:</p>
-<pre><code>QueryStatus: Provable
+<h3 id="when-each-type-is-used"><a class="header" href="#when-each-type-is-used">When Each Type Is Used</a></h3>
+<p>The parser chooses the numeric type based on how you write the literal:</p>
+<ul>
+<li><strong>Integer</strong>: No decimal point, no exponent. <code>42</code>, <code>-7</code>, <code>0</code>.</li>
+<li><strong>Decimal</strong>: Contains a decimal point but no exponent (<code>e</code>/<code>E</code>). <code>3.14</code>, <code>0.001</code>, <code>-0.5</code>.</li>
+<li><strong>Float</strong>: Contains an exponent (<code>e</code> or <code>E</code>). <code>1.5e2</code> (= 150.0), <code>1e-3</code> (= 0.001), <code>2.0E10</code>.</li>
+</ul>
+<p>Decimal is the default for numbers with a decimal point because it gives exact representation. This matters for financial calculations and precise comparisons: <code>0.1 + 0.2</code> equals exactly <code>0.3</code> in Decimal, but not in floating point. Use scientific notation only when you specifically need IEEE 754 semantics or very large/small magnitudes.</p>
+<h3 id="promotion-rules"><a class="header" href="#promotion-rules">Promotion Rules</a></h3>
+<p>When mixing types in an operation, values are promoted along the chain:</p>
+<pre><code>Integer → Decimal → Float
 </code></pre>
-<p>With <code>--json</code>:</p>
-<pre><code class="language-json">{"literal":"flies","status":"Refuted"}
+<ul>
+<li>Integer + Integer = Integer</li>
+<li>Integer + Decimal = Decimal</li>
+<li>Anything + Float = Float</li>
+</ul>
+<p>Once a Float enters a computation, the entire result is Float. Keep this in mind if exact precision matters to your use case.</p>
+<h3 id="cross-type-matching"><a class="header" href="#cross-type-matching">Cross-Type Matching</a></h3>
+<p>During grounding, numeric values match across types when equal:</p>
+<pre><code class="language-spl">(given (limit 100))          ; Integer
+(given (score alice 100.0))  ; Decimal
+
+; ?s (Decimal 100.0) matches ?limit (Integer 100) in the comparison
+(normally r1
+  (and (score ?name ?s) (limit ?limit) (&gt;= ?s ?limit))
+  (at-limit ?name))
 </code></pre>
-<h3 id="explain"><a class="header" href="#explain">explain</a></h3>
-<p>Show the derivation proof tree for why a literal holds.</p>
-<pre><code class="language-bash">spindle explain "-flies" examples/penguin.spl
-spindle explain "-flies" examples/penguin.spl --json
+<h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
+<h3 id="n-ary-operators"><a class="header" href="#n-ary-operators">N-ary Operators</a></h3>
+<p>These accept two or more arguments:</p>
+<pre><code class="language-spl">(+ 1 2 3)       ; =&gt; 6
+(- 10 3 2)      ; =&gt; 5  (left fold: (10-3)-2)
+(* 2 3 4)       ; =&gt; 24
+(/ 100 5 2)     ; =&gt; 10 (left fold: (100/5)/2)
+(min 5 3 8 1)   ; =&gt; 1
+(max 5 3 8 1)   ; =&gt; 8
 </code></pre>
-<p>Shows the proof tree detailing how the reasoning engine derived the conclusion.</p>
-<p>Output:</p>
-<pre><code>Explanation for -flies:
-  -flies ← [defeasible] r3: penguin -&gt; -flies
-    penguin ← [fact]
-  Blocked alternatives:
-    r1: bird -&gt; flies (defeated by r3 via superiority)
-  Conflict resolutions:
-    r3 &gt; r1 (superiority)
+<p>Subtraction and division use <strong>left fold</strong> semantics: <code>(- a b c)</code> = <code>((a - b) - c)</code>.</p>
+<h3 id="binary-operators"><a class="header" href="#binary-operators">Binary Operators</a></h3>
+<p>These require exactly two arguments:</p>
+<pre><code class="language-spl">(div 7 2)    ; =&gt; 3   (integer division, floor toward -inf)
+(rem 7 2)    ; =&gt; 1   (remainder)
+(** 2 10)    ; =&gt; 1024 (exponentiation)
 </code></pre>
-<p>With <code>--json</code>, the output is a JSON or JSON-LD structure containing an <code>Explanation</code> with proof nodes, blocked alternatives, and conflict resolutions.</p>
-<h3 id="why-not"><a class="header" href="#why-not">why-not</a></h3>
-<p>Explain why a literal is NOT provable.</p>
-<pre><code class="language-bash">spindle why-not flies examples/penguin.spl
-spindle why-not flies examples/penguin.spl --json
+<p><code>div</code> and <code>rem</code> require integer operands.</p>
+<h3 id="unary-operator"><a class="header" href="#unary-operator">Unary Operator</a></h3>
+<pre><code class="language-spl">(abs -5)            ; =&gt; 5
+(abs (- 3 10))      ; =&gt; 7
 </code></pre>
-<p>Lists the blocking rules and the reasons they prevent the literal from being derived. Useful for debugging unexpected results. When the literal is provable, the JSON output includes <code>is_provable: true</code> and <code>blocked_by</code> will be empty.</p>
-<p>Output:</p>
-<pre><code>Why not flies?
-  Rule r1: bird -&gt; flies
-    Status: Defeated
-    Defeated by: r3 (penguin -&gt; -flies) via superiority r3 &gt; r1
+<h3 id="nesting"><a class="header" href="#nesting">Nesting</a></h3>
+<p>Expressions can be arbitrarily nested:</p>
+<pre><code class="language-spl">(+ (* ?base ?rate) (abs (- ?adjustment ?threshold)))
 </code></pre>
-<p>Possible blocking reasons:</p>
+<h2 id="bind-constraints"><a class="header" href="#bind-constraints">Bind Constraints</a></h2>
+<p><code>bind</code> assigns the result of an expression to a variable:</p>
+<pre><code class="language-spl">(bind ?total (+ ?price ?tax))
+</code></pre>
+<p>The variable must be unbound (not previously assigned in this rule). If it is already bound, the bind succeeds only if the existing value equals the computed result.</p>
+<h3 id="example-computing-derived-values"><a class="header" href="#example-computing-derived-values">Example: Computing Derived Values</a></h3>
+<pre><code class="language-spl">(given (item widget 25))
+(given (item gadget 10))
+(given (discount 0.15))
+
+(normally calc-price
+  (and (item ?name ?price) (discount ?rate)
+       (bind ?savings (* ?price ?rate))
+       (bind ?final (- ?price ?savings)))
+  (final-price ?name ?final))
+</code></pre>
+<p>Results: <code>(final-price widget 21.25)</code>, <code>(final-price gadget 8.50)</code></p>
+<h2 id="comparison-guards"><a class="header" href="#comparison-guards">Comparison Guards</a></h2>
+<p>Comparisons filter substitutions:</p>
+<pre><code class="language-spl">(&gt; ?age 18)
+(&lt;= ?score 100)
+(= ?x ?y)
+(!= ?status 0)
+</code></pre>
+<p>Available operators: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></p>
+<h3 id="example-filtering-by-condition"><a class="header" href="#example-filtering-by-condition">Example: Filtering by Condition</a></h3>
+<pre><code class="language-spl">(given (employee alice 95000))
+(given (employee bob 45000))
+(given (employee carol 120000))
+
+(normally high-earner
+  (and (employee ?name ?salary) (&gt; ?salary 90000))
+  (senior-band ?name))
+</code></pre>
+<p>Only <code>alice</code> and <code>carol</code> satisfy <code>(&gt; ?salary 90000)</code>.</p>
+<h3 id="comparisons-with-expressions"><a class="header" href="#comparisons-with-expressions">Comparisons with Expressions</a></h3>
+<p>Both sides can be expressions:</p>
+<pre><code class="language-spl">(normally r1
+  (and (budget ?b) (cost ?item ?c) (tax-rate ?r)
+       (&gt; ?b (+ ?c (* ?c ?r))))
+  (affordable ?item))
+</code></pre>
+<h2 id="evaluation-order"><a class="header" href="#evaluation-order">Evaluation Order</a></h2>
+<p>Body elements are evaluated <strong>left to right</strong>. Variables must be bound by a preceding literal or bind before they can be used in arithmetic:</p>
+<pre><code class="language-spl">; CORRECT: ?price is bound before bind uses it
+(normally r1
+  (and (item ?name ?price)
+       (bind ?discounted (* ?price 0.9)))
+  (sale-price ?name ?discounted))
+</code></pre>
+<p>If an arithmetic expression references an unbound variable, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
+<h2 id="arithmetic-in-predicate-arguments"><a class="header" href="#arithmetic-in-predicate-arguments">Arithmetic in Predicate Arguments</a></h2>
+<p>Arithmetic expressions can appear directly as predicate arguments in the body:</p>
+<pre><code class="language-spl">(normally r1
+  (and (base ?x ?b) (offset ?x ?o))
+  (result ?x (+ ?b ?o)))
+</code></pre>
+<p>The expression <code>(+ ?b ?o)</code> is evaluated during grounding and the result becomes a concrete term in the head literal.</p>
+<h2 id="restrictions"><a class="header" href="#restrictions">Restrictions</a></h2>
+<p>Spindle enforces several restrictions on where arithmetic can appear. Each is checked at parse time and produces a clear error message.</p>
+<h3 id="no-arithmetic-in-heads-or-facts-req-009"><a class="header" href="#no-arithmetic-in-heads-or-facts-req-009">No Arithmetic in Heads or Facts (REQ-009)</a></h3>
+<p>Arithmetic constraints (<code>bind</code>, comparisons) are for filtering and computing in rule bodies. They cannot appear as conclusions.</p>
+<pre><code class="language-spl">; INVALID — bind in head position
+(normally r1 (price ?p) (bind ?total (* ?p 1.1)))
+
+; INVALID — bind as a fact
+(given (bind ?x 42))
+
+; INVALID — comparison in head position
+(normally r1 bird (&gt; 1 0))
+</code></pre>
+<p><strong>Error message:</strong></p>
+<pre><code>Arithmetic predicate 'bind' cannot appear in rule head or fact position (REQ-009)
+</code></pre>
+<p>The same message appears for comparison operators (<code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>) used as head literals.</p>
+<h3 id="no-negated-arithmetic-req-011"><a class="header" href="#no-negated-arithmetic-req-011">No Negated Arithmetic (REQ-011)</a></h3>
+<p>Arithmetic constraints cannot be wrapped in <code>not</code>. This avoids ambiguity about what “not greater than” means in a defeasible logic context.</p>
+<pre><code class="language-spl">; INVALID — cannot negate a comparison
+(normally r1 (and (val ?x) (not (&gt; ?x 100))) (low ?x))
+
+; INVALID — cannot negate bind
+(normally r1 (and bird (not (bind ?x 10))) flies)
+</code></pre>
+<p><strong>Error message:</strong></p>
+<pre><code>Arithmetic predicate '&gt;' cannot be negated (REQ-011). Use the positive form in the rule body instead.
+</code></pre>
+<p>Use the complementary comparison instead:</p>
+<pre><code class="language-spl">; CORRECT — use &lt;= instead of (not &gt;)
+(normally r1 (and (val ?x) (&lt;= ?x 100)) (low ?x))
+</code></pre>
+<h3 id="no-temporal-variables-in-arithmetic-req-006"><a class="header" href="#no-temporal-variables-in-arithmetic-req-006">No Temporal Variables in Arithmetic (REQ-006)</a></h3>
+<p>Variables bound by <code>during</code> expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If a temporal variable appears in an arithmetic expression, the substitution is silently discarded (the rule does not fire for that ground instance).</p>
+<pre><code class="language-spl">; The rule below will never produce "shifted" because ?T is temporal
+(given (during (event) 100 200))
+(normally r1
+  (and (during (event) ?T ?U) (bind ?next (+ ?T 1)))
+  (shifted ?next))
+</code></pre>
+<h3 id="reserved-keywords-req-008"><a class="header" href="#reserved-keywords-req-008">Reserved Keywords (REQ-008)</a></h3>
+<p>Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels. This prevents confusing programs where <code>+</code> or <code>bind</code> might look like user-defined predicates.</p>
+<pre><code>+  -  *  /  div  rem  abs  min  max  **
+bind  =  !=  &lt;  &gt;  &lt;=  &gt;=
+</code></pre>
+<p>The following names are also reserved for future use: <code>sum</code>, <code>count</code>, <code>avg</code>, <code>round</code>, <code>floor</code>, <code>ceil</code>.</p>
+<p><strong>Error message:</strong></p>
+<pre><code>Reserved keyword 'bind' cannot be used as a predicate name (REQ-008)
+</code></pre>
+<p>This also applies to tilde-negated forms (e.g., <code>~&gt;</code> is rejected because <code>&gt;</code> is reserved) and to rule labels in <code>prefer</code> declarations.</p>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="runtime-errors-during-grounding"><a class="header" href="#runtime-errors-during-grounding">Runtime Errors (During Grounding)</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Reason</th><th>Meaning</th></tr>
+<tr><th>Error</th><th>Cause</th></tr>
 </thead>
 <tbody>
-<tr><td>MissingPremise</td><td>A required premise of the rule is not provable</td></tr>
-<tr><td>Defeated</td><td>The rule is defeated by a stronger or competing rule</td></tr>
-<tr><td>Contradicted</td><td>The conclusion conflicts with a strictly proved literal</td></tr>
+<tr><td>Division by zero</td><td><code>(/ ?x 0)</code> or <code>(div ?x 0)</code></td></tr>
+<tr><td>Non-integer operand</td><td><code>(div 3.5 2)</code> or <code>(rem 1.5 1)</code></td></tr>
+<tr><td>Negative base with fractional exponent</td><td><code>(** -2 0.5)</code></td></tr>
+<tr><td>Non-finite result</td><td>Overflow producing infinity or NaN</td></tr>
+<tr><td>Unbound variable</td><td>Variable not yet assigned when expression is evaluated</td></tr>
+<tr><td>Temporal variable in arithmetic</td><td><code>(+ ?T 1)</code> where <code>?T</code> is from a <code>during</code></td></tr>
 </tbody>
 </table>
 </div>
-<h3 id="requires"><a class="header" href="#requires">requires</a></h3>
-<p>Abduction: find the minimal sets of facts needed to derive a literal.</p>
-<pre><code class="language-bash">spindle requires flies examples/penguin.spl
-spindle requires flies examples/penguin.spl --max 5
-spindle requires flies examples/penguin.spl --json
-</code></pre>
-<p>The <code>--max</code> option limits the number of solutions returned (defaults to 10).</p>
-<p>As of the v2 contract (IMPL-011), <code>requires</code> <strong>verifies all candidate solutions
-by default</strong>. Each candidate set of facts is fed back through the reasoning
-engine to confirm it actually makes the goal provable. The JSON output includes
-<code>verification_mode: "verified"</code> and a <code>verification</code> object with
-<code>raw_examined</code>, <code>accepted</code>, and <code>rejected</code> counts. Only accepted solutions
-appear in the <code>solutions</code> array. The JSON envelope uses schema
-<code>spindle.requires.v2</code>.</p>
-<p>Output:</p>
-<pre><code>Verified requirements for flies:
-  1. Add facts: {bird, -penguin}
-  2. Add facts: {flies}
-</code></pre>
-<p>Each result is a minimal, verified set of assumptions that, if added to the theory, would make the literal provable.</p>
-<h3 id="capabilities"><a class="header" href="#capabilities">capabilities</a></h3>
-<p>Show the commands, features, and JSON schema versions supported by this build
-of Spindle. Useful for tooling that needs to discover available functionality
-at runtime.</p>
-<pre><code class="language-bash">spindle capabilities
-spindle capabilities --json
-</code></pre>
-<p>Output:</p>
-<pre><code>Spindle Capabilities:
-
-Commands: reason, query, requires, explain, why-not
-
-Features:
-  --stdin: yes
-  --at: yes
-  --json: yes
-  Trust overlay: no
-  Given flags: no
-
-Schema versions:
-  reason: spindle.reason.v1
-  query: spindle.query.v1
-  requires: spindle.requires.v2
-  explain: spindle.explain.v1
-  why-not: spindle.why_not.v1
-</code></pre>
-<p>With <code>--json</code>, the output is a JSON object with schema <code>spindle.capabilities.v1</code>
-containing <code>commands</code>, <code>features</code>, and <code>schemas</code> fields.</p>
-<h3 id="explain-code"><a class="header" href="#explain-code">explain-code</a></h3>
-<p>Look up the meaning and common causes of a stable error code.</p>
-<pre><code class="language-bash">spindle explain-code RULE_NOT_FOUND
-spindle explain-code SPL_PARSE_ERROR
-</code></pre>
-<p>This command does not accept <code>--json</code>; output is always human-readable text.
-Use it to get guidance when a JSON error envelope contains an unfamiliar error
-code.</p>
-<h2 id="json-envelope-schema-versions"><a class="header" href="#json-envelope-schema-versions">JSON Envelope Schema Versions</a></h2>
-<p>Every <code>--json</code> response includes a <code>schema_version</code> field identifying the
-envelope format. The following schema versions are defined:</p>
+<p>When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance. No error is raised to the user; the rule is silently skipped for that particular combination of variable bindings.</p>
+<h3 id="parse-time-errors"><a class="header" href="#parse-time-errors">Parse-Time Errors</a></h3>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Schema</th><th>Command</th><th>Description</th></tr>
+<tr><th>Error</th><th>Cause</th><th>Example</th></tr>
 </thead>
 <tbody>
-<tr><td><code>spindle.reason.v1</code></td><td><code>reason</code></td><td>Default reason output with flat literal strings</td></tr>
-<tr><td><code>spindle.reason.v2</code></td><td><code>reason --v2</code></td><td>Reason output with typed term arguments</td></tr>
-<tr><td><code>spindle.query.v1</code></td><td><code>query</code></td><td>Query result with status</td></tr>
-<tr><td><code>spindle.explain.v1</code></td><td><code>explain</code></td><td>Proof tree with blocked alternatives</td></tr>
-<tr><td><code>spindle.why_not.v1</code></td><td><code>why-not</code></td><td>Blocking-reason analysis</td></tr>
-<tr><td><code>spindle.requires.v2</code></td><td><code>requires</code></td><td>Verified abduction solutions (v2 contract)</td></tr>
-<tr><td><code>spindle.capabilities.v1</code></td><td><code>capabilities</code></td><td>Feature and schema discovery</td></tr>
+<tr><td>Arithmetic in head (REQ-009)</td><td><code>bind</code> or comparison used as a conclusion</td><td><code>(normally r1 p (bind ?x 1))</code></td></tr>
+<tr><td>Negated arithmetic (REQ-011)</td><td><code>not</code> wrapping <code>bind</code> or comparison</td><td><code>(not (&gt; ?x 5))</code></td></tr>
+<tr><td>Reserved keyword (REQ-008)</td><td>Operator used as predicate or label</td><td><code>(given bind)</code></td></tr>
+<tr><td>Unknown operator</td><td>Unrecognised operator name</td><td><code>(mod 5 3)</code></td></tr>
+<tr><td>Wrong arity</td><td>Too few or too many arguments</td><td><code>(div 1)</code>, <code>(abs 1 2)</code></td></tr>
+<tr><td>Invalid operand</td><td>Non-numeric, non-variable atom</td><td><code>(+ bird 1)</code></td></tr>
 </tbody>
 </table>
 </div>
-<h2 id="options"><a class="header" href="#options">Options</a></h2>
-<h3 id="--json"><a class="header" href="#--json"><code>--json</code></a></h3>
-<p>Output results in JSON format. Available for all commands, including <code>validate</code> and <code>stats</code>.
-When <code>--json</code> is present, success and failure paths are machine-readable JSON.</p>
-<pre><code class="language-bash">spindle reason examples/penguin.spl --json
-spindle query flies examples/penguin.spl --json
-spindle explain "-flies" examples/penguin.spl --json
-spindle --json validate --stdin &lt; examples/penguin.spl
-</code></pre>
-<p>Parse/usage failures also emit JSON envelopes when <code>--json</code> is present:</p>
-<pre><code class="language-bash">spindle --json
-</code></pre>
-<h3 id="--at-time"><a class="header" href="#--at-time"><code>--at &lt;TIME&gt;</code></a></h3>
-<p>Set the reference time for temporal (“as-of”) reasoning. The value must be an
-ISO 8601 / RFC 3339 timestamp.</p>
-<pre><code class="language-bash">spindle reason --at 2024-06-15T12:00:00Z examples/temporal.spl
-spindle query p --at 2024-06-15T12:00:00Z examples/temporal.spl
-</code></pre>
-<h3 id="--stdin"><a class="header" href="#--stdin"><code>--stdin</code></a></h3>
-<p>Read the theory from standard input instead of a file. Mutually exclusive with
-providing a file path.</p>
-<pre><code class="language-bash">cat examples/penguin.spl | spindle reason --stdin
-spindle --json validate --stdin &lt; examples/penguin.spl
-</code></pre>
-<h3 id="--positive"><a class="header" href="#--positive"><code>--positive</code></a></h3>
-<p>Show only positive conclusions (+D, +d). Applies to the <code>reason</code> command.</p>
-<pre><code class="language-bash">spindle reason --positive examples/penguin.spl
-</code></pre>
-<p>Output:</p>
-<pre><code>+D bird
-+D penguin
-+d bird
-+d penguin
-+d -flies
-</code></pre>
-<h3 id="--debug-errors"><a class="header" href="#--debug-errors"><code>--debug-errors</code></a></h3>
-<p>Show full error details including source chains and unredacted file paths.
-Useful for diagnosing unexpected failures.</p>
-<pre><code class="language-bash">spindle reason examples/penguin.spl --debug-errors
-</code></pre>
-<h2 id="file-format-detection"><a class="header" href="#file-format-detection">File Format Detection</a></h2>
-<p>The CLI auto-detects format by extension:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Extension</th><th>Format</th></tr>
-</thead>
-<tbody>
-<tr><td><code>.spl</code></td><td>SPL (Spindle Lisp)</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="exit-codes"><a class="header" href="#exit-codes">Exit Codes</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Code</th><th>Meaning</th></tr>
-</thead>
-<tbody>
-<tr><td>0</td><td>Success</td></tr>
-<tr><td>2</td><td>User input / parse / validation error</td></tr>
-<tr><td>3</td><td>Execution/internal reasoning error</td></tr>
-<tr><td>4</td><td>Resource/limit/timeout hit</td></tr>
-</tbody>
-</table>
-</div>
-<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
-<h3 id="basic-reasoning"><a class="header" href="#basic-reasoning">Basic Reasoning</a></h3>
-<pre><code class="language-bash"># Reason about a theory
-spindle reason penguin.spl
-</code></pre>
-<h3 id="querying-and-explaining"><a class="header" href="#querying-and-explaining">Querying and Explaining</a></h3>
-<pre><code class="language-bash"># Check if a literal holds
-spindle query flies penguin.spl
-
-# Get a proof tree for a derived conclusion
-spindle explain "-flies" penguin.spl
-
-# Debug why something is not provable
-spindle why-not flies penguin.spl
-
-# Find what facts would make a literal provable
-spindle requires flies penguin.spl --max 5
-
-# Get JSON output for scripting
-spindle query flies penguin.spl --json
-</code></pre>
-<h3 id="validate-before-reasoning"><a class="header" href="#validate-before-reasoning">Validate Before Reasoning</a></h3>
-<pre><code class="language-bash">spindle validate theory.spl &amp;&amp; spindle reason theory.spl
-</code></pre>
-<h3 id="compare-runs"><a class="header" href="#compare-runs">Compare Runs</a></h3>
-<pre><code class="language-bash"># Compare two revisions or theories
-spindle reason theory-a.spl &gt; run-a.txt
-spindle reason theory-b.spl &gt; run-b.txt
-diff run-a.txt run-b.txt
-</code></pre>
-<h3 id="scripting"><a class="header" href="#scripting">Scripting</a></h3>
-<pre><code class="language-bash">#!/bin/bash
-for file in theories/*.spl; do
-    echo "Processing $file..."
-    if spindle validate "$file"; then
-        spindle reason --positive "$file"
-    else
-        echo "Invalid: $file"
-    fi
-done
-</code></pre>
-<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Variable</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>SPINDLE_LOG</code></td><td>Set log level (error, warn, info, debug, trace)</td></tr>
-</tbody>
-</table>
-</div>
-<pre><code class="language-bash">SPINDLE_LOG=debug spindle reason theory.spl
-</code></pre>
+<p>Parse-time errors halt processing and report the line number and a description of the problem.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/spl.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guides/grounding.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../guides/algorithms.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guides/temporal.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -538,11 +420,11 @@ done
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/spl.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guides/grounding.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../guides/algorithms.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guides/temporal.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

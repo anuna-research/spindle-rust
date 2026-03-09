@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -244,11 +244,11 @@ const spindle = await setup();
 const spindle = new Spindle();
 
 spindle.parseSpl(`
-    f1: &gt;&gt; bird
-    f2: &gt;&gt; penguin
-    r1: bird =&gt; flies
-    r2: penguin =&gt; ~flies
-    r2 &gt; r1
+    (given bird)
+    (given penguin)
+    (normally r1 bird flies)
+    (normally r2 penguin (not flies))
+    (prefer r2 r1)
 `);
 
 const conclusions = spindle.reason();
@@ -279,12 +279,6 @@ spindle.addDefeater(["broken_wing"], "flies");
 </code></pre>
 <h3 id="parsing"><a class="header" href="#parsing">Parsing</a></h3>
 <pre><code class="language-typescript">// Parse SPL
-spindle.parseSpl(`
-    f1: &gt;&gt; bird
-    r1: bird =&gt; flies
-`);
-
-// Parse SPL
 spindle.parseSpl(`
     (given bird)
     (normally r1 bird flies)
@@ -381,15 +375,15 @@ async function reasonAboutPenguins() {
 
     // Build theory
     spindle.parseSpl(`
-        f1: &gt;&gt; bird
-        f2: &gt;&gt; penguin
+        (given bird)
+        (given penguin)
 
-        r1: bird =&gt; flies
-        r2: bird =&gt; has_feathers
-        r3: penguin =&gt; ~flies
-        r4: penguin =&gt; swims
+        (normally r1 bird flies)
+        (normally r2 bird has-feathers)
+        (normally r3 penguin (not flies))
+        (normally r4 penguin swims)
 
-        r3 &gt; r1
+        (prefer r3 r1)
     `);
 
     // Reason
@@ -540,6 +534,7 @@ function ReasoningComponent() {
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

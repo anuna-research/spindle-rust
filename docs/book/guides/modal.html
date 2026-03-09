@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-d375d7c9.js";
+            window.path_to_searchindex_js = "../searchindex-57d33209.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-78568b9e.js"></script>
+        <script src="../toc-25a1a19c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,7 +193,7 @@
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Operator</th><th>SPL Syntax</th><th>SPL Syntax</th><th>Meaning</th></tr>
+<tr><th>Operator</th><th>Display</th><th>SPL Syntax</th><th>Meaning</th></tr>
 </thead>
 <tbody>
 <tr><td>Obligation</td><td><code>[O]</code></td><td><code>(must ...)</code></td><td>The proposition <strong>must</strong> hold</td></tr>
@@ -202,32 +202,15 @@
 </tbody>
 </table>
 </div>
-<h3 id="obligation-o"><a class="header" href="#obligation-o">Obligation (<code>[O]</code>)</a></h3>
-<p>An obligation states that something is required. If <code>[O]pay</code> is concluded, then there is an obligation to pay.</p>
-<h3 id="permission-p"><a class="header" href="#permission-p">Permission (<code>[P]</code>)</a></h3>
-<p>A permission states that something is allowed. If <code>[P]access</code> is concluded, then access is permitted.</p>
-<h3 id="forbidden-f"><a class="header" href="#forbidden-f">Forbidden (<code>[F]</code>)</a></h3>
-<p>A prohibition states that something is not allowed. If <code>[F]enter</code> is concluded, then entering is forbidden.</p>
+<h3 id="obligation-must"><a class="header" href="#obligation-must">Obligation (<code>must</code>)</a></h3>
+<p>An obligation states that something is required. If <code>(must pay)</code> is concluded, then there is an obligation to pay.</p>
+<h3 id="permission-may"><a class="header" href="#permission-may">Permission (<code>may</code>)</a></h3>
+<p>A permission states that something is allowed. If <code>(may access)</code> is concluded, then access is permitted.</p>
+<h3 id="forbidden-forbidden"><a class="header" href="#forbidden-forbidden">Forbidden (<code>forbidden</code>)</a></h3>
+<p>A prohibition states that something is not allowed. If <code>(forbidden enter)</code> is concluded, then entering is forbidden.</p>
 <h2 id="spl-syntax"><a class="header" href="#spl-syntax">SPL Syntax</a></h2>
-<p>In SPL, modal operators are written as square-bracketed prefixes on literals:</p>
-<pre><code class="language-lisp"># Modal facts
-f1: &gt;&gt; [O]pay
-f2: &gt;&gt; [P]access
-f3: &gt;&gt; [F]enter
-
-# Modal literals in rules
-r1: signed_contract =&gt; [O]pay
-r2: member =&gt; [P]access
-r3: unauthorized =&gt; [F]enter
-</code></pre>
-<p>Negated modal literals use a tilde or hyphen before the literal name, as with ordinary SPL literals:</p>
-<pre><code class="language-lisp"># Negated modal literals
-r4: exemption =&gt; -[O]pay
-r5: revoked =&gt; -[P]access
-</code></pre>
-<h2 id="spl-syntax-1"><a class="header" href="#spl-syntax-1">SPL Syntax</a></h2>
-<p>In SPL, modal operators use keyword wrappers:</p>
-<pre><code class="language-lisp">; Obligation: (must &lt;literal&gt;)
+<p>Modal operators use keyword wrappers:</p>
+<pre><code class="language-spl">; Obligation: (must &lt;literal&gt;)
 (given (must pay))
 (normally r1 signed-contract (must pay))
 
@@ -241,7 +224,7 @@ r5: revoked =&gt; -[P]access
 </code></pre>
 <h3 id="spl-negation"><a class="header" href="#spl-negation">SPL Negation</a></h3>
 <p>Negation of modal literals in SPL uses the <code>not</code> wrapper:</p>
-<pre><code class="language-lisp">; Negated obligation: not obligated to pay
+<pre><code class="language-spl">; Negated obligation: not obligated to pay
 (normally r4 exemption (not (must pay)))
 
 ; Negated permission: not permitted to access
@@ -252,28 +235,8 @@ r5: revoked =&gt; -[P]access
 </code></pre>
 <h2 id="using-modal-operators-in-rules"><a class="header" href="#using-modal-operators-in-rules">Using Modal Operators in Rules</a></h2>
 <p>Modal operators can appear in both the body and head of rules, in all rule types.</p>
-<h3 id="spl-examples"><a class="header" href="#spl-examples">SPL Examples</a></h3>
-<pre><code class="language-lisp"># If you signed a contract, you are obligated to pay
-r1: signed_contract =&gt; [O]pay
-
-# If you are obligated to pay and fail to pay, you are in violation
-r2: [O]pay, -paid =&gt; violation
-
-# Members may access resources
-r3: member =&gt; [P]access
-
-# Unauthorized users are forbidden from entering
-r4: unauthorized =&gt; [F]enter
-
-# An exemption defeats the obligation to pay
-r5: exemption =&gt; -[O]pay
-r5 &gt; r1
-
-# A defeater: pending review blocks the permission
-d1: pending_review ~&gt; [P]access
-</code></pre>
-<h3 id="spl-examples-1"><a class="header" href="#spl-examples-1">SPL Examples</a></h3>
-<pre><code class="language-lisp">; If you signed a contract, you are obligated to pay
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<pre><code class="language-spl">; If you signed a contract, you are obligated to pay
 (normally r1 signed-contract (must pay))
 
 ; If obligated to pay and haven't paid, violation
@@ -294,7 +257,7 @@ d1: pending_review ~&gt; [P]access
 </code></pre>
 <h3 id="combining-with-predicates-and-variables"><a class="header" href="#combining-with-predicates-and-variables">Combining with Predicates and Variables</a></h3>
 <p>In SPL, modal operators can be combined with predicates and variables:</p>
-<pre><code class="language-lisp">; Employees are obligated to report hours
+<pre><code class="language-spl">; Employees are obligated to report hours
 (given (employee alice))
 (given (employee bob))
 (normally r1 (employee ?x) (must (report-hours ?x)))
@@ -430,7 +393,7 @@ assert_eq!(format!("{}", forbidden_enter), "[F]enter(restricted_area)");
 </span>use spindle_core::prelude::*;
 use smallvec::smallvec;
 
-// r1: signed_contract =&gt; [O]pay
+// (normally r1 signed-contract (must pay))
 let body = smallvec![Literal::simple("signed_contract")];
 let head = smallvec![Literal::new(
     "pay",
@@ -441,7 +404,7 @@ let head = smallvec![Literal::new(
 )];
 let rule = Rule::new("r1", RuleType::Defeasible, body, head);
 
-// r2: [O]pay, ~paid =&gt; violation
+// (normally r2 (and (must pay) (not paid)) violation)
 let body = smallvec![
     Literal::new("pay", false, Mode::obligation(), Temporal::empty(), vec![]),
     Literal::negated("paid"),
@@ -475,7 +438,7 @@ set.insert(pay.literal_id());
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <h3 id="compliance-rules"><a class="header" href="#compliance-rules">Compliance Rules</a></h3>
 <p>Model regulatory compliance where obligations can be defeated by exceptions:</p>
-<pre><code class="language-lisp">; All companies must file annual reports
+<pre><code class="language-spl">; All companies must file annual reports
 (normally r1 company (must file-annual-report))
 
 ; Small companies are exempt from detailed reporting
@@ -491,7 +454,7 @@ set.insert(pay.literal_id());
 </code></pre>
 <h3 id="permission-systems"><a class="header" href="#permission-systems">Permission Systems</a></h3>
 <p>Model access control with defeasible permissions:</p>
-<pre><code class="language-lisp">; Employees may access the office
+<pre><code class="language-spl">; Employees may access the office
 (normally r1 employee (may access-office))
 
 ; Suspended employees lose access
@@ -506,7 +469,7 @@ set.insert(pay.literal_id());
 </code></pre>
 <h3 id="obligation-tracking"><a class="header" href="#obligation-tracking">Obligation Tracking</a></h3>
 <p>Track obligations through chains of reasoning:</p>
-<pre><code class="language-lisp">; Signing a contract creates an obligation to pay
+<pre><code class="language-spl">; Signing a contract creates an obligation to pay
 (normally r1 signed-contract (must pay))
 
 ; Obligation to pay and failure to pay results in violation
@@ -521,7 +484,7 @@ set.insert(pay.literal_id());
 </code></pre>
 <h3 id="mixed-normative-reasoning"><a class="header" href="#mixed-normative-reasoning">Mixed Normative Reasoning</a></h3>
 <p>Combine obligations, permissions, and prohibitions in a single theory:</p>
-<pre><code class="language-lisp">; Citizens must pay taxes
+<pre><code class="language-spl">; Citizens must pay taxes
 (normally r1 citizen (must pay-taxes))
 
 ; Citizens may vote
@@ -549,20 +512,20 @@ set.insert(pay.literal_id());
 <ol>
 <li>
 <p><strong>Be explicit about modal relationships</strong></p>
-<pre><code class="language-lisp">; If something is obligatory, it is also permitted
+<pre><code class="language-spl">; If something is obligatory, it is also permitted
 (always obligation-implies-permission (must ?x) (may ?x))
 </code></pre>
 </li>
 <li>
 <p><strong>Use superiority to handle conflicts between norms</strong></p>
-<pre><code class="language-lisp">(normally r1 employee (must attend-meeting))
+<pre><code class="language-spl">(normally r1 employee (must attend-meeting))
 (normally r2 (and employee on-leave) (not (must attend-meeting)))
 (prefer r2 r1)
 </code></pre>
 </li>
 <li>
 <p><strong>Separate normative and factual reasoning</strong></p>
-<pre><code class="language-lisp">; Factual rules
+<pre><code class="language-spl">; Factual rules
 (normally r1 penguin bird)
 (normally r2 bird flies)
 
@@ -572,7 +535,7 @@ set.insert(pay.literal_id());
 </li>
 <li>
 <p><strong>Document the intended interpretation of custom modes</strong></p>
-<pre><code class="language-lisp">; [K] = epistemic "known to be true"
+<pre><code class="language-spl">; [K] = epistemic "known to be true"
 ; Use metadata to document the mode's meaning
 (meta r1 (description "Agents know their own obligations"))
 (normally r1 (must ?x) (K ?x))
@@ -631,6 +594,7 @@ set.insert(pay.literal_id());
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../src/spl-highlight-4621e734.js"></script>
 
 
 

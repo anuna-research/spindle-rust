@@ -3,26 +3,44 @@
 **Spindle-Rust** is a Rust implementation of the SPINdle defeasible logic reasoning engine.
 
 This project is part of the SPINdle family:
-- **[SPINdle](http://spindle.data61.csiro.au/)** - The original Java implementation by NICTA (now Data61/CSIRO)
-- **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A comprehensive Racket port with trust-weighted reasoning
+- **[SPINdle](https://research.csiro.au/bpli/tools/spindle/)** ([source](https://sourceforge.net/projects/spindlereasoner/)) - The original Java implementation by NICTA (now Data61/CSIRO)
+- **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A comprehensive Racket port of SPINdle Java v2.2.4, with trust-weighted reasoning
 - **spindle-rust** - This Rust port, based on spindle-racket v1.7.0
 
 ## What is Defeasible Logic?
 
-Defeasible logic is a **non-monotonic reasoning** system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears.
+Defeasible logic is a [**non-monotonic reasoning**](https://www.youtube.com/watch?v=Ozipf13jRr4&t=1066) system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is **tractable** — for propositional theories, inference runs in linear time relative to the size of the theory (Maher, 2001). With first-order variables, a grounding phase instantiates rules against known facts before reasoning begins; the grounding step can be exponential in rule body size (as with Datalog), but reasoning over the ground theory remains polynomial. This makes defeasible logic practical where other non-monotonic formalisms are intractable.
 
-```lisp
+```spl
 ; The classic "Tweety" example
-(given bird)
-(given penguin)
+(given bird tweety)              ; Tweety is a bird
+(given penguin tweety)           ; Tweety is a penguin
 
-(normally r1 bird flies)           ; Birds typically fly
-(normally r2 penguin (not flies))  ; Penguins don't fly
+(normally birds-fly              ; Birds typically fly
+  (bird ?x) (flies ?x))
 
-(prefer r2 r1)                     ; Penguin rule beats bird rule
+(normally penguins-dont-fly      ; Penguins don't fly
+  (penguin ?x) (not (flies ?x)))
+
+(prefer penguins-dont-fly birds-fly)  ; Specificity: more specific rule prevails
 ```
 
-**Result:** `-flies` is provable (Tweety doesn't fly).
+**Result:**
+
+```
+Conclusions:
+
+  +D penguin(tweety)
+  +D bird(tweety)
+  +d penguin(tweety)
+  +d bird(tweety)
+  +d ~flies(tweety)
+  -D flies(tweety)
+  -d flies(tweety)
+  -D ~flies(tweety)
+```
+
+Tweety is defeasibly proven not to fly (`+d ~flies(tweety)`), because `penguins-dont-fly` defeats `birds-fly`.
 
 ## Features
 
@@ -84,7 +102,7 @@ spindle-parser = { path = "crates/spindle-parser" }
 
 ## References
 
-- [SPINdle Project](http://spindle.data61.csiro.au/) - Original Java implementation by NICTA/Data61
+- [SPINdle Project](https://research.csiro.au/bpli/tools/spindle/) - Original Java implementation by NICTA/Data61
 - Nute, D. (1994). "Defeasible Logic" - Foundational paper on defeasible logic
 - [spindle-racket](https://codeberg.org/anuna/spindle-racket) - Racket implementation this port is based on
 
