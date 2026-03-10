@@ -6,6 +6,8 @@
 //!
 //! - **Positive bridge:** `q[s,e] → base(q)` — a temporal fact implies its base.
 //! - **Negation bridge:** `~q[s,e] → ~base(q)` — coupled negation propagation.
+//! - **Defeater bridge:** `A ~> q[s,e]` becomes `A ~> base(q)` — defeaters keep
+//!   their original applicability because they never prove their temporal head.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -28,9 +30,9 @@ use crate::theory::Theory;
 /// 1. `q[s,e] → q` (positive bridge)
 /// 2. `~q[s,e] → ~q` (negation bridge)
 ///
-/// Each synthesized bridge preserves the originating rule strength:
-/// facts/strict rules produce strict bridges, defeasible rules produce
-/// defeasible bridges, and defeaters produce defeater bridges.
+/// Each synthesized bridge preserves the originating rule strength.
+/// Facts/strict/defeasible rules bridge from the temporal head literal;
+/// defeaters bridge from their original rule body so they remain applicable.
 ///
 /// Deduplication is by bridge structure (temporal body + matching atemporal head)
 /// keyed by the positive temporal literal's SPL rendering.
@@ -116,6 +118,31 @@ fn existing_bridge_signature(rule: &Rule) -> Option<(String, bool, RuleType)> {
     Some((positive.to_spl(), body.negation, rule.rule_type))
 }
 
+fn direct_rule_signature(rule: &Rule) -> Option<String> {
+    if rule.head.len() != 1 || !rule.head[0].temporal.is_empty() {
+        return None;
+    }
+
+    let mut body_parts: Vec<_> = rule.body.iter().map(BodyLiteral::to_spl).collect();
+    body_parts.sort();
+
+    let mut constraint_parts: Vec<_> = rule.constraints.iter().map(|c| c.to_spl()).collect();
+    constraint_parts.sort();
+
+    let mut state_query_parts: Vec<_> = rule.state_queries.iter().map(|q| q.to_spl()).collect();
+    state_query_parts.sort();
+
+    Some(format!(
+        "mode:{}|rule_temporal:{}|body:{}|constraints:{}|state_queries:{}|head:{}",
+        rule.mode,
+        rule.temporal,
+        body_parts.join("&"),
+        constraint_parts.join("&"),
+        state_query_parts.join("&"),
+        rule.head[0].to_spl(),
+    ))
+}
+
 fn template_label_priority(label: &str, theory: &Theory) -> (bool, bool, bool) {
     let Some(meta) = theory.get_meta(label) else {
         return (false, false, false);
@@ -188,6 +215,21 @@ fn atemporal_base_literal(literal: &Literal) -> Literal {
         Temporal::empty(),
         literal.predicate_args().to_vec(),
     )
+}
+
+fn synthesize_defeater_bridge(source: &Rule, head_literal: &Literal) -> Rule {
+    let mut bridge = Rule::new(
+        String::new(),
+        RuleType::Defeater,
+        source.body.clone(),
+        smallvec![atemporal_base_literal(head_literal)],
+    );
+    bridge.template_label = Some(source.template_label().to_string());
+    bridge.mode = source.mode.clone();
+    bridge.temporal = source.temporal.clone();
+    bridge.constraints = source.constraints.clone();
+    bridge.state_queries = source.state_queries.clone();
+    bridge
 }
 
 fn prove_definite_literal(
@@ -406,6 +448,7 @@ impl PipelineStage for TemporalBridge {
     fn apply(&self, mut theory: Theory, ctx: &mut PipelineContext) -> Result<Theory> {
         // Track which bridge variants (positive/negative) already exist.
         let mut existing: HashMap<String, BridgePresence> = HashMap::new();
+        let mut existing_direct: HashMap<String, RuleType> = HashMap::new();
         for rule in theory.rules() {
             if let Some((key, is_negative, rule_type)) = existing_bridge_signature(rule) {
                 let entry = existing.entry(key).or_default();
@@ -415,14 +458,26 @@ impl PipelineStage for TemporalBridge {
                     update_strongest_bridge(&mut entry.positive, rule_type);
                 }
             }
+            if let Some(signature) = direct_rule_signature(rule) {
+                if let Some(current) = existing_direct.get_mut(&signature) {
+                    if rule_strength(rule.rule_type) > rule_strength(*current) {
+                        *current = rule.rule_type;
+                    }
+                } else {
+                    existing_direct.insert(signature, rule.rule_type);
+                }
+            }
         }
 
-        // Collect one seed per distinct temporal atom, with deterministic
-        // template-label choice per polarity (prefer trust-relevant metadata
-        // such as source/timestamp, then other metadata, then lexicographically
-        // smaller labels).
+        // Collect one seed per distinct temporal atom for rules that can prove
+        // their temporal head. Defeaters are handled separately because they
+        // must preserve their original antecedents.
         let mut seeds: HashMap<String, BridgeSeed> = HashMap::new();
         for rule in theory.rules() {
+            if rule.rule_type == RuleType::Defeater {
+                continue;
+            }
+
             let template_label = rule.template_label().to_string();
 
             for head_lit in &rule.head {
@@ -473,6 +528,55 @@ impl PipelineStage for TemporalBridge {
         let mut reserved_labels: HashSet<String> =
             theory.rules().map(|rule| rule.label.clone()).collect();
         let mut bridges: Vec<Rule> = Vec::new();
+
+        let mut defeater_bridges: HashMap<String, (Rule, String, BridgeOrigin)> = HashMap::new();
+        for rule in theory.rules() {
+            if rule.rule_type != RuleType::Defeater {
+                continue;
+            }
+
+            let origin = BridgeOrigin {
+                template_label: rule.template_label().to_string(),
+                rule_type: RuleType::Defeater,
+            };
+
+            for head_lit in &rule.head {
+                if head_lit.temporal.is_empty() {
+                    continue;
+                }
+
+                let candidate_rule = synthesize_defeater_bridge(rule, head_lit);
+                let signature = direct_rule_signature(&candidate_rule)
+                    .expect("synthesized defeater bridge must have an atemporal head");
+                if existing_bridge_is_strong_enough(
+                    existing_direct.get(&signature).copied(),
+                    RuleType::Defeater,
+                ) {
+                    continue;
+                }
+
+                let preferred_label =
+                    format!("__bridge::defeater::{}::{}", rule.label, head_lit.to_spl());
+                match defeater_bridges.get_mut(&signature) {
+                    Some((existing_rule, existing_label, existing_origin)) => {
+                        if should_replace_origin(Some(existing_origin), &origin, &theory) {
+                            *existing_rule = candidate_rule.clone();
+                            *existing_label = preferred_label;
+                            *existing_origin = origin.clone();
+                        }
+                    }
+                    None => {
+                        defeater_bridges
+                            .insert(signature, (candidate_rule, preferred_label, origin.clone()));
+                    }
+                }
+            }
+        }
+        for (_, (mut rule, preferred_label, _)) in defeater_bridges {
+            rule.label = reserve_bridge_label(&mut reserved_labels, preferred_label);
+            bridges.push(rule);
+        }
+
         for (key, seed) in seeds {
             let presence = existing.get(&key).copied().unwrap_or_default();
             let positive = &seed.positive;
@@ -568,7 +672,7 @@ impl PipelineStage for TemporalBridge {
             ctx.diagnostics.push(Diagnostic {
                 severity: Severity::Info,
                 stage: self.name(),
-                message: format!("generated {count} bridging rules ({} pairs)", count / 2),
+                message: format!("generated {count} bridging rules"),
             });
         }
 
@@ -1499,6 +1603,77 @@ mod tests {
             "bridges from defeasible temporal heads must remain defeasible"
         );
         assert_eq!(neg_bridge.template_label.as_deref(), Some("r_neg"));
+    }
+
+    #[test]
+    fn temporal_defeater_bridges_preserve_original_applicability() {
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_fact("b");
+        theory.add_defeasible_rule(&["a"], "q");
+        theory.add_rule(Rule::new(
+            "d_neg_temporal",
+            RuleType::Defeater,
+            vec![Literal::simple("b")],
+            smallvec::smallvec![Literal::new(
+                "q",
+                true,
+                crate::mode::Mode::empty(),
+                Temporal::from_bounds(1, 10),
+                vec![],
+            )],
+        ));
+
+        let mut ctx = PipelineContext::default();
+        let bridged = TemporalBridge.apply(theory, &mut ctx).unwrap();
+
+        let neg_bridge = bridged
+            .rules()
+            .find(|rule| {
+                rule.rule_type == RuleType::Defeater
+                    && rule.head.len() == 1
+                    && rule.head[0].name() == "q"
+                    && rule.head[0].negation
+                    && rule.head[0].temporal.is_empty()
+            })
+            .expect("expected synthesized atemporal defeater bridge");
+        assert_eq!(
+            neg_bridge.body.len(),
+            1,
+            "defeater bridge should preserve the original antecedent"
+        );
+        let body_lit = neg_bridge.body[0]
+            .as_logic()
+            .expect("defeater bridge body should remain a logic literal");
+        assert_eq!(body_lit.name(), "b");
+        assert!(
+            body_lit.temporal.is_empty(),
+            "defeater bridge must preserve the original body rather than depend on the temporal head"
+        );
+        assert!(
+            !body_lit.negation,
+            "defeater bridge must preserve the original body polarity"
+        );
+
+        let conclusions = reason_prepared(&bridged).unwrap();
+        assert!(
+            !conclusions.iter().any(|conclusion| {
+                conclusion.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && conclusion.literal.name() == "q"
+                    && !conclusion.literal.negation
+                    && conclusion.literal.temporal.is_empty()
+            }),
+            "the bridged temporal defeater should block the base literal q"
+        );
+        assert!(
+            !conclusions.iter().any(|conclusion| {
+                conclusion.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && conclusion.literal.name() == "q"
+                    && conclusion.literal.negation
+                    && conclusion.literal.temporal.is_empty()
+            }),
+            "the defeater bridge must not prove ~q"
+        );
     }
 
     // --- TEST-009: Negation bridge generated ---
