@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 55,
-    "deletions": 36,
+    "insertions": 219,
+    "deletions": 40,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/src/query/mod.rs"
+      "crates/spindle-core/src/query/abduce.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-wildcard-semantics-changes",
-      "content": "Modified 2 files (+55, -36): .hence/context-manifest.json, crates/spindle-core/src/query/mod.rs",
+      "key": "task-abduce-family-changes",
+      "content": "Modified 2 files (+219, -40): .hence/context-manifest.json, crates/spindle-core/src/query/abduce.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/wildcard-semantics-v1",
-  "evaluated_at": "2026-03-10T02:28:58Z",
+  "branch_name": "hence/abduce-family-v1",
+  "evaluated_at": "2026-03-10T02:34:36Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
