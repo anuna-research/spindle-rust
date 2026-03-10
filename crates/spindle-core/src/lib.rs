@@ -46,6 +46,7 @@ pub mod analysis;
 pub mod arith;
 pub mod body;
 pub mod claims;
+pub mod compilation;
 pub mod conclusion;
 pub mod error;
 pub mod explanation;
@@ -84,6 +85,7 @@ pub mod prelude {
     pub use crate::pipeline::{
         Pipeline, PipelineBuilder, PipelineContext, PipelineResult, PipelineStage, PrepareOptions,
     };
+    pub use crate::compilation::{BodyMatchKey, CompiledBody, compile_rule, compile_theory};
     pub use crate::projection::{
         ExactLitId, ExactSupport, FamilyAttack, FamilyId, FamilySupport, ProjectionToken,
     };

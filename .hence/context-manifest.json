@@ -1,12 +1,12 @@
 {
-  "task_id": "exact-family-indexing",
+  "task_id": "rule-compilation",
   "token_budget": 8000,
-  "tokens_used": 91,
+  "tokens_used": 118,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Extend IndexedTheory with exact_lit_id, family_id, family_members, and family_for_exact APIs per CON-001",
-      "token_cost": 26,
+      "content": "Compile rule bodies into explicit match keys: temporal bodies require exact evidence, atemporal bodies require family support",
+      "token_cost": 31,
       "priority": "PlanMeta"
     },
     {
@@ -20,9 +20,14 @@
       "content": "Modified 3 files (+237, -17): .hence/context-manifest.json, crates/spindle-core/src/literal.rs, crates/spindle-core/src/projection.rs",
       "token_cost": 33,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-exact-family-indexing-changes",
+      "content": "Modified 2 files (+281, -8): .hence/context-manifest.json, crates/spindle-core/src/index.rs",
+      "token_cost": 22,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T01:46:48Z",
-  "completed_at": "2026-03-10T02:00:00Z"
+  "constructed_at": "2026-03-10T01:49:51Z"
 }
