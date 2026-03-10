@@ -56,6 +56,7 @@ pub mod literal;
 pub mod mining;
 pub mod mode;
 pub mod pipeline;
+pub mod projection;
 pub mod query;
 pub mod reason;
 pub mod rule;
@@ -82,6 +83,9 @@ pub mod prelude {
     pub use crate::mode::Mode;
     pub use crate::pipeline::{
         Pipeline, PipelineBuilder, PipelineContext, PipelineResult, PipelineStage, PrepareOptions,
+    };
+    pub use crate::projection::{
+        ExactLitId, ExactSupport, FamilyAttack, FamilyId, FamilySupport, ProjectionToken,
     };
     pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
     pub use crate::reason::{
