@@ -1,12 +1,12 @@
 {
-  "task_id": "query-match-modes",
-  "token_budget": 8000,
-  "tokens_used": 363,
+  "task_id": "wildcard-semantics",
+  "token_budget": 5000,
+  "tokens_used": 326,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Implement ExactTemporal, Family, and WildcardTemporal query match modes per CON-004",
-      "token_cost": 20,
+      "content": "Preserve user-facing wildcard query behavior modeled explicitly as WildcardTemporal match mode",
+      "token_cost": 23,
       "priority": "PlanMeta"
     },
     {
@@ -68,14 +68,8 @@
       "content": "Modified 1 files (+427, -0): crates/spindle-core/tests/pbt_family_invariants.rs",
       "token_cost": 19,
       "priority": "AgentMemory"
-    },
-    {
-      "source": "memory/episodic/task-query-match-modes-changes",
-      "content": "Modified 2 files: crates/spindle-core/src/query/mod.rs (added QueryMatchMode enum with ExactTemporal/Family/WildcardTemporal variants, query_with_match_mode function, and match logic), crates/spindle-core/src/lib.rs (exported new types in prelude)",
-      "token_cost": 40,
-      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T03:00:00Z"
+  "constructed_at": "2026-03-10T02:24:15Z"
 }

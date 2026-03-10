@@ -393,10 +393,15 @@ pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
     query_with_options(theory, literal, PrepareOptions::default())
 }
 
-/// Query a literal against a theory with custom options
+/// Query a literal against a theory with custom options.
 ///
-/// This is the primary API for as-of queries. Use `reference_time` in options
-/// to query at a specific point in time:
+/// Uses [`QueryMatchMode::WildcardTemporal`] semantics: the query matches any
+/// conclusion in the same atemporal family, selecting the deterministic earliest
+/// representative when multiple temporal variants exist. This preserves the
+/// user-facing wildcard behavior that callers relied on before match modes were
+/// introduced, but models it explicitly rather than accidentally.
+///
+/// For exact-temporal or family-level matching, use [`query_with_match_mode`].
 ///
 /// ```rust
 /// use spindle_core::prelude::*;
@@ -419,26 +424,7 @@ pub fn query_with_options(
     literal: &Literal,
     opts: PrepareOptions,
 ) -> Result<QueryResult> {
-    let conclusions = reason_with_options(theory, opts)?;
-    let complement = literal.complement();
-
-    // Check if literal is provable
-    for conc in &conclusions {
-        if conc.literal == *literal && conc.conclusion_type.is_positive() {
-            return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
-                .with_conclusion_type(conc.conclusion_type));
-        }
-    }
-
-    // Check if complement is provable (refuted)
-    for conc in &conclusions {
-        if conc.literal == complement && conc.conclusion_type.is_positive() {
-            return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
-        }
-    }
-
-    // Unknown
-    Ok(QueryResult::new(literal.clone(), QueryStatus::Unknown))
+    query_with_match_mode(theory, literal, QueryMatchMode::WildcardTemporal, opts)
 }
 
 /// Query a literal against a theory using an explicit match mode (CON-004).
@@ -2030,6 +2016,45 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.status, QueryStatus::Unknown);
+    }
+
+    // -- Default query() uses WildcardTemporal --
+
+    #[test]
+    fn default_query_matches_temporal_variant() {
+        // The default query() should match across temporal variants (wildcard
+        // behavior), not require exact temporal bounds.
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        // Querying bare `p` should find the temporal fact p[1,10].
+        let result = query(&theory, &Literal::simple("p")).unwrap();
+        assert_eq!(
+            result.status,
+            QueryStatus::Provable,
+            "default query() should match temporal variants via WildcardTemporal"
+        );
+    }
+
+    #[test]
+    fn default_query_refuted_by_complement_family() {
+        // The default query() should detect refutation across temporal families.
+        let mut theory = Theory::new();
+        let neg_lit = Literal::new(
+            "p",
+            true,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", neg_lit));
+
+        let result = query(&theory, &Literal::simple("p")).unwrap();
+        assert_eq!(
+            result.status,
+            QueryStatus::Refuted,
+            "default query() should detect complement family for refutation"
+        );
     }
 
     // -- Display --

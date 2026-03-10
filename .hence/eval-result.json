@@ -3,26 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 500,
-    "deletions": 8,
+    "files_changed": 2,
+    "insertions": 55,
+    "deletions": 36,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/src/lib.rs",
       "crates/spindle-core/src/query/mod.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-query-match-modes-changes",
-      "content": "Modified 3 files (+500, -8): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/query/mod.rs",
+      "key": "task-wildcard-semantics-changes",
+      "content": "Modified 2 files (+55, -36): .hence/context-manifest.json, crates/spindle-core/src/query/mod.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/query-match-modes-v1",
-  "evaluated_at": "2026-03-10T02:24:10Z",
+  "branch_name": "hence/wildcard-semantics-v1",
+  "evaluated_at": "2026-03-10T02:28:58Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
