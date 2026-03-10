@@ -20,9 +20,7 @@ mod fixtures;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
-use spindle_core::query::{
-    BlockingType, RequiresOptions, abduce, requires_with_options, why_not,
-};
+use spindle_core::query::{BlockingType, RequiresOptions, abduce, requires_with_options, why_not};
 use spindle_core::reason::reason;
 use spindle_core::rule::{Rule, RuleType};
 use spindle_core::theory::Theory;
