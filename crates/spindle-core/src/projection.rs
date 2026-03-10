@@ -206,6 +206,162 @@ pub enum ProjectionToken {
     Attack(FamilyAttack),
 }
 
+// ---------------------------------------------------------------------------
+// ProjectionEngine — CON-002
+// ---------------------------------------------------------------------------
+
+use crate::index::IndexedTheory;
+use crate::rule::Rule;
+
+/// The projection engine emits support/attack tokens when a rule fires.
+///
+/// Instead of synthesizing bridge rules, it produces first-class
+/// [`ProjectionToken`]s that carry the original rule label and type,
+/// preserving superiority and trust semantics by construction
+/// (SPEC-020, CON-002).
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// let mut engine = ProjectionEngine::new();
+/// engine.project_rule(&rule, &mut index);
+/// let tokens = engine.tokens();
+/// ```
+#[derive(Debug, Clone)]
+pub struct ProjectionEngine {
+    tokens: Vec<ProjectionToken>,
+}
+
+impl ProjectionEngine {
+    /// Create a new, empty projection engine.
+    pub fn new() -> Self {
+        Self { tokens: Vec::new() }
+    }
+
+    /// Create a projection engine with pre-allocated capacity.
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            tokens: Vec::with_capacity(cap),
+        }
+    }
+
+    /// Project a fired rule into support/attack tokens.
+    ///
+    /// For each head literal in the rule:
+    ///
+    /// - **Any rule type, any head**: emits [`ExactSupport`] for the exact
+    ///   literal identity of the head.
+    /// - **Defeater head**: additionally emits [`FamilyAttack`] against the
+    ///   head's base family, using the original rule label and type.
+    /// - **Non-defeater head**: additionally emits [`FamilySupport`] for
+    ///   the head's base family, projecting temporal evidence to the
+    ///   atemporal family.
+    ///
+    /// # Pre-conditions (CON-002)
+    ///
+    /// - Rule applicability has been evaluated against body match keys.
+    /// - Original rule label and type are available.
+    ///
+    /// # Post-conditions (CON-002)
+    ///
+    /// - Emits support/attack tokens using original labels.
+    /// - Does not materialize synthetic rules in `Theory`.
+    pub fn project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) {
+        let label = rule
+            .template_label
+            .as_ref()
+            .unwrap_or(&rule.label)
+            .clone();
+        let rule_type = rule.rule_type;
+
+        for head_lit in &rule.head {
+            let exact = index.exact_lit_id(head_lit);
+
+            // Always emit exact support.
+            self.tokens.push(ProjectionToken::Exact(ExactSupport {
+                exact_lit: exact,
+                rule_label: label.clone(),
+                rule_type,
+            }));
+
+            let family = FamilyId::from(head_lit);
+
+            if rule_type.is_defeater() {
+                // Defeaters attack the base family.
+                self.tokens.push(ProjectionToken::Attack(FamilyAttack {
+                    family_id: family,
+                    source_exact_lit: Some(exact),
+                    rule_label: label.clone(),
+                    rule_type,
+                }));
+            } else {
+                // Non-defeaters project family-level support.
+                self.tokens.push(ProjectionToken::Family(FamilySupport {
+                    family_id: family,
+                    source_exact_lit: exact,
+                    rule_label: label.clone(),
+                    rule_type,
+                }));
+            }
+        }
+    }
+
+    /// Return all tokens emitted so far.
+    pub fn tokens(&self) -> &[ProjectionToken] {
+        &self.tokens
+    }
+
+    /// Consume the engine and return all emitted tokens.
+    pub fn into_tokens(self) -> Vec<ProjectionToken> {
+        self.tokens
+    }
+
+    /// Number of tokens emitted so far.
+    pub fn len(&self) -> usize {
+        self.tokens.len()
+    }
+
+    /// Whether any tokens have been emitted.
+    pub fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
+    }
+
+    /// Clear all emitted tokens.
+    pub fn clear(&mut self) {
+        self.tokens.clear();
+    }
+
+    /// Count of exact support tokens.
+    pub fn exact_count(&self) -> usize {
+        self.tokens
+            .iter()
+            .filter(|t| matches!(t, ProjectionToken::Exact(_)))
+            .count()
+    }
+
+    /// Count of family support tokens.
+    pub fn family_count(&self) -> usize {
+        self.tokens
+            .iter()
+            .filter(|t| matches!(t, ProjectionToken::Family(_)))
+            .count()
+    }
+
+    /// Count of family attack tokens.
+    pub fn attack_count(&self) -> usize {
+        self.tokens
+            .iter()
+            .filter(|t| matches!(t, ProjectionToken::Attack(_)))
+            .count()
+    }
+}
+
+impl Default for ProjectionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,5 +472,277 @@ mod tests {
 
         // lit_b should map to the same family
         assert_eq!(map.get(&FamilyId::from(&lit_b)), Some(&1));
+    }
+
+    // -- ProjectionEngine tests --
+
+    use crate::index::IndexedTheory;
+    use crate::rule::Rule;
+    use crate::theory::Theory;
+
+    fn make_index(theory: &Theory) -> IndexedTheory<'_> {
+        IndexedTheory::build(theory)
+    }
+
+    #[test]
+    fn fact_emits_exact_and_family_support() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("bird")));
+
+        let mut idx = make_index(&theory);
+        let rule = theory.get_rule("f1").unwrap();
+
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(rule, &mut idx);
+
+        assert_eq!(engine.len(), 2);
+        assert_eq!(engine.exact_count(), 1);
+        assert_eq!(engine.family_count(), 1);
+        assert_eq!(engine.attack_count(), 0);
+
+        // Exact support preserves rule label and type.
+        let exact = match &engine.tokens()[0] {
+            ProjectionToken::Exact(s) => s,
+            other => panic!("expected Exact, got {other:?}"),
+        };
+        assert_eq!(exact.rule_label, "f1");
+        assert_eq!(exact.rule_type, crate::rule::RuleType::Fact);
+
+        // Family support projects to the atemporal family.
+        let family = match &engine.tokens()[1] {
+            ProjectionToken::Family(s) => s,
+            other => panic!("expected Family, got {other:?}"),
+        };
+        assert_eq!(family.rule_label, "f1");
+        assert_eq!(family.family_id, FamilyId::from(&Literal::simple("bird")));
+    }
+
+    #[test]
+    fn defeasible_rule_emits_exact_and_family_support() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("bird")],
+            Literal::simple("flies"),
+        ));
+
+        let mut idx = make_index(&theory);
+        let rule = theory.get_rule("r1").unwrap();
+
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(rule, &mut idx);
+
+        assert_eq!(engine.exact_count(), 1);
+        assert_eq!(engine.family_count(), 1);
+        assert_eq!(engine.attack_count(), 0);
+    }
+
+    #[test]
+    fn defeater_emits_exact_support_and_family_attack() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::defeater(
+            "d1",
+            vec![Literal::simple("broken")],
+            Literal::negated("works"),
+        ));
+
+        let mut idx = make_index(&theory);
+        let rule = theory.get_rule("d1").unwrap();
+
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(rule, &mut idx);
+
+        assert_eq!(engine.exact_count(), 1);
+        assert_eq!(engine.family_count(), 0);
+        assert_eq!(engine.attack_count(), 1);
+
+        let attack = match &engine.tokens()[1] {
+            ProjectionToken::Attack(a) => a,
+            other => panic!("expected Attack, got {other:?}"),
+        };
+        assert_eq!(attack.rule_label, "d1");
+        assert_eq!(
+            attack.family_id,
+            FamilyId::from(&Literal::negated("works"))
+        );
+        assert!(attack.source_exact_lit.is_some());
+    }
+
+    #[test]
+    fn temporal_defeater_attacks_base_family() {
+        // b ~> ~q[1,10] should attack base family ~q
+        let head = Literal::new(
+            "q",
+            true,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::defeater(
+            "d_temp",
+            vec![Literal::simple("b")],
+            head.clone(),
+        ));
+
+        let mut idx = make_index(&theory);
+        let rule = theory.get_rule("d_temp").unwrap();
+
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(rule, &mut idx);
+
+        let attack = match &engine.tokens()[1] {
+            ProjectionToken::Attack(a) => a,
+            other => panic!("expected Attack, got {other:?}"),
+        };
+
+        // Attack targets the base family ~q (no temporal bounds).
+        let base_family = FamilyId::from(&Literal::negated("q"));
+        assert_eq!(attack.family_id, base_family);
+        assert_eq!(attack.rule_label, "d_temp");
+    }
+
+    #[test]
+    fn template_label_is_preferred() {
+        // Grounded instances carry template_label; projection should use it.
+        let mut rule = Rule::defeasible(
+            "r1__ground_0",
+            vec![Literal::simple("a")],
+            Literal::simple("b"),
+        );
+        rule.template_label = Some("r1".to_string());
+
+        let mut theory = Theory::new();
+        theory.add_rule(rule);
+
+        let mut idx = make_index(&theory);
+        let rule = theory.get_rule("r1__ground_0").unwrap();
+
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(rule, &mut idx);
+
+        for token in engine.tokens() {
+            match token {
+                ProjectionToken::Exact(s) => assert_eq!(s.rule_label, "r1"),
+                ProjectionToken::Family(s) => assert_eq!(s.rule_label, "r1"),
+                ProjectionToken::Attack(a) => assert_eq!(a.rule_label, "r1"),
+            }
+        }
+    }
+
+    #[test]
+    fn distinct_defeaters_remain_distinct() {
+        // Two defeaters with same shape but different labels → separate attacks.
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::defeater(
+            "d1",
+            vec![Literal::simple("b")],
+            Literal::negated("q"),
+        ));
+        theory.add_rule(Rule::defeater(
+            "d2",
+            vec![Literal::simple("b")],
+            Literal::negated("q"),
+        ));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+
+        let r1 = theory.get_rule("d1").unwrap();
+        let r2 = theory.get_rule("d2").unwrap();
+        engine.project_rule(r1, &mut idx);
+        engine.project_rule(r2, &mut idx);
+
+        assert_eq!(engine.attack_count(), 2);
+
+        let attacks: Vec<_> = engine
+            .tokens()
+            .iter()
+            .filter_map(|t| match t {
+                ProjectionToken::Attack(a) => Some(a),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(attacks[0].rule_label, "d1");
+        assert_eq!(attacks[1].rule_label, "d2");
+    }
+
+    #[test]
+    fn clear_resets_engine() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+
+        assert!(!engine.is_empty());
+        engine.clear();
+        assert!(engine.is_empty());
+        assert_eq!(engine.len(), 0);
+    }
+
+    #[test]
+    fn into_tokens_consumes_engine() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+
+        let tokens = engine.into_tokens();
+        assert_eq!(tokens.len(), 2);
+    }
+
+    #[test]
+    fn strict_rule_emits_support_not_attack() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::strict(
+            "s1",
+            vec![Literal::simple("a")],
+            Literal::simple("b"),
+        ));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(theory.get_rule("s1").unwrap(), &mut idx);
+
+        assert_eq!(engine.exact_count(), 1);
+        assert_eq!(engine.family_count(), 1);
+        assert_eq!(engine.attack_count(), 0);
+    }
+
+    #[test]
+    fn temporal_head_projects_to_atemporal_family() {
+        // A defeasible rule with temporal head q[1,10] should project
+        // family support to base family q.
+        let head = Literal::new(
+            "q",
+            false,
+            Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("a")],
+            head.clone(),
+        ));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(theory.get_rule("r1").unwrap(), &mut idx);
+
+        let family_tok = match &engine.tokens()[1] {
+            ProjectionToken::Family(f) => f,
+            other => panic!("expected Family, got {other:?}"),
+        };
+
+        // Family should be the atemporal base q.
+        let base = FamilyId::from(&Literal::simple("q"));
+        assert_eq!(family_tok.family_id, base);
     }
 }
