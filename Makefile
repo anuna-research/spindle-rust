@@ -1,5 +1,8 @@
 .PHONY: all build test test-quick test-full clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory release-tag
 
+TEST_RUNNER = if cargo nextest --version >/dev/null 2>&1; then cargo nextest run --all; else cargo test --all; fi
+TEST_RUNNER_QUICK = if cargo nextest --version >/dev/null 2>&1; then PROPTEST_CASES=20 cargo nextest run --all; else PROPTEST_CASES=20 cargo test --all; fi
+
 # Default target
 all: check build test
 
@@ -11,17 +14,17 @@ build:
 release:
 	cargo build --release --all
 
-# Run all tests (nextest for parallel execution)
+# Run all tests. Prefer nextest for parallel execution when available.
 test:
-	cargo nextest run --all
+	@$(TEST_RUNNER)
 
 # Run tests with reduced proptest cases (fast dev loop)
 test-quick:
-	PROPTEST_CASES=20 cargo nextest run --all
+	@$(TEST_RUNNER_QUICK)
 
 # Run full test suite (CI-grade, original proptest case counts)
 test-full:
-	cargo nextest run --all
+	@$(TEST_RUNNER)
 
 # Run clippy lints
 clippy:

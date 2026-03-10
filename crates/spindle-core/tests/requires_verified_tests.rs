@@ -47,11 +47,37 @@ fn test_requires_with_options_reports_budget_exhausted() {
     )
     .unwrap();
 
-    // abduce now verifies solutions internally, so all defeater-blocked
-    // candidates are filtered before reaching requires' verification step.
     assert!(!result.already_provable);
     assert!(result.solutions.is_empty());
+    assert_eq!(result.search_status, RequiresSearchStatus::BudgetExhausted);
+    assert_eq!(result.verification.raw_examined, 1);
     assert_eq!(result.verification.accepted, 0);
+    assert_eq!(result.verification.rejected, 1);
+}
+
+#[test]
+fn test_requires_with_options_treats_limit_as_raw_candidate_budget() {
+    let mut theory = Theory::new();
+    theory.add_defeasible_rule(&["a"], "goal");
+    theory.add_defeasible_rule(&["b", "c"], "goal");
+    theory.add_defeater(&["a"], "~goal");
+
+    let result = requires_with_options(
+        &theory,
+        &Literal::simple("goal"),
+        RequiresOptions {
+            max_solutions: 5,
+            max_raw_candidates: 1,
+        },
+    )
+    .unwrap();
+
+    assert!(!result.already_provable);
+    assert!(result.solutions.is_empty());
+    assert_eq!(result.search_status, RequiresSearchStatus::BudgetExhausted);
+    assert_eq!(result.verification.raw_examined, 1);
+    assert_eq!(result.verification.accepted, 0);
+    assert_eq!(result.verification.rejected, 1);
 }
 
 #[test]

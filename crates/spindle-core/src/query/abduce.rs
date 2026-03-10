@@ -4,12 +4,14 @@
 //! chaining to find minimal sets of facts whose addition would enable the
 //! goal to be proven via the standard reasoning pipeline.
 //!
-//! Solutions are checked using **family-aware support**: both the initial
-//! provability check and body-literal satisfaction use [`FamilyId`] matching
-//! so that a temporal conclusion like `p[1,10]` satisfies an atemporal body
-//! literal `p`. Each candidate solution is then **verified** by running the
-//! reasoner with the hypothesized facts added, filtering out solutions that
-//! would be blocked by defeaters or conflicts.
+//! Uses **family-aware support**: both the initial provability check and
+//! body-literal satisfaction use [`FamilyId`] matching so that a temporal
+//! conclusion like `p[1,10]` satisfies an atemporal body literal `p`.
+//!
+//! `abduce()` returns raw hypothesis sets derived from rule bodies. It does
+//! not verify that adding those facts actually makes the goal provable after
+//! defeaters or conflicts are considered. Use [`super::requires`] for verified
+//! fact-set search.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -18,10 +20,8 @@ use crate::error::Result;
 use crate::literal::Literal;
 use crate::projection::FamilyId;
 use crate::reason::reason;
-use crate::rule::{Rule, RuleType};
+use crate::rule::RuleType;
 use crate::theory::Theory;
-
-use super::what_if::next_hyp_label;
 
 // =============================================================================
 // TYPES
@@ -133,37 +133,14 @@ fn is_body_satisfied(lit: &Literal, proven_families: &HashSet<FamilyId>) -> bool
     proven_families.contains(&FamilyId::from(lit))
 }
 
-/// Verify a candidate solution by actually running reasoning with the
-/// hypothesized facts added. Returns `true` if the goal becomes provable.
-fn verify_solution(
-    theory: &Theory,
-    goal: &Literal,
-    hypothesized_facts: &HashSet<Literal>,
-) -> Result<bool> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static ABDUCE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    let unique_id = ABDUCE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let mut modified = theory.clone();
-    for (i, lit) in hypothesized_facts.iter().enumerate() {
-        let label = next_hyp_label(&modified, unique_id, i + 1);
-        let rule = Rule::fact(&label, lit.clone());
-        modified.add_rule(rule);
-    }
-
-    let conclusions = reason(&modified)?;
-    Ok(is_family_provable(goal, &conclusions))
-}
-
 /// Perform abductive reasoning: "What facts would make this goal provable?"
 ///
 /// Uses backward chaining to find minimal sets of facts that would
 /// enable the goal to be proven. Body-literal satisfaction uses
 /// family-aware matching (via [`FamilyId`]) so that temporal conclusions
-/// can satisfy atemporal body literals. Each candidate solution is
-/// **verified** by running reasoning with the hypothesized facts added,
-/// filtering out solutions that would be blocked by defeaters or
-/// conflicts.
+/// can satisfy atemporal body literals. Returns at most `max_solutions`
+/// raw hypothesis sets; callers that need verified fact-sets should use
+/// [`super::requires`].
 pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
     let mut result = AbductionResult::new(goal.clone());
 
@@ -221,18 +198,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
     // Sort by size (smallest first)
     candidates.sort_by_key(|s| s.len());
 
-    // Verify each candidate and keep only those that actually work
-    let mut solutions: Vec<HashSet<Literal>> = Vec::new();
-    for facts in candidates {
-        if solutions.len() >= max_solutions {
-            break;
-        }
-        if verify_solution(theory, goal, &facts)? {
-            solutions.push(facts);
-        }
-    }
-
-    for facts in solutions {
+    for facts in candidates.into_iter().take(max_solutions) {
         let mut sol = AbductionSolution::new(facts);
         // Track rules used — any rule whose head matches the goal family
         for rule in theory.rules() {
@@ -249,6 +215,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rule::Rule;
 
     // ==========================================================================
     // HELPER FUNCTIONS
@@ -566,35 +533,28 @@ mod tests {
     }
 
     #[test]
-    fn test_abduce_verification_filters_blocked_solutions() {
+    fn test_abduce_returns_raw_candidates_even_if_blocked() {
         // Rule: bird => flies.  Defeater: broken_wing =X> ~flies.
-        // Both bird and broken_wing are missing. Adding bird alone should NOT
-        // make flies provable if broken_wing is also added — but here only
-        // broken_wing is present, so bird should work.
-        //
-        // Actually: if broken_wing is already a fact, adding bird should NOT
-        // pass verification because the defeater blocks it.
+        // When broken_wing is already true, abduce should still report the
+        // raw missing premise {bird}; verification belongs to requires().
         let mut th = Theory::new();
         th.add_fact("broken_wing");
         th.add_defeasible_rule(&["bird"], "flies");
         th.add_defeater(&["broken_wing"], "~flies");
 
         let result = abduce(&th, &Literal::simple("flies"), 10).unwrap();
-        // The candidate {bird} should fail verification because the defeater
-        // blocks the conclusion. The only solution should be the trivial
-        // {flies} fallback.
-        for sol in &result.solutions {
-            assert!(
-                !sol.facts.contains(&Literal::simple("bird")) || sol.facts.len() > 1,
-                "Solution containing only 'bird' should be filtered out \
-                 because the defeater blocks 'flies'"
-            );
-        }
+        assert!(result.has_solutions());
+        assert!(
+            result
+                .solutions
+                .iter()
+                .any(|sol| sol.facts == HashSet::from([Literal::simple("bird")]))
+        );
     }
 
     #[test]
-    fn test_abduce_verification_accepts_valid_solutions() {
-        // Rule: p => q.  No defeaters. Adding p should verify successfully.
+    fn test_abduce_returns_valid_raw_solutions() {
+        // Rule: p => q. No defeaters. The raw hypothesis {p} should be found.
         let mut th = Theory::new();
         th.add_defeasible_rule(&["p"], "q");
 

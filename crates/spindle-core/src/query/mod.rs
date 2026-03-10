@@ -500,24 +500,34 @@ fn match_exact_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result
 
 /// Family matching: any conclusion whose FamilyId matches the query's FamilyId
 /// counts as a match. Returns the strongest conclusion type found.
+fn strongest_positive_conclusion_type<'a>(
+    conclusions: impl IntoIterator<Item = &'a Conclusion>,
+) -> Option<ConclusionType> {
+    conclusions.into_iter().fold(None, |best, conc| {
+        if !conc.conclusion_type.is_positive() {
+            return best;
+        }
+
+        Some(match best {
+            Some(ConclusionType::DefinitelyProvable) => ConclusionType::DefinitelyProvable,
+            _ if conc.conclusion_type == ConclusionType::DefinitelyProvable => {
+                ConclusionType::DefinitelyProvable
+            }
+            Some(prev) => prev,
+            None => conc.conclusion_type,
+        })
+    })
+}
+
 fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
     let family = FamilyId::from(literal);
     let complement_family = family.complement();
 
-    // Find the strongest positive conclusion in the family.
-    // Definite (+D) is stronger than defeasible (+d).
-    let mut best_positive: Option<ConclusionType> = None;
-    for conc in conclusions {
-        if conc.conclusion_type.is_positive() {
-            let conc_family = FamilyId::from(&conc.literal);
-            if conc_family == family {
-                best_positive = Some(match best_positive {
-                    Some(prev) if prev == ConclusionType::DefinitelyProvable => prev,
-                    _ => conc.conclusion_type,
-                });
-            }
-        }
-    }
+    let best_positive = strongest_positive_conclusion_type(
+        conclusions
+            .iter()
+            .filter(|conc| FamilyId::from(&conc.literal) == family),
+    );
 
     if let Some(ct) = best_positive {
         return Ok(
@@ -539,8 +549,9 @@ fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryRe
 }
 
 /// WildcardTemporal matching: like Family, but when multiple temporal variants
-/// match, select a single deterministic representative (earliest start time,
-/// ties broken by earliest end time).
+/// match, use deterministic ordering (earliest start time, ties broken by
+/// earliest end time) while still reporting the strongest positive proof
+/// strength across the whole family.
 fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
     let family = FamilyId::from(literal);
     let complement_family = family.complement();
@@ -562,9 +573,10 @@ fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Res
                 .then_with(|| a.literal.temporal.end.cmp(&b.literal.temporal.end))
         });
 
-        let representative = family_positives[0];
+        let conclusion_type = strongest_positive_conclusion_type(family_positives.iter().copied())
+            .expect("family_positives is non-empty");
         return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
-            .with_conclusion_type(representative.conclusion_type));
+            .with_conclusion_type(conclusion_type));
     }
 
     // Check if complement family is provable (refuted)
@@ -2002,6 +2014,29 @@ mod tests {
     }
 
     #[test]
+    fn wildcard_temporal_preserves_strongest_conclusion_type() {
+        let mut theory = Theory::new();
+        theory.add_fact("support");
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("support")],
+            temporal_lit("p", 1, 10),
+        ));
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::WildcardTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+        assert!(result.is_definitely_provable());
+    }
+
+    #[test]
     fn wildcard_temporal_unknown_for_no_match() {
         let mut theory = Theory::new();
         theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
@@ -2033,6 +2068,23 @@ mod tests {
             QueryStatus::Provable,
             "default query() should match temporal variants via WildcardTemporal"
         );
+    }
+
+    #[test]
+    fn default_query_preserves_strongest_conclusion_type_across_family() {
+        let mut theory = Theory::new();
+        theory.add_fact("support");
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("support")],
+            temporal_lit("p", 1, 10),
+        ));
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+
+        let result = query(&theory, &Literal::simple("p")).unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+        assert!(result.is_definitely_provable());
     }
 
     #[test]

@@ -386,26 +386,32 @@ fn test_requires_verified_rejects_defeater_blocked_candidate() {
         result.solutions.is_empty(),
         "Verified requires should not return defeater-blocked candidates"
     );
-    // abduce now verifies solutions internally, so no raw candidates
-    // are passed through to requires' verification step.
+    assert_eq!(result.verification.raw_examined, 1);
     assert_eq!(
         result.verification.accepted, 0,
         "Defeater-blocked candidate should not be accepted"
     );
+    assert_eq!(
+        result.verification.rejected, 1,
+        "Defeater-blocked candidate should be rejected during verification"
+    );
 }
 
 #[test]
-fn test_abduce_rejects_defeater_blocked_candidate() {
-    // abduce now verifies candidates: a rule whose body is satisfiable but
-    // whose head is blocked by a defeater should yield no valid solutions.
+fn test_abduce_returns_raw_candidate_for_defeater_blocked_goal() {
+    // abduce returns raw missing-fact hypotheses; verification belongs to
+    // requires().
     let mut theory = Theory::new();
     theory.add_defeasible_rule(&["p"], "q");
     theory.add_defeater(&["p"], "~q");
 
     let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
     assert!(
-        !result.has_solutions(),
-        "Defeater-blocked candidate should be rejected by verification"
+        result
+            .solutions
+            .iter()
+            .any(|solution| solution.facts.contains(&Literal::simple("p"))),
+        "The raw candidate p should still be returned by abduce"
     );
 }
 
