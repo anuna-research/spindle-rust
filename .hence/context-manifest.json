@@ -1,12 +1,12 @@
 {
-  "task_id": "abduce-family",
+  "task_id": "why-not-family",
   "token_budget": 6000,
-  "tokens_used": 327,
+  "tokens_used": 325,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Update abduce to verify solutions using family-aware support instead of bridge-mediated conclusions",
-      "token_cost": 24,
+      "content": "Update why_not to use family-aware matching and cite original rule labels in explanations",
+      "token_cost": 22,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:29:04Z"
+  "constructed_at": "2026-03-10T02:34:42Z"
 }
