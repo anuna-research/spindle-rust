@@ -1,12 +1,12 @@
 {
-  "task_id": "wildcard-semantics",
-  "token_budget": 5000,
-  "tokens_used": 326,
+  "task_id": "abduce-family",
+  "token_budget": 6000,
+  "tokens_used": 327,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Preserve user-facing wildcard query behavior modeled explicitly as WildcardTemporal match mode",
-      "token_cost": 23,
+      "content": "Update abduce to verify solutions using family-aware support instead of bridge-mediated conclusions",
+      "token_cost": 24,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:24:15Z"
+  "constructed_at": "2026-03-10T02:29:04Z"
 }

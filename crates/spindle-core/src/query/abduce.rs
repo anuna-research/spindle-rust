@@ -3,15 +3,25 @@
 //! Given a goal literal and a theory, the [`abduce`] function uses backward
 //! chaining to find minimal sets of facts whose addition would enable the
 //! goal to be proven via the standard reasoning pipeline.
+//!
+//! Solutions are checked using **family-aware support**: both the initial
+//! provability check and body-literal satisfaction use [`FamilyId`] matching
+//! so that a temporal conclusion like `p[1,10]` satisfies an atemporal body
+//! literal `p`. Each candidate solution is then **verified** by running the
+//! reasoner with the hypothesized facts added, filtering out solutions that
+//! would be blocked by defeaters or conflicts.
 
 use std::collections::HashSet;
 use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::projection::FamilyId;
 use crate::reason::reason;
-use crate::rule::RuleType;
+use crate::rule::{Rule, RuleType};
 use crate::theory::Theory;
+
+use super::what_if::next_hyp_label;
 
 // =============================================================================
 // TYPES
@@ -108,39 +118,85 @@ impl fmt::Display for AbductionResult {
 // OPERATORS
 // =============================================================================
 
+/// Check whether `goal` is positively supported by any conclusion in its
+/// family (atemporal identity match via [`FamilyId`]).
+fn is_family_provable(
+    goal: &Literal,
+    conclusions: &[crate::conclusion::Conclusion],
+) -> bool {
+    let family = FamilyId::from(goal);
+    conclusions.iter().any(|c| {
+        c.conclusion_type.is_positive() && FamilyId::from(&c.literal) == family
+    })
+}
+
+/// Check whether `lit` is satisfied by any positive conclusion in the same
+/// family.  Used to determine which body literals are already supported.
+fn is_body_satisfied(
+    lit: &Literal,
+    proven_families: &HashSet<FamilyId>,
+) -> bool {
+    proven_families.contains(&FamilyId::from(lit))
+}
+
+/// Verify a candidate solution by actually running reasoning with the
+/// hypothesized facts added. Returns `true` if the goal becomes provable.
+fn verify_solution(
+    theory: &Theory,
+    goal: &Literal,
+    hypothesized_facts: &HashSet<Literal>,
+) -> Result<bool> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static ABDUCE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    let unique_id = ABDUCE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut modified = theory.clone();
+    for (i, lit) in hypothesized_facts.iter().enumerate() {
+        let label = next_hyp_label(&modified, unique_id, i + 1);
+        let rule = Rule::fact(&label, lit.clone());
+        modified.add_rule(rule);
+    }
+
+    let conclusions = reason(&modified)?;
+    Ok(is_family_provable(goal, &conclusions))
+}
+
 /// Perform abductive reasoning: "What facts would make this goal provable?"
 ///
 /// Uses backward chaining to find minimal sets of facts that would
-/// enable the goal to be proven.
+/// enable the goal to be proven. Body-literal satisfaction uses
+/// family-aware matching (via [`FamilyId`]) so that temporal conclusions
+/// can satisfy atemporal body literals. Each candidate solution is
+/// **verified** by running reasoning with the hypothesized facts added,
+/// filtering out solutions that would be blocked by defeaters or
+/// conflicts.
 pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
     let mut result = AbductionResult::new(goal.clone());
 
-    // First check if already provable
+    // First check if already provable (family-aware)
     let conclusions = reason(theory)?;
-    let is_provable = conclusions
-        .iter()
-        .any(|c| c.literal == *goal && c.conclusion_type.is_positive());
-
-    if is_provable {
+    if is_family_provable(goal, &conclusions) {
         result
             .solutions
             .push(AbductionSolution::new(HashSet::new()));
         return Ok(result);
     }
 
-    // Collect what's already proven
-    let proven: HashSet<_> = conclusions
+    // Collect families that are already positively proven
+    let proven_families: HashSet<FamilyId> = conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
+        .map(|c| FamilyId::from(&c.literal))
         .collect();
 
-    // Find rules that could derive the goal
-    let mut solutions: Vec<HashSet<Literal>> = Vec::new();
+    // Find rules that could derive the goal (family-aware head match)
+    let goal_family = FamilyId::from(goal);
+    let mut candidates: Vec<HashSet<Literal>> = Vec::new();
 
     for rule in theory.rules() {
-        if rule.head_literal() == goal && rule.rule_type != RuleType::Defeater {
-            // Find missing body literals (only logic literals)
+        let head_family = FamilyId::from(rule.head_literal());
+        if head_family == goal_family && rule.rule_type != RuleType::Defeater {
+            // Find missing body literals (family-aware satisfaction)
             let body_lits: Vec<Literal> = rule
                 .body
                 .iter()
@@ -148,42 +204,45 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
                 .collect();
             let missing: HashSet<_> = body_lits
                 .into_iter()
-                .filter(|b| !proven.contains(b))
+                .filter(|b| !is_body_satisfied(b, &proven_families))
                 .collect();
 
             if missing.is_empty() {
-                // All body satisfied, shouldn't happen if not provable
-                // (could be blocked by defeater/conflict)
+                // All body satisfied but goal not provable — blocked by
+                // defeater/conflict; skip this rule path.
                 continue;
             }
 
-            // Simple: just add missing as hypotheses
-            // More sophisticated: recursively find hypotheses for each missing
-            solutions.push(missing);
-
-            if solutions.len() >= max_solutions {
-                break;
-            }
+            candidates.push(missing);
         }
     }
 
-    // If no direct rules, try to find indirect paths (simplified)
-    if solutions.is_empty() {
-        // Add the goal itself as a hypothesis (trivial solution)
+    // If no direct rules, try the trivial solution (add goal itself)
+    if candidates.is_empty() {
         let mut trivial = HashSet::new();
         trivial.insert(goal.clone());
-        solutions.push(trivial);
+        candidates.push(trivial);
     }
 
-    // Sort by size (smallest first) and limit
-    solutions.sort_by_key(|s| s.len());
-    solutions.truncate(max_solutions);
+    // Sort by size (smallest first)
+    candidates.sort_by_key(|s| s.len());
+
+    // Verify each candidate and keep only those that actually work
+    let mut solutions: Vec<HashSet<Literal>> = Vec::new();
+    for facts in candidates {
+        if solutions.len() >= max_solutions {
+            break;
+        }
+        if verify_solution(theory, goal, &facts)? {
+            solutions.push(facts);
+        }
+    }
 
     for facts in solutions {
         let mut sol = AbductionSolution::new(facts);
-        // Track rules used (simplified)
+        // Track rules used — any rule whose head matches the goal family
         for rule in theory.rules() {
-            if rule.head_literal() == goal {
+            if FamilyId::from(rule.head_literal()) == goal_family {
                 sol.rules_used.insert(rule.label.clone());
             }
         }
@@ -457,5 +516,125 @@ mod tests {
         let result = AbductionResult::new(Literal::simple("x"));
         let s = result.to_string();
         assert!(s.contains("No hypotheses"));
+    }
+
+    // ==========================================================================
+    // FAMILY-AWARE TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_abduce_family_aware_already_provable() {
+        // Temporal fact p[1,10] should satisfy atemporal goal query for p
+        // via family matching.
+        let mut th = Theory::new();
+        let temporal_lit = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_lit));
+
+        let result = abduce(&th, &Literal::simple("p"), 10).unwrap();
+        assert!(
+            result.is_already_provable(),
+            "Temporal p[1,10] should family-satisfy atemporal goal p"
+        );
+    }
+
+    #[test]
+    fn test_abduce_family_aware_body_satisfaction() {
+        // Rule: a => goal. Temporal fact a[5,15] should satisfy body literal a
+        // via family matching, yielding no missing facts.
+        let mut th = Theory::new();
+        let temporal_a = Literal::new(
+            "a",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(5),
+                crate::temporal::TimePoint::Moment(15),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_a));
+        th.add_defeasible_rule(&["a"], "goal");
+
+        let result = abduce(&th, &Literal::simple("goal"), 10).unwrap();
+        assert!(
+            result.is_already_provable(),
+            "Temporal a[5,15] should family-satisfy body literal a"
+        );
+    }
+
+    #[test]
+    fn test_abduce_verification_filters_blocked_solutions() {
+        // Rule: bird => flies.  Defeater: broken_wing =X> ~flies.
+        // Both bird and broken_wing are missing. Adding bird alone should NOT
+        // make flies provable if broken_wing is also added — but here only
+        // broken_wing is present, so bird should work.
+        //
+        // Actually: if broken_wing is already a fact, adding bird should NOT
+        // pass verification because the defeater blocks it.
+        let mut th = Theory::new();
+        th.add_fact("broken_wing");
+        th.add_defeasible_rule(&["bird"], "flies");
+        th.add_defeater(&["broken_wing"], "~flies");
+
+        let result = abduce(&th, &Literal::simple("flies"), 10).unwrap();
+        // The candidate {bird} should fail verification because the defeater
+        // blocks the conclusion. The only solution should be the trivial
+        // {flies} fallback.
+        for sol in &result.solutions {
+            assert!(
+                !sol.facts.contains(&Literal::simple("bird"))
+                    || sol.facts.len() > 1,
+                "Solution containing only 'bird' should be filtered out \
+                 because the defeater blocks 'flies'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_abduce_verification_accepts_valid_solutions() {
+        // Rule: p => q.  No defeaters. Adding p should verify successfully.
+        let mut th = Theory::new();
+        th.add_defeasible_rule(&["p"], "q");
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        assert!(result.has_solutions());
+        let sol = result.smallest_solution().unwrap();
+        assert!(sol.facts.contains(&Literal::simple("p")));
+    }
+
+    #[test]
+    fn test_abduce_family_head_match() {
+        // Rule with temporal head p[1,10] should be considered as a candidate
+        // when the goal is atemporal p, because they share the same family.
+        let mut th = Theory::new();
+        let temporal_head = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let body = vec![Literal::simple("a")];
+        th.add_rule(crate::rule::Rule::defeasible("r1", body, temporal_head));
+
+        let result = abduce(&th, &Literal::simple("p"), 10).unwrap();
+        assert!(result.has_solutions());
+        let sol = result.smallest_solution().unwrap();
+        assert!(
+            sol.facts.contains(&Literal::simple("a")),
+            "Should find body literal 'a' as hypothesis via family head match"
+        );
     }
 }
