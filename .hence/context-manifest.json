@@ -1,12 +1,12 @@
 {
-  "task_id": "differential-tests",
-  "token_budget": 10000,
-  "tokens_used": 219,
+  "task_id": "observability",
+  "token_budget": 6000,
+  "tokens_used": 253,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Compare conclusions, explanation labels, and trust outputs between bridge and redesign paths across all fixtures",
-      "token_cost": 28,
+      "content": "Emit structured diagnostic counters for projection: exact supports, family supports, family attacks, contributing labels per OBS-001 and OBS-002",
+      "token_cost": 36,
       "priority": "PlanMeta"
     },
     {
@@ -44,8 +44,14 @@
       "content": "Modified 4 files (+636, -6): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/reason/mod.rs, crates/spindle-core/src/shadow.rs",
       "token_cost": 40,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-differential-tests-changes",
+      "content": "Modified 2 files (+564, -6): .hence/context-manifest.json, crates/spindle-core/tests/differential_tests.rs",
+      "token_cost": 26,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:04:06Z"
+  "constructed_at": "2026-03-10T02:09:15Z"
 }
