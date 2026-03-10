@@ -1,12 +1,12 @@
 {
-  "task_id": "pbt-family-invariants",
-  "token_budget": 6000,
-  "tokens_used": 313,
+  "task_id": "query-match-modes",
+  "token_budget": 8000,
+  "tokens_used": 363,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Property-based tests for family/exact mapping: literals differing only in temporal share family but not exact identity",
-      "token_cost": 29,
+      "content": "Implement ExactTemporal, Family, and WildcardTemporal query match modes per CON-004",
+      "token_cost": 20,
       "priority": "PlanMeta"
     },
     {
@@ -62,8 +62,20 @@
       "content": "Modified 2 files (+473, -6): .hence/context-manifest.json, crates/spindle-core/tests/pbt_nontemporal_parity.rs",
       "token_cost": 27,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-pbt-family-invariants-changes",
+      "content": "Modified 1 files (+427, -0): crates/spindle-core/tests/pbt_family_invariants.rs",
+      "token_cost": 19,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-query-match-modes-changes",
+      "content": "Modified 2 files: crates/spindle-core/src/query/mod.rs (added QueryMatchMode enum with ExactTemporal/Family/WildcardTemporal variants, query_with_match_mode function, and match logic), crates/spindle-core/src/lib.rs (exported new types in prelude)",
+      "token_cost": 40,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:15:33Z"
+  "constructed_at": "2026-03-10T03:00:00Z"
 }
