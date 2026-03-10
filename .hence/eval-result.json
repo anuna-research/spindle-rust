@@ -3,26 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 237,
-    "deletions": 17,
+    "files_changed": 2,
+    "insertions": 281,
+    "deletions": 8,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/src/literal.rs",
-      "crates/spindle-core/src/projection.rs"
+      "crates/spindle-core/src/index.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-family-id-type-changes",
-      "content": "Modified 3 files (+237, -17): .hence/context-manifest.json, crates/spindle-core/src/literal.rs, crates/spindle-core/src/projection.rs",
+      "key": "task-exact-family-indexing-changes",
+      "content": "Modified 2 files (+281, -8): .hence/context-manifest.json, crates/spindle-core/src/index.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/family-id-type-v1",
-  "evaluated_at": "2026-03-10T01:46:43Z",
+  "branch_name": "hence/exact-family-indexing-v1",
+  "evaluated_at": "2026-03-10T01:49:46Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

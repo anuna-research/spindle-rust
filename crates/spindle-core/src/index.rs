@@ -7,7 +7,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::intern::{SymbolId, intern, resolve};
 use crate::literal::Literal;
+use crate::projection::{ExactLitId, FamilyId};
 use crate::rule::{Rule, RuleLabel};
+use crate::temporal::Temporal;
 use crate::term::Term;
 use crate::theory::Theory;
 
@@ -67,12 +69,21 @@ impl LitId {
     }
 }
 
-/// Key used for interning atoms.
+/// Key used for interning atoms (atemporal identity).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AtomKey {
     functor: SymbolId,
     mode: (SymbolId, bool), // name_id, negated
     args: Vec<Term>,
+}
+
+/// Key used for interning exact literals (includes temporal bounds).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ExactAtomKey {
+    functor: SymbolId,
+    mode: (SymbolId, bool),
+    args: Vec<Term>,
+    temporal: Temporal,
 }
 
 /// An indexed theory for efficient rule lookup.
@@ -93,6 +104,14 @@ pub struct IndexedTheory<'a> {
     body_index: FxHashMap<LitId, Vec<RuleLabel>>,
     /// Set of all literal IDs in the theory
     literal_set: FxHashSet<LitId>,
+    /// Map from (ExactAtomKey, negated) to ExactLitId
+    exact_map: FxHashMap<(ExactAtomKey, bool), ExactLitId>,
+    /// Reverse map from ExactLitId to FamilyId
+    exact_to_family: FxHashMap<ExactLitId, FamilyId>,
+    /// Map from FamilyId to the set of ExactLitIds belonging to that family
+    family_to_exact: FxHashMap<FamilyId, Vec<ExactLitId>>,
+    /// Counter for assigning ExactLitId values
+    next_exact_id: u32,
 }
 
 impl<'a> IndexedTheory<'a> {
@@ -105,6 +124,10 @@ impl<'a> IndexedTheory<'a> {
             head_index: FxHashMap::default(),
             body_index: FxHashMap::default(),
             literal_set: FxHashSet::default(),
+            exact_map: FxHashMap::default(),
+            exact_to_family: FxHashMap::default(),
+            family_to_exact: FxHashMap::default(),
+            next_exact_id: 0,
         };
 
         // Index all rules
@@ -116,6 +139,7 @@ impl<'a> IndexedTheory<'a> {
                     .or_default()
                     .push(rule.label.clone());
                 idx.literal_set.insert(lit_id);
+                idx.intern_exact(head_lit);
             }
 
             for body_bl in &rule.body {
@@ -128,6 +152,7 @@ impl<'a> IndexedTheory<'a> {
                         .or_default()
                         .push(rule.label.clone());
                     idx.literal_set.insert(lit_id);
+                    idx.intern_exact(&as_lit);
                 }
             }
         }
@@ -269,6 +294,79 @@ impl<'a> IndexedTheory<'a> {
     pub fn all_literal_ids(&self) -> impl Iterator<Item = &LitId> {
         self.literal_set.iter()
     }
+
+    // -- Exact-family indexing API (CON-001) --
+
+    /// Intern a literal as an exact identity (including temporal bounds).
+    ///
+    /// Returns the same `ExactLitId` for structurally identical literals
+    /// (same functor, args, mode, negation, and temporal window).
+    fn intern_exact(&mut self, lit: &Literal) -> ExactLitId {
+        let mode_id = lit
+            .mode
+            .name
+            .as_deref()
+            .map(intern)
+            .unwrap_or(SymbolId::EMPTY);
+        let key = ExactAtomKey {
+            functor: lit.name_id(),
+            mode: (mode_id, lit.mode.negation),
+            args: lit.predicate_args().to_vec(),
+            temporal: lit.temporal.clone(),
+        };
+        let map_key = (key, lit.negation);
+
+        if let Some(&id) = self.exact_map.get(&map_key) {
+            return id;
+        }
+
+        // Allocate a new LitId for exact identity and wrap it.
+        let raw = self.next_exact_id;
+        self.next_exact_id += 1;
+        let atom = AtomId(raw);
+        let exact = ExactLitId::new(LitId::new(atom, lit.negation));
+
+        let family = FamilyId::from(lit);
+
+        self.exact_map.insert(map_key, exact);
+        self.exact_to_family.insert(exact, family.clone());
+        self.family_to_exact
+            .entry(family)
+            .or_default()
+            .push(exact);
+
+        exact
+    }
+
+    /// Get the [`ExactLitId`] for a literal, interning it if not yet seen.
+    ///
+    /// Two literals that differ only in temporal window produce different
+    /// `ExactLitId` values.
+    pub fn exact_lit_id(&mut self, lit: &Literal) -> ExactLitId {
+        self.intern_exact(lit)
+    }
+
+    /// Get the [`FamilyId`] for a literal (atemporal identity).
+    pub fn family_id(&self, lit: &Literal) -> FamilyId {
+        FamilyId::from(lit)
+    }
+
+    /// Get all exact literals belonging to a family.
+    ///
+    /// Returns an empty slice if the family has no members in this index.
+    pub fn family_members(&self, family: &FamilyId) -> &[ExactLitId] {
+        self.family_to_exact
+            .get(family)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    /// Get the [`FamilyId`] for an exact literal.
+    ///
+    /// Returns `None` if the `ExactLitId` was not interned by this index.
+    pub fn family_for_exact(&self, exact: ExactLitId) -> Option<&FamilyId> {
+        self.exact_to_family.get(&exact)
+    }
 }
 
 #[cfg(test)]
@@ -331,5 +429,173 @@ mod tests {
 
         // p(a) is NOT a rule body
         assert!(indexed.rules_with_body_id(id_a).is_empty());
+    }
+
+    #[test]
+    fn exact_lit_id_same_literal_returns_same_id() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact(
+            "f1",
+            Literal::new(
+                "p",
+                false,
+                Default::default(),
+                Temporal::new(
+                    crate::temporal::TimePoint::Moment(1),
+                    crate::temporal::TimePoint::Moment(10),
+                ),
+                vec![],
+            ),
+        ));
+
+        let mut idx = IndexedTheory::build(&theory);
+
+        let lit = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+
+        let id1 = idx.exact_lit_id(&lit);
+        let id2 = idx.exact_lit_id(&lit);
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn exact_lit_id_temporal_variants_differ() {
+        let mut theory = Theory::new();
+        let lit_a = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let lit_b = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(20),
+                crate::temporal::TimePoint::Moment(30),
+            ),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", lit_a.clone()));
+        theory.add_rule(Rule::fact("f2", lit_b.clone()));
+
+        let mut idx = IndexedTheory::build(&theory);
+
+        let id_a = idx.exact_lit_id(&lit_a);
+        let id_b = idx.exact_lit_id(&lit_b);
+        assert_ne!(id_a, id_b);
+    }
+
+    #[test]
+    fn family_members_groups_temporal_variants() {
+        let mut theory = Theory::new();
+        let lit_a = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let lit_b = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(20),
+                crate::temporal::TimePoint::Moment(30),
+            ),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", lit_a.clone()));
+        theory.add_rule(Rule::fact("f2", lit_b.clone()));
+
+        let idx = IndexedTheory::build(&theory);
+        let family = idx.family_id(&lit_a);
+        let members = idx.family_members(&family);
+
+        assert_eq!(members.len(), 2);
+    }
+
+    #[test]
+    fn family_for_exact_round_trips() {
+        let mut theory = Theory::new();
+        let lit = Literal::new(
+            "q",
+            true,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(5),
+                crate::temporal::TimePoint::Moment(15),
+            ),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", lit.clone()));
+
+        let mut idx = IndexedTheory::build(&theory);
+        let exact = idx.exact_lit_id(&lit);
+        let family = idx.family_for_exact(exact).unwrap();
+
+        assert_eq!(*family, idx.family_id(&lit));
+    }
+
+    #[test]
+    fn family_members_empty_for_unknown_family() {
+        let theory = Theory::new();
+        let idx = IndexedTheory::build(&theory);
+        let unknown = FamilyId::from(&Literal::simple("unknown"));
+        assert!(idx.family_members(&unknown).is_empty());
+    }
+
+    #[test]
+    fn negation_separates_exact_families() {
+        let mut theory = Theory::new();
+        let pos = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let neg = Literal::new(
+            "p",
+            true,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", pos.clone()));
+        theory.add_rule(Rule::fact("f2", neg.clone()));
+
+        let mut idx = IndexedTheory::build(&theory);
+
+        let exact_pos = idx.exact_lit_id(&pos);
+        let exact_neg = idx.exact_lit_id(&neg);
+        assert_ne!(exact_pos, exact_neg);
+
+        let family_pos = idx.family_for_exact(exact_pos).unwrap();
+        let family_neg = idx.family_for_exact(exact_neg).unwrap();
+        assert_ne!(family_pos, family_neg);
     }
 }
