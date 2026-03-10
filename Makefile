@@ -1,4 +1,4 @@
-.PHONY: all build test clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory release-tag
+.PHONY: all build test test-quick test-full clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory release-tag
 
 # Default target
 all: check build test
@@ -11,9 +11,17 @@ build:
 release:
 	cargo build --release --all
 
-# Run all tests
+# Run all tests (nextest for parallel execution)
 test:
-	cargo test --all
+	cargo nextest run --all
+
+# Run tests with reduced proptest cases (fast dev loop)
+test-quick:
+	PROPTEST_CASES=20 cargo nextest run --all
+
+# Run full test suite (CI-grade, original proptest case counts)
+test-full:
+	cargo nextest run --all
 
 # Run clippy lints
 clippy:

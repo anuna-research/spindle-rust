@@ -32,17 +32,11 @@ use crate::rule::RuleLabel;
 // ---------------------------------------------------------------------------
 
 /// Configuration for shadow mode.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ShadowConfig {
     /// Whether shadow mode is active. When `false`, the shadow reasoner
     /// delegates directly to the standard reasoner with no overhead.
     pub enabled: bool,
-}
-
-impl Default for ShadowConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -333,12 +327,11 @@ fn detect_divergences(
             ProjectionToken::Attack(fa) => Some(&fa.family_id),
             ProjectionToken::Exact(_) => None,
         };
-        if let Some(family) = token_family {
-            if !concluded_families.contains(family)
-                && !concluded_families.contains(&family.complement())
-            {
-                divergences.push(Divergence::unmatched_token(token.clone()));
-            }
+        if let Some(family) = token_family
+            && !concluded_families.contains(family)
+            && !concluded_families.contains(&family.complement())
+        {
+            divergences.push(Divergence::unmatched_token(token.clone()));
         }
     }
 

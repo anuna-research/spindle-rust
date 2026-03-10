@@ -19,7 +19,7 @@ use spindle_core::reason::reason;
 use spindle_core::shadow::{ShadowReasoner, ShadowResult};
 
 use proptest_helpers::{
-    arb_conflicting_theory, arb_conflicting_theory_with_head, arb_resolved_conflict_theory,
+    arb_conflicting_theory, arb_resolved_conflict_theory,
     arb_theory, conclusion_set,
 };
 
@@ -41,6 +41,7 @@ fn conclusion_str_set(conclusions: &[Conclusion]) -> HashSet<String> {
 }
 
 /// Collect positive conclusion literal names.
+#[allow(dead_code)]
 fn positive_names(conclusions: &[Conclusion]) -> HashSet<String> {
     conclusions
         .iter()

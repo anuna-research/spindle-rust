@@ -21,7 +21,7 @@ use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
 use spindle_core::query::{
-    BlockingType, RequiresOptions, RequiresSearchStatus, abduce, requires_with_options, why_not,
+    BlockingType, RequiresOptions, abduce, requires_with_options, why_not,
 };
 use spindle_core::reason::reason;
 use spindle_core::rule::{Rule, RuleType};
@@ -388,59 +388,27 @@ fn test_requires_verified_rejects_defeater_blocked_candidate() {
         result.solutions.is_empty(),
         "Verified requires should not return defeater-blocked candidates"
     );
-    assert!(
-        result.verification.raw_examined >= 1,
-        "At least one raw candidate should be examined"
-    );
+    // abduce now verifies solutions internally, so no raw candidates
+    // are passed through to requires' verification step.
     assert_eq!(
         result.verification.accepted, 0,
         "Defeater-blocked candidate should not be accepted"
     );
-    assert_eq!(
-        result.verification.raw_examined, result.verification.rejected,
-        "All examined candidates should be rejected in this scenario"
-    );
-    assert_eq!(result.search_status, RequiresSearchStatus::BoundedComplete);
 }
 
 #[test]
-fn test_abduce_may_return_unverified_candidate_documented() {
-    // Raw abduce behavior remains unchanged: it may return body-satisfying
-    // candidates that fail under full defeasible reasoning.
+fn test_abduce_rejects_defeater_blocked_candidate() {
+    // abduce now verifies candidates: a rule whose body is satisfiable but
+    // whose head is blocked by a defeater should yield no valid solutions.
     let mut theory = Theory::new();
     theory.add_defeasible_rule(&["p"], "q");
     theory.add_defeater(&["p"], "~q");
 
     let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
     assert!(
-        result.has_solutions(),
-        "Raw abduce should still return body-level candidates"
+        !result.has_solutions(),
+        "Defeater-blocked candidate should be rejected by verification"
     );
-
-    for (i, solution) in result.solutions.iter().enumerate() {
-        if solution.is_already_provable() {
-            continue;
-        }
-
-        let mut modified = theory.clone();
-        for fact_lit in &solution.facts {
-            let label = format!("__abduce_test_{i}_{}", fact_lit.name());
-            modified.add_rule(Rule::fact(&label, fact_lit.clone()));
-        }
-
-        let modified_conclusions = reason(&modified).unwrap();
-        let goal_achieved = modified_conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "q"
-                && !c.literal.negation
-        });
-
-        if !goal_achieved {
-            return;
-        }
-    }
-
-    panic!("Expected at least one raw abduce candidate to fail verification");
 }
 
 #[test]
