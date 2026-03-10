@@ -1,5 +1,5 @@
-//! Shadow mode: run both bridge-based and projection-based reasoning in
-//! parallel for comparison and validation.
+//! Shadow mode: run both standard and projection-based reasoning in
+//! parallel for diagnostic comparison.
 //!
 //! When shadow mode is enabled, the [`ShadowReasoner`] wraps the standard
 //! DL(d) reasoner and additionally runs the [`ProjectionEngine`] on every
@@ -7,9 +7,11 @@
 //! projection tokens against the standard conclusions and reports any
 //! divergences.
 //!
-//! This gates the redesign behind a comparison layer so that the new
-//! projection-based approach can be validated against the existing
-//! bridge-based reasoning before replacing it.
+//! Shadow mode was originally used to validate parity between the old
+//! synthetic bridge rule approach and the new first-class projection
+//! tokens. Now that parity is established and bridge rules have been
+//! removed, shadow mode remains as an optional diagnostic tool for
+//! verifying projection consistency.
 
 use std::fmt;
 

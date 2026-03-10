@@ -1,9 +1,10 @@
 //! First-class projection tokens for temporal family reasoning.
 //!
-//! Instead of synthesizing bridge rules to connect temporal literals to their
-//! atemporal families, the engine emits projection tokens that carry the
-//! original rule label and type. This preserves superiority and trust semantics
-//! by construction (SPEC-020, §4.2).
+//! Rather than the old approach of synthesizing bridge rules to connect
+//! temporal literals to their atemporal families, the engine emits
+//! projection tokens that carry the original rule label and type. This
+//! preserves superiority and trust semantics by construction (SPEC-020,
+//! §4.2).
 
 use crate::index::LitId;
 use crate::literal::{InternedLiteralName, Literal};
@@ -177,9 +178,8 @@ pub struct FamilySupport {
 /// A token recording that a temporal defeater attacks a base family using
 /// its original body and label.
 ///
-/// This replaces synthetic bridge defeater rules — the attack carries the
-/// original rule's identity so that superiority resolution uses authored
-/// labels directly (SPEC-020, ADR-004).
+/// The attack carries the original rule's identity so that superiority
+/// resolution uses authored labels directly (SPEC-020, ADR-004).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FamilyAttack {
     /// The base family being attacked.
@@ -215,10 +215,9 @@ use crate::rule::Rule;
 
 /// The projection engine emits support/attack tokens when a rule fires.
 ///
-/// Instead of synthesizing bridge rules, it produces first-class
-/// [`ProjectionToken`]s that carry the original rule label and type,
-/// preserving superiority and trust semantics by construction
-/// (SPEC-020, CON-002).
+/// Produces first-class [`ProjectionToken`]s that carry the original
+/// rule label and type, preserving superiority and trust semantics by
+/// construction (SPEC-020, CON-002).
 ///
 /// # Usage
 ///

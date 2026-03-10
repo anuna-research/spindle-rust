@@ -33,10 +33,15 @@ pub(crate) mod definite;
 pub(crate) mod facts;
 pub(crate) mod state;
 
+use rustc_hash::FxHashSet;
+
 use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::index::IndexedTheory;
 use crate::pipeline::{PrepareOptions, prepare};
+use crate::projection::{
+    ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
+};
 use crate::theory::Theory;
 
 use self::state::ReasoningState;
@@ -113,10 +118,35 @@ pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
 }
 
 // ---------------------------------------------------------------------------
+// ReasonResult: enriched output with projection tokens
+// ---------------------------------------------------------------------------
+
+/// The result of a full reasoning pass, including both conclusions and
+/// projection tokens.
+///
+/// The projection engine runs automatically on every rule that contributed
+/// to a positive conclusion, emitting [`ProjectionToken`]s that carry
+/// family-level support and attack information without synthetic bridge
+/// rules.
+#[derive(Debug, Clone)]
+pub struct ReasonResult {
+    /// All conclusions (positive and negative) from the DL(d) reasoner.
+    pub conclusions: Vec<Conclusion>,
+    /// Projection tokens emitted for rules that contributed to positive
+    /// conclusions. These provide family-level support/attack semantics
+    /// for temporal literals.
+    pub projection_tokens: Vec<ProjectionToken>,
+    /// Structured diagnostic counters for projection activity.
+    pub diagnostics: ProjectionDiagnostics,
+    /// Deterministic debug snapshot of projection state.
+    pub snapshot: ProjectionSnapshot,
+}
+
+// ---------------------------------------------------------------------------
 // Free-function convenience API (unchanged public surface)
 // ---------------------------------------------------------------------------
 
-/// Perform defeasible reasoning on a theory
+/// Perform defeasible reasoning on a theory.
 pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
     reason_with_options(theory, PrepareOptions::default())
 }
@@ -161,6 +191,68 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
     let mut indexed = IndexedTheory::build(theory);
     reason_indexed(&mut indexed)
+}
+
+/// Perform full reasoning with projection tokens on a theory.
+///
+/// Like [`reason`], but returns a [`ReasonResult`] that includes
+/// projection tokens alongside conclusions. The projection engine runs
+/// on every rule that contributed to a positive conclusion, providing
+/// family-level support and attack semantics for temporal literals.
+pub fn reason_full(theory: &Theory) -> Result<ReasonResult> {
+    reason_full_with_options(theory, PrepareOptions::default())
+}
+
+/// Perform full reasoning with projection tokens and custom options.
+///
+/// Like [`reason_with_options`], but returns a [`ReasonResult`] that
+/// includes projection tokens alongside conclusions.
+pub fn reason_full_with_options(theory: &Theory, opts: PrepareOptions) -> Result<ReasonResult> {
+    let prepared = prepare(theory, opts)?;
+    reason_full_prepared(&prepared.theory)
+}
+
+/// Perform full reasoning with projection tokens on a prepared theory.
+///
+/// Like [`reason_prepared`], but returns a [`ReasonResult`] that
+/// includes projection tokens alongside conclusions.
+pub fn reason_full_prepared(theory: &Theory) -> Result<ReasonResult> {
+    let mut indexed = IndexedTheory::build(theory);
+    reason_full_indexed(&mut indexed)
+}
+
+/// Core reasoning with projection, operating on an already-indexed theory.
+///
+/// Runs the standard DL(d) algorithm, then projects all contributing
+/// rules through the [`ProjectionEngine`] to produce family-level
+/// support and attack tokens.
+pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResult> {
+    let conclusions = reason_indexed(indexed)?;
+
+    // Run projection on rules that contributed to positive conclusions.
+    let contributing_labels: FxHashSet<String> = conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .filter_map(|c| c.rule_label.clone())
+        .collect();
+
+    let mut engine = ProjectionEngine::with_capacity(conclusions.len() * 2);
+    let theory = indexed.theory();
+    for label in &contributing_labels {
+        if let Some(rule) = theory.get_rule(label) {
+            engine.project_rule(rule, indexed);
+        }
+    }
+
+    let diagnostics = engine.diagnostics();
+    let snapshot = engine.snapshot();
+
+    Ok(ReasonResult {
+        conclusions,
+        projection_tokens: engine.into_tokens(),
+        diagnostics,
+        snapshot,
+    })
 }
 
 /// Core reasoning loop operating on an already-indexed theory.
