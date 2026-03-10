@@ -91,7 +91,10 @@ pub mod prelude {
         ExactLitId, ExactSupport, FamilyAttack, FamilyId, FamilySupport, ProjectionDiagnostics,
         ProjectionEngine, ProjectionSnapshot, ProjectionToken,
     };
-    pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
+    pub use crate::query::{
+        QueryMatchMode, QueryResult, QueryStatus, query, query_with_match_mode,
+        query_with_options,
+    };
     pub use crate::reason::{
         Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
     };
