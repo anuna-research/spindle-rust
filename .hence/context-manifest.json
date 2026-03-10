@@ -1,12 +1,12 @@
 {
-  "task_id": "pbt-nontemporal-parity",
-  "token_budget": 8000,
-  "tokens_used": 285,
+  "task_id": "pbt-family-invariants",
+  "token_budget": 6000,
+  "tokens_used": 313,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Property-based tests verifying redesigned engine matches current engine on randomly generated non-temporal theories",
-      "token_cost": 28,
+      "content": "Property-based tests for family/exact mapping: literals differing only in temporal share family but not exact identity",
+      "token_cost": 29,
       "priority": "PlanMeta"
     },
     {
@@ -56,8 +56,14 @@
       "content": "Modified 2 files (+564, -6): .hence/context-manifest.json, crates/spindle-core/tests/differential_tests.rs",
       "token_cost": 26,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-pbt-nontemporal-parity-changes",
+      "content": "Modified 2 files (+473, -6): .hence/context-manifest.json, crates/spindle-core/tests/pbt_nontemporal_parity.rs",
+      "token_cost": 27,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:12:03Z"
+  "constructed_at": "2026-03-10T02:15:33Z"
 }
