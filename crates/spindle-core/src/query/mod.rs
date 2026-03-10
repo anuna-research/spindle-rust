@@ -133,6 +133,53 @@ impl QueryMatchMode {
     }
 }
 
+fn default_query_match_mode(literal: &Literal) -> QueryMatchMode {
+    if literal.is_temporal() {
+        QueryMatchMode::ExactTemporal
+    } else {
+        QueryMatchMode::WildcardTemporal
+    }
+}
+
+pub(crate) fn exact_literal_match(expected: &Literal, candidate: &Literal) -> bool {
+    expected == candidate && expected.temporal == candidate.temporal
+}
+
+pub(crate) fn literal_matches(
+    match_mode: QueryMatchMode,
+    expected: &Literal,
+    candidate: &Literal,
+) -> bool {
+    match match_mode {
+        QueryMatchMode::ExactTemporal => exact_literal_match(expected, candidate),
+        QueryMatchMode::Family | QueryMatchMode::WildcardTemporal => {
+            FamilyId::from(expected) == FamilyId::from(candidate)
+        }
+    }
+}
+
+pub(crate) fn semantic_match_mode(literal: &Literal) -> QueryMatchMode {
+    QueryMatchMode::detect(literal)
+}
+
+pub(crate) fn semantic_literal_matches(expected: &Literal, candidate: &Literal) -> bool {
+    literal_matches(semantic_match_mode(expected), expected, candidate)
+}
+
+pub(crate) fn find_positive_match<'a>(
+    literal: &Literal,
+    conclusions: &'a [Conclusion],
+) -> Option<&'a Conclusion> {
+    let match_mode = semantic_match_mode(literal);
+    conclusions.iter().find(|c| {
+        c.conclusion_type.is_positive() && literal_matches(match_mode, literal, &c.literal)
+    })
+}
+
+pub(crate) fn has_positive_match(literal: &Literal, conclusions: &[Conclusion]) -> bool {
+    find_positive_match(literal, conclusions).is_some()
+}
+
 impl fmt::Display for QueryMatchMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -395,11 +442,10 @@ pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
 
 /// Query a literal against a theory with custom options.
 ///
-/// Uses [`QueryMatchMode::WildcardTemporal`] semantics: the query matches any
-/// conclusion in the same atemporal family, selecting the deterministic earliest
-/// representative when multiple temporal variants exist. This preserves the
-/// user-facing wildcard behavior that callers relied on before match modes were
-/// introduced, but models it explicitly rather than accidentally.
+/// Uses exact matching for bounded temporal literals and wildcard-family
+/// matching for atemporal literals. This preserves the historic wildcard
+/// behavior for bare queries while keeping bounded temporal queries exact, as
+/// required by SPEC-020 REQ-006.
 ///
 /// For exact-temporal or family-level matching, use [`query_with_match_mode`].
 ///
@@ -424,7 +470,7 @@ pub fn query_with_options(
     literal: &Literal,
     opts: PrepareOptions,
 ) -> Result<QueryResult> {
-    query_with_match_mode(theory, literal, QueryMatchMode::WildcardTemporal, opts)
+    query_with_match_mode(theory, literal, default_query_match_mode(literal), opts)
 }
 
 /// Query a literal against a theory using an explicit match mode (CON-004).
@@ -470,16 +516,11 @@ pub fn query_with_match_mode(
 /// ExactTemporal matching: conclusion must match both atemporal identity AND
 /// temporal bounds of the query literal.
 fn match_exact_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
-    let query_temporal = &literal.temporal;
     let complement = literal.complement();
-    let complement_temporal = &complement.temporal;
 
     // Check if literal is provable with exact temporal match
     for conc in conclusions {
-        if conc.literal == *literal
-            && conc.literal.temporal == *query_temporal
-            && conc.conclusion_type.is_positive()
-        {
+        if conc.conclusion_type.is_positive() && exact_literal_match(literal, &conc.literal) {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
                 .with_conclusion_type(conc.conclusion_type));
         }
@@ -487,10 +528,7 @@ fn match_exact_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result
 
     // Check if complement is provable with exact temporal match (refuted)
     for conc in conclusions {
-        if conc.literal == complement
-            && conc.literal.temporal == *complement_temporal
-            && conc.conclusion_type.is_positive()
-        {
+        if conc.conclusion_type.is_positive() && exact_literal_match(&complement, &conc.literal) {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
         }
     }
@@ -2067,6 +2105,20 @@ mod tests {
             result.status,
             QueryStatus::Provable,
             "default query() should match temporal variants via WildcardTemporal"
+        );
+    }
+
+    #[test]
+    fn default_query_uses_exact_temporal_for_bounded_literal() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let result = query(&theory, &temporal_lit("p", 20, 30)).unwrap();
+
+        assert_eq!(
+            result.status,
+            QueryStatus::Unknown,
+            "default query() should not cross-match disjoint temporal windows"
         );
     }
 

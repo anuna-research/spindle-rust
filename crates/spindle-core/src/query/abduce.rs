@@ -4,9 +4,8 @@
 //! chaining to find minimal sets of facts whose addition would enable the
 //! goal to be proven via the standard reasoning pipeline.
 //!
-//! Uses **family-aware support**: both the initial provability check and
-//! body-literal satisfaction use [`FamilyId`] matching so that a temporal
-//! conclusion like `p[1,10]` satisfies an atemporal body literal `p`.
+//! Uses query-shape-aware support: atemporal goals and body literals match by
+//! family, while bounded temporal literals remain exact per SPEC-020.
 //!
 //! `abduce()` returns raw hypothesis sets derived from rule bodies. It does
 //! not verify that adding those facts actually makes the goal provable after
@@ -16,12 +15,14 @@
 use std::collections::HashSet;
 use std::fmt;
 
+use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::literal::Literal;
-use crate::projection::FamilyId;
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
+
+use super::{has_positive_match, semantic_literal_matches};
 
 // =============================================================================
 // TYPES
@@ -118,56 +119,46 @@ impl fmt::Display for AbductionResult {
 // OPERATORS
 // =============================================================================
 
-/// Check whether `goal` is positively supported by any conclusion in its
-/// family (atemporal identity match via [`FamilyId`]).
-fn is_family_provable(goal: &Literal, conclusions: &[crate::conclusion::Conclusion]) -> bool {
-    let family = FamilyId::from(goal);
-    conclusions
-        .iter()
-        .any(|c| c.conclusion_type.is_positive() && FamilyId::from(&c.literal) == family)
+/// Check whether `goal` is positively supported according to SPEC-020 query
+/// semantics: exact-temporal for bounded literals, family-aware for atemporal.
+fn is_goal_provable(goal: &Literal, conclusions: &[Conclusion]) -> bool {
+    has_positive_match(goal, conclusions)
 }
 
-/// Check whether `lit` is satisfied by any positive conclusion in the same
-/// family.  Used to determine which body literals are already supported.
-fn is_body_satisfied(lit: &Literal, proven_families: &HashSet<FamilyId>) -> bool {
-    proven_families.contains(&FamilyId::from(lit))
+/// Check whether `lit` is satisfied according to the literal's own match
+/// semantics. Atemporal premises match by family; bounded premises stay exact.
+fn is_body_satisfied(lit: &Literal, conclusions: &[Conclusion]) -> bool {
+    has_positive_match(lit, conclusions)
 }
 
 /// Perform abductive reasoning: "What facts would make this goal provable?"
 ///
 /// Uses backward chaining to find minimal sets of facts that would
-/// enable the goal to be proven. Body-literal satisfaction uses
-/// family-aware matching (via [`FamilyId`]) so that temporal conclusions
-/// can satisfy atemporal body literals. Returns at most `max_solutions`
-/// raw hypothesis sets; callers that need verified fact-sets should use
-/// [`super::requires`].
+/// enable the goal to be proven. Atemporal goals and premises use family
+/// matching; bounded temporal literals stay exact. Returns at most
+/// `max_solutions` raw hypothesis sets; callers that need verified fact-sets
+/// should use [`super::requires`].
 pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
     let mut result = AbductionResult::new(goal.clone());
 
-    // First check if already provable (family-aware)
+    // First check if already provable using the goal's own match semantics.
     let conclusions = reason(theory)?;
-    if is_family_provable(goal, &conclusions) {
+    if is_goal_provable(goal, &conclusions) {
         result
             .solutions
             .push(AbductionSolution::new(HashSet::new()));
         return Ok(result);
     }
 
-    // Collect families that are already positively proven
-    let proven_families: HashSet<FamilyId> = conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| FamilyId::from(&c.literal))
-        .collect();
-
-    // Find rules that could derive the goal (family-aware head match)
-    let goal_family = FamilyId::from(goal);
+    // Find rules that could derive the goal according to the goal's own match
+    // semantics: exact when bounded, family-aware when atemporal.
     let mut candidates: Vec<HashSet<Literal>> = Vec::new();
 
     for rule in theory.rules() {
-        let head_family = FamilyId::from(rule.head_literal());
-        if head_family == goal_family && rule.rule_type != RuleType::Defeater {
-            // Find missing body literals (family-aware satisfaction)
+        if semantic_literal_matches(goal, rule.head_literal())
+            && rule.rule_type != RuleType::Defeater
+        {
+            // Find missing body literals using each premise's own match semantics.
             let body_lits: Vec<Literal> = rule
                 .body
                 .iter()
@@ -175,7 +166,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
                 .collect();
             let missing: HashSet<_> = body_lits
                 .into_iter()
-                .filter(|b| !is_body_satisfied(b, &proven_families))
+                .filter(|b| !is_body_satisfied(b, &conclusions))
                 .collect();
 
             if missing.is_empty() {
@@ -200,9 +191,9 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 
     for facts in candidates.into_iter().take(max_solutions) {
         let mut sol = AbductionSolution::new(facts);
-        // Track rules used — any rule whose head matches the goal family
+        // Track rules used with the same goal/head matching semantics as above.
         for rule in theory.rules() {
-            if FamilyId::from(rule.head_literal()) == goal_family {
+            if semantic_literal_matches(goal, rule.head_literal()) {
                 sol.rules_used.insert(rule.label.clone());
             }
         }
@@ -216,6 +207,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 mod tests {
     use super::*;
     use crate::rule::Rule;
+    use crate::temporal::{Temporal, TimePoint};
 
     // ==========================================================================
     // HELPER FUNCTIONS
@@ -234,6 +226,16 @@ mod tests {
         th.add_fact("code_written");
         th.add_defeasible_rule(&["code_written", "tests_pass"], "ready_review");
         th
+    }
+
+    fn temporal_lit(name: &str, start: i64, end: i64) -> Literal {
+        Literal::new(
+            name,
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(start), TimePoint::Moment(end)),
+            vec![],
+        )
     }
 
     // ==========================================================================
@@ -569,16 +571,7 @@ mod tests {
         // Rule with temporal head p[1,10] should be considered as a candidate
         // when the goal is atemporal p, because they share the same family.
         let mut th = Theory::new();
-        let temporal_head = Literal::new(
-            "p",
-            false,
-            crate::mode::Mode::empty(),
-            crate::temporal::Temporal::new(
-                crate::temporal::TimePoint::Moment(1),
-                crate::temporal::TimePoint::Moment(10),
-            ),
-            vec![],
-        );
+        let temporal_head = temporal_lit("p", 1, 10);
         let body = vec![Literal::simple("a")];
         th.add_rule(crate::rule::Rule::defeasible("r1", body, temporal_head));
 
@@ -588,6 +581,46 @@ mod tests {
         assert!(
             sol.facts.contains(&Literal::simple("a")),
             "Should find body literal 'a' as hypothesis via family head match"
+        );
+    }
+
+    #[test]
+    fn test_abduce_temporal_goal_does_not_cross_match_other_window() {
+        let mut th = Theory::new();
+        th.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+
+        let goal = temporal_lit("p", 1, 10);
+        let result = abduce(&th, &goal, 10).unwrap();
+
+        assert!(
+            !result.is_already_provable(),
+            "A different temporal window must not satisfy a bounded goal"
+        );
+        let sol = result.smallest_solution().unwrap();
+        let fact = sol.facts.iter().next().unwrap();
+        assert_eq!(fact.to_spl(), goal.to_spl());
+    }
+
+    #[test]
+    fn test_abduce_temporal_body_requires_exact_window() {
+        let mut th = Theory::new();
+        th.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+        th.add_fact("block");
+        th.add_rule(Rule::defeasible(
+            "r1",
+            vec![temporal_lit("p", 1, 10)],
+            Literal::simple("q"),
+        ));
+        th.add_defeater(&["block"], "~q");
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+        let fact = sol.facts.iter().next().unwrap();
+
+        assert_eq!(
+            fact.to_spl(),
+            temporal_lit("p", 1, 10).to_spl(),
+            "A temporal premise should stay exact during body satisfaction"
         );
     }
 }

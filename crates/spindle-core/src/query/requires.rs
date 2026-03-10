@@ -2,7 +2,8 @@
 //!
 //! [`requires_with_options`] verifies each raw abduction candidate by injecting
 //! candidate facts and re-running full reasoning. Only candidates that make the
-//! goal positively provable are returned.
+//! goal positively provable under the same exact-vs-family semantics as
+//! `abduce()` are returned.
 
 use std::collections::HashSet;
 
@@ -14,6 +15,7 @@ use crate::rule::Rule;
 use crate::theory::Theory;
 
 use super::abduce::{AbductionSolution, abduce};
+use super::has_positive_match;
 
 /// Default upper bound for raw candidates verified by `requires`.
 pub const DEFAULT_MAX_RAW_CANDIDATES: usize = 1000;
@@ -78,9 +80,7 @@ fn canonical_fact_key(solution: &AbductionSolution) -> String {
 }
 
 fn is_goal_provable(conclusions: &[Conclusion], goal: &Literal) -> bool {
-    conclusions
-        .iter()
-        .any(|c| c.literal == *goal && c.conclusion_type.is_positive())
+    has_positive_match(goal, conclusions)
 }
 
 fn verify_candidate(
