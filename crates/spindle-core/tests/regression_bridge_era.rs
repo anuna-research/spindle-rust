@@ -35,7 +35,12 @@ fn shadow(theory: &Theory) -> ShadowResult {
         .expect("shadow reasoning failed")
 }
 
-fn has_conclusion(conclusions: &[Conclusion], name: &str, negated: bool, ct: ConclusionType) -> bool {
+fn has_conclusion(
+    conclusions: &[Conclusion],
+    name: &str,
+    negated: bool,
+    ct: ConclusionType,
+) -> bool {
     conclusions.iter().any(|c| {
         c.conclusion_type == ct && c.literal.name() == name && c.literal.negation == negated
     })
@@ -73,11 +78,7 @@ fn strength_defeasible_temporal_projects_defeasible_support() {
         vec![],
     );
     let mut theory = Theory::new();
-    theory.add_rule(Rule::defeasible(
-        "r1",
-        vec![Literal::simple("a")],
-        head,
-    ));
+    theory.add_rule(Rule::defeasible("r1", vec![Literal::simple("a")], head));
 
     let tokens = project_rule_tokens(&theory, "r1");
     let family_tok = tokens
@@ -105,11 +106,7 @@ fn strength_strict_temporal_projects_strict_support() {
         vec![],
     );
     let mut theory = Theory::new();
-    theory.add_rule(Rule::strict(
-        "s1",
-        vec![Literal::simple("a")],
-        head,
-    ));
+    theory.add_rule(Rule::strict("s1", vec![Literal::simple("a")], head));
 
     let tokens = project_rule_tokens(&theory, "s1");
     let family_tok = tokens
@@ -137,11 +134,7 @@ fn strength_defeater_temporal_projects_defeater_attack() {
         vec![],
     );
     let mut theory = Theory::new();
-    theory.add_rule(Rule::defeater(
-        "d1",
-        vec![Literal::simple("a")],
-        head,
-    ));
+    theory.add_rule(Rule::defeater("d1", vec![Literal::simple("a")], head));
 
     let tokens = project_rule_tokens(&theory, "d1");
     let attack_tok = tokens
@@ -271,7 +264,12 @@ fn defeater_body_conditions_respected() {
     let conclusions = reason(&theory).unwrap();
 
     assert!(
-        has_conclusion(&conclusions, "flies", false, ConclusionType::DefeasiblyProvable),
+        has_conclusion(
+            &conclusions,
+            "flies",
+            false,
+            ConclusionType::DefeasiblyProvable
+        ),
         "bridge-era regression: defeater blocked conclusion despite unsatisfied body"
     );
 }
@@ -288,7 +286,12 @@ fn defeater_body_conditions_block_when_satisfied() {
     let conclusions = reason(&theory).unwrap();
 
     assert!(
-        !has_conclusion(&conclusions, "flies", false, ConclusionType::DefeasiblyProvable),
+        !has_conclusion(
+            &conclusions,
+            "flies",
+            false,
+            ConclusionType::DefeasiblyProvable
+        ),
         "defeater should block +d flies when body is satisfied"
     );
 }
@@ -354,8 +357,16 @@ fn distinct_temporal_defeaters_produce_distinct_attacks() {
     };
 
     let mut theory = Theory::new();
-    theory.add_rule(Rule::defeater("d1", vec![Literal::simple("a")], head(1, 10)));
-    theory.add_rule(Rule::defeater("d2", vec![Literal::simple("a")], head(1, 10)));
+    theory.add_rule(Rule::defeater(
+        "d1",
+        vec![Literal::simple("a")],
+        head(1, 10),
+    ));
+    theory.add_rule(Rule::defeater(
+        "d2",
+        vec![Literal::simple("a")],
+        head(1, 10),
+    ));
 
     let mut idx = IndexedTheory::build(&theory);
     let mut engine = ProjectionEngine::new();
@@ -398,7 +409,11 @@ fn projection_tokens_carry_original_label() {
         vec![],
     );
     let mut theory = Theory::new();
-    theory.add_rule(Rule::defeasible("my_rule", vec![Literal::simple("input")], head));
+    theory.add_rule(Rule::defeasible(
+        "my_rule",
+        vec![Literal::simple("input")],
+        head,
+    ));
 
     let tokens = project_rule_tokens(&theory, "my_rule");
 
@@ -534,7 +549,7 @@ fn different_temporal_windows_share_family() {
 fn atemporal_body_compiled_as_family_key() {
     // An atemporal body literal should compile to a Family match key,
     // which means any temporal variant of that family can satisfy it.
-    use spindle_core::compilation::{compile_rule, BodyMatchKey};
+    use spindle_core::compilation::{BodyMatchKey, compile_rule};
 
     let mut theory = Theory::new();
     theory.add_rule(Rule::defeasible(
@@ -626,11 +641,7 @@ fn no_bridge_rules_with_temporal_theory() {
     );
     let mut theory = Theory::new();
     theory.add_fact("a");
-    theory.add_rule(Rule::defeasible(
-        "r1",
-        vec![Literal::simple("a")],
-        head,
-    ));
+    theory.add_rule(Rule::defeasible("r1", vec![Literal::simple("a")], head));
 
     let conclusions = reason(&theory).unwrap();
     assert!(!conclusions.is_empty());
@@ -813,8 +824,20 @@ fn family_separates_negation() {
 
 #[test]
 fn family_separates_args() {
-    let lit_a = Literal::new("parent", false, Mode::empty(), Temporal::empty(), vec!["alice".into()]);
-    let lit_b = Literal::new("parent", false, Mode::empty(), Temporal::empty(), vec!["bob".into()]);
+    let lit_a = Literal::new(
+        "parent",
+        false,
+        Mode::empty(),
+        Temporal::empty(),
+        vec!["alice".into()],
+    );
+    let lit_b = Literal::new(
+        "parent",
+        false,
+        Mode::empty(),
+        Temporal::empty(),
+        vec!["bob".into()],
+    );
 
     assert_ne!(
         FamilyId::from(&lit_a),
@@ -909,11 +932,21 @@ fn tweety_triangle_correct_conclusions() {
 
     // Penguin wins: +d ~flies, NOT +d flies.
     assert!(
-        has_conclusion(&conclusions, "flies", true, ConclusionType::DefeasiblyProvable),
+        has_conclusion(
+            &conclusions,
+            "flies",
+            true,
+            ConclusionType::DefeasiblyProvable
+        ),
         "expected +d ~flies"
     );
     assert!(
-        !has_conclusion(&conclusions, "flies", false, ConclusionType::DefeasiblyProvable),
+        !has_conclusion(
+            &conclusions,
+            "flies",
+            false,
+            ConclusionType::DefeasiblyProvable
+        ),
         "should NOT have +d flies (penguin rule is superior)"
     );
 }
@@ -925,11 +958,21 @@ fn nixon_diamond_ambiguity_blocks_both() {
 
     // Neither +d pacifist nor +d ~pacifist should hold (ambiguity).
     assert!(
-        !has_conclusion(&conclusions, "pacifist", false, ConclusionType::DefeasiblyProvable),
+        !has_conclusion(
+            &conclusions,
+            "pacifist",
+            false,
+            ConclusionType::DefeasiblyProvable
+        ),
         "should NOT have +d pacifist (ambiguity)"
     );
     assert!(
-        !has_conclusion(&conclusions, "pacifist", true, ConclusionType::DefeasiblyProvable),
+        !has_conclusion(
+            &conclusions,
+            "pacifist",
+            true,
+            ConclusionType::DefeasiblyProvable
+        ),
         "should NOT have +d ~pacifist (ambiguity)"
     );
 }
@@ -941,11 +984,21 @@ fn defeaters_block_without_proving() {
 
     // Defeaters should block +d flies but NOT prove +d ~flies.
     assert!(
-        !has_conclusion(&conclusions, "flies", false, ConclusionType::DefeasiblyProvable),
+        !has_conclusion(
+            &conclusions,
+            "flies",
+            false,
+            ConclusionType::DefeasiblyProvable
+        ),
         "defeaters should block +d flies"
     );
     assert!(
-        !has_conclusion(&conclusions, "flies", true, ConclusionType::DefeasiblyProvable),
+        !has_conclusion(
+            &conclusions,
+            "flies",
+            true,
+            ConclusionType::DefeasiblyProvable
+        ),
         "defeaters should NOT prove +d ~flies (defeaters only block)"
     );
 }

@@ -838,7 +838,11 @@ mod tests {
             ),
             vec![],
         );
-        th.add_rule(Rule::defeater("d1", vec![Literal::simple("broken_wing")], temporal_neg_flies));
+        th.add_rule(Rule::defeater(
+            "d1",
+            vec![Literal::simple("broken_wing")],
+            temporal_neg_flies,
+        ));
 
         let result = why_not(&th, &Literal::simple("flies")).unwrap();
         // The defeater d1 should block flies via family-aware attacker detection

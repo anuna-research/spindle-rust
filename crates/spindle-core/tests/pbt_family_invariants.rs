@@ -32,10 +32,8 @@ const PRED_ARGS: &[&str] = &["alice", "bob", "carol", "dave"];
 
 /// Generate a pair of distinct finite temporals.
 fn arb_two_distinct_temporals() -> impl Strategy<Value = (Temporal, Temporal)> {
-    (arb_finite_temporal(), arb_finite_temporal()).prop_filter(
-        "temporals must differ",
-        |(a, b)| a != b,
-    )
+    (arb_finite_temporal(), arb_finite_temporal())
+        .prop_filter("temporals must differ", |(a, b)| a != b)
 }
 
 /// Generate a literal and a second temporal for creating a temporal variant.

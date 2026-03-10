@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use spindle_core::conclusion::{Conclusion, ConclusionType};
 use spindle_core::index::IndexedTheory;
-use spindle_core::pipeline::{compute_weighted_conclusions, prepare, PrepareOptions};
+use spindle_core::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
 use spindle_core::projection::{FamilyId, ProjectionToken};
 use spindle_core::reason::{reason, reason_prepared};
 use spindle_core::shadow::{ShadowReasoner, ShadowResult};
@@ -132,7 +132,8 @@ macro_rules! conclusion_agreement_test {
             let shadow_set = conclusion_set(&result.primary);
 
             assert_eq!(
-                standard_set, shadow_set,
+                standard_set,
+                shadow_set,
                 "conclusions differ on {}\n  standard only: {:?}\n  shadow only: {:?}",
                 stringify!($name),
                 standard_set.difference(&shadow_set).collect::<Vec<_>>(),
@@ -200,7 +201,10 @@ label_test!(labels_nixon_diamond, fixtures::nixon_diamond());
 label_test!(labels_chain_5, fixtures::inheritance_chain(5));
 label_test!(labels_temporal, fixtures::temporal_theory());
 label_test!(labels_modal, fixtures::modal_theory());
-label_test!(labels_conflicting_defeaters, fixtures::conflicting_defeaters());
+label_test!(
+    labels_conflicting_defeaters,
+    fixtures::conflicting_defeaters()
+);
 
 // ===========================================================================
 // 4. Family coverage: every positive conclusion's family has a token

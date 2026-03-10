@@ -330,10 +330,7 @@ impl<'a> IndexedTheory<'a> {
 
         self.exact_map.insert(map_key, exact);
         self.exact_to_family.insert(exact, family.clone());
-        self.family_to_exact
-            .entry(family)
-            .or_default()
-            .push(exact);
+        self.family_to_exact.entry(family).or_default().push(exact);
 
         exact
     }

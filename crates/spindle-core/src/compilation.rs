@@ -107,10 +107,7 @@ impl CompiledBody {
 
     /// Count of logic (non-arithmetic) keys.
     pub fn logic_key_count(&self) -> usize {
-        self.keys
-            .iter()
-            .filter(|k| !k.is_arithmetic())
-            .count()
+        self.keys.iter().filter(|k| !k.is_arithmetic()).count()
     }
 }
 
@@ -278,10 +275,7 @@ mod tests {
         theory.add_rule(Rule::new(
             "r1",
             crate::rule::RuleType::Defeasible,
-            smallvec::smallvec![
-                BodyLiteral::simple("data"),
-                BodyLiteral::Arithmetic(bind),
-            ],
+            smallvec::smallvec![BodyLiteral::simple("data"), BodyLiteral::Arithmetic(bind),],
             smallvec::smallvec![Literal::simple("result")],
         ));
 
@@ -313,11 +307,7 @@ mod tests {
             vec![Literal::simple("bird")],
             Literal::simple("flies"),
         ));
-        theory.add_rule(Rule::strict(
-            "s1",
-            vec![temporal_lit],
-            Literal::simple("q"),
-        ));
+        theory.add_rule(Rule::strict("s1", vec![temporal_lit], Literal::simple("q")));
 
         let mut idx = build_theory_and_index(&theory);
         let compiled = compile_theory(&mut idx);

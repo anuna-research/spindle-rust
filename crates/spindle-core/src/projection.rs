@@ -66,12 +66,7 @@ pub struct FamilyId {
 
 impl FamilyId {
     /// Create a `FamilyId` from its constituent parts.
-    pub fn new(
-        functor: InternedLiteralName,
-        args: Vec<Term>,
-        mode: Mode,
-        negated: bool,
-    ) -> Self {
+    pub fn new(functor: InternedLiteralName, args: Vec<Term>, mode: Mode, negated: bool) -> Self {
         Self {
             functor,
             args,
@@ -266,11 +261,7 @@ impl ProjectionEngine {
     /// - Emits support/attack tokens using original labels.
     /// - Does not materialize synthetic rules in `Theory`.
     pub fn project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) {
-        let label = rule
-            .template_label
-            .as_ref()
-            .unwrap_or(&rule.label)
-            .clone();
+        let label = rule.template_label.as_ref().unwrap_or(&rule.label).clone();
         let rule_type = rule.rule_type;
 
         for head_lit in &rule.head {
@@ -404,10 +395,7 @@ impl ProjectionEngine {
         for token in &self.tokens {
             match token {
                 ProjectionToken::Exact(s) => {
-                    exact.push((
-                        s.rule_label.clone(),
-                        format!("{:?}", s.exact_lit),
-                    ));
+                    exact.push((s.rule_label.clone(), format!("{:?}", s.exact_lit)));
                 }
                 ProjectionToken::Family(s) => {
                     family.push((
@@ -547,8 +535,20 @@ mod tests {
 
     #[test]
     fn different_args_separate_families() {
-        let lit_a = Literal::new("parent", false, Mode::empty(), Temporal::empty(), vec!["alice".into()]);
-        let lit_b = Literal::new("parent", false, Mode::empty(), Temporal::empty(), vec!["bob".into()]);
+        let lit_a = Literal::new(
+            "parent",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["alice".into()],
+        );
+        let lit_b = Literal::new(
+            "parent",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["bob".into()],
+        );
 
         assert_ne!(FamilyId::from(&lit_a), FamilyId::from(&lit_b));
     }
@@ -585,7 +585,13 @@ mod tests {
 
     #[test]
     fn display_negated_with_args() {
-        let lit = Literal::new("parent", true, Mode::empty(), Temporal::empty(), vec!["alice".into(), "bob".into()]);
+        let lit = Literal::new(
+            "parent",
+            true,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["alice".into(), "bob".into()],
+        );
         let family = FamilyId::from(&lit);
         assert_eq!(format!("{family}"), "~parent(alice, bob)");
     }
@@ -710,10 +716,7 @@ mod tests {
             other => panic!("expected Attack, got {other:?}"),
         };
         assert_eq!(attack.rule_label, "d1");
-        assert_eq!(
-            attack.family_id,
-            FamilyId::from(&Literal::negated("works"))
-        );
+        assert_eq!(attack.family_id, FamilyId::from(&Literal::negated("works")));
         assert!(attack.source_exact_lit.is_some());
     }
 

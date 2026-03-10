@@ -520,8 +520,9 @@ fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryRe
     }
 
     if let Some(ct) = best_positive {
-        return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
-            .with_conclusion_type(ct));
+        return Ok(
+            QueryResult::new(literal.clone(), QueryStatus::Provable).with_conclusion_type(ct)
+        );
     }
 
     // Check if complement family is provable (refuted)
@@ -562,10 +563,8 @@ fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Res
         });
 
         let representative = family_positives[0];
-        return Ok(
-            QueryResult::new(literal.clone(), QueryStatus::Provable)
-                .with_conclusion_type(representative.conclusion_type),
-        );
+        return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
+            .with_conclusion_type(representative.conclusion_type));
     }
 
     // Check if complement family is provable (refuted)
@@ -2061,8 +2060,14 @@ mod tests {
 
     #[test]
     fn match_mode_display() {
-        assert_eq!(format!("{}", QueryMatchMode::ExactTemporal), "exact-temporal");
+        assert_eq!(
+            format!("{}", QueryMatchMode::ExactTemporal),
+            "exact-temporal"
+        );
         assert_eq!(format!("{}", QueryMatchMode::Family), "family");
-        assert_eq!(format!("{}", QueryMatchMode::WildcardTemporal), "wildcard-temporal");
+        assert_eq!(
+            format!("{}", QueryMatchMode::WildcardTemporal),
+            "wildcard-temporal"
+        );
     }
 }

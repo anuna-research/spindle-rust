@@ -17,13 +17,15 @@ use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::compilation::{compile_theory, CompiledBody};
-use crate::rule::RuleLabel;
+use crate::compilation::{CompiledBody, compile_theory};
 use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::index::IndexedTheory;
-use crate::projection::{FamilyId, ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken};
-use crate::reason::{reason_indexed, Reasoner};
+use crate::projection::{
+    FamilyId, ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
+};
+use crate::reason::{Reasoner, reason_indexed};
+use crate::rule::RuleLabel;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -195,10 +197,7 @@ impl ShadowReasoner {
     ///
     /// Returns a [`ShadowResult`] with both standard conclusions and
     /// projection tokens, plus any divergences.
-    pub fn reason_shadow(
-        &self,
-        indexed: &mut IndexedTheory<'_>,
-    ) -> Result<ShadowResult> {
+    pub fn reason_shadow(&self, indexed: &mut IndexedTheory<'_>) -> Result<ShadowResult> {
         // Step 1: Run standard reasoning.
         let primary = reason_indexed(indexed)?;
 
@@ -400,14 +399,20 @@ mod tests {
         let result = shadow_reason(&theory);
 
         assert!(
-            result.primary.iter().any(|c| c.conclusion_type
-                == ConclusionType::DefinitelyProvable
-                && c.literal.name() == "bird"),
+            result
+                .primary
+                .iter()
+                .any(|c| c.conclusion_type == ConclusionType::DefinitelyProvable
+                    && c.literal.name() == "bird"),
             "should have +D bird"
         );
 
         // Shadow mode is consistent for simple facts.
-        assert!(result.is_consistent(), "divergences: {:?}", result.divergences);
+        assert!(
+            result.is_consistent(),
+            "divergences: {:?}",
+            result.divergences
+        );
     }
 
     // ======================================================================
@@ -434,7 +439,11 @@ mod tests {
                     && c.literal.name() == "animal"),
             "should have +D animal"
         );
-        assert!(result.is_consistent(), "divergences: {:?}", result.divergences);
+        assert!(
+            result.is_consistent(),
+            "divergences: {:?}",
+            result.divergences
+        );
     }
 
     // ======================================================================
@@ -461,7 +470,11 @@ mod tests {
                     && c.literal.name() == "flies"),
             "should have +d flies"
         );
-        assert!(result.is_consistent(), "divergences: {:?}", result.divergences);
+        assert!(
+            result.is_consistent(),
+            "divergences: {:?}",
+            result.divergences
+        );
     }
 
     // ======================================================================
@@ -572,11 +585,7 @@ mod tests {
         );
         let mut theory = Theory::new();
         theory.add_fact("a");
-        theory.add_rule(Rule::defeasible(
-            "r1",
-            vec![Literal::simple("a")],
-            head,
-        ));
+        theory.add_rule(Rule::defeasible("r1", vec![Literal::simple("a")], head));
 
         let result = shadow_reason(&theory);
 
@@ -636,6 +645,10 @@ mod tests {
                     && c.literal.negation),
             "should have +d ~flies"
         );
-        assert!(result.is_consistent(), "divergences: {:?}", result.divergences);
+        assert!(
+            result.is_consistent(),
+            "divergences: {:?}",
+            result.divergences
+        );
     }
 }

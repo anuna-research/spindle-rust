@@ -120,22 +120,16 @@ impl fmt::Display for AbductionResult {
 
 /// Check whether `goal` is positively supported by any conclusion in its
 /// family (atemporal identity match via [`FamilyId`]).
-fn is_family_provable(
-    goal: &Literal,
-    conclusions: &[crate::conclusion::Conclusion],
-) -> bool {
+fn is_family_provable(goal: &Literal, conclusions: &[crate::conclusion::Conclusion]) -> bool {
     let family = FamilyId::from(goal);
-    conclusions.iter().any(|c| {
-        c.conclusion_type.is_positive() && FamilyId::from(&c.literal) == family
-    })
+    conclusions
+        .iter()
+        .any(|c| c.conclusion_type.is_positive() && FamilyId::from(&c.literal) == family)
 }
 
 /// Check whether `lit` is satisfied by any positive conclusion in the same
 /// family.  Used to determine which body literals are already supported.
-fn is_body_satisfied(
-    lit: &Literal,
-    proven_families: &HashSet<FamilyId>,
-) -> bool {
+fn is_body_satisfied(lit: &Literal, proven_families: &HashSet<FamilyId>) -> bool {
     proven_families.contains(&FamilyId::from(lit))
 }
 
@@ -591,8 +585,7 @@ mod tests {
         // {flies} fallback.
         for sol in &result.solutions {
             assert!(
-                !sol.facts.contains(&Literal::simple("bird"))
-                    || sol.facts.len() > 1,
+                !sol.facts.contains(&Literal::simple("bird")) || sol.facts.len() > 1,
                 "Solution containing only 'bird' should be filtered out \
                  because the defeater blocks 'flies'"
             );
