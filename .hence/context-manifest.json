@@ -1,12 +1,12 @@
 {
-  "task_id": "rule-compilation",
-  "token_budget": 8000,
-  "tokens_used": 118,
+  "task_id": "projection-engine",
+  "token_budget": 10000,
+  "tokens_used": 142,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Compile rule bodies into explicit match keys: temporal bodies require exact evidence, atemporal bodies require family support",
-      "token_cost": 31,
+      "content": "Implement ProjectionEngine that emits support/attack tokens from rule application per CON-002",
+      "token_cost": 23,
       "priority": "PlanMeta"
     },
     {
@@ -26,8 +26,14 @@
       "content": "Modified 2 files (+281, -8): .hence/context-manifest.json, crates/spindle-core/src/index.rs",
       "token_cost": 22,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-rule-compilation-changes",
+      "content": "Modified 3 files (+423, -7): .hence/context-manifest.json, crates/spindle-core/src/compilation.rs, crates/spindle-core/src/lib.rs",
+      "token_cost": 32,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T01:49:51Z"
+  "constructed_at": "2026-03-10T01:53:41Z"
 }

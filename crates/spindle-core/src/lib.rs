@@ -87,7 +87,8 @@ pub mod prelude {
     };
     pub use crate::compilation::{BodyMatchKey, CompiledBody, compile_rule, compile_theory};
     pub use crate::projection::{
-        ExactLitId, ExactSupport, FamilyAttack, FamilyId, FamilySupport, ProjectionToken,
+        ExactLitId, ExactSupport, FamilyAttack, FamilyId, FamilySupport, ProjectionEngine,
+        ProjectionToken,
     };
     pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
     pub use crate::reason::{
