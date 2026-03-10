@@ -61,6 +61,7 @@ pub mod projection;
 pub mod query;
 pub mod reason;
 pub mod rule;
+pub mod shadow;
 pub mod superiority;
 pub mod temporal;
 pub mod term;
@@ -93,6 +94,9 @@ pub mod prelude {
     pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
     pub use crate::reason::{
         Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
+    };
+    pub use crate::shadow::{
+        Divergence, DivergenceKind, ShadowConfig, ShadowReasoner, ShadowResult,
     };
     pub use crate::rule::{IntoRuleBody, Rule, RuleLabel, RuleType};
     pub use crate::superiority::{Superiority, SuperiorityIndex};

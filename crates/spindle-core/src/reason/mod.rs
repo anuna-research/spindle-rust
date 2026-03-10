@@ -107,6 +107,7 @@ impl Reasoner for StandardReasoner {
 pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
     match name {
         "standard" => Box::new(StandardReasoner),
+        "shadow" => Box::new(crate::shadow::ShadowReasoner::enabled()),
         _ => Box::new(StandardReasoner),
     }
 }
