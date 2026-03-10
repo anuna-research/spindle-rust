@@ -3,24 +3,26 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 1,
-    "insertions": 427,
-    "deletions": 0,
+    "files_changed": 3,
+    "insertions": 500,
+    "deletions": 8,
     "file_list": [
-      "crates/spindle-core/tests/pbt_family_invariants.rs"
+      ".hence/context-manifest.json",
+      "crates/spindle-core/src/lib.rs",
+      "crates/spindle-core/src/query/mod.rs"
     ],
-    "dirty_files": 1
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-pbt-family-invariants-changes",
-      "content": "Modified 1 files (+427, -0): crates/spindle-core/tests/pbt_family_invariants.rs",
+      "key": "task-query-match-modes-changes",
+      "content": "Modified 3 files (+500, -8): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/query/mod.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/pbt-family-invariants-v1",
-  "evaluated_at": "2026-03-10T02:18:08Z",
+  "branch_name": "hence/query-match-modes-v1",
+  "evaluated_at": "2026-03-10T02:24:10Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
