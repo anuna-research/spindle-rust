@@ -3,30 +3,24 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 7,
-    "insertions": 162,
-    "deletions": 68,
+    "files_changed": 1,
+    "insertions": 982,
+    "deletions": 0,
     "file_list": [
-      ".hence/context-manifest.json",
-      "crates/spindle-core/src/lib.rs",
-      "crates/spindle-core/src/projection.rs",
-      "crates/spindle-core/src/reason/mod.rs",
-      "crates/spindle-core/src/shadow.rs",
-      "crates/spindle-core/tests/differential_tests.rs",
-      "crates/spindle-core/tests/pbt_nontemporal_parity.rs"
+      "crates/spindle-core/tests/regression_bridge_era.rs"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-remove-bridge-changes",
-      "content": "Modified 7 files (+162, -68): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs, crates/spindle-core/src/reason/mod.rs, crates/spindle-core/src/shadow.rs and 2 more",
+      "key": "task-regression-suite-changes",
+      "content": "Modified 1 files (+982, -0): crates/spindle-core/tests/regression_bridge_era.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/remove-bridge-v1",
-  "evaluated_at": "2026-03-10T02:48:16Z",
+  "branch_name": "hence/regression-suite-v1",
+  "evaluated_at": "2026-03-10T02:53:36Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

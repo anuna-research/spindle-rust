@@ -1,12 +1,12 @@
 {
-  "task_id": "remove-bridge",
+  "task_id": "regression-suite",
   "token_budget": 8000,
-  "tokens_used": 320,
+  "tokens_used": 326,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Remove TemporalBridge from default pipeline once parity is established",
-      "token_cost": 17,
+      "content": "Retain focused regression tests for all bridge-era failure modes that motivated the redesign",
+      "token_cost": 23,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:38:35Z"
+  "constructed_at": "2026-03-10T02:48:22Z"
 }
