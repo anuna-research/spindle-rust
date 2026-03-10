@@ -3,27 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 4,
-    "insertions": 275,
-    "deletions": 9,
+    "files_changed": 2,
+    "insertions": 473,
+    "deletions": 6,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/src/lib.rs",
-      "crates/spindle-core/src/projection.rs",
-      "crates/spindle-core/src/shadow.rs"
+      "crates/spindle-core/tests/pbt_nontemporal_parity.rs"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-observability-changes",
-      "content": "Modified 4 files (+275, -9): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs, crates/spindle-core/src/shadow.rs",
+      "key": "task-pbt-nontemporal-parity-changes",
+      "content": "Modified 2 files (+473, -6): .hence/context-manifest.json, crates/spindle-core/tests/pbt_nontemporal_parity.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/observability-v1",
-  "evaluated_at": "2026-03-10T02:11:58Z",
+  "branch_name": "hence/pbt-nontemporal-parity-v1",
+  "evaluated_at": "2026-03-10T02:15:28Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
