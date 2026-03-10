@@ -3,25 +3,24 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 219,
-    "deletions": 40,
+    "files_changed": 1,
+    "insertions": 221,
+    "deletions": 23,
     "file_list": [
-      ".hence/context-manifest.json",
-      "crates/spindle-core/src/query/abduce.rs"
+      "crates/spindle-core/src/query/why_not.rs"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-abduce-family-changes",
-      "content": "Modified 2 files (+219, -40): .hence/context-manifest.json, crates/spindle-core/src/query/abduce.rs",
+      "key": "task-why-not-family-changes",
+      "content": "Modified 1 files (+221, -23): crates/spindle-core/src/query/why_not.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/abduce-family-v1",
-  "evaluated_at": "2026-03-10T02:34:36Z",
+  "branch_name": "hence/why-not-family-v1",
+  "evaluated_at": "2026-03-10T02:38:29Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
