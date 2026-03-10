@@ -109,18 +109,18 @@ proptest! {
 
     #[test]
     fn conclusions_agree_on_random_theories(theory in arb_theory()) {
-        let bridge = reason(&theory).expect("standard reason should succeed");
+        let standard = reason(&theory).expect("standard reason should succeed");
         let result = shadow(&theory);
 
-        let bridge_set = conclusion_str_set(&bridge);
+        let standard_set = conclusion_str_set(&standard);
         let shadow_set = conclusion_str_set(&result.primary);
 
         prop_assert_eq!(
-            bridge_set.clone(),
+            standard_set.clone(),
             shadow_set.clone(),
-            "conclusions differ\n  bridge only: {:?}\n  shadow only: {:?}",
-            bridge_set.difference(&shadow_set).collect::<Vec<_>>(),
-            shadow_set.difference(&bridge_set).collect::<Vec<_>>(),
+            "conclusions differ\n  standard only: {:?}\n  shadow only: {:?}",
+            standard_set.difference(&shadow_set).collect::<Vec<_>>(),
+            shadow_set.difference(&standard_set).collect::<Vec<_>>(),
         );
     }
 }
@@ -134,13 +134,13 @@ proptest! {
 
     #[test]
     fn conclusions_agree_on_conflicting_theories(theory in arb_conflicting_theory()) {
-        let bridge = reason(&theory).expect("standard reason should succeed");
+        let standard = reason(&theory).expect("standard reason should succeed");
         let result = shadow(&theory);
 
-        let bridge_set = conclusion_str_set(&bridge);
+        let standard_set = conclusion_str_set(&standard);
         let shadow_set = conclusion_str_set(&result.primary);
 
-        prop_assert_eq!(bridge_set, shadow_set);
+        prop_assert_eq!(standard_set, shadow_set);
         prop_assert!(
             result.is_consistent(),
             "shadow divergences on conflicting theory: {:?}",
@@ -160,13 +160,13 @@ proptest! {
     fn conclusions_agree_on_resolved_conflicts(
         (theory, _head) in arb_resolved_conflict_theory()
     ) {
-        let bridge = reason(&theory).expect("standard reason should succeed");
+        let standard = reason(&theory).expect("standard reason should succeed");
         let result = shadow(&theory);
 
-        let bridge_set = conclusion_str_set(&bridge);
+        let standard_set = conclusion_str_set(&standard);
         let shadow_set = conclusion_str_set(&result.primary);
 
-        prop_assert_eq!(bridge_set, shadow_set);
+        prop_assert_eq!(standard_set, shadow_set);
         prop_assert!(
             result.is_consistent(),
             "shadow divergences on resolved conflict: {:?}",
@@ -353,7 +353,7 @@ proptest! {
 
     #[test]
     fn per_type_conclusion_parity(theory in arb_theory()) {
-        let bridge = reason(&theory).expect("reason should succeed");
+        let standard = reason(&theory).expect("reason should succeed");
         let result = shadow(&theory);
 
         for ct in &[
@@ -362,15 +362,15 @@ proptest! {
             ConclusionType::DefeasiblyProvable,
             ConclusionType::DefeasiblyNotProvable,
         ] {
-            let bridge_set = conclusion_set(&bridge, *ct);
+            let standard_set = conclusion_set(&standard, *ct);
             let shadow_set = conclusion_set(&result.primary, *ct);
             prop_assert_eq!(
-                bridge_set.clone(),
+                standard_set.clone(),
                 shadow_set.clone(),
-                "conclusion type {:?} differs\n  bridge only: {:?}\n  shadow only: {:?}",
+                "conclusion type {:?} differs\n  standard only: {:?}\n  shadow only: {:?}",
                 ct,
-                bridge_set.difference(&shadow_set).collect::<Vec<_>>(),
-                shadow_set.difference(&bridge_set).collect::<Vec<_>>(),
+                standard_set.difference(&shadow_set).collect::<Vec<_>>(),
+                shadow_set.difference(&standard_set).collect::<Vec<_>>(),
             );
         }
     }

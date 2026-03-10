@@ -1,5 +1,5 @@
 //! Differential tests: compare conclusions, explanation labels, and trust
-//! outputs between the bridge (standard) and redesign (projection) paths
+//! outputs between the standard and projection-based reasoning paths
 //! across all fixtures.
 //!
 //! These tests exercise the `ShadowReasoner` in enabled mode to verify that
@@ -122,21 +122,21 @@ macro_rules! conclusion_agreement_test {
         fn $name() {
             let theory = $fixture;
 
-            // Bridge path: standard reasoner
-            let bridge = reason(&theory).expect("standard reason should succeed");
+            // Standard path: DL(d) reasoner
+            let standard = reason(&theory).expect("standard reason should succeed");
 
-            // Redesign path: shadow primary
+            // Projection path: shadow primary
             let result = shadow(&theory);
 
-            let bridge_set = conclusion_set(&bridge);
+            let standard_set = conclusion_set(&standard);
             let shadow_set = conclusion_set(&result.primary);
 
             assert_eq!(
-                bridge_set, shadow_set,
-                "conclusions differ on {}\n  bridge only: {:?}\n  shadow only: {:?}",
+                standard_set, shadow_set,
+                "conclusions differ on {}\n  standard only: {:?}\n  shadow only: {:?}",
                 stringify!($name),
-                bridge_set.difference(&shadow_set).collect::<Vec<_>>(),
-                shadow_set.difference(&bridge_set).collect::<Vec<_>>(),
+                standard_set.difference(&shadow_set).collect::<Vec<_>>(),
+                shadow_set.difference(&standard_set).collect::<Vec<_>>(),
             );
         }
     };
@@ -269,7 +269,7 @@ compiled_bodies_test!(compiled_modal, fixtures::modal_theory());
 compiled_bodies_test!(compiled_defeaters, fixtures::conflicting_defeaters());
 
 // ===========================================================================
-// 6. Trust output agreement: weighted conclusions from bridge match shadow
+// 6. Trust output agreement: weighted conclusions from standard match shadow
 // ===========================================================================
 
 /// Parse SPL, reason via both paths, compare weighted conclusions.
@@ -279,20 +279,20 @@ fn trust_differential(spl: &str) {
     let prepared = prepare(&theory, opts).expect("prepare should succeed");
     let policy = prepared.theory.trust_policy().clone();
 
-    // Bridge path
-    let bridge_conclusions =
-        reason_prepared(&prepared.theory).expect("bridge reasoning should succeed");
-    let bridge_weighted =
-        compute_weighted_conclusions(&bridge_conclusions, &prepared.theory, &policy, None);
+    // Standard path
+    let standard_conclusions =
+        reason_prepared(&prepared.theory).expect("standard reasoning should succeed");
+    let standard_weighted =
+        compute_weighted_conclusions(&standard_conclusions, &prepared.theory, &policy, None);
 
-    // Redesign path (shadow)
+    // Projection path (shadow)
     let shadow_result = shadow(&prepared.theory);
 
-    // Shadow primary conclusions should match bridge conclusions.
-    let bridge_set = conclusion_set(&bridge_conclusions);
+    // Shadow primary conclusions should match standard conclusions.
+    let standard_set = conclusion_set(&standard_conclusions);
     let shadow_set = conclusion_set(&shadow_result.primary);
     assert_eq!(
-        bridge_set, shadow_set,
+        standard_set, shadow_set,
         "trust differential: conclusions differ"
     );
 
@@ -308,27 +308,27 @@ fn trust_differential(spl: &str) {
         compute_weighted_conclusions(&shadow_result.primary, &prepared.theory, &policy, None);
 
     assert_eq!(
-        bridge_weighted.len(),
+        standard_weighted.len(),
         shadow_weighted.len(),
         "weighted conclusion count differs"
     );
 
     // Build map by (literal_display, conclusion_type) for comparison.
-    let bridge_map: HashMap<(String, ConclusionType), f64> = bridge_weighted
+    let standard_map: HashMap<(String, ConclusionType), f64> = standard_weighted
         .iter()
         .map(|wc| ((format!("{}", wc.literal), wc.conclusion_type), wc.degree))
         .collect();
 
     for wc in &shadow_weighted {
         let key = (format!("{}", wc.literal), wc.conclusion_type);
-        let bridge_degree = bridge_map
+        let standard_degree = standard_map
             .get(&key)
-            .unwrap_or_else(|| panic!("missing bridge weighted conclusion for {:?}", key));
+            .unwrap_or_else(|| panic!("missing standard weighted conclusion for {:?}", key));
         assert!(
-            (wc.degree - bridge_degree).abs() < 1e-10,
-            "trust degree differs for {:?}: bridge={}, shadow={}",
+            (wc.degree - standard_degree).abs() < 1e-10,
+            "trust degree differs for {:?}: standard={}, shadow={}",
             key,
-            bridge_degree,
+            standard_degree,
             wc.degree,
         );
     }

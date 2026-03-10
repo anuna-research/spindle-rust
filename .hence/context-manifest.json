@@ -1,12 +1,12 @@
 {
-  "task_id": "why-not-family",
-  "token_budget": 6000,
-  "tokens_used": 325,
+  "task_id": "remove-bridge",
+  "token_budget": 8000,
+  "tokens_used": 320,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Update why_not to use family-aware matching and cite original rule labels in explanations",
-      "token_cost": 22,
+      "content": "Remove TemporalBridge from default pipeline once parity is established",
+      "token_cost": 17,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:34:42Z"
+  "constructed_at": "2026-03-10T02:38:35Z"
 }

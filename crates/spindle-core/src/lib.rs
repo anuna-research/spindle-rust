@@ -96,7 +96,8 @@ pub mod prelude {
         query_with_options,
     };
     pub use crate::reason::{
-        Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
+        ReasonResult, Reasoner, StandardReasoner, reason, reason_full, reason_full_prepared,
+        reason_full_with_options, reason_with_options, select_reasoner,
     };
     pub use crate::shadow::{
         Divergence, DivergenceKind, ShadowConfig, ShadowReasoner, ShadowResult,
