@@ -1,15 +1,21 @@
 {
-  "task_id": "projection-token-types",
-  "token_budget": 5000,
-  "tokens_used": 25,
+  "task_id": "family-id-type",
+  "token_budget": 6000,
+  "tokens_used": 53,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define ExactSupport, FamilySupport, and FamilyAttack token structs with original rule label and type",
-      "token_cost": 25,
+      "content": "Define FamilyId type: same functor, args, mode, polarity but excluding temporal bounds",
+      "token_cost": 21,
       "priority": "PlanMeta"
+    },
+    {
+      "source": "memory/episodic/task-projection-token-types-changes",
+      "content": "Modified 3 files (+124, -66): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
+      "token_cost": 32,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T01:41:38Z"
+  "constructed_at": "2026-03-10T01:44:28Z"
 }

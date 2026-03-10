@@ -4,25 +4,25 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 3,
-    "insertions": 124,
-    "deletions": 66,
+    "insertions": 237,
+    "deletions": 17,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/src/lib.rs",
+      "crates/spindle-core/src/literal.rs",
       "crates/spindle-core/src/projection.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-projection-token-types-changes",
-      "content": "Modified 3 files (+124, -66): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
+      "key": "task-family-id-type-changes",
+      "content": "Modified 3 files (+237, -17): .hence/context-manifest.json, crates/spindle-core/src/literal.rs, crates/spindle-core/src/projection.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/projection-token-types-v1",
-  "evaluated_at": "2026-03-10T01:44:22Z",
+  "branch_name": "hence/family-id-type-v1",
+  "evaluated_at": "2026-03-10T01:46:43Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
