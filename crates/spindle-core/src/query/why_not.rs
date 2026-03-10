@@ -4,12 +4,17 @@
 //! Given a literal, `why_not` inspects the theory's rules and the current
 //! set of conclusions to identify blocking conditions: missing premises,
 //! defeaters, and contradictions.
+//!
+//! Uses **family-aware matching** (via [`FamilyId`]) so that temporal
+//! conclusions like `p[1,10]` satisfy atemporal queries for `p`, and
+//! cites **original rule labels** in explanations.
 
 use std::collections::HashSet;
 use std::fmt;
 
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::projection::FamilyId;
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -173,46 +178,49 @@ impl fmt::Display for WhyNotResult {
 // WHY-NOT OPERATOR
 // =============================================================================
 
-/// Explain why a literal is NOT provable
+/// Explain why a literal is NOT provable.
+///
+/// Uses family-aware matching (via [`FamilyId`]) so that temporal
+/// conclusions satisfy atemporal queries, and cites original rule labels
+/// in all explanations.
 pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     let conclusions = reason(theory)?;
+    let goal_family = FamilyId::from(literal);
 
-    // First check if it IS provable (then why-not doesn't apply)
-    let is_provable = conclusions
+    // First check if it IS provable (family-aware)
+    let provable_conclusion = conclusions
         .iter()
-        .any(|c| c.literal == *literal && c.conclusion_type.is_positive());
+        .find(|c| c.conclusion_type.is_positive() && FamilyId::from(&c.literal) == goal_family);
 
-    if is_provable {
-        // Return a result with would_derive taken from the conclusion's rule_label
+    if let Some(conclusion) = provable_conclusion {
         let mut result = WhyNotResult::new(literal.clone());
-        result.would_derive = conclusions
-            .iter()
-            .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
-            .and_then(|c| c.rule_label.clone());
+        result.would_derive = conclusion.rule_label.clone();
         return Ok(result);
     }
 
-    // Collect proven literals for checking body satisfaction
-    let proven: HashSet<_> = conclusions
+    // Collect proven families for checking body satisfaction
+    let proven_families: HashSet<FamilyId> = conclusions
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
+        .map(|c| FamilyId::from(&c.literal))
         .collect();
 
     let complement = literal.complement();
+    let complement_family = FamilyId::from(&complement);
     let mut result = WhyNotResult::new(literal.clone());
     let mut found_rule = false;
 
-    // Find rules that could derive this literal and why they don't fire
+    // Find rules that could derive this literal (family-aware head match)
     for rule in theory.rules() {
-        if rule.head_literal() == literal && rule.rule_type != RuleType::Defeater {
+        let head_family = FamilyId::from(rule.head_literal());
+        if head_family == goal_family && rule.rule_type != RuleType::Defeater {
             found_rule = true;
 
             if result.would_derive.is_none() {
                 result.would_derive = Some(rule.label.clone());
             }
 
-            // Check which body literals are missing (only logic literals)
+            // Check which body literals are missing (family-aware satisfaction)
             let body_lits: Vec<Literal> = rule
                 .body
                 .iter()
@@ -220,7 +228,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 .collect();
             let missing: Vec<_> = body_lits
                 .iter()
-                .filter(|b| !proven.contains(*b))
+                .filter(|b| !proven_families.contains(&FamilyId::from(*b)))
                 .cloned()
                 .collect();
 
@@ -230,17 +238,19 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                     .push(BlockingCondition::missing_premise(&rule.label, missing));
             } else {
                 // Body is fully satisfied but conclusion not proven.
-                // Check for defeater blocking.
+                // Check for defeater blocking (family-aware attacker match).
                 let mut blocked = false;
                 for attacker in theory.rules() {
-                    if attacker.head_literal() == &complement {
+                    let attacker_head_family = FamilyId::from(attacker.head_literal());
+                    if attacker_head_family == complement_family {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
                             .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
                             .collect();
-                        let attacker_body_satisfied =
-                            attacker_body_lits.iter().all(|b| proven.contains(b));
+                        let attacker_body_satisfied = attacker_body_lits
+                            .iter()
+                            .all(|b| proven_families.contains(&FamilyId::from(b)));
                         if !attacker_body_satisfied {
                             continue;
                         }
@@ -293,8 +303,8 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
 
     // If no rules found at all
     if !found_rule {
-        // Check if complement is proven (contradicted)
-        if proven.contains(&complement) {
+        // Check if complement is proven (family-aware)
+        if proven_families.contains(&complement_family) {
             result.blocked_by.push(BlockingCondition {
                 blocking_type: BlockingType::Contradicted,
                 rule_label: String::new(),
@@ -680,5 +690,193 @@ mod tests {
         assert!(!result.is_provable()); // now has blockers
         assert!(result.has_blockers());
         assert_eq!(result.get_missing_premises().len(), 1);
+    }
+
+    // =========================================================================
+    // Family-aware tests
+    // =========================================================================
+
+    #[test]
+    fn test_why_not_family_aware_provable() {
+        // Temporal fact p[1,10] should family-satisfy an atemporal query for p
+        use crate::rule::Rule;
+
+        let mut th = Theory::new();
+        let temporal_lit = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_lit));
+
+        let result = why_not(&th, &Literal::simple("p")).unwrap();
+        assert!(
+            result.is_provable(),
+            "Temporal p[1,10] should family-satisfy atemporal query for p"
+        );
+    }
+
+    #[test]
+    fn test_why_not_family_aware_body_satisfaction() {
+        // Rule: a => goal. Temporal fact a[5,15] should satisfy body literal a
+        // via family matching, so goal should be provable.
+        use crate::rule::Rule;
+
+        let mut th = Theory::new();
+        let temporal_a = Literal::new(
+            "a",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(5),
+                crate::temporal::TimePoint::Moment(15),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_a));
+        th.add_defeasible_rule(&["a"], "goal");
+
+        let result = why_not(&th, &Literal::simple("goal")).unwrap();
+        assert!(
+            result.is_provable(),
+            "Temporal a[5,15] should family-satisfy body literal a, making goal provable"
+        );
+    }
+
+    #[test]
+    fn test_why_not_family_aware_head_match() {
+        // Rule with temporal head p[1,10] should be found when querying
+        // why_not for atemporal p, because they share the same family.
+        use crate::rule::Rule;
+
+        let mut th = Theory::new();
+        let temporal_head = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let body = vec![Literal::simple("a")];
+        th.add_rule(Rule::defeasible("r1", body, temporal_head));
+
+        let result = why_not(&th, &Literal::simple("p")).unwrap();
+        // r1 should be found as a candidate rule via family head match
+        assert_eq!(
+            result.would_derive.as_deref(),
+            Some("r1"),
+            "Should find rule r1 via family head match"
+        );
+        // Body literal 'a' is missing
+        let missing = result.get_missing_premises();
+        assert!(
+            missing.iter().any(|l| l.name() == "a"),
+            "Should report 'a' as missing premise"
+        );
+    }
+
+    #[test]
+    fn test_why_not_family_aware_complement_proven() {
+        // Temporal complement ~p[1,10] should be detected as blocking
+        // atemporal query for p via family matching.
+        use crate::rule::Rule;
+
+        let mut th = Theory::new();
+        let temporal_neg = Literal::new(
+            "p",
+            true,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_neg));
+
+        let result = why_not(&th, &Literal::simple("p")).unwrap();
+        assert!(
+            !result.is_provable(),
+            "p should not be provable when ~p[1,10] is proven"
+        );
+        let has_complement_blocker = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Contradicted);
+        assert!(
+            has_complement_blocker,
+            "Should report complement as contradicted blocker"
+        );
+    }
+
+    #[test]
+    fn test_why_not_family_aware_attacker_detection() {
+        // Rule: bird => flies. Defeater with temporal head: broken_wing ~> ~flies[1,10].
+        // Both bodies satisfied. The defeater should be detected via family matching.
+        use crate::rule::Rule;
+
+        let mut th = Theory::new();
+        th.add_fact("bird");
+        th.add_fact("broken_wing");
+        th.add_defeasible_rule(&["bird"], "flies");
+
+        let temporal_neg_flies = Literal::new(
+            "flies",
+            true,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::defeater("d1", vec![Literal::simple("broken_wing")], temporal_neg_flies));
+
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+        // The defeater d1 should block flies via family-aware attacker detection
+        let has_defeated = result
+            .blocked_by
+            .iter()
+            .any(|b| b.blocking_type == BlockingType::Defeated);
+        assert!(
+            has_defeated,
+            "Temporal defeater ~flies[1,10] should block atemporal flies via family matching"
+        );
+    }
+
+    #[test]
+    fn test_why_not_cites_original_rule_labels() {
+        // Verify that blocking conditions cite the original rule labels
+        let mut th = Theory::new();
+        th.add_fact("bird");
+        th.add_fact("broken_wing");
+        let r1 = th.add_defeasible_rule(&["bird"], "flies");
+        let d1 = th.add_defeater(&["broken_wing"], "~flies");
+
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+        // The defeated condition should cite both the blocked rule and the blocker
+        let defeated = result
+            .blocked_by
+            .iter()
+            .find(|b| b.blocking_type == BlockingType::Defeated);
+        assert!(defeated.is_some(), "Should have a Defeated blocker");
+        let defeated = defeated.unwrap();
+        assert_eq!(
+            defeated.rule_label, r1,
+            "Should cite original rule label {r1}"
+        );
+        assert_eq!(
+            defeated.blocking_rule.as_deref(),
+            Some(d1.as_str()),
+            "Should cite original defeater label {d1}"
+        );
     }
 }
