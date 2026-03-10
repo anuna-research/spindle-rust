@@ -1,12 +1,12 @@
 {
-  "task_id": "family-id-type",
-  "token_budget": 6000,
-  "tokens_used": 53,
+  "task_id": "exact-family-indexing",
+  "token_budget": 8000,
+  "tokens_used": 91,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define FamilyId type: same functor, args, mode, polarity but excluding temporal bounds",
-      "token_cost": 21,
+      "content": "Extend IndexedTheory with exact_lit_id, family_id, family_members, and family_for_exact APIs per CON-001",
+      "token_cost": 26,
       "priority": "PlanMeta"
     },
     {
@@ -14,8 +14,15 @@
       "content": "Modified 3 files (+124, -66): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
       "token_cost": 32,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-family-id-type-changes",
+      "content": "Modified 3 files (+237, -17): .hence/context-manifest.json, crates/spindle-core/src/literal.rs, crates/spindle-core/src/projection.rs",
+      "token_cost": 33,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T01:44:28Z"
+  "constructed_at": "2026-03-10T01:46:48Z",
+  "completed_at": "2026-03-10T02:00:00Z"
 }
