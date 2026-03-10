@@ -3,25 +3,27 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 564,
-    "deletions": 6,
+    "files_changed": 4,
+    "insertions": 275,
+    "deletions": 9,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/tests/differential_tests.rs"
+      "crates/spindle-core/src/lib.rs",
+      "crates/spindle-core/src/projection.rs",
+      "crates/spindle-core/src/shadow.rs"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-differential-tests-changes",
-      "content": "Modified 2 files (+564, -6): .hence/context-manifest.json, crates/spindle-core/tests/differential_tests.rs",
+      "key": "task-observability-changes",
+      "content": "Modified 4 files (+275, -9): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs, crates/spindle-core/src/shadow.rs",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/differential-tests-v1",
-  "evaluated_at": "2026-03-10T02:09:09Z",
+  "branch_name": "hence/observability-v1",
+  "evaluated_at": "2026-03-10T02:11:58Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

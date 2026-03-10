@@ -354,12 +354,162 @@ impl ProjectionEngine {
             .filter(|t| matches!(t, ProjectionToken::Attack(_)))
             .count()
     }
+
+    /// Produce structured diagnostic counters (OBS-001).
+    ///
+    /// Returns a [`ProjectionDiagnostics`] snapshot summarizing the current
+    /// projection state: token counts by type and the set of rule labels
+    /// that contributed projected evidence.
+    pub fn diagnostics(&self) -> ProjectionDiagnostics {
+        let mut contributing_labels = std::collections::BTreeSet::new();
+        let mut exact_supports = 0usize;
+        let mut family_supports = 0usize;
+        let mut family_attacks = 0usize;
+
+        for token in &self.tokens {
+            match token {
+                ProjectionToken::Exact(s) => {
+                    exact_supports += 1;
+                    contributing_labels.insert(s.rule_label.clone());
+                }
+                ProjectionToken::Family(s) => {
+                    family_supports += 1;
+                    contributing_labels.insert(s.rule_label.clone());
+                }
+                ProjectionToken::Attack(a) => {
+                    family_attacks += 1;
+                    contributing_labels.insert(a.rule_label.clone());
+                }
+            }
+        }
+
+        ProjectionDiagnostics {
+            exact_supports,
+            family_supports,
+            family_attacks,
+            contributing_labels,
+        }
+    }
+
+    /// Produce a deterministic debug snapshot for test-mode comparison
+    /// (OBS-002).
+    ///
+    /// The snapshot contains tokens sorted by a stable key so that
+    /// non-deterministic iteration order does not cause spurious test
+    /// failures. Labels are sorted alphabetically within each category.
+    pub fn snapshot(&self) -> ProjectionSnapshot {
+        let mut exact: Vec<(String, String)> = Vec::new();
+        let mut family: Vec<(String, String, String)> = Vec::new();
+        let mut attack: Vec<(String, String, String)> = Vec::new();
+
+        for token in &self.tokens {
+            match token {
+                ProjectionToken::Exact(s) => {
+                    exact.push((
+                        s.rule_label.clone(),
+                        format!("{:?}", s.exact_lit),
+                    ));
+                }
+                ProjectionToken::Family(s) => {
+                    family.push((
+                        s.rule_label.clone(),
+                        format!("{}", s.family_id),
+                        format!("{:?}", s.source_exact_lit),
+                    ));
+                }
+                ProjectionToken::Attack(a) => {
+                    attack.push((
+                        a.rule_label.clone(),
+                        format!("{}", a.family_id),
+                        format!("{:?}", a.source_exact_lit),
+                    ));
+                }
+            }
+        }
+
+        // Sort for deterministic ordering.
+        exact.sort();
+        family.sort();
+        attack.sort();
+
+        ProjectionSnapshot {
+            exact,
+            family,
+            attack,
+        }
+    }
 }
 
 impl Default for ProjectionEngine {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ---------------------------------------------------------------------------
+// ProjectionDiagnostics — OBS-001
+// ---------------------------------------------------------------------------
+
+/// Structured diagnostic counters for projection activity (OBS-001).
+///
+/// Summarizes the number of exact supports, family supports, family attacks,
+/// and the set of rule labels that contributed projected evidence. This
+/// validates that projection activity is explainable and bounded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectionDiagnostics {
+    /// Number of [`ExactSupport`] tokens emitted.
+    pub exact_supports: usize,
+    /// Number of [`FamilySupport`] tokens emitted.
+    pub family_supports: usize,
+    /// Number of [`FamilyAttack`] tokens emitted.
+    pub family_attacks: usize,
+    /// Rule labels that contributed projected evidence (sorted for stability).
+    pub contributing_labels: std::collections::BTreeSet<RuleLabel>,
+}
+
+impl ProjectionDiagnostics {
+    /// Total number of projection tokens emitted.
+    pub fn total_tokens(&self) -> usize {
+        self.exact_supports + self.family_supports + self.family_attacks
+    }
+}
+
+impl std::fmt::Display for ProjectionDiagnostics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "exact_supports={}, family_supports={}, family_attacks={}, labels=[{}]",
+            self.exact_supports,
+            self.family_supports,
+            self.family_attacks,
+            self.contributing_labels
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ProjectionSnapshot — OBS-002
+// ---------------------------------------------------------------------------
+
+/// A deterministic debug snapshot of projection state (OBS-002).
+///
+/// All entries are sorted by a stable key so that non-deterministic iteration
+/// order does not cause test regressions. Useful for golden-file or snapshot
+/// testing of projected evidence ordering and tie-break label selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectionSnapshot {
+    /// Sorted `(rule_label, exact_lit_debug)` pairs for exact support tokens.
+    pub exact: Vec<(String, String)>,
+    /// Sorted `(rule_label, family_display, source_exact_debug)` triples for
+    /// family support tokens.
+    pub family: Vec<(String, String, String)>,
+    /// Sorted `(rule_label, family_display, source_exact_debug)` triples for
+    /// family attack tokens.
+    pub attack: Vec<(String, String, String)>,
 }
 
 #[cfg(test)]
@@ -712,6 +862,96 @@ mod tests {
         assert_eq!(engine.exact_count(), 1);
         assert_eq!(engine.family_count(), 1);
         assert_eq!(engine.attack_count(), 0);
+    }
+
+    // -- OBS-001 diagnostics tests --
+
+    #[test]
+    fn diagnostics_counts_tokens_correctly() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("bird")));
+        theory.add_rule(Rule::defeater(
+            "d1",
+            vec![Literal::simple("broken")],
+            Literal::negated("flies"),
+        ));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+        engine.project_rule(theory.get_rule("d1").unwrap(), &mut idx);
+
+        let diag = engine.diagnostics();
+        assert_eq!(diag.exact_supports, 2);
+        assert_eq!(diag.family_supports, 1);
+        assert_eq!(diag.family_attacks, 1);
+        assert_eq!(diag.total_tokens(), 4);
+        assert!(diag.contributing_labels.contains("f1"));
+        assert!(diag.contributing_labels.contains("d1"));
+        assert_eq!(diag.contributing_labels.len(), 2);
+    }
+
+    #[test]
+    fn diagnostics_display_format() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+
+        let diag = engine.diagnostics();
+        let s = format!("{diag}");
+        assert!(s.contains("exact_supports=1"));
+        assert!(s.contains("family_supports=1"));
+        assert!(s.contains("family_attacks=0"));
+        assert!(s.contains("f1"));
+    }
+
+    #[test]
+    fn empty_engine_diagnostics() {
+        let engine = ProjectionEngine::new();
+        let diag = engine.diagnostics();
+        assert_eq!(diag.exact_supports, 0);
+        assert_eq!(diag.family_supports, 0);
+        assert_eq!(diag.family_attacks, 0);
+        assert_eq!(diag.total_tokens(), 0);
+        assert!(diag.contributing_labels.is_empty());
+    }
+
+    // -- OBS-002 snapshot tests --
+
+    #[test]
+    fn snapshot_is_deterministic() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f2", Literal::simple("b")));
+        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
+
+        let mut idx = make_index(&theory);
+        let mut engine = ProjectionEngine::new();
+        // Project in reverse label order to verify sorting.
+        engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
+        engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+
+        let snap = engine.snapshot();
+        // Exact entries should be sorted by label.
+        assert_eq!(snap.exact[0].0, "f1");
+        assert_eq!(snap.exact[1].0, "f2");
+        // Family entries should be sorted by label.
+        assert_eq!(snap.family[0].0, "f1");
+        assert_eq!(snap.family[1].0, "f2");
+
+        // Two calls produce identical snapshots.
+        assert_eq!(snap, engine.snapshot());
+    }
+
+    #[test]
+    fn snapshot_empty_engine() {
+        let engine = ProjectionEngine::new();
+        let snap = engine.snapshot();
+        assert!(snap.exact.is_empty());
+        assert!(snap.family.is_empty());
+        assert!(snap.attack.is_empty());
     }
 
     #[test]

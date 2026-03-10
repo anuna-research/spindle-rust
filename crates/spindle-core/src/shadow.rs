@@ -20,7 +20,7 @@ use crate::rule::RuleLabel;
 use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::index::IndexedTheory;
-use crate::projection::{FamilyId, ProjectionEngine, ProjectionToken};
+use crate::projection::{FamilyId, ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken};
 use crate::reason::{reason_indexed, Reasoner};
 
 // ---------------------------------------------------------------------------
@@ -131,6 +131,10 @@ pub struct ShadowResult {
     pub compiled_bodies: FxHashMap<RuleLabel, CompiledBody>,
     /// Divergences detected between the two approaches.
     pub divergences: Vec<Divergence>,
+    /// Structured diagnostic counters for projection activity (OBS-001).
+    pub diagnostics: ProjectionDiagnostics,
+    /// Deterministic debug snapshot of projection state (OBS-002).
+    pub snapshot: ProjectionSnapshot,
 }
 
 impl ShadowResult {
@@ -202,6 +206,17 @@ impl ShadowReasoner {
                 projection_tokens: Vec::new(),
                 compiled_bodies: FxHashMap::default(),
                 divergences: Vec::new(),
+                diagnostics: ProjectionDiagnostics {
+                    exact_supports: 0,
+                    family_supports: 0,
+                    family_attacks: 0,
+                    contributing_labels: std::collections::BTreeSet::new(),
+                },
+                snapshot: ProjectionSnapshot {
+                    exact: Vec::new(),
+                    family: Vec::new(),
+                    attack: Vec::new(),
+                },
             });
         }
 
@@ -236,11 +251,16 @@ impl ShadowReasoner {
             &projected_labels,
         );
 
+        let diagnostics = engine.diagnostics();
+        let snapshot = engine.snapshot();
+
         Ok(ShadowResult {
             primary,
             projection_tokens: engine.into_tokens(),
             compiled_bodies,
             divergences,
+            diagnostics,
+            snapshot,
         })
     }
 }
