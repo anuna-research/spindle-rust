@@ -1,12 +1,12 @@
 {
-  "task_id": "shadow-mode",
-  "token_budget": 8000,
-  "tokens_used": 178,
+  "task_id": "differential-tests",
+  "token_budget": 10000,
+  "tokens_used": 219,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Gate redesign behind shadow mode; run both bridge-based and redesign-based reasoning in parallel for comparison",
-      "token_cost": 27,
+      "content": "Compare conclusions, explanation labels, and trust outputs between bridge and redesign paths across all fixtures",
+      "token_cost": 28,
       "priority": "PlanMeta"
     },
     {
@@ -38,8 +38,14 @@
       "content": "Modified 3 files (+442, -7): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
       "token_cost": 32,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-shadow-mode-changes",
+      "content": "Modified 4 files (+636, -6): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/reason/mod.rs, crates/spindle-core/src/shadow.rs",
+      "token_cost": 40,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T01:57:54Z"
+  "constructed_at": "2026-03-10T02:04:06Z"
 }
