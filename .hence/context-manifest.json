@@ -1,12 +1,12 @@
 {
-  "task_id": "projection-engine",
-  "token_budget": 10000,
-  "tokens_used": 142,
+  "task_id": "shadow-mode",
+  "token_budget": 8000,
+  "tokens_used": 178,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Implement ProjectionEngine that emits support/attack tokens from rule application per CON-002",
-      "token_cost": 23,
+      "content": "Gate redesign behind shadow mode; run both bridge-based and redesign-based reasoning in parallel for comparison",
+      "token_cost": 27,
       "priority": "PlanMeta"
     },
     {
@@ -32,8 +32,14 @@
       "content": "Modified 3 files (+423, -7): .hence/context-manifest.json, crates/spindle-core/src/compilation.rs, crates/spindle-core/src/lib.rs",
       "token_cost": 32,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-projection-engine-changes",
+      "content": "Modified 3 files (+442, -7): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
+      "token_cost": 32,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T01:53:41Z"
+  "constructed_at": "2026-03-10T01:57:54Z"
 }
