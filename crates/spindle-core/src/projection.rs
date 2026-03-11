@@ -175,10 +175,11 @@ impl std::fmt::Display for FamilyId {
     }
 }
 
-/// A token recording that a rule produced exact support for a specific
-/// temporal literal.
+/// A token recording that a non-defeater rule produced exact support for a
+/// specific literal identity.
 ///
-/// Emitted when a rule fires and its head matches an exact temporal literal.
+/// Emitted when a non-defeater rule fires and its head matches an exact
+/// literal identity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExactSupport {
     /// The exact literal that received support.
@@ -298,13 +299,11 @@ impl ProjectionEngine {
     ///
     /// For each head literal in the rule:
     ///
-    /// - **Any rule type, any head**: emits [`ExactSupport`] for the exact
-    ///   literal identity of the head.
-    /// - **Defeater head**: additionally emits [`FamilyAttack`] against the
-    ///   head's base family, using the original rule label and type.
-    /// - **Non-defeater head**: additionally emits [`FamilySupport`] for
-    ///   the head's base family, projecting temporal evidence to the
-    ///   atemporal family.
+    /// - **Defeater head**: emits [`FamilyAttack`] against the head's base
+    ///   family, using the original rule label and type.
+    /// - **Non-defeater head**: emits [`ExactSupport`] for the exact literal
+    ///   identity of the head, and [`FamilySupport`] for the head's base
+    ///   family.
     ///
     /// # Pre-conditions (CON-002)
     ///
@@ -322,14 +321,6 @@ impl ProjectionEngine {
 
         for head_lit in &rule.head {
             let exact = index.try_exact_lit_id(head_lit)?;
-
-            // Always emit exact support.
-            self.push_exact(ExactSupport {
-                exact_lit: exact,
-                rule_label: label.clone(),
-                rule_type,
-            });
-
             let family = FamilyId::from(head_lit);
 
             if rule_type.is_defeater() {
@@ -341,7 +332,12 @@ impl ProjectionEngine {
                     rule_type,
                 });
             } else {
-                // Non-defeaters project family-level support.
+                // Non-defeaters support both the exact literal and its family.
+                self.push_exact(ExactSupport {
+                    exact_lit: exact,
+                    rule_label: label.clone(),
+                    rule_type,
+                });
                 self.push_family(FamilySupport {
                     family_id: family,
                     source_exact_lit: exact,
@@ -802,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn defeater_emits_exact_support_and_family_attack() {
+    fn defeater_emits_family_attack_without_exact_support() {
         let mut theory = Theory::new();
         theory.add_rule(Rule::defeater(
             "d1",
@@ -816,7 +812,7 @@ mod tests {
         let mut engine = ProjectionEngine::new();
         engine.project_rule(rule, &mut idx);
 
-        assert_eq!(engine.exact_count(), 1);
+        assert_eq!(engine.exact_count(), 0);
         assert_eq!(engine.family_count(), 0);
         assert_eq!(engine.attack_count(), 1);
 
@@ -991,10 +987,10 @@ mod tests {
         engine.project_rule(theory.get_rule("d1").unwrap(), &mut idx);
 
         let diag = engine.diagnostics();
-        assert_eq!(diag.exact_supports, 2);
+        assert_eq!(diag.exact_supports, 1);
         assert_eq!(diag.family_supports, 1);
         assert_eq!(diag.family_attacks, 1);
-        assert_eq!(diag.total_tokens(), 4);
+        assert_eq!(diag.total_tokens(), 3);
         assert!(diag.contributing_labels.contains("f1"));
         assert!(diag.contributing_labels.contains("d1"));
         assert_eq!(diag.contributing_labels.len(), 2);

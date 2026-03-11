@@ -1,7 +1,8 @@
 //! Theory indexing for O(1) rule lookup
 //!
 //! Indexed theories provide fast lookup of rules by head or body literals.
-//! Uses a local atom interner to ensure correct identity for predicates with arguments.
+//! Uses a local atom interner to ensure correct identity for predicates with
+//! arguments and temporal windows.
 
 use std::cmp::Ordering;
 
@@ -72,12 +73,13 @@ impl LitId {
     }
 }
 
-/// Key used for interning atoms (atemporal identity).
+/// Key used for interning atoms in the main reasoning index.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AtomKey {
     functor: SymbolId,
     mode: (SymbolId, bool), // name_id, negated
     args: Vec<Term>,
+    temporal: Temporal,
 }
 
 /// Key used for interning exact literals (includes temporal bounds).
@@ -92,7 +94,7 @@ struct ExactAtomKey {
 /// An indexed theory for efficient rule lookup.
 ///
 /// Holds a reference to the theory to avoid deep cloning during reasoning.
-/// Interns atoms locally to ensure p(a) != p(b).
+/// Interns atoms locally to ensure `p(a) != p(b)` and `p[1,10] != p[20,30]`.
 #[derive(Debug)]
 pub struct IndexedTheory<'a> {
     /// Reference to the underlying theory (avoids deep clone)
@@ -103,8 +105,10 @@ pub struct IndexedTheory<'a> {
     atoms: Vec<AtomKey>,
     /// Rules indexed by head literal
     head_index: FxHashMap<LitId, Vec<RuleLabel>>,
-    /// Rules indexed by body literal (trigger index)
+    /// Rules indexed by exact temporal body literals.
     body_index: FxHashMap<LitId, Vec<RuleLabel>>,
+    /// Rules indexed by atemporal body families.
+    family_body_index: FxHashMap<FamilyId, Vec<RuleLabel>>,
     /// Set of all literal IDs in the theory
     literal_set: FxHashSet<LitId>,
     /// Map from (ExactAtomKey, negated) to ExactLitId
@@ -135,6 +139,7 @@ impl<'a> IndexedTheory<'a> {
             atoms: Vec::new(),
             head_index: FxHashMap::default(),
             body_index: FxHashMap::default(),
+            family_body_index: FxHashMap::default(),
             literal_set: FxHashSet::default(),
             exact_map: FxHashMap::default(),
             exact_atoms: Vec::new(),
@@ -160,10 +165,17 @@ impl<'a> IndexedTheory<'a> {
                 if let Some(logic_lit) = body_bl.as_logic() {
                     let as_lit = logic_lit.to_literal();
                     let lit_id = idx.intern_literal(&as_lit);
-                    idx.body_index
-                        .entry(lit_id)
-                        .or_default()
-                        .push(rule.label.clone());
+                    if as_lit.is_temporal() {
+                        idx.body_index
+                            .entry(lit_id)
+                            .or_default()
+                            .push(rule.label.clone());
+                    } else {
+                        idx.family_body_index
+                            .entry(FamilyId::from(&as_lit))
+                            .or_default()
+                            .push(rule.label.clone());
+                    }
                     idx.literal_set.insert(lit_id);
                     idx.try_intern_exact(&as_lit)?;
                 }
@@ -185,6 +197,7 @@ impl<'a> IndexedTheory<'a> {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
             args: lit.predicate_args().to_vec(),
+            temporal: lit.temporal.clone(),
         };
 
         let atom_id = if let Some(&id) = self.atom_map.get(&key) {
@@ -211,6 +224,7 @@ impl<'a> IndexedTheory<'a> {
             functor: lit.name_id(),
             mode: (mode_id, lit.mode.negation),
             args: lit.predicate_args().to_vec(),
+            temporal: lit.temporal.clone(),
         };
 
         self.atom_map
@@ -236,7 +250,7 @@ impl<'a> IndexedTheory<'a> {
             key.functor,
             negated,
             Self::mode_from_parts(key.mode),
-            crate::temporal::Temporal::empty(),
+            key.temporal.clone(),
             key.args.clone(),
         )
     }
@@ -288,23 +302,25 @@ impl<'a> IndexedTheory<'a> {
 
     /// Get rules with the given literal in the body.
     pub fn rules_with_body(&self, lit: &Literal) -> Vec<&Rule> {
-        if let Some(lit_id) = self.get_lit_id(lit) {
-            self.rules_with_body_id(lit_id)
-        } else {
-            Vec::new()
+        let mut rules = Vec::new();
+
+        if let Some(lit_id) = self.get_lit_id(lit)
+            && let Some(labels) = self.body_index.get(&lit_id)
+        {
+            rules.extend(labels.iter().filter_map(|l| self.theory.get_rule(l)));
         }
+
+        if let Some(labels) = self.family_body_index.get(&FamilyId::from(lit)) {
+            rules.extend(labels.iter().filter_map(|l| self.theory.get_rule(l)));
+        }
+
+        rules
     }
 
     /// Get rules with the given literal ID in the body.
     pub fn rules_with_body_id(&self, lit_id: LitId) -> Vec<&Rule> {
-        self.body_index
-            .get(&lit_id)
-            .map(|labels| {
-                labels
-                    .iter()
-                    .filter_map(|l| self.theory.get_rule(l))
-                    .collect()
-            })
+        self.try_resolve_literal(lit_id)
+            .map(|lit| self.rules_with_body(&lit))
             .unwrap_or_default()
     }
 
@@ -499,6 +515,52 @@ mod tests {
 
         // p(a) is NOT a rule body
         assert!(indexed.rules_with_body_id(id_a).is_empty());
+    }
+
+    #[test]
+    fn test_indexed_theory_temporal_discrimination() {
+        let mut theory = Theory::new();
+        let early = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let late = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(
+                crate::temporal::TimePoint::Moment(20),
+                crate::temporal::TimePoint::Moment(30),
+            ),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", early.clone()));
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![late.clone()],
+            Literal::simple("q"),
+        ));
+
+        let mut indexed = IndexedTheory::build(&theory);
+        let early_id = indexed.intern_literal(&early);
+        let late_id = indexed.intern_literal(&late);
+
+        assert_ne!(
+            early_id, late_id,
+            "disjoint temporal windows should have different LitIds"
+        );
+        assert!(!indexed.rules_with_head_id(early_id).is_empty());
+        assert!(!indexed.rules_with_body_id(late_id).is_empty());
+        assert!(
+            indexed.rules_with_body_id(early_id).is_empty(),
+            "an early-window fact must not satisfy a late-window body slot"
+        );
     }
 
     #[test]

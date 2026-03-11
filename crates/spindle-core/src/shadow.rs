@@ -290,8 +290,8 @@ fn detect_divergences(
 ) -> Vec<Divergence> {
     let mut divergences = Vec::new();
 
-    // Check 1: Every temporally-relevant contributing rule label should
-    // have been projected.
+    // Check 1: Every contributing rule label selected for projection
+    // should have been projected.
     for label in expected_projected_labels {
         if !projected_labels.contains(label) {
             divergences.push(Divergence::missing_rule(label.clone()));
@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn atemporal_contributors_do_not_emit_projection_tokens() {
+    fn atemporal_contributors_emit_projection_tokens() {
         let mut theory = Theory::new();
         theory.add_fact("a");
         theory.add_rule(Rule::defeasible(
@@ -583,8 +583,11 @@ mod tests {
         let result = shadow_reason(&theory);
 
         assert!(
-            result.projection_tokens.is_empty(),
-            "purely atemporal contributors should not be projected"
+            result.projection_tokens.iter().any(|token| matches!(
+                token,
+                ProjectionToken::Family(family) if family.rule_label == "r1"
+            )),
+            "atemporal contributors should be preserved in the projection stream"
         );
         assert!(
             result.is_consistent(),
@@ -779,11 +782,11 @@ mod tests {
     }
 
     /// This test exercises the *integration* path through reason_shadow.
-    /// If a contributing rule exists in the theory and has temporal literals,
-    /// it should appear in expected_projected_labels. If projection silently
-    /// skips it (e.g., engine bug), that should be detected. We verify by
-    /// checking that expected_projected_labels is built independently of
-    /// projected_labels.
+    /// If a contributing rule exists in the theory and is selected for
+    /// projection, it should appear in expected_projected_labels. If
+    /// projection silently skips it (e.g., engine bug), that should be
+    /// detected. We verify by checking that expected_projected_labels is
+    /// built independently of projected_labels.
     #[test]
     fn reason_shadow_populates_expected_independently_of_projected() {
         // A temporal rule that should be projected.

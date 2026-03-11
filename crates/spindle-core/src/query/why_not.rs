@@ -219,8 +219,54 @@ pub fn why_not_with_conclusions(
     let provable_conclusion = find_positive_match(literal, conclusions);
 
     if let Some(conclusion) = provable_conclusion {
+        if literal.is_temporal() {
+            let mut result = WhyNotResult::new(literal.clone());
+            result.would_derive = conclusion.rule_label.clone();
+            return Ok(result);
+        }
+
         let mut result = WhyNotResult::new(literal.clone());
         result.would_derive = conclusion.rule_label.clone();
+        let Some(rule_label) = conclusion.rule_label.as_deref() else {
+            return Ok(result);
+        };
+        let complement = literal.complement();
+
+        for attacker in theory.rules() {
+            if !semantic_literal_matches(&complement, attacker.head_literal()) {
+                continue;
+            }
+
+            let attacker_body_lits: Vec<Literal> = attacker
+                .body
+                .iter()
+                .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
+                .collect();
+            let attacker_body_satisfied = attacker_body_lits
+                .iter()
+                .all(|body_lit| has_positive_match(body_lit, conclusions));
+            if !attacker_body_satisfied {
+                continue;
+            }
+
+            if attacker.rule_type == RuleType::Defeater {
+                if !theory.is_superior(rule_label, &attacker.label) {
+                    result
+                        .blocked_by
+                        .push(BlockingCondition::defeated(rule_label, &attacker.label));
+                }
+            } else {
+                let attacker_superior = theory.is_superior(&attacker.label, rule_label);
+                let rule_superior = theory.is_superior(rule_label, &attacker.label);
+
+                if !rule_superior || attacker_superior {
+                    result
+                        .blocked_by
+                        .push(BlockingCondition::contradicted(rule_label, &attacker.label));
+                }
+            }
+        }
+
         return Ok(result);
     }
 

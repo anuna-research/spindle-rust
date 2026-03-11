@@ -40,7 +40,8 @@ pub(crate) fn resolve_defeasible(
     let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
 
     // --- Seed +d from +D (subsumption), but respect condition (2) ---
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
     for &lit_id in &all_ids {
         if state.definite_proven.contains(lit_id) {
             let comp_id = lit_id.complement();
@@ -100,7 +101,23 @@ pub(crate) fn resolve_defeasible(
     }
 
     // --- Seed empty-body defeasible/strict rules not yet decided ---
-    for rule in theory.rules() {
+    let mut empty_body_rules: Vec<_> = theory
+        .rules()
+        .filter(|rule| {
+            rule.body.is_empty()
+                && matches!(
+                    rule.rule_type,
+                    RuleType::Defeasible | RuleType::Strict | RuleType::Fact
+                )
+        })
+        .collect();
+    empty_body_rules.sort_by(|lhs, rhs| {
+        lhs.head_literal()
+            .to_spl()
+            .cmp(&rhs.head_literal().to_spl())
+            .then_with(|| lhs.label.cmp(&rhs.label))
+    });
+    for rule in empty_body_rules {
         if rule.body.is_empty()
             && matches!(
                 rule.rule_type,
@@ -129,11 +146,26 @@ pub(crate) fn resolve_defeasible(
     // --- Fixed-point loop ---
     while let Some((q_id, proved)) = worklist.pop_front() {
         // Update rule counters for ALL rules containing q in body
-        let rules_with_q: Vec<String> = indexed
+        let mut rules_with_q: Vec<String> = indexed
             .rules_with_body_id(q_id)
             .iter()
             .map(|r| r.label.clone())
             .collect();
+        rules_with_q.sort_by(|lhs, rhs| {
+            theory
+                .get_rule(lhs)
+                .expect("rule label from body index must exist")
+                .head_literal()
+                .to_spl()
+                .cmp(
+                    &theory
+                        .get_rule(rhs)
+                        .expect("rule label from body index must exist")
+                        .head_literal()
+                        .to_spl(),
+                )
+                .then_with(|| lhs.cmp(rhs))
+        });
 
         for rule_label in &rules_with_q {
             if proved {
@@ -327,7 +359,8 @@ pub(crate) fn resolve_defeasible(
     // ====================================================================
     // PHASE 3: Emit remaining conclusions (-D, -d)
     // ====================================================================
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
 
     for lit_id in all_ids {
         if !state.definite_proven.contains(lit_id) {

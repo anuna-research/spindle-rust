@@ -73,8 +73,8 @@ fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
     labels
 }
 
-pub(crate) fn should_project_rule(rule: &Rule) -> bool {
-    rule.has_temporal_literals()
+pub(crate) fn should_project_rule(_rule: &Rule) -> bool {
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -227,8 +227,8 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
 ///
 /// Like [`reason`], but returns a [`ReasonResult`] that includes
 /// projection tokens alongside conclusions. The projection engine runs on
-/// positive contributors and applicable blockers, providing family-level
-/// support and attack semantics for temporal literals.
+/// positive contributors and applicable blockers, preserving both temporal
+/// and authored atemporal contributors in the family-level audit stream.
 pub fn reason_full(theory: &Theory) -> Result<ReasonResult> {
     reason_full_with_options(theory, PrepareOptions::default())
 }
@@ -253,9 +253,9 @@ pub fn reason_full_prepared(theory: &Theory) -> Result<ReasonResult> {
 
 /// Core reasoning with projection, operating on an already-indexed theory.
 ///
-/// Runs the standard DL(d) algorithm, then projects contributing rules that
-/// actually participate in temporal reasoning through the
-/// [`ProjectionEngine`] to produce family-level support and attack tokens.
+/// Runs the standard DL(d) algorithm, then projects contributing rules
+/// through the [`ProjectionEngine`] to produce family-level support and
+/// attack tokens.
 pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResult> {
     let trace = reason_indexed_trace(indexed)?;
     let ReasoningTrace {
@@ -266,10 +266,7 @@ pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResu
     let mut engine = ProjectionEngine::with_capacity(conclusions.len() * 2);
     let theory = indexed.theory();
     for label in &contributing_labels {
-        if let Some(rule) = theory
-            .get_rule(label)
-            .filter(|rule| should_project_rule(rule))
-        {
+        if let Some(rule) = theory.get_rule(label) {
             engine.try_project_rule(rule, indexed)?;
         }
     }
@@ -334,7 +331,9 @@ mod tests {
     use crate::conclusion::ConclusionType;
     use crate::index::LitId;
     use crate::literal::Literal;
-    use crate::rule::RuleType;
+    use crate::projection::ProjectionToken;
+    use crate::rule::{Rule, RuleType};
+    use crate::temporal::Temporal;
 
     use super::state::LiteralBitSet;
 
@@ -1498,6 +1497,101 @@ mod tests {
             !has_bird_outside,
             "bird should NOT be provable at time 3000 (outside temporal window)"
         );
+    }
+
+    #[test]
+    fn test_reason_keeps_disjoint_temporal_windows_distinct() {
+        let early = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::from_bounds(1, 10),
+            vec![],
+        );
+        let late = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::from_bounds(20, 30),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", early));
+        theory.add_rule(Rule::defeasible("r1", vec![late], Literal::simple("q")));
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "a fact for p[1,10] must not satisfy a rule body requiring p[20,30]"
+        );
+    }
+
+    #[test]
+    fn test_reason_full_defeater_projects_attack_without_exact_support() {
+        let temporal_head = Literal::new(
+            "q",
+            true,
+            Default::default(),
+            Temporal::from_bounds(1, 10),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_rule(Rule::defeater(
+            "d1",
+            vec![Literal::simple("a")],
+            temporal_head,
+        ));
+
+        let result = reason_full(&theory).unwrap();
+
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Attack(attack) if attack.rule_label == "d1"
+        )));
+        assert!(!result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Exact(exact) if exact.rule_label == "d1"
+        )));
+    }
+
+    #[test]
+    fn test_reason_full_projects_mixed_temporal_and_atemporal_contributors() {
+        let temporal_head = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::from_bounds(1, 10),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_rule(Rule::defeasible(
+            "r_temporal",
+            vec![Literal::simple("a")],
+            temporal_head,
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_atemporal",
+            vec![Literal::simple("a")],
+            Literal::negated("p"),
+        ));
+
+        let result = reason_full(&theory).unwrap();
+
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Family(family) if family.rule_label == "r_temporal"
+        )));
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Family(family) if family.rule_label == "r_atemporal"
+        )));
     }
 
     #[test]
