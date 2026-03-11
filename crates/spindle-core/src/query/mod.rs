@@ -597,8 +597,9 @@ fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryRe
 
 /// WildcardTemporal matching: like Family, but when multiple temporal variants
 /// match, use deterministic ordering (earliest start time, ties broken by
-/// earliest end time) while still reporting the strongest positive proof
-/// strength across the whole family.
+/// earliest end time). The returned conclusion type stays aligned with that
+/// selected representative instead of being promoted from a different family
+/// member.
 fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
     let family = FamilyId::from(literal);
     let complement_family = family.complement();
@@ -620,14 +621,13 @@ fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Res
                 .then_with(|| a.literal.temporal.end.cmp(&b.literal.temporal.end))
         });
 
-        let conclusion_type = strongest_positive_conclusion_type(family_positives.iter().copied())
-            .expect("family_positives is non-empty");
-        // Use the earliest representative's literal instead of the bare
-        // query literal, so callers can inspect which temporal variant was
-        // selected.
-        let representative = family_positives[0].literal.clone();
-        return Ok(QueryResult::new(representative, QueryStatus::Provable)
-            .with_conclusion_type(conclusion_type));
+        let representative = family_positives[0];
+        // Use the earliest representative's literal instead of the bare query
+        // literal, so callers can inspect which temporal variant was selected.
+        return Ok(
+            QueryResult::new(representative.literal.clone(), QueryStatus::Provable)
+                .with_conclusion_type(representative.conclusion_type),
+        );
     }
 
     // Check if complement family is provable (refuted)
@@ -2079,26 +2079,21 @@ mod tests {
     }
 
     #[test]
-    fn wildcard_temporal_preserves_strongest_conclusion_type() {
-        let mut theory = Theory::new();
-        theory.add_fact("support");
-        theory.add_rule(Rule::defeasible(
-            "r1",
-            vec![Literal::simple("support")],
-            temporal_lit("p", 1, 10),
-        ));
-        theory.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+    fn wildcard_temporal_uses_selected_representative_conclusion_type() {
+        let conclusions = vec![
+            Conclusion::defeasibly_provable(temporal_lit("p", 1, 10)),
+            Conclusion::definitely_provable(temporal_lit("p", 20, 30)),
+        ];
 
-        let result = query_with_match_mode(
-            &theory,
-            &Literal::simple("p"),
-            QueryMatchMode::WildcardTemporal,
-            PrepareOptions::default(),
-        )
-        .unwrap();
+        let result = match_wildcard_temporal(&Literal::simple("p"), &conclusions).unwrap();
 
         assert_eq!(result.status, QueryStatus::Provable);
-        assert!(result.is_definitely_provable());
+        assert_eq!(result.literal.temporal.start, TimePoint::Moment(1));
+        assert_eq!(result.literal.temporal.end, TimePoint::Moment(10));
+        assert!(
+            result.is_defeasibly_provable(),
+            "WildcardTemporal must report the selected representative's proof strength"
+        );
     }
 
     #[test]

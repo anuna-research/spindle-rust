@@ -18,7 +18,9 @@ use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
-use super::{find_positive_match, has_positive_match, semantic_literal_matches};
+use super::{
+    exact_literal_match, find_positive_match, has_positive_match, semantic_literal_matches,
+};
 
 const UNDETERMINED_BLOCKER_EXPLANATION: &str = "Body satisfied but no explicit blocker was identified in the current reasoning results; \
      this usually means ambiguity blocking or a gap in why-not diagnostics";
@@ -258,12 +260,12 @@ pub fn why_not_with_conclusions(
                     .blocked_by
                     .push(BlockingCondition::missing_premise(&rule.label, missing));
             } else {
-                // Body is fully satisfied but conclusion not proven.
-                // Check for blockers using the complement literal's own
-                // semantics: exact when bounded, family-aware when atemporal.
+                // Body is fully satisfied but conclusion not proven. Match
+                // candidate attackers the same way the standard reasoner does:
+                // exact head identity against the complement literal.
                 let mut blocked = false;
                 for attacker in theory.rules() {
-                    if semantic_literal_matches(&complement, attacker.head_literal()) {
+                    if exact_literal_match(&complement, attacker.head_literal()) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
@@ -878,6 +880,50 @@ mod tests {
         assert!(
             result.is_provable(),
             "flies should be provable — temporal defeater doesn't block atemporal rule"
+        );
+    }
+
+    #[test]
+    fn test_why_not_excludes_temporal_attackers_from_atemporal_blocker_explanations() {
+        use crate::rule::Rule;
+
+        let mut th = Theory::new();
+        th.add_fact("bird");
+        th.add_fact("injured");
+        th.add_fact("storm");
+
+        th.add_defeasible_rule(&["bird"], "flies");
+        let atemporal_blocker = th.add_defeasible_rule(&["injured"], "~flies");
+
+        let temporal_neg_flies = Literal::new(
+            "flies",
+            true,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let temporal_defeater = "d1".to_string();
+        th.add_rule(Rule::defeater(
+            &temporal_defeater,
+            vec![Literal::simple("storm")],
+            temporal_neg_flies,
+        ));
+
+        let result = why_not(&th, &Literal::simple("flies")).unwrap();
+
+        assert!(!result.is_provable());
+        assert!(
+            result.blocked_by.iter().any(|blocker| blocker.blocking_rule.as_deref()
+                == Some(atemporal_blocker.as_str())),
+            "why_not should still cite the actual atemporal blocker"
+        );
+        assert!(
+            result.blocked_by.iter().all(|blocker| blocker.blocking_rule.as_deref()
+                != Some(temporal_defeater.as_str())),
+            "why_not must not cite temporal attackers that the reasoner never used"
         );
     }
 
