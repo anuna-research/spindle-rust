@@ -258,10 +258,11 @@ impl ProjectionEngine {
     ///
     /// # Post-conditions (CON-002)
     ///
-    /// - Emits support/attack tokens using original labels.
+    /// - Emits support/attack tokens using the rule label space returned by
+    ///   reasoning results (grounded instances keep their grounded labels).
     /// - Does not materialize synthetic rules in `Theory`.
     pub fn project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) {
-        let label = rule.template_label.as_ref().unwrap_or(&rule.label).clone();
+        let label = rule.label.clone();
         let rule_type = rule.rule_type;
 
         for head_lit in &rule.head {
@@ -755,8 +756,9 @@ mod tests {
     }
 
     #[test]
-    fn template_label_is_preferred() {
-        // Grounded instances carry template_label; projection should use it.
+    fn grounded_rule_label_is_preserved() {
+        // Grounded instances should stay in the grounded label space so
+        // projection tokens can be joined back to conclusions and bodies.
         let mut rule = Rule::defeasible(
             "r1__ground_0",
             vec![Literal::simple("a")],
@@ -775,9 +777,9 @@ mod tests {
 
         for token in engine.tokens() {
             match token {
-                ProjectionToken::Exact(s) => assert_eq!(s.rule_label, "r1"),
-                ProjectionToken::Family(s) => assert_eq!(s.rule_label, "r1"),
-                ProjectionToken::Attack(a) => assert_eq!(a.rule_label, "r1"),
+                ProjectionToken::Exact(s) => assert_eq!(s.rule_label, "r1__ground_0"),
+                ProjectionToken::Family(s) => assert_eq!(s.rule_label, "r1__ground_0"),
+                ProjectionToken::Attack(a) => assert_eq!(a.rule_label, "r1__ground_0"),
             }
         }
     }

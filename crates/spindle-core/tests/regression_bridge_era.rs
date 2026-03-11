@@ -435,9 +435,9 @@ fn projection_tokens_carry_original_label() {
 }
 
 #[test]
-fn grounded_instance_preserves_template_label() {
-    // Grounded instances carry template_label; projection should use it
-    // for trust provenance instead of the ground label.
+fn grounded_instance_projection_uses_grounded_label() {
+    // Grounded instances should keep their grounded label in projection
+    // output so consumers can join tokens back to conclusions and bodies.
     let mut rule = Rule::defeasible(
         "r1__ground_0",
         vec![Literal::simple("a")],
@@ -457,8 +457,8 @@ fn grounded_instance_preserves_template_label() {
             ProjectionToken::Attack(a) => &a.rule_label,
         };
         assert_eq!(
-            label, "r1",
-            "bridge-era regression: grounded instance used ground label instead of template label for trust"
+            label, "r1__ground_0",
+            "bridge-era regression: grounded instance label was rewritten, breaking joins against conclusions"
         );
     }
 }

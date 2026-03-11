@@ -2,8 +2,8 @@
 //! parallel for diagnostic comparison.
 //!
 //! When shadow mode is enabled, the [`ShadowReasoner`] wraps the standard
-//! DL(d) reasoner and additionally runs the [`ProjectionEngine`] on every
-//! rule that contributed to a positive conclusion. It then cross-checks
+//! DL(d) reasoner and additionally runs the [`ProjectionEngine`] on positive
+//! contributors plus any rule that blocked a proof. It then cross-checks
 //! projection tokens against the standard conclusions and reports any
 //! divergences.
 //!
@@ -24,7 +24,7 @@ use crate::index::IndexedTheory;
 use crate::projection::{
     FamilyId, ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
 };
-use crate::reason::{Reasoner, reason_indexed};
+use crate::reason::{Reasoner, reason_indexed_trace};
 use crate::rule::RuleLabel;
 
 // ---------------------------------------------------------------------------
@@ -158,8 +158,8 @@ impl ShadowResult {
 /// reasoner with zero overhead. When enabled, it additionally:
 ///
 /// 1. Compiles all rule bodies into [`BodyMatchKey`]s.
-/// 2. Runs the [`ProjectionEngine`] on every rule that contributed to
-///    a positive conclusion.
+/// 2. Runs the [`ProjectionEngine`] on positive contributors and blocker
+///    rules that determined a negative or ambiguous outcome.
 /// 3. Cross-checks projection tokens against standard conclusions.
 /// 4. Reports divergences via [`ShadowResult`].
 #[derive(Debug, Clone)]
@@ -193,7 +193,8 @@ impl ShadowReasoner {
     /// projection tokens, plus any divergences.
     pub fn reason_shadow(&self, indexed: &mut IndexedTheory<'_>) -> Result<ShadowResult> {
         // Step 1: Run standard reasoning.
-        let primary = reason_indexed(indexed)?;
+        let trace = reason_indexed_trace(indexed)?;
+        let primary = trace.conclusions;
 
         if !self.config.enabled {
             return Ok(ShadowResult {
@@ -218,17 +219,11 @@ impl ShadowReasoner {
         // Step 2: Compile rule bodies.
         let compiled_bodies = compile_theory(indexed);
 
-        // Step 3: Run projection engine on rules that contributed to
-        // positive conclusions.
+        // Step 3: Run projection for positive contributors plus any rule
+        // that blocked a proof and therefore determined the outcome.
         let mut engine = ProjectionEngine::with_capacity(primary.len() * 2);
         let mut projected_labels: FxHashSet<String> = FxHashSet::default();
-
-        // Collect rule labels from positive conclusions.
-        let contributing_labels: FxHashSet<String> = primary
-            .iter()
-            .filter(|c| c.is_positive())
-            .filter_map(|c| c.rule_label.clone())
-            .collect();
+        let contributing_labels = trace.projection_labels;
 
         let theory = indexed.theory();
         for label in &contributing_labels {
@@ -314,10 +309,10 @@ fn detect_divergences(
     }
 
     // Check 3: Every family-level projection token should correspond to
-    // at least one positive conclusion family.
+    // at least one conclusion family. Blockers and ambiguity participants
+    // can legitimately project without producing a positive conclusion.
     let concluded_families: FxHashSet<FamilyId> = conclusions
         .iter()
-        .filter(|c| c.is_positive())
         .map(|c| FamilyId::from(&c.literal))
         .collect();
 
@@ -329,7 +324,6 @@ fn detect_divergences(
         };
         if let Some(family) = token_family
             && !concluded_families.contains(family)
-            && !concluded_families.contains(&family.complement())
         {
             divergences.push(Divergence::unmatched_token(token.clone()));
         }

@@ -46,6 +46,32 @@ use crate::theory::Theory;
 
 use self::state::ReasoningState;
 
+pub(crate) struct ReasoningTrace {
+    pub conclusions: Vec<Conclusion>,
+    pub projection_labels: FxHashSet<String>,
+}
+
+fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
+    let mut labels = state
+        .conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .filter_map(|c| c.rule_label.clone())
+        .collect::<FxHashSet<_>>();
+
+    labels.extend(
+        state
+            .defeasible_body_remaining
+            .iter()
+            .filter(|(label, remaining)| {
+                **remaining == 0 && !state.rule_discarded.get(**label).copied().unwrap_or(false)
+            })
+            .map(|(label, _)| (*label).to_string()),
+    );
+    labels.extend(state.projection_labels.iter().cloned());
+    labels
+}
+
 // ---------------------------------------------------------------------------
 // Reasoner trait
 // ---------------------------------------------------------------------------
@@ -124,17 +150,16 @@ pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
 /// The result of a full reasoning pass, including both conclusions and
 /// projection tokens.
 ///
-/// The projection engine runs automatically on every rule that contributed
-/// to a positive conclusion, emitting [`ProjectionToken`]s that carry
-/// family-level support and attack information without synthetic bridge
-/// rules.
+/// The projection engine runs automatically on positive contributors and on
+/// applicable blockers, emitting [`ProjectionToken`]s that carry family-level
+/// support and attack information without synthetic bridge rules.
 #[derive(Debug, Clone)]
 pub struct ReasonResult {
     /// All conclusions (positive and negative) from the DL(d) reasoner.
     pub conclusions: Vec<Conclusion>,
-    /// Projection tokens emitted for rules that contributed to positive
-    /// conclusions. These provide family-level support/attack semantics
-    /// for temporal literals.
+    /// Projection tokens emitted for positive contributors and blocker rules.
+    /// These provide family-level support/attack semantics for temporal
+    /// literals even when a rule only prevented a proof.
     pub projection_tokens: Vec<ProjectionToken>,
     /// Structured diagnostic counters for projection activity.
     pub diagnostics: ProjectionDiagnostics,
@@ -196,9 +221,9 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
 /// Perform full reasoning with projection tokens on a theory.
 ///
 /// Like [`reason`], but returns a [`ReasonResult`] that includes
-/// projection tokens alongside conclusions. The projection engine runs
-/// on every rule that contributed to a positive conclusion, providing
-/// family-level support and attack semantics for temporal literals.
+/// projection tokens alongside conclusions. The projection engine runs on
+/// positive contributors and applicable blockers, providing family-level
+/// support and attack semantics for temporal literals.
 pub fn reason_full(theory: &Theory) -> Result<ReasonResult> {
     reason_full_with_options(theory, PrepareOptions::default())
 }
@@ -227,14 +252,11 @@ pub fn reason_full_prepared(theory: &Theory) -> Result<ReasonResult> {
 /// rules through the [`ProjectionEngine`] to produce family-level
 /// support and attack tokens.
 pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResult> {
-    let conclusions = reason_indexed(indexed)?;
-
-    // Run projection on rules that contributed to positive conclusions.
-    let contributing_labels: FxHashSet<String> = conclusions
-        .iter()
-        .filter(|c| c.is_positive())
-        .filter_map(|c| c.rule_label.clone())
-        .collect();
+    let trace = reason_indexed_trace(indexed)?;
+    let ReasoningTrace {
+        conclusions,
+        projection_labels: contributing_labels,
+    } = trace;
 
     let mut engine = ProjectionEngine::with_capacity(conclusions.len() * 2);
     let theory = indexed.theory();
@@ -268,6 +290,10 @@ pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResu
 /// 3. **Negative Conclusions** -- emit `-D` and `-d` for all unproven
 ///    literals.
 pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>> {
+    Ok(reason_indexed_trace(indexed)?.conclusions)
+}
+
+pub(crate) fn reason_indexed_trace(indexed: &mut IndexedTheory<'_>) -> Result<ReasoningTrace> {
     let theory = indexed.theory();
 
     // Pre-allocate state sized for the theory.
@@ -286,7 +312,12 @@ pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>
     // Phase 2: Defeasible fixed-point loop + Phase 3: Negative conclusions
     defeasible::resolve_defeasible(theory, indexed, &mut state);
 
-    Ok(state.conclusions)
+    let projection_labels = collect_projection_labels(&state);
+
+    Ok(ReasoningTrace {
+        conclusions: state.conclusions,
+        projection_labels,
+    })
 }
 
 #[cfg(test)]

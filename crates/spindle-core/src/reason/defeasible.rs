@@ -119,6 +119,7 @@ pub(crate) fn resolve_defeasible(
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
                 &state.rule_discarded,
+                &mut state.projection_labels,
                 &mut worklist,
                 &mut state.conclusions,
             );
@@ -174,6 +175,7 @@ pub(crate) fn resolve_defeasible(
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
                         &state.rule_discarded,
+                        &mut state.projection_labels,
                         &mut worklist,
                         &mut state.conclusions,
                     );
@@ -188,6 +190,7 @@ pub(crate) fn resolve_defeasible(
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
                         &state.rule_discarded,
+                        &mut state.projection_labels,
                         &mut worklist,
                         &mut state.conclusions,
                     );
@@ -227,6 +230,7 @@ pub(crate) fn resolve_defeasible(
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
                         &state.rule_discarded,
+                        &mut state.projection_labels,
                         &mut worklist,
                         &mut state.conclusions,
                     );
@@ -295,6 +299,7 @@ pub(crate) fn resolve_defeasible(
                     &mut state.defeasible_disproven,
                     &state.defeasible_body_remaining,
                     &state.rule_discarded,
+                    &mut state.projection_labels,
                     &mut worklist,
                     &mut state.conclusions,
                 );
@@ -312,6 +317,7 @@ pub(crate) fn resolve_defeasible(
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
                 &state.rule_discarded,
+                &mut state.projection_labels,
                 &mut worklist,
                 &mut state.conclusions,
             );
@@ -357,6 +363,7 @@ fn try_prove_defeasible(
     defeasible_disproven: &mut LiteralBitSet,
     body_remaining: &FxHashMap<&str, usize>,
     rule_discarded: &FxHashMap<&str, bool>,
+    projection_labels: &mut FxHashSet<String>,
     worklist: &mut VecDeque<(LitId, bool)>,
     conclusions: &mut Vec<Conclusion>,
 ) {
@@ -409,6 +416,8 @@ fn try_prove_defeasible(
         .copied()
         .collect();
 
+    let mut blocked_by_applicable_attacker = false;
+
     for attacker in &attacking_rules {
         let att_discarded = rule_discarded
             .get(attacker.label.as_str())
@@ -431,6 +440,8 @@ fn try_prove_defeasible(
         if att_remaining > 0 {
             // Strict attackers cannot be defeated by superiority
             if attacker.rule_type == RuleType::Strict {
+                projection_labels
+                    .extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
                 return;
             }
             // Defeasible attacker with undecided body: if a superior
@@ -438,18 +449,27 @@ fn try_prove_defeasible(
             if defeated_by_superior {
                 continue;
             }
+            projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
             return;
         }
 
         // Strict attackers always block (cannot be defeated by superiority)
         if attacker.rule_type == RuleType::Strict {
-            return;
+            projection_labels.insert(attacker.label.clone());
+            blocked_by_applicable_attacker = true;
+            continue;
         }
 
         // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s
         if !defeated_by_superior {
-            return; // undefeated attacker
+            projection_labels.insert(attacker.label.clone());
+            blocked_by_applicable_attacker = true;
         }
+    }
+
+    if blocked_by_applicable_attacker {
+        projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
+        return;
     }
 
     // All conditions met.

@@ -176,8 +176,8 @@ proptest! {
 }
 
 // ===========================================================================
-// 5. Label parity: every positive conclusion's rule_label appears in
-//    projection tokens, and vice versa
+// 5. Label coverage: every positive conclusion's rule_label appears in
+//    projection tokens. Blockers may add extra projection labels.
 // ===========================================================================
 
 proptest! {
@@ -197,13 +197,6 @@ proptest! {
             );
         }
 
-        for label in &proj_labels {
-            prop_assert!(
-                conclusion_labels.contains(label),
-                "label '{}' in projection tokens but missing from conclusions",
-                label,
-            );
-        }
     }
 }
 
@@ -435,7 +428,8 @@ proptest! {
 }
 
 // ===========================================================================
-// 15. Contributing labels in diagnostics match positive conclusion labels
+// 15. Contributing labels in diagnostics cover positive conclusion labels.
+//     Blockers may add extra labels that never appear on +D/+d conclusions.
 // ===========================================================================
 
 proptest! {
@@ -452,10 +446,12 @@ proptest! {
             .cloned()
             .collect();
 
-        prop_assert_eq!(
-            conclusion_labels,
-            diag_labels,
-            "contributing labels mismatch"
-        );
+        for label in &conclusion_labels {
+            prop_assert!(
+                diag_labels.contains(label),
+                "positive conclusion label '{}' missing from diagnostics",
+                label,
+            );
+        }
     }
 }

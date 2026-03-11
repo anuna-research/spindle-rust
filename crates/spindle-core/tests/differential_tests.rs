@@ -156,8 +156,8 @@ conclusion_agreement_test!(
 );
 
 // ===========================================================================
-// 3. Label preservation: every positive conclusion's rule_label appears in
-//    projection tokens, and vice-versa.
+// 3. Label coverage: every positive conclusion's rule_label appears in
+//    projection tokens. Blockers may add extra projection labels.
 // ===========================================================================
 
 macro_rules! label_test {
@@ -176,17 +176,6 @@ macro_rules! label_test {
                 assert!(
                     proj_labels.contains(label),
                     "label '{}' in conclusions but missing from projection tokens on {}",
-                    label,
-                    stringify!($name),
-                );
-            }
-
-            // Every projected label should appear in the contributing labels
-            // (we only project rules whose label is on a positive conclusion).
-            for label in &proj_labels {
-                assert!(
-                    conclusion_labels.contains(label),
-                    "label '{}' in projection tokens but missing from conclusions on {}",
                     label,
                     stringify!($name),
                 );
