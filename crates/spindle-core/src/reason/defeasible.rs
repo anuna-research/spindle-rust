@@ -416,6 +416,11 @@ fn try_prove_defeasible(
         .copied()
         .collect();
 
+    // Keep scanning applicable attackers even after the proof is known to fail.
+    // Projection labels drive the shadow engine's explanation surface, so
+    // blocked literals should retain every grounded attacker/supporter that
+    // actually participated instead of whichever blocker happened to appear
+    // first in iteration order.
     let mut blocked_by_applicable_attacker = false;
 
     for attacker in &attacking_rules {

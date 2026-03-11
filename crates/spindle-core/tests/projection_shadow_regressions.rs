@@ -6,6 +6,7 @@ use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::projection::ProjectionToken;
 use spindle_core::reason::reason_full;
 use spindle_core::shadow::ShadowReasoner;
+use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::{Literal, Rule, Theory};
 
 fn token_label(token: &ProjectionToken) -> &str {
@@ -35,20 +36,33 @@ fn grounded_q_rule_label<'a>(conclusions: &'a [spindle_core::conclusion::Conclus
         .expect("expected grounded +d q(a) conclusion with a rule label")
 }
 
+fn temporal_literal(name: &str, negated: bool, args: Vec<&str>) -> Literal {
+    Literal::new(
+        name,
+        negated,
+        Default::default(),
+        Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+        args.into_iter().map(str::to_string).collect(),
+    )
+}
+
 #[test]
 fn reason_full_projects_ambiguity_blockers_without_positive_conclusions() {
     let mut theory = Theory::new();
-    theory.add_fact("republican");
-    theory.add_fact("quaker");
+    theory.add_rule(Rule::fact(
+        "f1",
+        temporal_literal("republican", false, vec![]),
+    ));
+    theory.add_rule(Rule::fact("f2", temporal_literal("quaker", false, vec![])));
     theory.add_rule(Rule::defeasible(
         "r1",
-        vec![Literal::simple("republican")],
-        Literal::negated("pacifist"),
+        vec![temporal_literal("republican", false, vec![])],
+        temporal_literal("pacifist", true, vec![]),
     ));
     theory.add_rule(Rule::defeasible(
         "r2",
-        vec![Literal::simple("quaker")],
-        Literal::simple("pacifist"),
+        vec![temporal_literal("quaker", false, vec![])],
+        temporal_literal("pacifist", false, vec![]),
     ));
 
     let result = reason_full(&theory).unwrap();
@@ -73,17 +87,20 @@ fn reason_full_projects_ambiguity_blockers_without_positive_conclusions() {
 #[test]
 fn shadow_projects_defeater_attack_tokens_when_defeater_only_blocks() {
     let mut theory = Theory::new();
-    theory.add_fact("bird");
-    theory.add_fact("broken_wing");
+    theory.add_rule(Rule::fact("f1", temporal_literal("bird", false, vec![])));
+    theory.add_rule(Rule::fact(
+        "f2",
+        temporal_literal("broken_wing", false, vec![]),
+    ));
     theory.add_rule(Rule::defeasible(
         "r1",
-        vec![Literal::simple("bird")],
-        Literal::simple("flies"),
+        vec![temporal_literal("bird", false, vec![])],
+        temporal_literal("flies", false, vec![]),
     ));
     theory.add_rule(Rule::defeater(
         "d1",
-        vec![Literal::simple("broken_wing")],
-        Literal::negated("flies"),
+        vec![temporal_literal("broken_wing", false, vec![])],
+        temporal_literal("flies", true, vec![]),
     ));
 
     let mut indexed = IndexedTheory::build(&theory);
@@ -115,32 +132,11 @@ fn shadow_projects_defeater_attack_tokens_when_defeater_only_blocks() {
 #[test]
 fn reason_full_keeps_grounded_projection_labels_aligned_with_conclusions() {
     let mut theory = Theory::new();
-    theory.add_rule(Rule::fact(
-        "f1",
-        Literal::new(
-            "p",
-            false,
-            Default::default(),
-            Default::default(),
-            vec!["a".to_string()],
-        ),
-    ));
+    theory.add_rule(Rule::fact("f1", temporal_literal("p", false, vec!["a"])));
     theory.add_rule(Rule::defeasible(
         "r1",
-        vec![Literal::new(
-            "p",
-            false,
-            Default::default(),
-            Default::default(),
-            vec!["?x".to_string()],
-        )],
-        Literal::new(
-            "q",
-            false,
-            Default::default(),
-            Default::default(),
-            vec!["?x".to_string()],
-        ),
+        vec![temporal_literal("p", false, vec!["?x"])],
+        temporal_literal("q", false, vec!["?x"]),
     ));
 
     let result = reason_full(&theory).unwrap();
@@ -164,32 +160,11 @@ fn reason_full_keeps_grounded_projection_labels_aligned_with_conclusions() {
 #[test]
 fn shadow_keeps_grounded_projection_labels_aligned_with_compiled_bodies() {
     let mut theory = Theory::new();
-    theory.add_rule(Rule::fact(
-        "f1",
-        Literal::new(
-            "p",
-            false,
-            Default::default(),
-            Default::default(),
-            vec!["a".to_string()],
-        ),
-    ));
+    theory.add_rule(Rule::fact("f1", temporal_literal("p", false, vec!["a"])));
     theory.add_rule(Rule::defeasible(
         "r1",
-        vec![Literal::new(
-            "p",
-            false,
-            Default::default(),
-            Default::default(),
-            vec!["?x".to_string()],
-        )],
-        Literal::new(
-            "q",
-            false,
-            Default::default(),
-            Default::default(),
-            vec!["?x".to_string()],
-        ),
+        vec![temporal_literal("p", false, vec!["?x"])],
+        temporal_literal("q", false, vec!["?x"]),
     ));
 
     let prepared = prepare(&theory, PrepareOptions::default()).unwrap();

@@ -185,6 +185,7 @@ proptest! {
                         BlockingType::MissingPremise
                             | BlockingType::Defeated
                             | BlockingType::Contradicted
+                            | BlockingType::Undetermined
                     ),
                     "Invalid blocking type: {:?}",
                     bc.blocking_type

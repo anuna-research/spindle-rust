@@ -11,6 +11,7 @@
 
 use std::fmt;
 
+use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::literal::Literal;
 use crate::reason::reason;
@@ -18,6 +19,9 @@ use crate::rule::RuleType;
 use crate::theory::Theory;
 
 use super::{find_positive_match, has_positive_match, semantic_literal_matches};
+
+const UNDETERMINED_BLOCKER_EXPLANATION: &str = "Body satisfied but no explicit blocker was identified in the current reasoning results; \
+     this usually means ambiguity blocking or a gap in why-not diagnostics";
 
 // =============================================================================
 // TYPES
@@ -32,6 +36,8 @@ pub enum BlockingType {
     Defeated,
     /// Contradicted by opposing conclusion
     Contradicted,
+    /// No concrete blocker could be identified from the current conclusions.
+    Undetermined,
 }
 
 impl fmt::Display for BlockingType {
@@ -40,6 +46,7 @@ impl fmt::Display for BlockingType {
             BlockingType::MissingPremise => write!(f, "missing premise"),
             BlockingType::Defeated => write!(f, "defeated"),
             BlockingType::Contradicted => write!(f, "contradicted"),
+            BlockingType::Undetermined => write!(f, "undetermined"),
         }
     }
 }
@@ -93,6 +100,18 @@ impl BlockingCondition {
             missing_literals: Vec::new(),
             blocking_rule: Some(by.clone()),
             explanation: format!("Contradicted by {by}"),
+        }
+    }
+
+    /// Create a fallback blocking condition when the current conclusions do not
+    /// expose a specific defeating rule or missing premise.
+    pub fn undetermined(rule_label: impl Into<String>, explanation: impl Into<String>) -> Self {
+        Self {
+            blocking_type: BlockingType::Undetermined,
+            rule_label: rule_label.into(),
+            missing_literals: Vec::new(),
+            blocking_rule: None,
+            explanation: explanation.into(),
         }
     }
 }
@@ -184,9 +203,20 @@ impl fmt::Display for WhyNotResult {
 /// stay exact, while atemporal literals match by family.
 pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
     let conclusions = reason(theory)?;
+    why_not_with_conclusions(theory, literal, &conclusions)
+}
 
+/// Explain why a literal is not provable using already-computed conclusions.
+///
+/// This avoids re-running the reasoning pipeline when the caller already has
+/// the conclusion set for `theory`.
+pub fn why_not_with_conclusions(
+    theory: &Theory,
+    literal: &Literal,
+    conclusions: &[Conclusion],
+) -> Result<WhyNotResult> {
     // First check if it IS provable using the query literal's own semantics.
-    let provable_conclusion = find_positive_match(literal, &conclusions);
+    let provable_conclusion = find_positive_match(literal, conclusions);
 
     if let Some(conclusion) = provable_conclusion {
         let mut result = WhyNotResult::new(literal.clone());
@@ -219,7 +249,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                 .collect();
             let missing: Vec<_> = body_lits
                 .iter()
-                .filter(|b| !has_positive_match(b, &conclusions))
+                .filter(|b| !has_positive_match(b, conclusions))
                 .cloned()
                 .collect();
 
@@ -241,7 +271,7 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                             .collect();
                         let attacker_body_satisfied = attacker_body_lits
                             .iter()
-                            .all(|b| has_positive_match(b, &conclusions));
+                            .all(|b| has_positive_match(b, conclusions));
                         if !attacker_body_satisfied {
                             continue;
                         }
@@ -267,7 +297,8 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                                 continue;
                             }
 
-                            // Report as blocker if attacker is superior or ambiguity
+                            // Report as blocker if the opposing rule is not
+                            // strictly defeated by superiority.
                             result.blocked_by.push(BlockingCondition::contradicted(
                                 &rule.label,
                                 &attacker.label,
@@ -277,23 +308,23 @@ pub fn why_not(theory: &Theory, literal: &Literal) -> Result<WhyNotResult> {
                     }
                 }
                 if !blocked {
-                    // Body satisfied, no attackers found, but still not provable.
-                    // This can happen with ambiguity blocking.
-                    result.blocked_by.push(BlockingCondition {
-                        blocking_type: BlockingType::Contradicted,
-                        rule_label: rule.label.clone(),
-                        missing_literals: Vec::new(),
-                        blocking_rule: None,
-                        explanation: "Body satisfied but conclusion blocked by ambiguity"
-                            .to_string(),
-                    });
+                    debug_assert!(
+                        !has_positive_match(&complement, conclusions),
+                        "why_not fell back to an undetermined blocker for rule {} even though {} is already positively supported",
+                        rule.label,
+                        complement
+                    );
+                    result.blocked_by.push(BlockingCondition::undetermined(
+                        &rule.label,
+                        UNDETERMINED_BLOCKER_EXPLANATION,
+                    ));
                 }
             }
         }
     }
 
     // If no rules found at all
-    if !found_rule && has_positive_match(&complement, &conclusions) {
+    if !found_rule && has_positive_match(&complement, conclusions) {
         result.blocked_by.push(BlockingCondition {
             blocking_type: BlockingType::Contradicted,
             rule_label: String::new(),
@@ -567,15 +598,15 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_ambiguity_blocking_body_satisfied_but_not_provable() {
-        // The ambiguity fallback (lines 269-279) fires when a rule's body is
-        // fully satisfied, no attacker has a satisfied body, yet the reasoner
-        // still did not prove the literal.
+    fn test_body_satisfied_without_identified_blocker() {
+        // The fallback fires when a rule's body is fully satisfied, no
+        // attacker has a satisfied body, yet the reasoner still did not prove
+        // the literal.
         //
         // Known bug: reason.rs doesn't fire empty-body non-fact defeasible rules.
         // An empty-body DEFEASIBLE rule (not a strict fact) should trigger this:
-        // why_not sees the body as trivially satisfied, finds no attackers, but
-        // the reasoner never proved the literal.
+        // why_not sees the body as trivially satisfied, finds no attackers,
+        // but the reasoner never proved the literal.
         use crate::rule::Rule;
 
         let mut th = Theory::new();
@@ -585,35 +616,31 @@ mod tests {
         let result = why_not(&th, &Literal::simple("p")).unwrap();
 
         if !result.is_provable() {
-            // We hit the ambiguity blocking fallback path
-            let has_ambiguity = result.blocked_by.iter().any(|b| {
-                b.blocking_type == BlockingType::Contradicted && b.explanation.contains("ambiguity")
+            let has_fallback = result.blocked_by.iter().any(|b| {
+                b.blocking_type == BlockingType::Undetermined
+                    && b.explanation.contains("no explicit blocker")
             });
             assert!(
-                has_ambiguity,
-                "Expected ambiguity blocking condition, got: {:?}",
+                has_fallback,
+                "Expected undetermined fallback condition, got: {:?}",
                 result.blocked_by
             );
         }
         // If provable, the reasoner fires empty-body defeasible rules and the
-        // ambiguity fallback is not reached. The Display provable path is tested
+        // fallback is not reached. The Display provable path is tested
         // separately in test_display_provable_literal.
     }
 
     #[test]
-    fn test_ambiguity_blocking_display_format() {
-        // Directly construct a WhyNotResult that represents ambiguity blocking
-        // and verify the Display output covers the blocked_by branch with
-        // the ambiguity explanation.
+    fn test_undetermined_blocking_display_format() {
+        // Directly construct a WhyNotResult that exercises the fallback
+        // display path.
         let mut result = WhyNotResult::new(Literal::simple("goal"));
         result.would_derive = Some("r1".to_string());
-        result.blocked_by.push(BlockingCondition {
-            blocking_type: BlockingType::Contradicted,
-            rule_label: "r1".to_string(),
-            missing_literals: Vec::new(),
-            blocking_rule: None,
-            explanation: "Body satisfied but conclusion blocked by ambiguity".to_string(),
-        });
+        result.blocked_by.push(BlockingCondition::undetermined(
+            "r1",
+            UNDETERMINED_BLOCKER_EXPLANATION,
+        ));
 
         assert!(result.has_blockers());
         assert!(!result.is_provable());
@@ -632,12 +659,12 @@ mod tests {
             "Display should mention blocking, got: {display}"
         );
         assert!(
-            display.contains("contradicted"),
-            "Display should mention contradicted type, got: {display}"
+            display.contains("undetermined"),
+            "Display should mention undetermined type, got: {display}"
         );
         assert!(
-            display.contains("ambiguity"),
-            "Display should mention ambiguity, got: {display}"
+            display.contains("no explicit blocker"),
+            "Display should mention the fallback explanation, got: {display}"
         );
     }
 

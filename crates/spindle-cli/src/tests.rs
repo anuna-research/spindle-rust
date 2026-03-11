@@ -621,6 +621,11 @@ fn test_blocking_type_display_contradicted() {
     assert_eq!(format!("{}", BlockingType::Contradicted), "contradicted");
 }
 
+#[test]
+fn test_blocking_type_display_undetermined() {
+    assert_eq!(format!("{}", BlockingType::Undetermined), "undetermined");
+}
+
 // =============================================================================
 // INTEGRATION TESTS
 // =============================================================================

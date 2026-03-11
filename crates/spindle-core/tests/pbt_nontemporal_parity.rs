@@ -176,8 +176,8 @@ proptest! {
 }
 
 // ===========================================================================
-// 5. Label coverage: every positive conclusion's rule_label appears in
-//    projection tokens. Blockers may add extra projection labels.
+// 5. Label coverage: every temporally-relevant positive conclusion's
+//    rule_label appears in projection tokens. Blockers may add extra labels.
 // ===========================================================================
 
 proptest! {
@@ -190,6 +190,12 @@ proptest! {
         let proj_labels = token_labels(&result.projection_tokens);
 
         for label in &conclusion_labels {
+            if !theory
+                .get_rule(label)
+                .is_some_and(|rule| rule.has_temporal_literals())
+            {
+                continue;
+            }
             prop_assert!(
                 proj_labels.contains(label),
                 "label '{}' in conclusions but missing from projection tokens",
@@ -201,7 +207,8 @@ proptest! {
 }
 
 // ===========================================================================
-// 6. Family coverage: every non-fact positive conclusion has a family token
+// 6. Family coverage: every temporally-relevant non-fact positive conclusion
+//    has a family token
 // ===========================================================================
 
 proptest! {
@@ -214,7 +221,12 @@ proptest! {
 
         for c in result.primary.iter().filter(|c| c.is_positive()) {
             // Facts don't go through projection.
-            if c.rule_label.is_none() {
+            if !c
+                .rule_label
+                .as_deref()
+                .and_then(|label| theory.get_rule(label))
+                .is_some_and(|rule| rule.has_temporal_literals())
+            {
                 continue;
             }
             let family = FamilyId::from(&c.literal);
@@ -428,8 +440,9 @@ proptest! {
 }
 
 // ===========================================================================
-// 15. Contributing labels in diagnostics cover positive conclusion labels.
-//     Blockers may add extra labels that never appear on +D/+d conclusions.
+// 15. Contributing labels in diagnostics cover temporally-relevant positive
+//     conclusion labels. Blockers may add extra labels that never appear on
+//     +D/+d conclusions.
 // ===========================================================================
 
 proptest! {
@@ -447,6 +460,12 @@ proptest! {
             .collect();
 
         for label in &conclusion_labels {
+            if !theory
+                .get_rule(label)
+                .is_some_and(|rule| rule.has_temporal_literals())
+            {
+                continue;
+            }
             prop_assert!(
                 diag_labels.contains(label),
                 "positive conclusion label '{}' missing from diagnostics",

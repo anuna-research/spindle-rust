@@ -13,6 +13,7 @@
 
 use smallvec::SmallVec;
 
+use crate::error::Result;
 use crate::index::IndexedTheory;
 use crate::projection::{ExactLitId, FamilyId};
 use crate::rule::{Rule, RuleLabel};
@@ -90,14 +91,22 @@ impl CompiledBody {
         self.keys.is_empty()
     }
 
-    /// Returns `true` if every logic key is [`BodyMatchKey::Family`].
+    /// Returns `true` if no logic key requires exact temporal evidence.
     ///
-    /// A purely atemporal body can be satisfied by family-level evidence
-    /// alone, which may enable faster bulk checking.
-    pub fn is_all_family(&self) -> bool {
+    /// `Arithmetic` keys are ignored for this check because they do not
+    /// correspond to fact matching.
+    pub fn has_no_exact(&self) -> bool {
         self.keys
             .iter()
             .all(|k| matches!(k, BodyMatchKey::Family(_) | BodyMatchKey::Arithmetic))
+    }
+
+    /// Returns `true` if every logic key uses family matching.
+    ///
+    /// `Arithmetic` keys are treated as neutral for this legacy predicate, so
+    /// this is equivalent to [`CompiledBody::has_no_exact`].
+    pub fn is_all_family(&self) -> bool {
+        self.has_no_exact()
     }
 
     /// Returns `true` if any logic key is [`BodyMatchKey::Exact`].
@@ -117,42 +126,60 @@ impl CompiledBody {
 /// - `BodyLiteral::Logic` with non-empty temporal bounds → [`BodyMatchKey::Exact`]
 /// - `BodyLiteral::Logic` with empty temporal bounds → [`BodyMatchKey::Family`]
 /// - `BodyLiteral::Arithmetic` → [`BodyMatchKey::Arithmetic`]
-pub fn compile_rule(rule: &Rule, index: &mut IndexedTheory<'_>) -> CompiledBody {
-    let keys = rule
+pub fn try_compile_rule(rule: &Rule, index: &mut IndexedTheory<'_>) -> Result<CompiledBody> {
+    let keys: SmallVec<[BodyMatchKey; 4]> = rule
         .body
         .iter()
         .map(|bl| match bl {
             crate::body::BodyLiteral::Logic(logic) => {
                 let lit = logic.to_literal();
                 if lit.is_temporal() {
-                    BodyMatchKey::Exact(index.exact_lit_id(&lit))
+                    Ok(BodyMatchKey::Exact(index.try_exact_lit_id(&lit)?))
                 } else {
-                    BodyMatchKey::Family(FamilyId::from(&lit))
+                    Ok(BodyMatchKey::Family(FamilyId::from(&lit)))
                 }
             }
-            crate::body::BodyLiteral::Arithmetic(_) => BodyMatchKey::Arithmetic,
+            crate::body::BodyLiteral::Arithmetic(_) => Ok(BodyMatchKey::Arithmetic),
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
-    CompiledBody {
+    Ok(CompiledBody {
         rule_label: rule.label.clone(),
         keys,
-    }
+    })
+}
+
+/// Compile a single rule's body into match keys.
+///
+/// Panics if exact-literal interning exhausts the available ID space.
+pub fn compile_rule(rule: &Rule, index: &mut IndexedTheory<'_>) -> CompiledBody {
+    try_compile_rule(rule, index)
+        .expect("exact literal capacity exceeded while compiling rule body")
 }
 
 /// Compile all rules in an indexed theory, returning a map from rule label
 /// to compiled body.
+pub fn try_compile_theory(
+    index: &mut IndexedTheory<'_>,
+) -> Result<rustc_hash::FxHashMap<RuleLabel, CompiledBody>> {
+    let theory = index.theory();
+    theory
+        .rules()
+        .map(|rule| {
+            let compiled = try_compile_rule(rule, index)?;
+            Ok((rule.label.clone(), compiled))
+        })
+        .collect()
+}
+
+/// Compile all rules in an indexed theory, returning a map from rule label
+/// to compiled body.
+///
+/// Panics if exact-literal interning exhausts the available ID space.
 pub fn compile_theory(
     index: &mut IndexedTheory<'_>,
 ) -> rustc_hash::FxHashMap<RuleLabel, CompiledBody> {
-    let rules: Vec<Rule> = index.theory().rules().cloned().collect();
-    rules
-        .iter()
-        .map(|rule| {
-            let compiled = compile_rule(rule, index);
-            (rule.label.clone(), compiled)
-        })
-        .collect()
+    try_compile_theory(index).expect("exact literal capacity exceeded while compiling theory")
 }
 
 #[cfg(test)]

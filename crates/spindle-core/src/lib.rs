@@ -92,7 +92,8 @@ pub mod prelude {
         ProjectionEngine, ProjectionSnapshot, ProjectionToken,
     };
     pub use crate::query::{
-        QueryMatchMode, QueryResult, QueryStatus, query, query_with_match_mode, query_with_options,
+        QueryMatchMode, QueryResult, QueryStatus, abduce_with_conclusions, query,
+        query_with_match_mode, query_with_options, why_not_with_conclusions,
     };
     pub use crate::reason::{
         ReasonResult, Reasoner, StandardReasoner, reason, reason_full, reason_full_prepared,

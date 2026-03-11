@@ -42,6 +42,7 @@ use crate::pipeline::{PrepareOptions, prepare};
 use crate::projection::{
     ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
 };
+use crate::rule::Rule;
 use crate::theory::Theory;
 
 use self::state::ReasoningState;
@@ -70,6 +71,10 @@ fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
     );
     labels.extend(state.projection_labels.iter().cloned());
     labels
+}
+
+pub(crate) fn should_project_rule(rule: &Rule) -> bool {
+    rule.has_temporal_literals()
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +219,7 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 /// Internally builds an [`IndexedTheory`] and delegates to
 /// [`reason_indexed`].
 pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
-    let mut indexed = IndexedTheory::build(theory);
+    let mut indexed = IndexedTheory::try_build(theory)?;
     reason_indexed(&mut indexed)
 }
 
@@ -242,15 +247,15 @@ pub fn reason_full_with_options(theory: &Theory, opts: PrepareOptions) -> Result
 /// Like [`reason_prepared`], but returns a [`ReasonResult`] that
 /// includes projection tokens alongside conclusions.
 pub fn reason_full_prepared(theory: &Theory) -> Result<ReasonResult> {
-    let mut indexed = IndexedTheory::build(theory);
+    let mut indexed = IndexedTheory::try_build(theory)?;
     reason_full_indexed(&mut indexed)
 }
 
 /// Core reasoning with projection, operating on an already-indexed theory.
 ///
-/// Runs the standard DL(d) algorithm, then projects all contributing
-/// rules through the [`ProjectionEngine`] to produce family-level
-/// support and attack tokens.
+/// Runs the standard DL(d) algorithm, then projects contributing rules that
+/// actually participate in temporal reasoning through the
+/// [`ProjectionEngine`] to produce family-level support and attack tokens.
 pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResult> {
     let trace = reason_indexed_trace(indexed)?;
     let ReasoningTrace {
@@ -261,8 +266,11 @@ pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResu
     let mut engine = ProjectionEngine::with_capacity(conclusions.len() * 2);
     let theory = indexed.theory();
     for label in &contributing_labels {
-        if let Some(rule) = theory.get_rule(label) {
-            engine.project_rule(rule, indexed);
+        if let Some(rule) = theory
+            .get_rule(label)
+            .filter(|rule| should_project_rule(rule))
+        {
+            engine.try_project_rule(rule, indexed)?;
         }
     }
 

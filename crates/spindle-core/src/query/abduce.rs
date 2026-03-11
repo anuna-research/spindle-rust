@@ -139,11 +139,23 @@ fn is_body_satisfied(lit: &Literal, conclusions: &[Conclusion]) -> bool {
 /// `max_solutions` raw hypothesis sets; callers that need verified fact-sets
 /// should use [`super::requires`].
 pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
+    let conclusions = reason(theory)?;
+    abduce_with_conclusions(theory, goal, &conclusions, max_solutions)
+}
+
+/// Perform abductive reasoning using already-computed conclusions.
+///
+/// This avoids re-running the full reasoning pipeline when the caller already
+/// has conclusions for `theory`.
+pub fn abduce_with_conclusions(
+    theory: &Theory,
+    goal: &Literal,
+    conclusions: &[Conclusion],
+    max_solutions: usize,
+) -> Result<AbductionResult> {
     let mut result = AbductionResult::new(goal.clone());
 
-    // First check if already provable using the goal's own match semantics.
-    let conclusions = reason(theory)?;
-    if is_goal_provable(goal, &conclusions) {
+    if is_goal_provable(goal, conclusions) {
         result
             .solutions
             .push(AbductionSolution::new(HashSet::new()));
@@ -152,7 +164,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 
     // Find rules that could derive the goal according to the goal's own match
     // semantics: exact when bounded, family-aware when atemporal.
-    let mut candidates: Vec<HashSet<Literal>> = Vec::new();
+    let mut candidates: Vec<(HashSet<Literal>, HashSet<String>)> = Vec::new();
 
     for rule in theory.rules() {
         if semantic_literal_matches(goal, rule.head_literal())
@@ -166,7 +178,7 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
                 .collect();
             let missing: HashSet<_> = body_lits
                 .into_iter()
-                .filter(|b| !is_body_satisfied(b, &conclusions))
+                .filter(|b| !is_body_satisfied(b, conclusions))
                 .collect();
 
             if missing.is_empty() {
@@ -175,7 +187,15 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
                 continue;
             }
 
-            candidates.push(missing);
+            if let Some((_, rules_used)) =
+                candidates.iter_mut().find(|(facts, _)| *facts == missing)
+            {
+                rules_used.insert(rule.label.clone());
+            } else {
+                let mut rules_used = HashSet::new();
+                rules_used.insert(rule.label.clone());
+                candidates.push((missing, rules_used));
+            }
         }
     }
 
@@ -183,20 +203,15 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
     if candidates.is_empty() {
         let mut trivial = HashSet::new();
         trivial.insert(goal.clone());
-        candidates.push(trivial);
+        candidates.push((trivial, HashSet::new()));
     }
 
     // Sort by size (smallest first)
-    candidates.sort_by_key(|s| s.len());
+    candidates.sort_by_key(|(facts, _)| facts.len());
 
-    for facts in candidates.into_iter().take(max_solutions) {
+    for (facts, rules_used) in candidates.into_iter().take(max_solutions) {
         let mut sol = AbductionSolution::new(facts);
-        // Track rules used with the same goal/head matching semantics as above.
-        for rule in theory.rules() {
-            if semantic_literal_matches(goal, rule.head_literal()) {
-                sol.rules_used.insert(rule.label.clone());
-            }
-        }
+        sol.rules_used = rules_used;
         result.solutions.push(sol);
     }
 
@@ -430,6 +445,34 @@ mod tests {
         let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
         assert!(sol.rules_used.contains(&r1));
+    }
+
+    #[test]
+    fn test_abduction_solution_tracks_only_contributing_rules() {
+        let mut theory = Theory::new();
+        let r1 = theory.add_defeasible_rule(&["p"], "goal");
+        let r2 = theory.add_defeasible_rule(&["q", "r"], "goal");
+
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(sol.facts.len(), 1);
+        assert!(sol.rules_used.contains(&r1));
+        assert!(!sol.rules_used.contains(&r2));
+    }
+
+    #[test]
+    fn test_abduction_solution_merges_rules_for_identical_hypotheses() {
+        let mut theory = Theory::new();
+        let r1 = theory.add_defeasible_rule(&["p"], "goal");
+        let r2 = theory.add_strict_rule(&["p"], "goal");
+
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(sol.facts.len(), 1);
+        assert!(sol.rules_used.contains(&r1));
+        assert!(sol.rules_used.contains(&r2));
     }
 
     #[test]

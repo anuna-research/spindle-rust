@@ -6,30 +6,61 @@
 //! preserves superiority and trust semantics by construction (SPEC-020,
 //! §4.2).
 
-use crate::index::LitId;
 use crate::literal::{InternedLiteralName, Literal};
 use crate::mode::Mode;
 use crate::rule::{RuleLabel, RuleType};
 use crate::term::Term;
+use crate::{error::Result, index::IndexedTheory, rule::Rule};
+use smallvec::SmallVec;
 
-/// Exact literal identity — a newtype over [`LitId`] that explicitly includes
-/// temporal bounds in its semantics.
+/// Exact literal identity for the projection index.
 ///
 /// Two literals that differ only in temporal window produce different
 /// `ExactLitId` values.
+///
+/// This is intentionally **not** a [`LitId`](crate::index::LitId): exact-literal
+/// IDs live in a separate projection-local ID space and must not be mixed with
+/// the main theory index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct ExactLitId(LitId);
+pub struct ExactLitId(u32);
 
 impl ExactLitId {
-    /// Wrap a [`LitId`] as an exact literal identity.
-    pub fn new(lit: LitId) -> Self {
-        Self(lit)
+    pub(crate) const NEGATION_BIT: u32 = 1 << 31;
+    const ATOM_MASK: u32 = !Self::NEGATION_BIT;
+
+    /// Create an exact literal ID from an exact-atom slot and negation flag.
+    pub fn new(atom_index: u32, negated: bool) -> Self {
+        if negated {
+            Self(atom_index | Self::NEGATION_BIT)
+        } else {
+            Self(atom_index & Self::ATOM_MASK)
+        }
     }
 
-    /// Return the underlying [`LitId`].
-    pub fn lit_id(self) -> LitId {
+    /// Return the projection-local exact-atom index.
+    pub fn atom_index(self) -> u32 {
+        self.0 & Self::ATOM_MASK
+    }
+
+    /// Return whether this exact literal is negated.
+    pub fn is_negated(self) -> bool {
+        (self.0 & Self::NEGATION_BIT) != 0
+    }
+
+    /// Return the underlying raw projection-local value.
+    pub fn as_raw(self) -> u32 {
         self.0
+    }
+}
+
+impl std::fmt::Display for ExactLitId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_negated() {
+            write!(f, "exact~{}", self.atom_index())
+        } else {
+            write!(f, "exact{}", self.atom_index())
+        }
     }
 }
 
@@ -57,7 +88,7 @@ pub struct FamilyId {
     /// The interned functor name.
     functor: InternedLiteralName,
     /// Predicate arguments (e.g., `parent(alice, bob)` → `[alice, bob]`).
-    args: Vec<Term>,
+    args: SmallVec<[Term; 2]>,
     /// Modal operator, if any.
     mode: Mode,
     /// Whether the literal is negated (`~p` vs `p`).
@@ -66,10 +97,15 @@ pub struct FamilyId {
 
 impl FamilyId {
     /// Create a `FamilyId` from its constituent parts.
-    pub fn new(functor: InternedLiteralName, args: Vec<Term>, mode: Mode, negated: bool) -> Self {
+    pub fn new(
+        functor: InternedLiteralName,
+        args: impl Into<SmallVec<[Term; 2]>>,
+        mode: Mode,
+        negated: bool,
+    ) -> Self {
         Self {
             functor,
-            args,
+            args: args.into(),
             mode,
             negated,
         }
@@ -115,7 +151,7 @@ impl From<&Literal> for FamilyId {
     fn from(lit: &Literal) -> Self {
         Self {
             functor: lit.interned_name(),
-            args: lit.predicate_args().to_vec(),
+            args: lit.predicate_args().iter().cloned().collect(),
             mode: lit.mode.clone(),
             negated: lit.negation,
         }
@@ -179,8 +215,8 @@ pub struct FamilySupport {
 pub struct FamilyAttack {
     /// The base family being attacked.
     pub family_id: FamilyId,
-    /// The exact temporal literal from which the attack originates, if any.
-    pub source_exact_lit: Option<ExactLitId>,
+    /// The exact temporal literal from which the attack originates.
+    pub source_exact_lit: ExactLitId,
     /// Label of the original defeater rule.
     pub rule_label: RuleLabel,
     /// Type/strength of the original defeater rule.
@@ -201,13 +237,6 @@ pub enum ProjectionToken {
     Attack(FamilyAttack),
 }
 
-// ---------------------------------------------------------------------------
-// ProjectionEngine — CON-002
-// ---------------------------------------------------------------------------
-
-use crate::index::IndexedTheory;
-use crate::rule::Rule;
-
 /// The projection engine emits support/attack tokens when a rule fires.
 ///
 /// Produces first-class [`ProjectionToken`]s that carry the original
@@ -224,19 +253,45 @@ use crate::rule::Rule;
 #[derive(Debug, Clone)]
 pub struct ProjectionEngine {
     tokens: Vec<ProjectionToken>,
+    exact_supports: usize,
+    family_supports: usize,
+    family_attacks: usize,
 }
 
 impl ProjectionEngine {
     /// Create a new, empty projection engine.
     pub fn new() -> Self {
-        Self { tokens: Vec::new() }
+        Self {
+            tokens: Vec::new(),
+            exact_supports: 0,
+            family_supports: 0,
+            family_attacks: 0,
+        }
     }
 
     /// Create a projection engine with pre-allocated capacity.
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             tokens: Vec::with_capacity(cap),
+            exact_supports: 0,
+            family_supports: 0,
+            family_attacks: 0,
         }
+    }
+
+    fn push_exact(&mut self, support: ExactSupport) {
+        self.exact_supports += 1;
+        self.tokens.push(ProjectionToken::Exact(support));
+    }
+
+    fn push_family(&mut self, support: FamilySupport) {
+        self.family_supports += 1;
+        self.tokens.push(ProjectionToken::Family(support));
+    }
+
+    fn push_attack(&mut self, attack: FamilyAttack) {
+        self.family_attacks += 1;
+        self.tokens.push(ProjectionToken::Attack(attack));
     }
 
     /// Project a fired rule into support/attack tokens.
@@ -261,40 +316,50 @@ impl ProjectionEngine {
     /// - Emits support/attack tokens using the rule label space returned by
     ///   reasoning results (grounded instances keep their grounded labels).
     /// - Does not materialize synthetic rules in `Theory`.
-    pub fn project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) {
+    pub fn try_project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) -> Result<()> {
         let label = rule.label.clone();
         let rule_type = rule.rule_type;
 
         for head_lit in &rule.head {
-            let exact = index.exact_lit_id(head_lit);
+            let exact = index.try_exact_lit_id(head_lit)?;
 
             // Always emit exact support.
-            self.tokens.push(ProjectionToken::Exact(ExactSupport {
+            self.push_exact(ExactSupport {
                 exact_lit: exact,
                 rule_label: label.clone(),
                 rule_type,
-            }));
+            });
 
             let family = FamilyId::from(head_lit);
 
             if rule_type.is_defeater() {
                 // Defeaters attack the base family.
-                self.tokens.push(ProjectionToken::Attack(FamilyAttack {
-                    family_id: family,
-                    source_exact_lit: Some(exact),
-                    rule_label: label.clone(),
-                    rule_type,
-                }));
-            } else {
-                // Non-defeaters project family-level support.
-                self.tokens.push(ProjectionToken::Family(FamilySupport {
+                self.push_attack(FamilyAttack {
                     family_id: family,
                     source_exact_lit: exact,
                     rule_label: label.clone(),
                     rule_type,
-                }));
+                });
+            } else {
+                // Non-defeaters project family-level support.
+                self.push_family(FamilySupport {
+                    family_id: family,
+                    source_exact_lit: exact,
+                    rule_label: label.clone(),
+                    rule_type,
+                });
             }
         }
+
+        Ok(())
+    }
+
+    /// Project a fired rule into support/attack tokens.
+    ///
+    /// Panics if exact-literal interning exhausts the available ID space.
+    pub fn project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) {
+        self.try_project_rule(rule, index)
+            .expect("exact literal capacity exceeded while projecting rule")
     }
 
     /// Return all tokens emitted so far.
@@ -320,30 +385,24 @@ impl ProjectionEngine {
     /// Clear all emitted tokens.
     pub fn clear(&mut self) {
         self.tokens.clear();
+        self.exact_supports = 0;
+        self.family_supports = 0;
+        self.family_attacks = 0;
     }
 
     /// Count of exact support tokens.
     pub fn exact_count(&self) -> usize {
-        self.tokens
-            .iter()
-            .filter(|t| matches!(t, ProjectionToken::Exact(_)))
-            .count()
+        self.exact_supports
     }
 
     /// Count of family support tokens.
     pub fn family_count(&self) -> usize {
-        self.tokens
-            .iter()
-            .filter(|t| matches!(t, ProjectionToken::Family(_)))
-            .count()
+        self.family_supports
     }
 
     /// Count of family attack tokens.
     pub fn attack_count(&self) -> usize {
-        self.tokens
-            .iter()
-            .filter(|t| matches!(t, ProjectionToken::Attack(_)))
-            .count()
+        self.family_attacks
     }
 
     /// Produce structured diagnostic counters (OBS-001).
@@ -352,32 +411,27 @@ impl ProjectionEngine {
     /// projection state: token counts by type and the set of rule labels
     /// that contributed projected evidence.
     pub fn diagnostics(&self) -> ProjectionDiagnostics {
+        debug_assert_counts(self);
         let mut contributing_labels = std::collections::BTreeSet::new();
-        let mut exact_supports = 0usize;
-        let mut family_supports = 0usize;
-        let mut family_attacks = 0usize;
 
         for token in &self.tokens {
             match token {
                 ProjectionToken::Exact(s) => {
-                    exact_supports += 1;
                     contributing_labels.insert(s.rule_label.clone());
                 }
                 ProjectionToken::Family(s) => {
-                    family_supports += 1;
                     contributing_labels.insert(s.rule_label.clone());
                 }
                 ProjectionToken::Attack(a) => {
-                    family_attacks += 1;
                     contributing_labels.insert(a.rule_label.clone());
                 }
             }
         }
 
         ProjectionDiagnostics {
-            exact_supports,
-            family_supports,
-            family_attacks,
+            exact_supports: self.exact_supports,
+            family_supports: self.family_supports,
+            family_attacks: self.family_attacks,
             contributing_labels,
         }
     }
@@ -389,27 +443,28 @@ impl ProjectionEngine {
     /// non-deterministic iteration order does not cause spurious test
     /// failures. Labels are sorted alphabetically within each category.
     pub fn snapshot(&self) -> ProjectionSnapshot {
-        let mut exact: Vec<(String, String)> = Vec::new();
-        let mut family: Vec<(String, String, String)> = Vec::new();
-        let mut attack: Vec<(String, String, String)> = Vec::new();
+        debug_assert_counts(self);
+        let mut exact: Vec<(String, String)> = Vec::with_capacity(self.exact_supports);
+        let mut family: Vec<(String, String, String)> = Vec::with_capacity(self.family_supports);
+        let mut attack: Vec<(String, String, String)> = Vec::with_capacity(self.family_attacks);
 
         for token in &self.tokens {
             match token {
                 ProjectionToken::Exact(s) => {
-                    exact.push((s.rule_label.clone(), format!("{:?}", s.exact_lit)));
+                    exact.push((s.rule_label.clone(), s.exact_lit.to_string()));
                 }
                 ProjectionToken::Family(s) => {
                     family.push((
                         s.rule_label.clone(),
                         format!("{}", s.family_id),
-                        format!("{:?}", s.source_exact_lit),
+                        s.source_exact_lit.to_string(),
                     ));
                 }
                 ProjectionToken::Attack(a) => {
                     attack.push((
                         a.rule_label.clone(),
                         format!("{}", a.family_id),
-                        format!("{:?}", a.source_exact_lit),
+                        a.source_exact_lit.to_string(),
                     ));
                 }
             }
@@ -432,6 +487,26 @@ impl Default for ProjectionEngine {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn debug_assert_counts(engine: &ProjectionEngine) {
+    let counts = engine.tokens.iter().fold(
+        (0usize, 0usize, 0usize),
+        |(exact, family, attack), token| match token {
+            ProjectionToken::Exact(_) => (exact + 1, family, attack),
+            ProjectionToken::Family(_) => (exact, family + 1, attack),
+            ProjectionToken::Attack(_) => (exact, family, attack + 1),
+        },
+    );
+    debug_assert_eq!(
+        counts,
+        (
+            engine.exact_supports,
+            engine.family_supports,
+            engine.family_attacks
+        ),
+        "projection token counters drifted from the token buffer"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -490,12 +565,12 @@ impl std::fmt::Display for ProjectionDiagnostics {
 /// testing of projected evidence ordering and tie-break label selection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionSnapshot {
-    /// Sorted `(rule_label, exact_lit_debug)` pairs for exact support tokens.
+    /// Sorted `(rule_label, exact_lit_display)` pairs for exact support tokens.
     pub exact: Vec<(String, String)>,
-    /// Sorted `(rule_label, family_display, source_exact_debug)` triples for
+    /// Sorted `(rule_label, family_display, source_exact_display)` triples for
     /// family support tokens.
     pub family: Vec<(String, String, String)>,
-    /// Sorted `(rule_label, family_display, source_exact_debug)` triples for
+    /// Sorted `(rule_label, family_display, source_exact_display)` triples for
     /// family attack tokens.
     pub attack: Vec<(String, String, String)>,
 }
@@ -505,6 +580,12 @@ mod tests {
     use super::*;
     use crate::mode::Mode;
     use crate::temporal::{Temporal, TimePoint};
+
+    #[test]
+    fn exact_lit_id_display_is_stable() {
+        assert_eq!(ExactLitId::new(7, false).to_string(), "exact7");
+        assert_eq!(ExactLitId::new(7, true).to_string(), "exact~7");
+    }
 
     #[test]
     fn temporal_variants_share_family() {
@@ -640,6 +721,39 @@ mod tests {
         IndexedTheory::build(theory)
     }
 
+    fn first_exact(engine: &ProjectionEngine) -> &ExactSupport {
+        engine
+            .tokens()
+            .iter()
+            .find_map(|token| match token {
+                ProjectionToken::Exact(s) => Some(s),
+                _ => None,
+            })
+            .expect("expected Exact token")
+    }
+
+    fn first_family(engine: &ProjectionEngine) -> &FamilySupport {
+        engine
+            .tokens()
+            .iter()
+            .find_map(|token| match token {
+                ProjectionToken::Family(s) => Some(s),
+                _ => None,
+            })
+            .expect("expected Family token")
+    }
+
+    fn first_attack(engine: &ProjectionEngine) -> &FamilyAttack {
+        engine
+            .tokens()
+            .iter()
+            .find_map(|token| match token {
+                ProjectionToken::Attack(a) => Some(a),
+                _ => None,
+            })
+            .expect("expected Attack token")
+    }
+
     #[test]
     fn fact_emits_exact_and_family_support() {
         let mut theory = Theory::new();
@@ -657,18 +771,12 @@ mod tests {
         assert_eq!(engine.attack_count(), 0);
 
         // Exact support preserves rule label and type.
-        let exact = match &engine.tokens()[0] {
-            ProjectionToken::Exact(s) => s,
-            other => panic!("expected Exact, got {other:?}"),
-        };
+        let exact = first_exact(&engine);
         assert_eq!(exact.rule_label, "f1");
         assert_eq!(exact.rule_type, crate::rule::RuleType::Fact);
 
         // Family support projects to the atemporal family.
-        let family = match &engine.tokens()[1] {
-            ProjectionToken::Family(s) => s,
-            other => panic!("expected Family, got {other:?}"),
-        };
+        let family = first_family(&engine);
         assert_eq!(family.rule_label, "f1");
         assert_eq!(family.family_id, FamilyId::from(&Literal::simple("bird")));
     }
@@ -712,13 +820,13 @@ mod tests {
         assert_eq!(engine.family_count(), 0);
         assert_eq!(engine.attack_count(), 1);
 
-        let attack = match &engine.tokens()[1] {
-            ProjectionToken::Attack(a) => a,
-            other => panic!("expected Attack, got {other:?}"),
-        };
+        let attack = first_attack(&engine);
         assert_eq!(attack.rule_label, "d1");
         assert_eq!(attack.family_id, FamilyId::from(&Literal::negated("works")));
-        assert!(attack.source_exact_lit.is_some());
+        assert_eq!(
+            attack.source_exact_lit,
+            idx.exact_lit_id(&Literal::negated("works"))
+        );
     }
 
     #[test]
@@ -744,10 +852,7 @@ mod tests {
         let mut engine = ProjectionEngine::new();
         engine.project_rule(rule, &mut idx);
 
-        let attack = match &engine.tokens()[1] {
-            ProjectionToken::Attack(a) => a,
-            other => panic!("expected Attack, got {other:?}"),
-        };
+        let attack = first_attack(&engine);
 
         // Attack targets the base family ~q (no temporal bounds).
         let base_family = FamilyId::from(&Literal::negated("q"));
@@ -980,10 +1085,7 @@ mod tests {
         let mut engine = ProjectionEngine::new();
         engine.project_rule(theory.get_rule("r1").unwrap(), &mut idx);
 
-        let family_tok = match &engine.tokens()[1] {
-            ProjectionToken::Family(f) => f,
-            other => panic!("expected Family, got {other:?}"),
-        };
+        let family_tok = first_family(&engine);
 
         // Family should be the atemporal base q.
         let base = FamilyId::from(&Literal::simple("q"));

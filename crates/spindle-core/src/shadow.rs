@@ -231,11 +231,7 @@ impl ShadowReasoner {
         // same loop, making Check 1 dead code).
         let expected_projected_labels: FxHashSet<String> = contributing_labels
             .iter()
-            .filter(|label| {
-                theory
-                    .get_rule(label)
-                    .is_some_and(should_project_rule)
-            })
+            .filter(|label| theory.get_rule(label).is_some_and(should_project_rule))
             .cloned()
             .collect();
 

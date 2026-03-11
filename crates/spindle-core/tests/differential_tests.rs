@@ -156,8 +156,8 @@ conclusion_agreement_test!(
 );
 
 // ===========================================================================
-// 3. Label coverage: every positive conclusion's rule_label appears in
-//    projection tokens. Blockers may add extra projection labels.
+// 3. Label coverage: every temporally-relevant positive conclusion's
+//    rule_label appears in projection tokens. Blockers may add extra labels.
 // ===========================================================================
 
 macro_rules! label_test {
@@ -173,6 +173,12 @@ macro_rules! label_test {
             // Every label that contributed to a positive conclusion should
             // have been projected (producing at least one token).
             for label in &conclusion_labels {
+                if !theory
+                    .get_rule(label)
+                    .is_some_and(|rule| rule.has_temporal_literals())
+                {
+                    continue;
+                }
                 assert!(
                     proj_labels.contains(label),
                     "label '{}' in conclusions but missing from projection tokens on {}",
@@ -196,7 +202,8 @@ label_test!(
 );
 
 // ===========================================================================
-// 4. Family coverage: every positive conclusion's family has a token
+// 4. Family coverage: every temporally-relevant positive conclusion's family
+//    has a token
 // ===========================================================================
 
 macro_rules! family_coverage_test {
@@ -210,7 +217,12 @@ macro_rules! family_coverage_test {
 
             for c in result.primary.iter().filter(|c| c.is_positive()) {
                 // Skip facts (no rule_label) — they don't go through projection.
-                if c.rule_label.is_none() {
+                if !c
+                    .rule_label
+                    .as_deref()
+                    .and_then(|label| theory.get_rule(label))
+                    .is_some_and(|rule| rule.has_temporal_literals())
+                {
                     continue;
                 }
                 let family = FamilyId::from(&c.literal);
