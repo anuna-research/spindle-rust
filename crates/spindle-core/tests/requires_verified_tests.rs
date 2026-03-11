@@ -93,7 +93,9 @@ fn test_requires_with_options_treats_limit_as_raw_candidate_budget() {
 }
 
 #[test]
-fn test_requires_with_options_reports_budget_exhausted_with_duplicate_candidates() {
+fn test_requires_with_options_dedup_candidates_fit_within_budget() {
+    // Two identical rules produce one deduplicated candidate, which fits
+    // within the raw budget of 1 — so search completes, not exhausted.
     let mut theory = Theory::new();
     theory.add_defeasible_rule(&["a"], "goal");
     theory.add_defeasible_rule(&["a"], "goal");
@@ -109,7 +111,7 @@ fn test_requires_with_options_reports_budget_exhausted_with_duplicate_candidates
     .unwrap();
 
     assert!(!result.already_provable);
-    assert_eq!(result.search_status, RequiresSearchStatus::BudgetExhausted);
+    assert_eq!(result.search_status, RequiresSearchStatus::BoundedComplete);
 }
 
 #[test]
