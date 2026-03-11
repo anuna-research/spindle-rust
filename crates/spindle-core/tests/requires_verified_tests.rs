@@ -109,9 +109,7 @@ fn test_requires_with_options_reports_budget_exhausted_with_duplicate_candidates
     .unwrap();
 
     assert!(!result.already_provable);
-    // abduce() merges duplicate fact-sets before returning, so two identical
-    // rules produce only one raw candidate — within budget.
-    assert_eq!(result.search_status, RequiresSearchStatus::BoundedComplete);
+    assert_eq!(result.search_status, RequiresSearchStatus::BudgetExhausted);
 }
 
 #[test]
