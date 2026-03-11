@@ -299,11 +299,12 @@ impl ProjectionEngine {
     ///
     /// For each head literal in the rule:
     ///
-    /// - **Defeater head**: emits [`FamilyAttack`] against the head's base
-    ///   family, using the original rule label and type.
-    /// - **Non-defeater head**: emits [`ExactSupport`] for the exact literal
-    ///   identity of the head, and [`FamilySupport`] for the head's base
-    ///   family.
+    /// - **Any rule type, any head**: emits [`ExactSupport`] for the exact
+    ///   literal identity of the head.
+    /// - **Defeater head**: additionally emits [`FamilyAttack`] against the
+    ///   head's base family, using the original rule label and type.
+    /// - **Non-defeater head**: additionally emits [`FamilySupport`] for the
+    ///   head's base family.
     ///
     /// # Pre-conditions (CON-002)
     ///
@@ -323,6 +324,12 @@ impl ProjectionEngine {
             let exact = index.try_exact_lit_id(head_lit)?;
             let family = FamilyId::from(head_lit);
 
+            self.push_exact(ExactSupport {
+                exact_lit: exact,
+                rule_label: label.clone(),
+                rule_type,
+            });
+
             if rule_type.is_defeater() {
                 // Defeaters attack the base family.
                 self.push_attack(FamilyAttack {
@@ -333,11 +340,6 @@ impl ProjectionEngine {
                 });
             } else {
                 // Non-defeaters support both the exact literal and its family.
-                self.push_exact(ExactSupport {
-                    exact_lit: exact,
-                    rule_label: label.clone(),
-                    rule_type,
-                });
                 self.push_family(FamilySupport {
                     family_id: family,
                     source_exact_lit: exact,
@@ -798,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn defeater_emits_family_attack_without_exact_support() {
+    fn defeater_emits_exact_support_and_family_attack() {
         let mut theory = Theory::new();
         theory.add_rule(Rule::defeater(
             "d1",
@@ -812,7 +814,7 @@ mod tests {
         let mut engine = ProjectionEngine::new();
         engine.project_rule(rule, &mut idx);
 
-        assert_eq!(engine.exact_count(), 0);
+        assert_eq!(engine.exact_count(), 1);
         assert_eq!(engine.family_count(), 0);
         assert_eq!(engine.attack_count(), 1);
 
@@ -987,10 +989,10 @@ mod tests {
         engine.project_rule(theory.get_rule("d1").unwrap(), &mut idx);
 
         let diag = engine.diagnostics();
-        assert_eq!(diag.exact_supports, 1);
+        assert_eq!(diag.exact_supports, 2);
         assert_eq!(diag.family_supports, 1);
         assert_eq!(diag.family_attacks, 1);
-        assert_eq!(diag.total_tokens(), 3);
+        assert_eq!(diag.total_tokens(), 4);
         assert!(diag.contributing_labels.contains("f1"));
         assert!(diag.contributing_labels.contains("d1"));
         assert_eq!(diag.contributing_labels.len(), 2);

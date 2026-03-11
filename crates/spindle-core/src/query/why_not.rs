@@ -219,54 +219,8 @@ pub fn why_not_with_conclusions(
     let provable_conclusion = find_positive_match(literal, conclusions);
 
     if let Some(conclusion) = provable_conclusion {
-        if literal.is_temporal() {
-            let mut result = WhyNotResult::new(literal.clone());
-            result.would_derive = conclusion.rule_label.clone();
-            return Ok(result);
-        }
-
         let mut result = WhyNotResult::new(literal.clone());
         result.would_derive = conclusion.rule_label.clone();
-        let Some(rule_label) = conclusion.rule_label.as_deref() else {
-            return Ok(result);
-        };
-        let complement = literal.complement();
-
-        for attacker in theory.rules() {
-            if !semantic_literal_matches(&complement, attacker.head_literal()) {
-                continue;
-            }
-
-            let attacker_body_lits: Vec<Literal> = attacker
-                .body
-                .iter()
-                .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
-                .collect();
-            let attacker_body_satisfied = attacker_body_lits
-                .iter()
-                .all(|body_lit| has_positive_match(body_lit, conclusions));
-            if !attacker_body_satisfied {
-                continue;
-            }
-
-            if attacker.rule_type == RuleType::Defeater {
-                if !theory.is_superior(rule_label, &attacker.label) {
-                    result
-                        .blocked_by
-                        .push(BlockingCondition::defeated(rule_label, &attacker.label));
-                }
-            } else {
-                let attacker_superior = theory.is_superior(&attacker.label, rule_label);
-                let rule_superior = theory.is_superior(rule_label, &attacker.label);
-
-                if !rule_superior || attacker_superior {
-                    result
-                        .blocked_by
-                        .push(BlockingCondition::contradicted(rule_label, &attacker.label));
-                }
-            }
-        }
-
         return Ok(result);
     }
 
@@ -925,6 +879,26 @@ mod tests {
         assert!(
             has_defeated,
             "Temporal defeater ~flies[1,10] should block atemporal flies via family matching"
+        );
+    }
+
+    #[test]
+    fn test_why_not_returns_provable_after_positive_family_match() {
+        let positive = temporal_lit("p", false, 1, 10);
+        let negative = temporal_lit("p", true, 20, 30);
+        let mut th = Theory::new();
+        th.add_rule(crate::rule::Rule::fact("f_pos", positive));
+        th.add_rule(crate::rule::Rule::fact("f_neg", negative));
+
+        let result = why_not(&th, &Literal::simple("p")).unwrap();
+
+        assert!(
+            result.is_provable(),
+            "positive family match should short-circuit"
+        );
+        assert!(
+            result.blocked_by.is_empty(),
+            "why_not must not add blockers once the query is already provable"
         );
     }
 

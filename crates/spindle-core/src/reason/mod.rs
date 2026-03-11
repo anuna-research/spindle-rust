@@ -1532,7 +1532,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reason_full_defeater_projects_attack_without_exact_support() {
+    fn test_reason_full_defeater_projects_attack_with_exact_support() {
         let temporal_head = Literal::new(
             "q",
             true,
@@ -1554,7 +1554,7 @@ mod tests {
             token,
             ProjectionToken::Attack(attack) if attack.rule_label == "d1"
         )));
-        assert!(!result.projection_tokens.iter().any(|token| matches!(
+        assert!(result.projection_tokens.iter().any(|token| matches!(
             token,
             ProjectionToken::Exact(exact) if exact.rule_label == "d1"
         )));
