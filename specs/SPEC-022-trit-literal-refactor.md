@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Document ID | SPEC-019 |
+| Document ID | SPEC-022 |
 | Title | Trit Literal Refactor: Three-Valued Truth for Defeasible Reasoning |
 | Version | 1.0.0 |
 | Status | Draft |
