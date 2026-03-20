@@ -1,27 +1,27 @@
 {
-  "recommended_status": "completed",
-  "confidence": 1.0,
-  "exit_code": 0,
+  "recommended_status": "failed",
+  "confidence": 0.0,
+  "exit_code": -1,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 411,
-    "deletions": 5,
+    "insertions": 191,
+    "deletions": 6,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/tests/lean_oracle_difftest.rs"
+      "lean/SpindleLean/Properties/Soundness.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-diff-harness-changes",
-      "content": "Modified 2 files (+411, -5): .hence/context-manifest.json, crates/spindle-core/tests/lean_oracle_difftest.rs",
+      "key": "task-prove-definite-soundness-changes",
+      "content": "Modified 2 files (+191, -6): .hence/context-manifest.json, lean/SpindleLean/Properties/Soundness.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/diff-harness-v1",
-  "evaluated_at": "2026-03-20T12:13:18Z",
+  "branch_name": "hence/prove-definite-soundness-v1",
+  "evaluated_at": "2026-03-20T12:44:34Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
