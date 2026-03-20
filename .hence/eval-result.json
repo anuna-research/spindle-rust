@@ -4,23 +4,23 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 1,
-    "insertions": 11,
-    "deletions": 5,
+    "insertions": 6,
+    "deletions": 1,
     "file_list": [
-      ".hence/context-manifest.json"
+      "lean/SpindleLean/Literal.lean"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-decidable-instances-changes",
-      "content": "Modified 1 files (+11, -5): .hence/context-manifest.json",
+      "key": "task-complement-changes",
+      "content": "Modified 1 files (+6, -1): lean/SpindleLean/Literal.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/decidable-instances-v1",
-  "evaluated_at": "2026-03-20T11:12:50Z",
+  "branch_name": "hence/complement-v1",
+  "evaluated_at": "2026-03-20T11:14:25Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
