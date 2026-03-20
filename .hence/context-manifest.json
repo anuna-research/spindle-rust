@@ -1,12 +1,12 @@
 {
-  "task_id": "prove-defeater-asymmetry",
+  "task_id": "prove-termination",
   "token_budget": 8000,
-  "tokens_used": 316,
+  "tokens_used": 351,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Prove that defeater rules never appear in Rsd[q] (only in R[q]). This follows directly from the definition of Rsd filtering by RuleType. State as theorem and prove by unfolding Rsd definition.",
-      "token_cost": 48,
+      "content": "Prove the fixed-point computation terminates for any finite theory. Argument: each literal transitions from Unknown to decided at most once; only transitions enqueue work; number of literals is finite; total transitions bounded by 2*|literals| per phase. Provide explicit well-founded measure if Lean's termination checker needs it.",
+      "token_cost": 83,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T12:44:40Z"
+  "constructed_at": "2026-03-20T12:47:49Z"
 }
