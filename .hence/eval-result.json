@@ -3,39 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 16,
-    "insertions": 122,
+    "files_changed": 2,
+    "insertions": 62,
     "deletions": 0,
     "file_list": [
       "lean/SpindleLean.lean",
-      "lean/SpindleLean/AmbiguityBlocking.lean",
-      "lean/SpindleLean/AmbiguityPropagation.lean",
-      "lean/SpindleLean/Closure/Delta.lean",
-      "lean/SpindleLean/Closure/Lambda.lean",
-      "lean/SpindleLean/Closure/Partial.lean",
-      "lean/SpindleLean/DiffTest/Oracle.lean",
-      "lean/SpindleLean/Properties/Confluence.lean",
-      "lean/SpindleLean/Properties/Consistency.lean",
-      "lean/SpindleLean/Properties/Equivalence.lean",
-      "lean/SpindleLean/Properties/Soundness.lean",
-      "lean/SpindleLean/Properties/Subset.lean",
-      "lean/SpindleLean/Properties/Termination.lean",
-      "lean/SpindleLean/Rule.lean",
-      "lean/SpindleLean/Tests.lean",
-      "lean/SpindleLean/Theory.lean"
+      "lean/SpindleLean/Literal.lean"
     ],
     "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-module-structure-changes",
-      "content": "Modified 16 files (+122, -0): lean/SpindleLean.lean, lean/SpindleLean/AmbiguityBlocking.lean, lean/SpindleLean/AmbiguityPropagation.lean, lean/SpindleLean/Closure/Delta.lean, lean/SpindleLean/Closure/Lambda.lean and 11 more",
+      "key": "task-literal-type-changes",
+      "content": "Modified 2 files (+62, -0): lean/SpindleLean.lean, lean/SpindleLean/Literal.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/module-structure-v1",
-  "evaluated_at": "2026-03-20T10:58:55Z",
+  "branch_name": "hence/literal-type-v1",
+  "evaluated_at": "2026-03-20T11:01:08Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

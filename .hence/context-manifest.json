@@ -1,12 +1,12 @@
 {
-  "task_id": "module-structure",
+  "task_id": "literal-type",
   "token_budget": 8000,
-  "tokens_used": 129,
+  "tokens_used": 181,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Create the Lean module tree: Spindle.lean (root), Spindle/{Basic,Rule,Theory,Closure/{Delta,Lambda,Partial},Properties/{Soundness,Subset,Termination,Consistency,Confluence,Equivalence},AmbiguityBlocking,AmbiguityPropagation,Tests,DiffTest/Oracle}.lean",
-      "token_cost": 62,
+      "content": "Define Literal inductive type: an atom name (String) paired with a polarity Bool. Positive = not negated, Negative = negated. Include DecidableEq, BEq, Hashable, Repr instances. Document correspondence to Rust literal.rs Literal struct.",
+      "token_cost": 59,
       "priority": "PlanMeta"
     },
     {
@@ -20,8 +20,14 @@
       "content": "Modified 3 files (+26, -7): .hence/context-manifest.json, lean/SpindleLean/Basic.lean, lean/lake-manifest.json",
       "token_cost": 27,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-module-structure-changes",
+      "content": "Modified 16 files (+122, -0): lean/SpindleLean.lean, lean/SpindleLean/AmbiguityBlocking.lean, lean/SpindleLean/AmbiguityPropagation.lean, lean/SpindleLean/Closure/Delta.lean, lean/SpindleLean/Closure/Lambda.lean and 11 more",
+      "token_cost": 55,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T10:52:51Z"
+  "constructed_at": "2026-03-20T10:59:01Z"
 }
