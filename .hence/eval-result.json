@@ -3,26 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 88,
-    "deletions": 5,
+    "files_changed": 2,
+    "insertions": 160,
+    "deletions": 7,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/SpindleLean.lean",
-      "lean/SpindleLean/Properties/Completeness.lean"
+      "lean/SpindleLean/Properties/Consistency.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-prove-definite-completeness-changes",
-      "content": "Modified 3 files (+88, -5): .hence/context-manifest.json, lean/SpindleLean.lean, lean/SpindleLean/Properties/Completeness.lean",
+      "key": "task-prove-consistency-changes",
+      "content": "Modified 2 files (+160, -7): .hence/context-manifest.json, lean/SpindleLean/Properties/Consistency.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/prove-definite-completeness-v1",
-  "evaluated_at": "2026-03-20T21:45:30Z",
+  "branch_name": "hence/prove-consistency-v1",
+  "evaluated_at": "2026-03-20T22:29:19Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
