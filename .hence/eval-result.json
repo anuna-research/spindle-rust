@@ -3,26 +3,24 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 101,
+    "files_changed": 1,
+    "insertions": 11,
     "deletions": 5,
     "file_list": [
-      ".hence/context-manifest.json",
-      "lean/SpindleLean.lean",
-      "lean/SpindleLean/Conclusion.lean"
+      ".hence/context-manifest.json"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-conclusion-type-changes",
-      "content": "Modified 3 files (+101, -5): .hence/context-manifest.json, lean/SpindleLean.lean, lean/SpindleLean/Conclusion.lean",
+      "key": "task-decidable-instances-changes",
+      "content": "Modified 1 files (+11, -5): .hence/context-manifest.json",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/conclusion-type-v1",
-  "evaluated_at": "2026-03-20T11:08:32Z",
+  "branch_name": "hence/decidable-instances-v1",
+  "evaluated_at": "2026-03-20T11:12:50Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
