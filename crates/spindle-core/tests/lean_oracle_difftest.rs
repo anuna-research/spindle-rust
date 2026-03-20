@@ -246,18 +246,12 @@ fn mismatch_report(
         }
     }
 
-    report.push_str(&format!(
-        "\nRust conclusions ({}):\n",
-        rust_set.len()
-    ));
+    report.push_str(&format!("\nRust conclusions ({}):\n", rust_set.len()));
     for c in rust_set {
         report.push_str(&format!("  {c}\n"));
     }
 
-    report.push_str(&format!(
-        "\nLean conclusions ({}):\n",
-        lean_set.len()
-    ));
+    report.push_str(&format!("\nLean conclusions ({}):\n", lean_set.len()));
     for c in lean_set {
         report.push_str(&format!("  {c}\n"));
     }
@@ -265,7 +259,9 @@ fn mismatch_report(
     report.push_str("\nTheory JSON:\n");
     // Pretty-print the JSON for readability
     if let Ok(v) = serde_json::from_str::<Value>(theory_json) {
-        report.push_str(&serde_json::to_string_pretty(&v).unwrap_or_else(|_| theory_json.to_string()));
+        report.push_str(
+            &serde_json::to_string_pretty(&v).unwrap_or_else(|_| theory_json.to_string()),
+        );
     } else {
         report.push_str(theory_json);
     }
