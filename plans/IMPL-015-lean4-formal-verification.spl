@@ -1,0 +1,512 @@
+;; ============================================================================
+;; IMPL-015: Lean 4 Formal Verification of Spindle Core
+;; ============================================================================
+;; Implementation plan for SPEC-015. Phases progress from project scaffolding
+;; through core types, executable model, proofs, cross-validation, and
+;; advanced metatheory. Each task maps to one or more SPEC-015 requirements.
+;;
+;; Agent: Claude (AI agent using lean4 skills)
+;; Target: lean/ directory in spindle-rust workspace
+;; ============================================================================
+
+(meta plan
+  (id "IMPL-015")
+  (title "Lean 4 Formal Verification of Spindle Core")
+  (version "1.0.0")
+  (status "active")
+  (created "2026-03-20")
+  (author "agent:architect")
+  (spec "SPEC-015")
+  (description "Implement formal verification of spindle's propositional SDL core in Lean 4, covering type formalization, executable model, soundness/completeness proofs, and cross-validation against Rust"))
+
+;; ============================================================================
+;; Agents
+;; ============================================================================
+
+(given agent-claude-available)
+
+;; ============================================================================
+;; Phase 0: Project Setup
+;; ============================================================================
+
+(given task-scaffold-lakefile)
+(given task-mathlib-deps)
+(given task-module-structure)
+(given no-deps-scaffold-lakefile)
+
+(meta task-scaffold-lakefile
+  (description "Create lean/ project with lake init, configure lakefile.lean targeting Lean 4 toolchain compatible with Mathlib. Ensure lake build succeeds with empty project.")
+  (acceptance "lake build completes with exit 0; lakefile.lean exists with Mathlib dependency declared")
+  (phase "0-setup")
+  (req "ADR-001")
+  (target-dir "lean/"))
+
+(meta task-mathlib-deps
+  (description "Pin Mathlib version, run lake update, verify Mathlib imports compile. Required modules: Data.Finset.Basic, Order.FixedPoints, Order.Monotone.Basic, Data.List.Basic")
+  (acceptance "A test file importing all required Mathlib modules compiles via lake build")
+  (phase "0-setup")
+  (req "ADR-001"))
+
+(meta task-module-structure
+  (description "Create the Lean module tree: Spindle.lean (root), Spindle/{Basic,Rule,Theory,Closure/{Delta,Lambda,Partial},Properties/{Soundness,Subset,Termination,Consistency,Confluence,Equivalence},AmbiguityBlocking,AmbiguityPropagation,Tests,DiffTest/Oracle}.lean")
+  (acceptance "All modules import successfully; lake build succeeds with stub files")
+  (phase "0-setup")
+  (req "REQ-001"))
+
+;; Phase 0 readiness rules
+(normally r-ready-scaffold
+  (and task-scaffold-lakefile no-deps-scaffold-lakefile)
+  ready-scaffold-lakefile)
+(normally r-ready-mathlib
+  (and task-mathlib-deps completed-scaffold-lakefile)
+  ready-mathlib-deps)
+(normally r-ready-modules
+  (and task-module-structure completed-mathlib-deps)
+  ready-module-structure)
+
+;; Phase 0 assignments
+(normally r-assign-scaffold
+  (and ready-scaffold-lakefile agent-claude-available)
+  assign-to-scaffold-lakefile-claude)
+(normally r-assign-mathlib
+  (and ready-mathlib-deps agent-claude-available)
+  assign-to-mathlib-deps-claude)
+(normally r-assign-modules
+  (and ready-module-structure agent-claude-available)
+  assign-to-module-structure-claude)
+
+;; Phase 0 gate
+(normally r-phase0-done
+  (and completed-scaffold-lakefile completed-mathlib-deps completed-module-structure)
+  phase-0-complete)
+
+;; ============================================================================
+;; Phase 1: Core Types (REQ-001, REQ-002, REQ-003)
+;; ============================================================================
+
+(given task-literal-type)
+(given task-complement)
+(given task-rule-type)
+(given task-theory-type)
+(given task-conclusion-type)
+(given task-rule-classification)
+(given task-decidable-instances)
+
+(meta task-literal-type
+  (description "Define Literal inductive type: an atom name (String) paired with a polarity Bool. Positive = not negated, Negative = negated. Include DecidableEq, BEq, Hashable, Repr instances. Document correspondence to Rust literal.rs Literal struct.")
+  (acceptance "Lean type compiles; mapping comment to Rust literal.rs present; example literals construct and compare correctly via #eval")
+  (phase "1-core-types")
+  (req "REQ-001")
+  (target-file "Spindle/Basic.lean"))
+
+(meta task-complement
+  (description "Define complement function on Literal that flips polarity. State and prove complement_involution: complement (complement l) = l for all Literal l. Proof should be by cases on l.")
+  (acceptance "complement_involution theorem compiles with no sorry; #eval tests show complement(p) = ~p, complement(~p) = p")
+  (phase "1-core-types")
+  (req "REQ-002")
+  (target-file "Spindle/Basic.lean"))
+
+(meta task-rule-type
+  (description "Define RuleType inductive (strict, defeasible, defeater). Define Rule structure with label: String, ruleType: RuleType, body: List Literal, head: Literal. Add DecidableEq, BEq, Repr. Document correspondence to Rust rule.rs.")
+  (acceptance "Types compile; example rules construct correctly via #eval; mapping comment to Rust rule.rs present")
+  (phase "1-core-types")
+  (req "REQ-001")
+  (target-file "Spindle/Rule.lean"))
+
+(meta task-theory-type
+  (description "Define Theory structure with rules: List Rule, superiority: List (String * String) (pairs of rule labels where first is superior). Define helper: sup (t: Theory) (r1 r2: Rule) : Bool checking if (r1.label, r2.label) is in t.superiority. Document correspondence to Rust theory.rs.")
+  (acceptance "Theory type compiles; superiority lookup works via #eval; mapping comment to Rust theory.rs present")
+  (phase "1-core-types")
+  (req "REQ-001")
+  (target-file "Spindle/Theory.lean"))
+
+(meta task-conclusion-type
+  (description "Define ConclusionType inductive: plusD, minusD, plusd, minusd. Define Conclusion as ConclusionType * Literal pair. Add Repr instances for readable output.")
+  (acceptance "Types compile; example conclusions format readably via #eval")
+  (phase "1-core-types")
+  (req "REQ-001")
+  (target-file "Spindle/Basic.lean"))
+
+(meta task-rule-classification
+  (description "Define rule-set functions: R(theory, q) returns all rules with head q; Rs(theory, q) returns strict rules with head q; Rsd(theory, q) returns strict or defeasible rules with head q. Define applicable(r, proved) checking all body literals are in proved list. Define discarded(r, disproved) checking some body literal is in disproved list.")
+  (acceptance "Functions compile; #eval tests on sample theory return expected rule sets; at least 3 test theories exercised")
+  (phase "1-core-types")
+  (req "REQ-003")
+  (target-file "Spindle/Basic.lean"))
+
+(meta task-decidable-instances
+  (description "Ensure DecidableEq instances exist for all core types (Literal, RuleType, Rule, ConclusionType). These are required for List membership decisions and computation.")
+  (acceptance "All types have DecidableEq; membership tests like (l ∈ proved) are decidable; lake build succeeds")
+  (phase "1-core-types")
+  (req "REQ-001"))
+
+;; Phase 1 readiness (all depend on phase 0 complete)
+(normally r-ready-literal
+  (and task-literal-type phase-0-complete)
+  ready-literal-type)
+(normally r-ready-complement
+  (and task-complement completed-literal-type)
+  ready-complement)
+(normally r-ready-rule
+  (and task-rule-type completed-literal-type)
+  ready-rule-type)
+(normally r-ready-theory
+  (and task-theory-type completed-rule-type)
+  ready-theory-type)
+(normally r-ready-conclusion
+  (and task-conclusion-type completed-literal-type)
+  ready-conclusion-type)
+(normally r-ready-classification
+  (and task-rule-classification completed-theory-type)
+  ready-rule-classification)
+(normally r-ready-decidable
+  (and task-decidable-instances completed-theory-type)
+  ready-decidable-instances)
+
+;; Phase 1 assignments
+(normally r-assign-literal (and ready-literal-type agent-claude-available) assign-to-literal-type-claude)
+(normally r-assign-complement (and ready-complement agent-claude-available) assign-to-complement-claude)
+(normally r-assign-rule (and ready-rule-type agent-claude-available) assign-to-rule-type-claude)
+(normally r-assign-theory (and ready-theory-type agent-claude-available) assign-to-theory-type-claude)
+(normally r-assign-conclusion (and ready-conclusion-type agent-claude-available) assign-to-conclusion-type-claude)
+(normally r-assign-classification (and ready-rule-classification agent-claude-available) assign-to-rule-classification-claude)
+(normally r-assign-decidable (and ready-decidable-instances agent-claude-available) assign-to-decidable-instances-claude)
+
+;; Phase 1 gate
+(normally r-phase1-done
+  (and completed-literal-type completed-complement completed-rule-type completed-theory-type completed-conclusion-type completed-rule-classification completed-decidable-instances)
+  phase-1-complete)
+
+;; ============================================================================
+;; Phase 2: Executable Model — Fixed-Point Algorithm
+;; ============================================================================
+
+(given task-definite-closure)
+(given task-defeasible-closure)
+(given task-reason-function)
+(given task-smoke-tests)
+
+(meta task-definite-closure
+  (description "Implement definite closure as iterative fixed-point: starting from facts, repeatedly fire strict rules whose bodies are all proved, until no new conclusions. Use fuel-bounded iteration. Compute both +D and -D for all literals mentioned in the theory.")
+  (acceptance "+D/−D computed correctly for: single fact, strict chain a->b->c, empty theory. All via #eval.")
+  (phase "2-executable-model")
+  (req "REQ-004, REQ-005")
+  (target-file "Spindle/Closure/Delta.lean"))
+
+(meta task-defeasible-closure
+  (description "Implement defeasible closure: given definite closure results, compute +d/-d using the proof-theoretic conditions. For each undecided literal q: check if any rule in Rsd[q] is applicable, -D ~q holds, and all attackers in R[~q] are either discarded or defeated by a superior applicable rule in Rsd[q]. Iterate until fixed point. Implement ambiguity blocking mode (default).")
+  (acceptance "+d/−d computed correctly for: simple defeasible rule, competing rules with superiority, defeater blocking, symmetric conflict. All via #eval.")
+  (phase "2-executable-model")
+  (req "REQ-006, REQ-007, REQ-010, REQ-011")
+  (target-file "Spindle/Closure/Lambda.lean"))
+
+(meta task-reason-function
+  (description "Define top-level reason function that composes definite and defeasible closures: reason(theory) returns List Conclusion. This mirrors Rust reason() and serves as the executable specification for cross-validation.")
+  (acceptance "reason function compiles; produces correct conclusions for tweety triangle theory (bird, penguin, flies/~flies with superiority)")
+  (phase "2-executable-model")
+  (req "REQ-013, ADR-003")
+  (target-file "Spindle/Closure/Partial.lean"))
+
+(meta task-smoke-tests
+  (description "Encode at least 10 test theories as Lean #eval statements exercising the reason function. Cover: empty theory, single fact, strict chain, defeasible chain, superiority override, defeater blocking, symmetric conflict, multiple conclusions, mixed strict+defeasible, vacuous body rules.")
+  (acceptance "All 10+ #eval tests produce expected conclusions; lake build succeeds")
+  (phase "2-executable-model")
+  (req "REQ-013")
+  (target-file "Spindle/Tests.lean"))
+
+;; Phase 2 readiness
+(normally r-ready-definite-closure
+  (and task-definite-closure phase-1-complete)
+  ready-definite-closure)
+(normally r-ready-defeasible-closure
+  (and task-defeasible-closure completed-definite-closure)
+  ready-defeasible-closure)
+(normally r-ready-reason
+  (and task-reason-function completed-defeasible-closure)
+  ready-reason-function)
+(normally r-ready-smoke
+  (and task-smoke-tests completed-reason-function)
+  ready-smoke-tests)
+
+;; Phase 2 assignments
+(normally r-assign-definite (and ready-definite-closure agent-claude-available) assign-to-definite-closure-claude)
+(normally r-assign-defeasible (and ready-defeasible-closure agent-claude-available) assign-to-defeasible-closure-claude)
+(normally r-assign-reason (and ready-reason-function agent-claude-available) assign-to-reason-function-claude)
+(normally r-assign-smoke (and ready-smoke-tests agent-claude-available) assign-to-smoke-tests-claude)
+
+;; Phase 2 gate
+(normally r-phase2-done
+  (and completed-definite-closure completed-defeasible-closure completed-reason-function completed-smoke-tests)
+  phase-2-complete)
+
+;; ============================================================================
+;; Phase 3: Core Proofs (REQ-004 through REQ-010)
+;; ============================================================================
+
+(given task-prove-definite-soundness)
+(given task-prove-definite-completeness)
+(given task-prove-defeasible-soundness)
+(given task-prove-defeasible-completeness)
+(given task-prove-termination)
+(given task-prove-consistency)
+(given task-prove-defeater-asymmetry)
+
+(meta task-prove-definite-soundness
+  (description "State and prove: if the definite closure marks q as +D, then q is a fact or there exists a strict rule r with head q whose body literals are all +D. Proof by induction on the iteration step at which q was added to the closure.")
+  (acceptance "Theorem compiles with no sorry; covers the +D iff condition from SPEC-015 REQ-004")
+  (phase "3-core-proofs")
+  (req "REQ-004")
+  (target-file "Spindle/Properties/Soundness.lean"))
+
+(meta task-prove-definite-completeness
+  (description "State and prove: if q satisfies the proof-theoretic condition for -D (not a fact AND every strict rule for q has a discarded body literal), then the algorithm marks q as -D. Proof by contradiction: assume q is not marked -D, derive that some strict rule must be applicable, contradicting the -D condition.")
+  (acceptance "Theorem compiles with no sorry; covers -D iff condition from SPEC-015 REQ-005")
+  (phase "3-core-proofs")
+  (req "REQ-005")
+  (target-file "Spindle/Properties/Soundness.lean"))
+
+(meta task-prove-defeasible-soundness
+  (description "State and prove: if the defeasible closure marks q as +d, then either +D q holds, or there exists an applicable rule in Rsd[q], -D ~q holds, and every attacker in R[~q] is either discarded or defeated by a superior applicable rule. Proof by induction on the defeasible closure iteration.")
+  (acceptance "Theorem compiles with no sorry; covers +d condition from SPEC-015 REQ-006")
+  (phase "3-core-proofs")
+  (req "REQ-006")
+  (target-file "Spindle/Properties/Soundness.lean"))
+
+(meta task-prove-defeasible-completeness
+  (description "State and prove: if q satisfies the proof-theoretic condition for -d, then the algorithm marks q as -d. The -d condition is: -D q AND (every rule in Rsd[q] is discarded, OR +D ~q, OR some attacker in R[~q] is applicable and undefeated).")
+  (acceptance "Theorem compiles with no sorry; covers -d condition from SPEC-015 REQ-007")
+  (phase "3-core-proofs")
+  (req "REQ-007")
+  (target-file "Spindle/Properties/Soundness.lean"))
+
+(meta task-prove-termination
+  (description "Prove the fixed-point computation terminates for any finite theory. Argument: each literal transitions from Unknown to decided at most once; only transitions enqueue work; number of literals is finite; total transitions bounded by 2*|literals| per phase. Provide explicit well-founded measure if Lean's termination checker needs it.")
+  (acceptance "Termination proof compiles with no sorry; Lean accepts the fixed-point function without partial or sorry-based termination")
+  (phase "3-core-proofs")
+  (req "REQ-008")
+  (target-file "Spindle/Properties/Termination.lean"))
+
+(meta task-prove-consistency
+  (description "Prove tag consistency and level coherence. Tag consistency: for any theory and literal q, +D q and -D q cannot both hold, and +d q and -d q cannot both hold. Level coherence: +D q implies +d q, and -d q implies -D q. Proofs follow from the structure of the closure computation.")
+  (acceptance "All four theorems compile with no sorry")
+  (phase "3-core-proofs")
+  (req "REQ-009")
+  (target-file "Spindle/Properties/Consistency.lean"))
+
+(meta task-prove-defeater-asymmetry
+  (description "Prove that defeater rules never appear in Rsd[q] (only in R[q]). This follows directly from the definition of Rsd filtering by RuleType. State as theorem and prove by unfolding Rsd definition.")
+  (acceptance "Theorem compiles with no sorry; proof is definitional")
+  (phase "3-core-proofs")
+  (req "REQ-010")
+  (target-file "Spindle/Properties/Soundness.lean"))
+
+;; Phase 3 readiness (all depend on phase 2 complete)
+(normally r-ready-def-sound
+  (and task-prove-definite-soundness phase-2-complete)
+  ready-prove-definite-soundness)
+(normally r-ready-def-complete
+  (and task-prove-definite-completeness completed-prove-definite-soundness)
+  ready-prove-definite-completeness)
+(normally r-ready-dfs-sound
+  (and task-prove-defeasible-soundness completed-prove-definite-completeness)
+  ready-prove-defeasible-soundness)
+(normally r-ready-dfs-complete
+  (and task-prove-defeasible-completeness completed-prove-defeasible-soundness)
+  ready-prove-defeasible-completeness)
+(normally r-ready-termination
+  (and task-prove-termination phase-2-complete)
+  ready-prove-termination)
+(normally r-ready-consistency
+  (and task-prove-consistency completed-prove-defeasible-completeness)
+  ready-prove-consistency)
+(normally r-ready-defeater
+  (and task-prove-defeater-asymmetry phase-2-complete)
+  ready-prove-defeater-asymmetry)
+
+;; Phase 3 assignments
+(normally r-assign-def-sound (and ready-prove-definite-soundness agent-claude-available) assign-to-prove-definite-soundness-claude)
+(normally r-assign-def-complete (and ready-prove-definite-completeness agent-claude-available) assign-to-prove-definite-completeness-claude)
+(normally r-assign-dfs-sound (and ready-prove-defeasible-soundness agent-claude-available) assign-to-prove-defeasible-soundness-claude)
+(normally r-assign-dfs-complete (and ready-prove-defeasible-completeness agent-claude-available) assign-to-prove-defeasible-completeness-claude)
+(normally r-assign-termination (and ready-prove-termination agent-claude-available) assign-to-prove-termination-claude)
+(normally r-assign-consistency (and ready-prove-consistency agent-claude-available) assign-to-prove-consistency-claude)
+(normally r-assign-defeater (and ready-prove-defeater-asymmetry agent-claude-available) assign-to-prove-defeater-asymmetry-claude)
+
+;; Phase 3 gate
+(normally r-phase3-done
+  (and completed-prove-definite-soundness completed-prove-definite-completeness completed-prove-defeasible-soundness completed-prove-defeasible-completeness completed-prove-termination completed-prove-consistency completed-prove-defeater-asymmetry)
+  phase-3-complete)
+
+;; ============================================================================
+;; Phase 4: Ambiguity Modes (REQ-011, REQ-012)
+;; ============================================================================
+
+(given task-ambiguity-blocking)
+(given task-ambiguity-propagation)
+
+(meta task-ambiguity-blocking
+  (description "Formalize ambiguity blocking semantics (already the default mode from Phase 2). State and prove Ambiguity Locality theorem: if p and ~p are both -d (ambiguous), and rule r: => q has no body mentioning p or ~p, then q's provability is independent of the p/~p ambiguity. Test with theory: r1: => p, r2: => ~p, r3: => q — show q is +d.")
+  (acceptance "Ambiguity Locality theorem compiles with no sorry; test theory produces expected results via #eval")
+  (phase "4-ambiguity")
+  (req "REQ-011")
+  (target-file "Spindle/AmbiguityBlocking.lean"))
+
+(meta task-ambiguity-propagation
+  (description "Implement ambiguity propagation mode as alternative closure computation. Prove Ambiguity Infectiousness: if p is ambiguous, any q depending on p through applicable rule chain inherits ambiguity. Prove AP Subsumption: +d under AP implies +d under AB. Test with theory: r1: => p, r2: => ~p, r3: => q, r4: p => q — show q is -d under AP.")
+  (acceptance "Both AP theorems compile with no sorry; test theories produce expected results via #eval; AP mode is selectable")
+  (phase "4-ambiguity")
+  (req "REQ-012")
+  (target-file "Spindle/AmbiguityPropagation.lean"))
+
+;; Phase 4 readiness (depends on phase 3 for proof infrastructure)
+(normally r-ready-amb-blocking
+  (and task-ambiguity-blocking phase-3-complete)
+  ready-ambiguity-blocking)
+(normally r-ready-amb-propagation
+  (and task-ambiguity-propagation completed-ambiguity-blocking)
+  ready-ambiguity-propagation)
+
+;; Phase 4 assignments
+(normally r-assign-amb-blocking (and ready-ambiguity-blocking agent-claude-available) assign-to-ambiguity-blocking-claude)
+(normally r-assign-amb-propagation (and ready-ambiguity-propagation agent-claude-available) assign-to-ambiguity-propagation-claude)
+
+;; Phase 4 gate
+(normally r-phase4-done
+  (and completed-ambiguity-blocking completed-ambiguity-propagation)
+  phase-4-complete)
+
+;; ============================================================================
+;; Phase 5: Cross-Validation (REQ-013)
+;; ============================================================================
+
+(given task-lean-oracle)
+(given task-encode-rust-tests)
+(given task-diff-harness)
+(given task-ci-pipeline)
+
+(meta task-lean-oracle
+  (description "Build Lean executable oracle: reads JSON-encoded theory from stdin, computes conclusions via reason function, outputs JSON conclusions to stdout. Use Lean 4 IO and JSON serialization (or simple custom parser). This enables automated comparison with Rust.")
+  (acceptance "Standalone executable builds via lake build; accepts JSON theory; outputs JSON conclusions matching manual verification")
+  (phase "5-cross-validation")
+  (req "REQ-013")
+  (target-file "Spindle/DiffTest/Oracle.lean"))
+
+(meta task-encode-rust-tests
+  (description "Encode at least 50 test theories from crates/spindle-core/tests/ as Lean #eval or #check statements. Each test encodes the theory, runs reason, and asserts the conclusions match. Cover all categories: facts-only, strict chains, defeasible chains, superiority, defeaters, symmetric conflicts, ambiguity, empty theories, vacuous rules.")
+  (acceptance "50+ test theories encoded; all produce conclusions matching Rust test expectations; lake build succeeds")
+  (phase "5-cross-validation")
+  (req "REQ-013")
+  (target-file "Spindle/Tests.lean"))
+
+(meta task-diff-harness
+  (description "Create Rust test harness in crates/spindle-core/tests/lean_oracle_difftest.rs: generate random theories via proptest, serialize to JSON, shell out to Lean oracle executable, parse JSON response, compare conclusion sets. Report first mismatch with full theory dump.")
+  (acceptance "Harness runs 100+ random theories without mismatch; test passes in cargo test")
+  (phase "5-cross-validation")
+  (req "REQ-013")
+  (target-file "crates/spindle-core/tests/lean_oracle_difftest.rs"))
+
+(meta task-ci-pipeline
+  (description "Add GitHub Actions workflow .github/workflows/lean-verify.yml: install Lean via elan, run lake build, run lake test (if applicable), run Rust differential tests. Build failure blocks merge.")
+  (acceptance "CI workflow runs on push; lake build succeeds; differential tests pass; OBS-002 satisfied")
+  (phase "5-cross-validation")
+  (req "REQ-013, OBS-002")
+  (target-file ".github/workflows/lean-verify.yml"))
+
+;; Phase 5 readiness
+(normally r-ready-oracle
+  (and task-lean-oracle phase-2-complete)
+  ready-lean-oracle)
+(normally r-ready-encode-tests
+  (and task-encode-rust-tests completed-reason-function)
+  ready-encode-rust-tests)
+(normally r-ready-diff-harness
+  (and task-diff-harness completed-lean-oracle completed-encode-rust-tests)
+  ready-diff-harness)
+(normally r-ready-ci
+  (and task-ci-pipeline completed-diff-harness)
+  ready-ci-pipeline)
+
+;; Phase 5 assignments
+(normally r-assign-oracle (and ready-lean-oracle agent-claude-available) assign-to-lean-oracle-claude)
+(normally r-assign-encode (and ready-encode-rust-tests agent-claude-available) assign-to-encode-rust-tests-claude)
+(normally r-assign-diff (and ready-diff-harness agent-claude-available) assign-to-diff-harness-claude)
+(normally r-assign-ci (and ready-ci-pipeline agent-claude-available) assign-to-ci-pipeline-claude)
+
+;; Phase 5 gate
+(normally r-phase5-done
+  (and completed-lean-oracle completed-encode-rust-tests completed-diff-harness completed-ci-pipeline)
+  phase-5-complete)
+
+;; ============================================================================
+;; Phase 6: Advanced Metatheory (stretch goals)
+;; ============================================================================
+
+(given task-prove-confluence)
+(given task-prove-equivalence)
+
+(meta task-prove-confluence
+  (description "Prove order independence: the conclusion set is the unique fixed point regardless of worklist processing order. Show the step function is monotone and the final state equals the lfp by Knaster-Tarski uniqueness. This is a stretch goal — may require significant Mathlib machinery.")
+  (acceptance "Confluence theorem compiles with no sorry; or if blocked, sorry count and blocker documented")
+  (phase "6-advanced")
+  (req "ADR-003"))
+
+(meta task-prove-equivalence
+  (description "Prove that the Lean reason function computes the same conclusions as the declarative proof-theoretic conditions for all finite theories. This is the master correctness theorem tying the executable model to the specification.")
+  (acceptance "Equivalence theorem compiles with no sorry; or if blocked, sorry count and blocker documented")
+  (phase "6-advanced")
+  (req "ADR-003"))
+
+;; Phase 6 readiness
+(normally r-ready-confluence
+  (and task-prove-confluence phase-3-complete phase-4-complete)
+  ready-prove-confluence)
+(normally r-ready-equivalence
+  (and task-prove-equivalence completed-prove-confluence)
+  ready-prove-equivalence)
+
+;; Phase 6 assignments
+(normally r-assign-confluence (and ready-prove-confluence agent-claude-available) assign-to-prove-confluence-claude)
+(normally r-assign-equivalence (and ready-prove-equivalence agent-claude-available) assign-to-prove-equivalence-claude)
+
+;; Phase 6 gate
+(normally r-phase6-done
+  (and completed-prove-confluence completed-prove-equivalence)
+  phase-6-complete)
+
+;; ============================================================================
+;; Project Completion
+;; ============================================================================
+
+;; Core completion: phases 0-5 cover all SPEC-015 requirements
+(normally r-core-complete
+  (and phase-0-complete phase-1-complete phase-2-complete phase-3-complete phase-4-complete phase-5-complete)
+  project-core-complete)
+
+;; Full completion: including stretch goals
+(normally r-full-complete
+  (and project-core-complete phase-6-complete)
+  project-fully-complete)
+
+;; ============================================================================
+;; Rule metadata — justifications for key sequencing decisions
+;; ============================================================================
+
+(meta r-ready-defeasible-closure
+  (description "Defeasible closure depends on definite closure results")
+  (justification "The +d condition references -D ~q and +D q, so definite closure must be computed first"))
+
+(meta r-ready-def-complete
+  (description "Definite completeness proof builds on soundness")
+  (justification "Completeness proof references soundness result as a lemma for the forward direction"))
+
+(meta r-ready-dfs-sound
+  (description "Defeasible soundness proof depends on definite completeness")
+  (justification "The +d proof needs -D ~q which requires the definite completeness characterization"))
+
+(meta r-ready-amb-propagation
+  (description "AP mode extends AB mode")
+  (justification "AP Subsumption theorem directly references AB conclusions; implement AB first to reuse infrastructure"))
+
+(meta r-ready-oracle
+  (description "Oracle can start once executable model works")
+  (justification "Oracle wraps the reason function in IO; does not need proofs, just the executable model from Phase 2"))
