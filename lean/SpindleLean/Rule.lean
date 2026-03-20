@@ -108,4 +108,12 @@ def mkDefeater (label : String) (body : List Literal) (head : Literal) : Rule :=
 def mkFact (label : String) (head : Literal) : Rule :=
   { label, ruleType := .strict, body := [], head }
 
+/-- A rule is applicable when every body literal appears in the `proved` set. -/
+def applicable (r : Rule) (proved : List Literal) : Bool :=
+  r.body.all (proved.contains ·)
+
+/-- A rule is discarded when some body literal appears in the `disproved` set. -/
+def discarded (r : Rule) (disproved : List Literal) : Bool :=
+  r.body.any (disproved.contains ·)
+
 end Rule
