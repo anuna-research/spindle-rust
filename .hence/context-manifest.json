@@ -1,12 +1,12 @@
 {
-  "task_id": "diff-harness",
+  "task_id": "prove-definite-soundness",
   "token_budget": 8000,
-  "tokens_used": 334,
+  "tokens_used": 324,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Create Rust test harness in crates/spindle-core/tests/lean_oracle_difftest.rs: generate random theories via proptest, serialize to JSON, shell out to Lean oracle executable, parse JSON response, compare conclusion sets. Report first mismatch with full theory dump.",
-      "token_cost": 66,
+      "content": "State and prove: if the definite closure marks q as +D, then q is a fact or there exists a strict rule r with head q whose body literals are all +D. Proof by induction on the iteration step at which q was added to the closure.",
+      "token_cost": 56,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T12:08:43Z"
+  "constructed_at": "2026-03-20T12:13:23Z"
 }
