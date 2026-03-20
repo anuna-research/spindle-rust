@@ -1,12 +1,12 @@
 {
-  "task_id": "reason-function",
+  "task_id": "smoke-tests",
   "token_budget": 8000,
-  "tokens_used": 321,
+  "tokens_used": 338,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define top-level reason function that composes definite and defeasible closures: reason(theory) returns List Conclusion. This mirrors Rust reason() and serves as the executable specification for cross-validation.",
-      "token_cost": 53,
+      "content": "Encode at least 10 test theories as Lean #eval statements exercising the reason function. Cover: empty theory, single fact, strict chain, defeasible chain, superiority override, defeater blocking, symmetric conflict, multiple conclusions, mixed strict+defeasible, vacuous body rules.",
+      "token_cost": 70,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:42:01Z"
+  "constructed_at": "2026-03-20T11:47:57Z"
 }
