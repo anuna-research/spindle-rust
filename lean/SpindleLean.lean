@@ -8,7 +8,6 @@ import SpindleLean.Closure.Lambda
 import SpindleLean.Closure.Partial
 import SpindleLean.Reason
 import SpindleLean.Properties.Soundness
-import SpindleLean.Properties.Completeness
 import SpindleLean.Properties.Subset
 import SpindleLean.Properties.Termination
 import SpindleLean.Properties.Consistency

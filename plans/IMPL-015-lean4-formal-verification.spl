@@ -510,3 +510,682 @@
 (meta r-ready-oracle
   (description "Oracle can start once executable model works")
   (justification "Oracle wraps the reason function in IO; does not need proofs, just the executable model from Phase 2"))
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T10:32:08Z"
+  (given delegated-v1-scaffold-lakefile-to-agent:claude)
+  (given (during (leased-v1-scaffold-lakefile) (moment "2026-03-20T10:32:08Z") (moment "2026-03-20T11:02:08Z")))
+  (given claim-v1-scaffold-lakefile-by-claude)
+  (normally r-cl-state-v1-scaffold-lakefile-by-claude claim-v1-scaffold-lakefile-by-claude state-claimed-v1-scaffold-lakefile-by-claude)
+  (normally r-cl-chain-v1-scaffold-lakefile-by-claude state-claimed-v1-scaffold-lakefile-by-claude claimed-scaffold-lakefile)
+)
+
+;; Propagation rules: failures in 'scaffold-lakefile' block downstream tasks
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-failed failed-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-permanently-failed permanently-failed-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-stale-v1 stale-v1-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-timeout-v1 timeout-v1-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-blocked upstream-blocked-scaffold-lakefile upstream-blocked-mathlib-deps)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-module-structure-from-mathlib-deps-blocked upstream-blocked-mathlib-deps upstream-blocked-module-structure)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T10:47:08Z"
+  (given (during (leased-v1-scaffold-lakefile) (moment "2026-03-20T10:47:08Z") (moment "2026-03-20T11:17:08Z")))
+  (given lease-renewal-v1-scaffold-lakefile-by-claude-r1)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T10:49:08Z"
+  (given completed-scaffold-lakefile)
+  (given eval-result-v1-scaffold-lakefile-by-claude)
+  (given eval-confidence-v1-scaffold-lakefile-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T10:49:23Z"
+  (given delegated-v1-mathlib-deps-to-agent:claude)
+  (given (during (leased-v1-mathlib-deps) (moment "2026-03-20T10:49:23Z") (moment "2026-03-20T11:19:23Z")))
+  (given claim-v1-mathlib-deps-by-claude)
+  (normally r-cl-state-v1-mathlib-deps-by-claude claim-v1-mathlib-deps-by-claude state-claimed-v1-mathlib-deps-by-claude)
+  (normally r-cl-chain-v1-mathlib-deps-by-claude state-claimed-v1-mathlib-deps-by-claude claimed-mathlib-deps)
+)
+
+;; Propagation rules: failures in 'mathlib-deps' block downstream tasks
+(normally r-propagate-module-structure-from-mathlib-deps-failed failed-mathlib-deps upstream-blocked-module-structure)
+(normally r-propagate-module-structure-from-mathlib-deps-permanently-failed permanently-failed-mathlib-deps upstream-blocked-module-structure)
+(normally r-propagate-module-structure-from-mathlib-deps-stale-v1 stale-v1-mathlib-deps upstream-blocked-module-structure)
+(normally r-propagate-module-structure-from-mathlib-deps-timeout-v1 timeout-v1-mathlib-deps upstream-blocked-module-structure)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T10:52:36Z"
+  (given completed-mathlib-deps)
+  (given eval-result-v1-mathlib-deps-by-claude)
+  (given eval-confidence-v1-mathlib-deps-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T10:52:51Z"
+  (given delegated-v1-module-structure-to-agent:claude)
+  (given (during (leased-v1-module-structure) (moment "2026-03-20T10:52:51Z") (moment "2026-03-20T11:22:51Z")))
+  (given claim-v1-module-structure-by-claude)
+  (normally r-cl-state-v1-module-structure-by-claude claim-v1-module-structure-by-claude state-claimed-v1-module-structure-by-claude)
+  (normally r-cl-chain-v1-module-structure-by-claude state-claimed-v1-module-structure-by-claude claimed-module-structure)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T10:58:55Z"
+  (given completed-module-structure)
+  (given eval-result-v1-module-structure-by-claude)
+  (given eval-confidence-v1-module-structure-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T10:59:01Z"
+  (given delegated-v1-literal-type-to-agent:claude)
+  (given (during (leased-v1-literal-type) (moment "2026-03-20T10:59:01Z") (moment "2026-03-20T11:29:01Z")))
+  (given claim-v1-literal-type-by-claude)
+  (normally r-cl-state-v1-literal-type-by-claude claim-v1-literal-type-by-claude state-claimed-v1-literal-type-by-claude)
+  (normally r-cl-chain-v1-literal-type-by-claude state-claimed-v1-literal-type-by-claude claimed-literal-type)
+)
+
+;; Propagation rules: failures in 'literal-type' block downstream tasks
+(normally r-propagate-complement-from-literal-type-failed failed-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-permanently-failed permanently-failed-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-stale-v1 stale-v1-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-timeout-v1 timeout-v1-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-blocked upstream-blocked-literal-type upstream-blocked-complement)
+(normally r-propagate-conclusion-type-from-literal-type-failed failed-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-permanently-failed permanently-failed-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-stale-v1 stale-v1-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-timeout-v1 timeout-v1-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-blocked upstream-blocked-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-rule-type-from-literal-type-failed failed-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-permanently-failed permanently-failed-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-stale-v1 stale-v1-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-timeout-v1 timeout-v1-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-blocked upstream-blocked-literal-type upstream-blocked-rule-type)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-theory-type-from-rule-type-blocked upstream-blocked-rule-type upstream-blocked-theory-type)
+(normally r-propagate-decidable-instances-from-theory-type-blocked upstream-blocked-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-rule-classification-from-theory-type-blocked upstream-blocked-theory-type upstream-blocked-rule-classification)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:01:08Z"
+  (given completed-literal-type)
+  (given eval-result-v1-literal-type-by-claude)
+  (given eval-confidence-v1-literal-type-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:01:13Z"
+  (given delegated-v1-rule-type-to-agent:claude)
+  (given (during (leased-v1-rule-type) (moment "2026-03-20T11:01:13Z") (moment "2026-03-20T11:31:13Z")))
+  (given claim-v1-rule-type-by-claude)
+  (normally r-cl-state-v1-rule-type-by-claude claim-v1-rule-type-by-claude state-claimed-v1-rule-type-by-claude)
+  (normally r-cl-chain-v1-rule-type-by-claude state-claimed-v1-rule-type-by-claude claimed-rule-type)
+)
+
+;; Propagation rules: failures in 'rule-type' block downstream tasks
+(normally r-propagate-theory-type-from-rule-type-failed failed-rule-type upstream-blocked-theory-type)
+(normally r-propagate-theory-type-from-rule-type-permanently-failed permanently-failed-rule-type upstream-blocked-theory-type)
+(normally r-propagate-theory-type-from-rule-type-stale-v1 stale-v1-rule-type upstream-blocked-theory-type)
+(normally r-propagate-theory-type-from-rule-type-timeout-v1 timeout-v1-rule-type upstream-blocked-theory-type)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:03:25Z"
+  (given completed-rule-type)
+  (given eval-result-v1-rule-type-by-claude)
+  (given eval-confidence-v1-rule-type-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:03:31Z"
+  (given delegated-v1-theory-type-to-agent:claude)
+  (given (during (leased-v1-theory-type) (moment "2026-03-20T11:03:31Z") (moment "2026-03-20T11:33:31Z")))
+  (given claim-v1-theory-type-by-claude)
+  (normally r-cl-state-v1-theory-type-by-claude claim-v1-theory-type-by-claude state-claimed-v1-theory-type-by-claude)
+  (normally r-cl-chain-v1-theory-type-by-claude state-claimed-v1-theory-type-by-claude claimed-theory-type)
+)
+
+;; Propagation rules: failures in 'theory-type' block downstream tasks
+(normally r-propagate-decidable-instances-from-theory-type-failed failed-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-decidable-instances-from-theory-type-permanently-failed permanently-failed-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-decidable-instances-from-theory-type-stale-v1 stale-v1-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-decidable-instances-from-theory-type-timeout-v1 timeout-v1-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-rule-classification-from-theory-type-failed failed-theory-type upstream-blocked-rule-classification)
+(normally r-propagate-rule-classification-from-theory-type-permanently-failed permanently-failed-theory-type upstream-blocked-rule-classification)
+(normally r-propagate-rule-classification-from-theory-type-stale-v1 stale-v1-theory-type upstream-blocked-rule-classification)
+(normally r-propagate-rule-classification-from-theory-type-timeout-v1 timeout-v1-theory-type upstream-blocked-rule-classification)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:05:55Z"
+  (given completed-theory-type)
+  (given eval-result-v1-theory-type-by-claude)
+  (given eval-confidence-v1-theory-type-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:06:00Z"
+  (given delegated-v1-conclusion-type-to-agent:claude)
+  (given (during (leased-v1-conclusion-type) (moment "2026-03-20T11:06:00Z") (moment "2026-03-20T11:36:00Z")))
+  (given claim-v1-conclusion-type-by-claude)
+  (normally r-cl-state-v1-conclusion-type-by-claude claim-v1-conclusion-type-by-claude state-claimed-v1-conclusion-type-by-claude)
+  (normally r-cl-chain-v1-conclusion-type-by-claude state-claimed-v1-conclusion-type-by-claude claimed-conclusion-type)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:08:32Z"
+  (given completed-conclusion-type)
+  (given eval-result-v1-conclusion-type-by-claude)
+  (given eval-confidence-v1-conclusion-type-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:08:38Z"
+  (given delegated-v1-decidable-instances-to-agent:claude)
+  (given (during (leased-v1-decidable-instances) (moment "2026-03-20T11:08:38Z") (moment "2026-03-20T11:38:38Z")))
+  (given claim-v1-decidable-instances-by-claude)
+  (normally r-cl-state-v1-decidable-instances-by-claude claim-v1-decidable-instances-by-claude state-claimed-v1-decidable-instances-by-claude)
+  (normally r-cl-chain-v1-decidable-instances-by-claude state-claimed-v1-decidable-instances-by-claude claimed-decidable-instances)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:12:51Z"
+  (given completed-decidable-instances)
+  (given eval-result-v1-decidable-instances-by-claude)
+  (given eval-confidence-v1-decidable-instances-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:12:56Z"
+  (given delegated-v1-complement-to-agent:claude)
+  (given (during (leased-v1-complement) (moment "2026-03-20T11:12:56Z") (moment "2026-03-20T11:42:56Z")))
+  (given claim-v1-complement-by-claude)
+  (normally r-cl-state-v1-complement-by-claude claim-v1-complement-by-claude state-claimed-v1-complement-by-claude)
+  (normally r-cl-chain-v1-complement-by-claude state-claimed-v1-complement-by-claude claimed-complement)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:14:25Z"
+  (given completed-complement)
+  (given eval-result-v1-complement-by-claude)
+  (given eval-confidence-v1-complement-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:14:31Z"
+  (given delegated-v1-rule-classification-to-agent:claude)
+  (given (during (leased-v1-rule-classification) (moment "2026-03-20T11:14:31Z") (moment "2026-03-20T11:44:31Z")))
+  (given claim-v1-rule-classification-by-claude)
+  (normally r-cl-state-v1-rule-classification-by-claude claim-v1-rule-classification-by-claude state-claimed-v1-rule-classification-by-claude)
+  (normally r-cl-chain-v1-rule-classification-by-claude state-claimed-v1-rule-classification-by-claude claimed-rule-classification)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:16:49Z"
+  (given completed-rule-classification)
+  (given eval-result-v1-rule-classification-by-claude)
+  (given eval-confidence-v1-rule-classification-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:16:55Z"
+  (given delegated-v1-definite-closure-to-agent:claude)
+  (given (during (leased-v1-definite-closure) (moment "2026-03-20T11:16:55Z") (moment "2026-03-20T11:46:55Z")))
+  (given claim-v1-definite-closure-by-claude)
+  (normally r-cl-state-v1-definite-closure-by-claude claim-v1-definite-closure-by-claude state-claimed-v1-definite-closure-by-claude)
+  (normally r-cl-chain-v1-definite-closure-by-claude state-claimed-v1-definite-closure-by-claude claimed-definite-closure)
+)
+
+;; Propagation rules: failures in 'definite-closure' block downstream tasks
+(normally r-propagate-defeasible-closure-from-definite-closure-failed failed-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-permanently-failed permanently-failed-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-stale-v1 stale-v1-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-timeout-v1 timeout-v1-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-blocked upstream-blocked-definite-closure upstream-blocked-defeasible-closure)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-reason-function-from-defeasible-closure-blocked upstream-blocked-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-encode-rust-tests-from-reason-function-blocked upstream-blocked-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-smoke-tests-from-reason-function-blocked upstream-blocked-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-diff-harness-from-encode-rust-tests-blocked upstream-blocked-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-ci-pipeline-from-diff-harness-blocked upstream-blocked-diff-harness upstream-blocked-ci-pipeline)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:28:21Z"
+  (given completed-definite-closure)
+  (given eval-result-v1-definite-closure-by-claude)
+  (given eval-confidence-v1-definite-closure-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:28:28Z"
+  (given delegated-v1-defeasible-closure-to-agent:claude)
+  (given (during (leased-v1-defeasible-closure) (moment "2026-03-20T11:28:28Z") (moment "2026-03-20T11:58:28Z")))
+  (given claim-v1-defeasible-closure-by-claude)
+  (normally r-cl-state-v1-defeasible-closure-by-claude claim-v1-defeasible-closure-by-claude state-claimed-v1-defeasible-closure-by-claude)
+  (normally r-cl-chain-v1-defeasible-closure-by-claude state-claimed-v1-defeasible-closure-by-claude claimed-defeasible-closure)
+)
+
+;; Propagation rules: failures in 'defeasible-closure' block downstream tasks
+(normally r-propagate-reason-function-from-defeasible-closure-failed failed-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-reason-function-from-defeasible-closure-permanently-failed permanently-failed-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-reason-function-from-defeasible-closure-stale-v1 stale-v1-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-reason-function-from-defeasible-closure-timeout-v1 timeout-v1-defeasible-closure upstream-blocked-reason-function)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:41:55Z"
+  (given completed-defeasible-closure)
+  (given eval-result-v1-defeasible-closure-by-claude)
+  (given eval-confidence-v1-defeasible-closure-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:42:01Z"
+  (given delegated-v1-reason-function-to-agent:claude)
+  (given (during (leased-v1-reason-function) (moment "2026-03-20T11:42:01Z") (moment "2026-03-20T12:12:01Z")))
+  (given claim-v1-reason-function-by-claude)
+  (normally r-cl-state-v1-reason-function-by-claude claim-v1-reason-function-by-claude state-claimed-v1-reason-function-by-claude)
+  (normally r-cl-chain-v1-reason-function-by-claude state-claimed-v1-reason-function-by-claude claimed-reason-function)
+)
+
+;; Propagation rules: failures in 'reason-function' block downstream tasks
+(normally r-propagate-encode-rust-tests-from-reason-function-failed failed-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-encode-rust-tests-from-reason-function-permanently-failed permanently-failed-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-encode-rust-tests-from-reason-function-stale-v1 stale-v1-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-encode-rust-tests-from-reason-function-timeout-v1 timeout-v1-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-smoke-tests-from-reason-function-failed failed-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-smoke-tests-from-reason-function-permanently-failed permanently-failed-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-smoke-tests-from-reason-function-stale-v1 stale-v1-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-smoke-tests-from-reason-function-timeout-v1 timeout-v1-reason-function upstream-blocked-smoke-tests)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:47:51Z"
+  (given completed-reason-function)
+  (given eval-result-v1-reason-function-by-claude)
+  (given eval-confidence-v1-reason-function-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:47:57Z"
+  (given delegated-v1-smoke-tests-to-agent:claude)
+  (given (during (leased-v1-smoke-tests) (moment "2026-03-20T11:47:57Z") (moment "2026-03-20T12:17:57Z")))
+  (given claim-v1-smoke-tests-by-claude)
+  (normally r-cl-state-v1-smoke-tests-by-claude claim-v1-smoke-tests-by-claude state-claimed-v1-smoke-tests-by-claude)
+  (normally r-cl-chain-v1-smoke-tests-by-claude state-claimed-v1-smoke-tests-by-claude claimed-smoke-tests)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T11:51:53Z"
+  (given completed-smoke-tests)
+  (given eval-result-v1-smoke-tests-by-claude)
+  (given eval-confidence-v1-smoke-tests-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T11:51:59Z"
+  (given delegated-v1-encode-rust-tests-to-agent:claude)
+  (given (during (leased-v1-encode-rust-tests) (moment "2026-03-20T11:51:59Z") (moment "2026-03-20T12:21:59Z")))
+  (given claim-v1-encode-rust-tests-by-claude)
+  (normally r-cl-state-v1-encode-rust-tests-by-claude claim-v1-encode-rust-tests-by-claude state-claimed-v1-encode-rust-tests-by-claude)
+  (normally r-cl-chain-v1-encode-rust-tests-by-claude state-claimed-v1-encode-rust-tests-by-claude claimed-encode-rust-tests)
+)
+
+;; Propagation rules: failures in 'encode-rust-tests' block downstream tasks
+(normally r-propagate-diff-harness-from-encode-rust-tests-failed failed-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-encode-rust-tests-permanently-failed permanently-failed-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-encode-rust-tests-stale-v1 stale-v1-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-encode-rust-tests-timeout-v1 timeout-v1-encode-rust-tests upstream-blocked-diff-harness)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T12:03:05Z"
+  (given completed-encode-rust-tests)
+  (given eval-result-v1-encode-rust-tests-by-claude)
+  (given eval-confidence-v1-encode-rust-tests-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T12:03:11Z"
+  (given delegated-v1-lean-oracle-to-agent:claude)
+  (given (during (leased-v1-lean-oracle) (moment "2026-03-20T12:03:11Z") (moment "2026-03-20T12:33:11Z")))
+  (given claim-v1-lean-oracle-by-claude)
+  (normally r-cl-state-v1-lean-oracle-by-claude claim-v1-lean-oracle-by-claude state-claimed-v1-lean-oracle-by-claude)
+  (normally r-cl-chain-v1-lean-oracle-by-claude state-claimed-v1-lean-oracle-by-claude claimed-lean-oracle)
+)
+
+;; Propagation rules: failures in 'lean-oracle' block downstream tasks
+(normally r-propagate-diff-harness-from-lean-oracle-failed failed-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-permanently-failed permanently-failed-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-stale-v1 stale-v1-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-timeout-v1 timeout-v1-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-blocked upstream-blocked-lean-oracle upstream-blocked-diff-harness)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T12:08:37Z"
+  (given completed-lean-oracle)
+  (given eval-result-v1-lean-oracle-by-claude)
+  (given eval-confidence-v1-lean-oracle-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T12:08:43Z"
+  (given delegated-v1-diff-harness-to-agent:claude)
+  (given (during (leased-v1-diff-harness) (moment "2026-03-20T12:08:43Z") (moment "2026-03-20T12:38:43Z")))
+  (given claim-v1-diff-harness-by-claude)
+  (normally r-cl-state-v1-diff-harness-by-claude claim-v1-diff-harness-by-claude state-claimed-v1-diff-harness-by-claude)
+  (normally r-cl-chain-v1-diff-harness-by-claude state-claimed-v1-diff-harness-by-claude claimed-diff-harness)
+)
+
+;; Propagation rules: failures in 'diff-harness' block downstream tasks
+(normally r-propagate-ci-pipeline-from-diff-harness-failed failed-diff-harness upstream-blocked-ci-pipeline)
+(normally r-propagate-ci-pipeline-from-diff-harness-permanently-failed permanently-failed-diff-harness upstream-blocked-ci-pipeline)
+(normally r-propagate-ci-pipeline-from-diff-harness-stale-v1 stale-v1-diff-harness upstream-blocked-ci-pipeline)
+(normally r-propagate-ci-pipeline-from-diff-harness-timeout-v1 timeout-v1-diff-harness upstream-blocked-ci-pipeline)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T12:13:18Z"
+  (given completed-diff-harness)
+  (given eval-result-v1-diff-harness-by-claude)
+  (given eval-confidence-v1-diff-harness-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T12:13:23Z"
+  (given delegated-v1-prove-definite-soundness-to-agent:claude)
+  (given (during (leased-v1-prove-definite-soundness) (moment "2026-03-20T12:13:23Z") (moment "2026-03-20T12:43:23Z")))
+  (given claim-v1-prove-definite-soundness-by-claude)
+  (normally r-cl-state-v1-prove-definite-soundness-by-claude claim-v1-prove-definite-soundness-by-claude state-claimed-v1-prove-definite-soundness-by-claude)
+  (normally r-cl-chain-v1-prove-definite-soundness-by-claude state-claimed-v1-prove-definite-soundness-by-claude claimed-prove-definite-soundness)
+)
+
+;; Propagation rules: failures in 'prove-definite-soundness' block downstream tasks
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-failed failed-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-permanently-failed permanently-failed-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-stale-v1 stale-v1-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-timeout-v1 timeout-v1-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-blocked upstream-blocked-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-blocked upstream-blocked-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-blocked upstream-blocked-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-blocked upstream-blocked-prove-defeasible-completeness upstream-blocked-prove-consistency)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T12:44:34Z"
+  (given stale-v1-prove-definite-soundness)
+  (normally r-stale-v1-prove-definite-soundness stale-v1-prove-definite-soundness (not claimed-prove-definite-soundness))
+  (prefer r-stale-v1-prove-definite-soundness r-cl-chain-v1-prove-definite-soundness-by-claude)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T12:44:34Z"
+  (given failed-prove-definite-soundness)
+  (given eval-result-v1-prove-definite-soundness-by-claude)
+  (given eval-confidence-v1-prove-definite-soundness-0.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T12:44:39Z"
+  (given delegated-v1-prove-defeater-asymmetry-to-agent:claude)
+  (given (during (leased-v1-prove-defeater-asymmetry) (moment "2026-03-20T12:44:39Z") (moment "2026-03-20T13:14:39Z")))
+  (given claim-v1-prove-defeater-asymmetry-by-claude)
+  (normally r-cl-state-v1-prove-defeater-asymmetry-by-claude claim-v1-prove-defeater-asymmetry-by-claude state-claimed-v1-prove-defeater-asymmetry-by-claude)
+  (normally r-cl-chain-v1-prove-defeater-asymmetry-by-claude state-claimed-v1-prove-defeater-asymmetry-by-claude claimed-prove-defeater-asymmetry)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T12:47:44Z"
+  (given completed-prove-defeater-asymmetry)
+  (given eval-result-v1-prove-defeater-asymmetry-by-claude)
+  (given eval-confidence-v1-prove-defeater-asymmetry-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T12:47:49Z"
+  (given delegated-v1-prove-termination-to-agent:claude)
+  (given (during (leased-v1-prove-termination) (moment "2026-03-20T12:47:49Z") (moment "2026-03-20T13:17:49Z")))
+  (given claim-v1-prove-termination-by-claude)
+  (normally r-cl-state-v1-prove-termination-by-claude claim-v1-prove-termination-by-claude state-claimed-v1-prove-termination-by-claude)
+  (normally r-cl-chain-v1-prove-termination-by-claude state-claimed-v1-prove-termination-by-claude claimed-prove-termination)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T13:08:14Z"
+  (given stale-v1-prove-termination)
+  (normally r-stale-v1-prove-termination stale-v1-prove-termination (not claimed-prove-termination))
+  (prefer r-stale-v1-prove-termination r-cl-chain-v1-prove-termination-by-claude)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T13:08:14Z"
+  (given failed-prove-termination)
+  (given eval-result-v1-prove-termination-by-claude)
+  (given eval-confidence-v1-prove-termination-0.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T13:08:19Z"
+  (given delegated-v1-ci-pipeline-to-agent:claude)
+  (given (during (leased-v1-ci-pipeline) (moment "2026-03-20T13:08:19Z") (moment "2026-03-20T13:38:19Z")))
+  (given claim-v1-ci-pipeline-by-claude)
+  (normally r-cl-state-v1-ci-pipeline-by-claude claim-v1-ci-pipeline-by-claude state-claimed-v1-ci-pipeline-by-claude)
+  (normally r-cl-chain-v1-ci-pipeline-by-claude state-claimed-v1-ci-pipeline-by-claude claimed-ci-pipeline)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T13:09:22Z"
+  (given completed-ci-pipeline)
+  (given eval-result-v1-ci-pipeline-by-claude)
+  (given eval-confidence-v1-ci-pipeline-1.00)
+)
+
+(claims agent:claude
+  :at "2026-03-20T21:36:44Z"
+  (given claim-v1-prove-definite-soundness)
+  (normally r-cl-state-v1-prove-definite-soundness claim-v1-prove-definite-soundness state-claimed-v1-prove-definite-soundness)
+  (normally r-cl-chain-v1-prove-definite-soundness state-claimed-v1-prove-definite-soundness claimed-prove-definite-soundness)
+)
+
+(claims agent:claude
+  :at "2026-03-20T21:37:51Z"
+  (given claim-v1-prove-termination)
+  (normally r-cl-state-v1-prove-termination claim-v1-prove-termination state-claimed-v1-prove-termination)
+  (normally r-cl-chain-v1-prove-termination state-claimed-v1-prove-termination claimed-prove-termination)
+)
+
+(claims agent:claude
+  :at "2026-03-20T21:39:13Z"
+  (given completed-prove-definite-soundness))
+
+(claims agent:claude
+  :at "2026-03-20T21:39:14Z"
+  (given completed-prove-termination))
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T21:39:16Z"
+  (given delegated-v1-prove-definite-completeness-to-agent:claude)
+  (given (during (leased-v1-prove-definite-completeness) (moment "2026-03-20T21:39:16Z") (moment "2026-03-20T22:09:16Z")))
+  (given claim-v1-prove-definite-completeness-by-claude)
+  (normally r-cl-state-v1-prove-definite-completeness-by-claude claim-v1-prove-definite-completeness-by-claude state-claimed-v1-prove-definite-completeness-by-claude)
+  (normally r-cl-chain-v1-prove-definite-completeness-by-claude state-claimed-v1-prove-definite-completeness-by-claude claimed-prove-definite-completeness)
+)
+
+;; Propagation rules: failures in 'prove-definite-completeness' block downstream tasks
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-failed failed-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-permanently-failed permanently-failed-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-stale-v1 stale-v1-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-timeout-v1 timeout-v1-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+
+(claims agent:claude
+  :at "2026-03-20T21:40:19Z"
+  (given (not failed-prove-definite-soundness)))
+
+(claims agent:claude
+  :at "2026-03-20T21:40:31Z"
+  (given (not stale-v1-prove-definite-soundness)))
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T21:45:30Z"
+  (given completed-prove-definite-completeness)
+  (given eval-result-v1-prove-definite-completeness-by-claude)
+  (given eval-confidence-v1-prove-definite-completeness-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T21:45:36Z"
+  (given delegated-v1-prove-defeasible-soundness-to-agent:claude)
+  (given (during (leased-v1-prove-defeasible-soundness) (moment "2026-03-20T21:45:36Z") (moment "2026-03-20T22:15:36Z")))
+  (given claim-v1-prove-defeasible-soundness-by-claude)
+  (normally r-cl-state-v1-prove-defeasible-soundness-by-claude claim-v1-prove-defeasible-soundness-by-claude state-claimed-v1-prove-defeasible-soundness-by-claude)
+  (normally r-cl-chain-v1-prove-defeasible-soundness-by-claude state-claimed-v1-prove-defeasible-soundness-by-claude claimed-prove-defeasible-soundness)
+)
+
+;; Propagation rules: failures in 'prove-defeasible-soundness' block downstream tasks
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-failed failed-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-permanently-failed permanently-failed-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-stale-v1 stale-v1-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-timeout-v1 timeout-v1-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+
+(claims agent:claude
+  :at "2026-03-20T22:00:51Z"
+  (given claim-v1-prove-defeasible-soundness)
+  (normally r-cl-state-v1-prove-defeasible-soundness claim-v1-prove-defeasible-soundness state-claimed-v1-prove-defeasible-soundness)
+  (normally r-cl-chain-v1-prove-defeasible-soundness state-claimed-v1-prove-defeasible-soundness claimed-prove-defeasible-soundness)
+)
+
+;; (duplicate propagation rules removed)
+
+(claims agent:claude
+  :at "2026-03-20T22:01:36Z"
+  (given completed-prove-defeasible-soundness))
+
+(claims agent:claude
+  :at "2026-03-20T22:01:41Z"
+  (given claim-v1-prove-defeasible-completeness)
+  (normally r-cl-state-v1-prove-defeasible-completeness claim-v1-prove-defeasible-completeness state-claimed-v1-prove-defeasible-completeness)
+  (normally r-cl-chain-v1-prove-defeasible-completeness state-claimed-v1-prove-defeasible-completeness claimed-prove-defeasible-completeness)
+)
+
+;; Propagation rules: failures in 'prove-defeasible-completeness' block downstream tasks
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-failed failed-prove-defeasible-completeness upstream-blocked-prove-consistency)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-permanently-failed permanently-failed-prove-defeasible-completeness upstream-blocked-prove-consistency)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-stale-v1 stale-v1-prove-defeasible-completeness upstream-blocked-prove-consistency)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-timeout-v1 timeout-v1-prove-defeasible-completeness upstream-blocked-prove-consistency)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T22:06:03Z"
+  (given stale-v1-prove-defeasible-soundness)
+  (normally r-stale-v1-prove-defeasible-soundness stale-v1-prove-defeasible-soundness (not claimed-prove-defeasible-soundness))
+  (prefer r-stale-v1-prove-defeasible-soundness r-cl-chain-v1-prove-defeasible-soundness-by-claude)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T22:06:03Z"
+  (given failed-prove-defeasible-soundness)
+  (given eval-result-v1-prove-defeasible-soundness-by-claude)
+  (given eval-confidence-v1-prove-defeasible-soundness-0.00)
+)
+
+(claims agent:claude
+  :at "2026-03-20T22:09:53Z"
+  (given completed-prove-defeasible-completeness))
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T22:09:55Z"
+  (given delegated-v1-prove-consistency-to-agent:claude)
+  (given (during (leased-v1-prove-consistency) (moment "2026-03-20T22:09:55Z") (moment "2026-03-20T22:39:55Z")))
+  (given claim-v1-prove-consistency-by-claude)
+  (normally r-cl-state-v1-prove-consistency-by-claude claim-v1-prove-consistency-by-claude state-claimed-v1-prove-consistency-by-claude)
+  (normally r-cl-chain-v1-prove-consistency-by-claude state-claimed-v1-prove-consistency-by-claude claimed-prove-consistency)
+)
+
+(claims agent:claude
+  :at "2026-03-20T22:10:14Z"
+  (given (not failed-prove-defeasible-soundness)))
+
+(claims agent:claude
+  :at "2026-03-20T22:10:14Z"
+  (given (not stale-v1-prove-defeasible-soundness)))
+
+(claims agent:claude
+  :at "2026-03-20T22:10:14Z"
+  (given (not failed-prove-termination)))
+
+(claims agent:claude
+  :at "2026-03-20T22:10:14Z"
+  (given (not stale-v1-prove-termination)))
+
+(claims agent:claude
+  :at "2026-03-20T22:12:55Z"
+  (given claim-v1-prove-consistency)
+  (normally r-cl-state-v1-prove-consistency claim-v1-prove-consistency state-claimed-v1-prove-consistency)
+  (normally r-cl-chain-v1-prove-consistency state-claimed-v1-prove-consistency claimed-prove-consistency)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T22:29:19Z"
+  (given completed-prove-consistency)
+  (given eval-result-v1-prove-consistency-by-claude)
+  (given eval-confidence-v1-prove-consistency-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T22:29:25Z"
+  (given delegated-v1-ambiguity-blocking-to-agent:claude)
+  (given (during (leased-v1-ambiguity-blocking) (moment "2026-03-20T22:29:25Z") (moment "2026-03-20T22:59:25Z")))
+  (given claim-v1-ambiguity-blocking-by-claude)
+  (normally r-cl-state-v1-ambiguity-blocking-by-claude claim-v1-ambiguity-blocking-by-claude state-claimed-v1-ambiguity-blocking-by-claude)
+  (normally r-cl-chain-v1-ambiguity-blocking-by-claude state-claimed-v1-ambiguity-blocking-by-claude claimed-ambiguity-blocking)
+)
+
+;; Propagation rules: failures in 'ambiguity-blocking' block downstream tasks
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-failed failed-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-permanently-failed permanently-failed-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-stale-v1 stale-v1-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-timeout-v1 timeout-v1-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-blocked upstream-blocked-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+
+(claims agent:claude
+  :at "2026-03-20T22:42:00Z"
+  (given claim-v1-ambiguity-blocking)
+  (normally r-cl-state-v1-ambiguity-blocking claim-v1-ambiguity-blocking state-claimed-v1-ambiguity-blocking)
+  (normally r-cl-chain-v1-ambiguity-blocking state-claimed-v1-ambiguity-blocking claimed-ambiguity-blocking)
+)
+
+;; (duplicate propagation rules removed)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T22:44:25Z"
+  (given (during (leased-v1-ambiguity-blocking) (moment "2026-03-20T22:44:25Z") (moment "2026-03-20T23:14:25Z")))
+  (given lease-renewal-v1-ambiguity-blocking-by-claude-r1)
+)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T22:47:14Z"
+  (given completed-ambiguity-blocking)
+  (given eval-result-v1-ambiguity-blocking-by-claude)
+  (given eval-confidence-v1-ambiguity-blocking-1.00)
+)
+
+(claims supervisor:ed25519:xfRAzZFG
+  :at "2026-03-20T22:58:51Z"
+  (given delegated-v1-ambiguity-propagation-to-agent:claude)
+  (given (during (leased-v1-ambiguity-propagation) (moment "2026-03-20T22:58:51Z") (moment "2026-03-20T23:28:51Z")))
+  (given claim-v1-ambiguity-propagation-by-claude)
+  (normally r-cl-state-v1-ambiguity-propagation-by-claude claim-v1-ambiguity-propagation-by-claude state-claimed-v1-ambiguity-propagation-by-claude)
+  (normally r-cl-chain-v1-ambiguity-propagation-by-claude state-claimed-v1-ambiguity-propagation-by-claude claimed-ambiguity-propagation)
+)
+
+(claims agent:claude
+  :at "2026-03-20T22:59:08Z"
+  (given claim-v1-ambiguity-propagation)
+  (normally r-cl-state-v1-ambiguity-propagation claim-v1-ambiguity-propagation state-claimed-v1-ambiguity-propagation)
+  (normally r-cl-chain-v1-ambiguity-propagation state-claimed-v1-ambiguity-propagation claimed-ambiguity-propagation)
+)
+
+(claims agent:claude
+  :at "2026-03-20T23:04:09Z"
+  (given completed-ambiguity-propagation))

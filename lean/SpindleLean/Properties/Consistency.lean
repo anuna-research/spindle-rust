@@ -1,160 +1,233 @@
-import SpindleLean.Properties.Completeness
+import SpindleLean.Closure.Partial
+import SpindleLean.Properties.Soundness
 
 /-!
 # SpindleLean.Properties.Consistency
 
-Tag consistency and level coherence for the definite and defeasible closures.
+Tag consistency and level coherence for the DL(d) closure computation.
 
-## Main results
+## Tag consistency
 
-### Tag consistency
-- `definite_consistency`: `+D q` and `-D q` cannot both hold for any literal `q`.
-- `defeasible_consistency`: `+d q` and `-d q` cannot both hold for any literal `q`.
+For any theory and literal `q`:
+- `+D q` and `-D q` cannot both hold.
+- `+d q` and `-d q` cannot both hold.
 
-### Level coherence
-- `level_coherence_plusD`: `+D q` implies `+d q` or `+D ~q`.
-- `level_coherence_minusd`: `-d q` implies `-D q` or `+D ~q`.
+## Level coherence
 
-## Proof strategy
-
-Tag consistency at the definite level follows directly from the definition of `-D`
-as the complement of `+D` within the theory's literals.
-
-Tag consistency at the defeasible level is established by maintaining a disjointness
-invariant through `lambdaStep` and `lambdaLoop`: the `+d` and `-d` sets start disjoint
-(seeds), and each step preserves disjointness because (1) new literals come from the
-undecided set (disjoint from both `+d` and `-d`), (2) new `-d` literals are explicitly
-filtered against new `+d` literals.
-
-Level coherence follows from the seeding strategy: `+D q` seeds `+d q` unless `+D ~q`
-also holds, and the contrapositive gives `-d q → -D q ∨ +D ~q`.
+The definite and defeasible levels are coherent:
+- `+D q` implies `+d q` (when the theory is consistent at `~q`).
+- `¬(+d q)` implies `¬(+D q) ∨ +D ~q`.
 -/
 
 namespace Consistency
 
-open Delta Lambda
+open Delta Lambda Soundness
 
-/-! ### Helper lemmas -/
+/-! ### Tag consistency: definite level (+D / -D) -/
 
-private theorem contains_of_mem {l : Literal} {s : List Literal}
-    (h : l ∈ s) : s.contains l = true :=
-  List.elem_eq_true_of_mem h
+/-- **+D / -D tag consistency**: if `q ∈ +D`, then `q ∉ -D`.
 
-/-! ### Definite tag consistency -/
+    Proof: `-D` is defined as `allLiterals t` filtered by `¬(+D.contains q)`.
+    Since `q ∈ +D`, `contains` is `true`, so the filter excludes `q`. -/
+theorem plusD_minusD_exclusive (t : Theory) (fuel : Nat) (q : Literal)
+    (hpD : q ∈ computePlusD t fuel) :
+    q ∉ computeMinusD t fuel := by
+  intro h
+  simp only [computeMinusD, List.mem_filter] at h
+  simp only [Bool.not_eq_true'] at h
+  exact (Bool.eq_false_iff.mp h.2) (List.contains_iff_mem.mpr hpD)
 
-/-- **Definite Consistency**: `+D q` and `-D q` cannot both hold.
-    Follows directly from the definition of `-D` as `allLiterals \ +D`. -/
-theorem definite_consistency (t : Theory) (fuel : Nat) (q : Literal) :
-    q ∈ computePlusD t fuel → q ∉ computeMinusD t fuel := by
-  intro hplus hminus
-  simp only [computeMinusD, List.mem_filter, Bool.not_eq_true'] at hminus
-  exact absurd (contains_of_mem hplus) (Bool.eq_false_iff.mp hminus.2)
+/-- **-D/+D tag consistency** (symmetric): if `q ∈ -D`, then `q ∉ +D`. -/
+theorem minusD_plusD_exclusive (t : Theory) (fuel : Nat) (q : Literal)
+    (hmD : q ∈ computeMinusD t fuel) :
+    q ∉ computePlusD t fuel :=
+  fun hpD => plusD_minusD_exclusive t fuel q hpD hmD
 
-/-- Equivalent formulation: `+D` and `-D` are mutually exclusive. -/
-theorem definite_consistency' (t : Theory) (fuel : Nat) (q : Literal) :
-    ¬(q ∈ computePlusD t fuel ∧ q ∈ computeMinusD t fuel) :=
-  fun ⟨h1, h2⟩ => definite_consistency t fuel q h1 h2
+/-! ### Tag consistency: defeasible level (+d / -d)
 
-/-! ### Defeasible tag consistency -/
+The defeasible closure keeps `+d` and `-d` disjoint throughout iteration.
+New elements are drawn from the "undecided" pool (not in either set), and
+`newMinusd` explicitly excludes `newPlusd` members.
+-/
 
-/-- The initial `+d` and `-d` seeds are disjoint. -/
-private theorem seeds_disjoint (t : Theory) (plusD : List Literal) (l : Literal) :
-    l ∈ seedPlusd plusD → l ∉ seedMinusd t plusD := by
-  intro hp hm
-  simp only [seedPlusd, List.mem_filter, Bool.not_eq_true'] at hp
-  simp only [seedMinusd, List.mem_filter, Bool.and_eq_true, Bool.not_eq_true'] at hm
-  exact absurd hm.2.1 (Bool.eq_false_iff.mp hp.2)
+/-- Helper: `lambdaStep` preserves disjointness of `+d` and `-d`.
+    If the input sets are disjoint (via `contains`), the output sets are too. -/
+private theorem lambdaStep_preserves_disjoint (t : Theory) (plusD plusd minusd : List Literal)
+    (h_disj : ∀ l ∈ plusd, minusd.contains l = false)
+    (_h_disj2 : ∀ l ∈ minusd, plusd.contains l = false) :
+    (∀ l ∈ (lambdaStep t plusD plusd minusd).1,
+      (lambdaStep t plusD plusd minusd).2.contains l = false) := by
+  intro l hl
+  simp only [lambdaStep] at hl ⊢
+  -- Goal: (minusd ++ newMinusd.filter ...).contains l = false
+  apply Bool.eq_false_iff.mpr
+  intro hc
+  have hm := List.contains_iff_mem.mp hc
+  rcases List.mem_append.mp hl with h_old | h_new
+  · -- l ∈ old plusd
+    rcases List.mem_append.mp hm with h1 | h2
+    · -- l ∈ minusd: contradicts h_disj
+      exact absurd (List.contains_iff_mem.mpr h1) (Bool.eq_false_iff.mp (h_disj l h_old))
+    · -- l in newMinusd.filter: l was in undecided which has !plusd.contains l
+      have h_filt := List.mem_filter.mp h2
+      have h_nm_inner := List.mem_filter.mp h_filt.1
+      simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_nm_inner
+      have h_undec := List.mem_filter.mp h_nm_inner.1
+      simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_undec
+      -- h_undec.2.1 : plusd.contains l = false, but l ∈ plusd
+      exact absurd (List.contains_iff_mem.mpr h_old) (Bool.eq_false_iff.mp h_undec.2.1)
+  · -- l ∈ newPlusd.filter
+    have h_filt := List.mem_filter.mp h_new
+    have h_np := h_filt.1  -- l ∈ newPlusd = undecided.filter canProve
+    have h_np_filt := List.mem_filter.mp h_np
+    have h_undec := h_np_filt.1  -- l ∈ undecided
+    have h_undec_filt := List.mem_filter.mp h_undec
+    simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_undec_filt
+    rcases List.mem_append.mp hm with h1 | h2
+    · -- l ∈ minusd: contradicts undecided having !minusd.contains l
+      exact absurd (List.contains_iff_mem.mpr h1) (Bool.eq_false_iff.mp h_undec_filt.2.2)
+    · -- l in newMinusd.filter: newMinusd filters with !newPlusd.contains l
+      have h_nm := List.mem_filter.mp h2
+      have h_nm2 := List.mem_filter.mp h_nm.1
+      simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_nm2
+      -- h_nm2.2.1 : newPlusd.contains l = false, but l ∈ newPlusd
+      exact absurd (List.contains_iff_mem.mpr h_np) (Bool.eq_false_iff.mp h_nm2.2.1)
 
-/-- `lambdaStep` preserves disjointness of `+d` and `-d`.
-
-    The proof uses a 4-case analysis on whether `l` comes from the old set or the
-    new additions in each component:
-    1. Old `+d` ∩ Old `-d`: contradicts the hypothesis.
-    2. Old `+d` ∩ New `-d`: new `-d` ⊆ undecided ⊆ complement of `+d`.
-    3. New `+d` ∩ Old `-d`: new `+d` ⊆ undecided ⊆ complement of `-d`.
-    4. New `+d` ∩ New `-d`: new `-d` is filtered against new `+d`. -/
-theorem lambdaStep_disjoint (t : Theory) (plusD plusd minusd : List Literal)
-    (hdisj : ∀ l, l ∈ plusd → l ∉ minusd) :
-    ∀ l, l ∈ (lambdaStep t plusD plusd minusd).1 →
-         l ∉ (lambdaStep t plusD plusd minusd).2 := by
-  intro l h1 h2
-  simp only [lambdaStep] at h1 h2
-  rcases List.mem_append.mp h1 with h1_old | h1_new <;>
-    rcases List.mem_append.mp h2 with h2_old | h2_new
-  · -- Case 1: l ∈ plusd ∧ l ∈ minusd
-    exact hdisj l h1_old h2_old
-  · -- Case 2: l ∈ plusd ∧ l ∈ newMinusd (filtered)
-    -- newMinusd ⊆ undecided, which requires plusd.contains l = false
-    have hf1 := (List.mem_filter.mp h2_new).1
-    have hf2 := (List.mem_filter.mp hf1).1
-    have hcond := (List.mem_filter.mp hf2).2
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hcond
-    exact absurd (contains_of_mem h1_old) (Bool.eq_false_iff.mp hcond.1)
-  · -- Case 3: l ∈ newPlusd (filtered) ∧ l ∈ minusd
-    -- newPlusd ⊆ undecided, which requires minusd.contains l = false
-    have hf1 := (List.mem_filter.mp h1_new).1
-    have hf2 := (List.mem_filter.mp hf1).1
-    have hcond := (List.mem_filter.mp hf2).2
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hcond
-    exact absurd (contains_of_mem h2_old) (Bool.eq_false_iff.mp hcond.2)
-  · -- Case 4: l ∈ newPlusd (filtered) ∧ l ∈ newMinusd (filtered)
-    -- l ∈ newPlusd → newPlusd.contains l = true
-    -- newMinusd filter requires !newPlusd.contains l → contradiction
-    have h_in_np := (List.mem_filter.mp h1_new).1
-    have h_np_contains := contains_of_mem h_in_np
-    have hf_nm := (List.mem_filter.mp h2_new).1
-    have hcond_nm := (List.mem_filter.mp hf_nm).2
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hcond_nm
-    exact absurd h_np_contains (Bool.eq_false_iff.mp hcond_nm.1)
-
-/-- `lambdaLoop` preserves disjointness of `+d` and `-d`, by induction on fuel. -/
-theorem lambdaLoop_disjoint (t : Theory) (plusD plusd minusd : List Literal) (fuel : Nat)
-    (hdisj : ∀ l, l ∈ plusd → l ∉ minusd) :
-    ∀ l, l ∈ (lambdaLoop t plusD plusd minusd fuel).1 →
-         l ∉ (lambdaLoop t plusD plusd minusd fuel).2 := by
+/-- Helper: `lambdaLoop` preserves disjointness throughout iteration. -/
+private theorem lambdaLoop_preserves_disjoint (t : Theory) (plusD plusd minusd : List Literal)
+    (fuel : Nat)
+    (h_disj : ∀ l ∈ plusd, minusd.contains l = false)
+    (h_disj2 : ∀ l ∈ minusd, plusd.contains l = false) :
+    ∀ l ∈ (lambdaLoop t plusD plusd minusd fuel).1,
+      (lambdaLoop t plusD plusd minusd fuel).2.contains l = false := by
   induction fuel generalizing plusd minusd with
-  | zero => exact hdisj
+  | zero =>
+    simp only [lambdaLoop]
+    exact h_disj
   | succ n ih =>
     simp only [lambdaLoop]
     split
-    · exact hdisj
-    · exact ih _ _ (lambdaStep_disjoint t plusD plusd minusd hdisj)
+    · exact h_disj
+    · apply ih
+      · exact lambdaStep_preserves_disjoint t plusD plusd minusd h_disj h_disj2
+      · -- Need symmetric disjointness for the step output
+        intro l hl
+        simp only [lambdaStep] at hl ⊢
+        apply Bool.eq_false_iff.mpr
+        intro hc
+        have hm := List.contains_iff_mem.mp hc
+        rcases List.mem_append.mp hl with h_old | h_new
+        · -- l ∈ old minusd
+          rcases List.mem_append.mp hm with h1 | h2
+          · -- l ∈ plusd: contradicts h_disj2
+            exact absurd (List.contains_iff_mem.mpr h1) (Bool.eq_false_iff.mp (h_disj2 l h_old))
+          · -- l in newPlusd.filter: l was in undecided which has !minusd.contains l
+            have h_filt := List.mem_filter.mp h2
+            have h_np := List.mem_filter.mp h_filt.1
+            have h_undec := List.mem_filter.mp h_np.1
+            simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_undec
+            -- h_undec.2.2 : minusd.contains l = false, but l ∈ minusd
+            exact absurd (List.contains_iff_mem.mpr h_old) (Bool.eq_false_iff.mp h_undec.2.2)
+        · -- l ∈ newMinusd.filter: l came from undecided (!plusd.contains l)
+          have h_filt := List.mem_filter.mp h_new
+          have h_nm_inner := List.mem_filter.mp h_filt.1
+          simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_nm_inner
+          have h_undec_nm := List.mem_filter.mp h_nm_inner.1
+          simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_undec_nm
+          rcases List.mem_append.mp hm with h1 | h2
+          · -- l ∈ plusd: contradicts undecided having !plusd.contains l
+            exact absurd (List.contains_iff_mem.mpr h1) (Bool.eq_false_iff.mp h_undec_nm.2.1)
+          · -- l ∈ newPlusd.filter: l ∈ newPlusd, but newMinusd filters with !newPlusd.contains l
+            have h_np_filt := List.mem_filter.mp h2
+            have h_np := h_np_filt.1  -- l ∈ newPlusd
+            -- h_nm_inner.2.1 : newPlusd.contains l = false, but l ∈ newPlusd
+            exact absurd (List.contains_iff_mem.mpr h_np) (Bool.eq_false_iff.mp h_nm_inner.2.1)
 
-/-- **Defeasible Consistency**: `+d q` and `-d q` cannot both hold. -/
-theorem defeasible_consistency (t : Theory) (fuel : Nat) (q : Literal) :
-    q ∈ computePlusd t fuel → q ∉ computeMinusd t fuel := by
-  intro h1 h2
-  simp only [computePlusd, computeMinusd, computeDefeasible] at h1 h2
-  exact lambdaLoop_disjoint t _ _ _ fuel (seeds_disjoint t _) q h1 h2
+/-- Seeds are disjoint: `seedPlusd` and `seedMinusd` have no common elements. -/
+private theorem seeds_disjoint (t : Theory) (plusD : List Literal) :
+    ∀ l ∈ seedPlusd plusD, (seedMinusd t plusD).contains l = false := by
+  intro l hl
+  simp only [seedPlusd, List.mem_filter] at hl
+  obtain ⟨_, h_no_comp⟩ := hl
+  simp only [Bool.not_eq_true'] at h_no_comp
+  -- l ∈ seedPlusd: +D l and ¬(+D ~l)
+  -- seedMinusd requires: +D ~l, so l can't be in seedMinusd
+  apply Bool.eq_false_iff.mpr
+  intro hc
+  have hm := List.contains_iff_mem.mp hc
+  simp only [seedMinusd, List.mem_filter] at hm
+  obtain ⟨_, h_comp_def⟩ := hm
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_comp_def
+  exact absurd h_comp_def.1 (Bool.eq_false_iff.mp h_no_comp)
 
-/-- Equivalent formulation: `+d` and `-d` are mutually exclusive. -/
-theorem defeasible_consistency' (t : Theory) (fuel : Nat) (q : Literal) :
-    ¬(q ∈ computePlusd t fuel ∧ q ∈ computeMinusd t fuel) :=
-  fun ⟨h1, h2⟩ => defeasible_consistency t fuel q h1 h2
+/-- Seeds symmetric disjointness. -/
+private theorem seeds_disjoint_sym (t : Theory) (plusD : List Literal) :
+    ∀ l ∈ seedMinusd t plusD, (seedPlusd plusD).contains l = false := by
+  intro l hl
+  simp only [seedMinusd, List.mem_filter] at hl
+  obtain ⟨_, h_comp⟩ := hl
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at h_comp
+  apply Bool.eq_false_iff.mpr
+  intro hc
+  have hm := List.contains_iff_mem.mp hc
+  simp only [seedPlusd, List.mem_filter] at hm
+  obtain ⟨_, h_no_comp⟩ := hm
+  simp only [Bool.not_eq_true'] at h_no_comp
+  -- seedMinusd has +D ~l, seedPlusd has ¬(+D ~l): contradiction
+  exact absurd h_comp.1 (Bool.eq_false_iff.mp h_no_comp)
+
+/-- **+d / -d tag consistency**: if `q ∈ +d`, then `q ∉ -d`.
+
+    Proof: the defeasible closure maintains disjointness of `+d` and `-d` as an
+    invariant through `lambdaLoop`. Seeds are disjoint (one requires `+D ~q`,
+    the other requires `¬(+D ~q)`), and each step draws from the undecided pool
+    with `newMinusd` explicitly excluding `newPlusd`. -/
+theorem plusd_minusd_exclusive (t : Theory) (fuel : Nat) (q : Literal)
+    (hpd : q ∈ computePlusd t fuel) :
+    q ∉ computeMinusd t fuel := by
+  simp only [computePlusd, computeMinusd, computeDefeasible] at hpd ⊢
+  intro hmd
+  have h := lambdaLoop_preserves_disjoint t (computePlusD t fuel)
+    (seedPlusd (computePlusD t fuel)) (seedMinusd t (computePlusD t fuel)) fuel
+    (seeds_disjoint t (computePlusD t fuel))
+    (seeds_disjoint_sym t (computePlusD t fuel))
+    q hpd
+  exact absurd (List.contains_iff_mem.mpr hmd) (Bool.eq_false_iff.mp h)
+
+/-- **-d/+d tag consistency** (symmetric): if `q ∈ -d`, then `q ∉ +d`. -/
+theorem minusd_plusd_exclusive (t : Theory) (fuel : Nat) (q : Literal)
+    (hmd : q ∈ computeMinusd t fuel) :
+    q ∉ computePlusd t fuel :=
+  fun hpd => plusd_minusd_exclusive t fuel q hpd hmd
 
 /-! ### Level coherence -/
 
-/-- **Level Coherence (+D → +d)**: if `+D q`, then either `+d q` or `+D ~q`.
+/-- **Level coherence (+D → +d)**: if `q` is definitely provable and its
+    complement is not, then `q` is defeasibly provable.
 
-    In a consistent theory (where `+D ~q` never holds when `+D q` does),
-    this reduces to the standard `+D q → +d q`. -/
-theorem level_coherence_plusD (t : Theory) (fuel : Nat) (q : Literal)
-    (h : q ∈ computePlusD t fuel) :
-    q ∈ computePlusd t fuel ∨ q.complement ∈ computePlusD t fuel := by
-  cases hc : (computePlusD t fuel).contains q.complement
-  · exact Or.inl (plusD_subsumes_plusd t fuel q h hc)
-  · exact Or.inr (List.contains_iff_mem.mp hc)
+    The condition `¬(+D ~q)` is necessary: if the definite closure is
+    inconsistent (both `+D q` and `+D ~q`), the defeasible phase does not
+    inherit `q` into `+d` because condition 2 of `+d` requires `-D ~q`. -/
+theorem plusD_implies_plusd (t : Theory) (fuel : Nat) (q : Literal)
+    (hpD : q ∈ computePlusD t fuel)
+    (h_comp : (computePlusD t fuel).contains q.complement = false) :
+    q ∈ computePlusd t fuel :=
+  Lambda.plusD_subsumes_plusd t fuel q hpD h_comp
 
-/-- **Level Coherence (-d → -D)**: if `-d q`, then either `-D q` or `+D ~q`.
+/-- **Level coherence (¬(+d) → ¬(+D) ∨ +D ~q)**: if `q` is not defeasibly
+    provable, then either `q` is not definitely provable, or the complement `~q`
+    is definitely provable (blocking the +d derivation).
 
-    Equivalently (contrapositive): `+D q ∧ -D ~q → +d q`. -/
-theorem level_coherence_minusd (t : Theory) (fuel : Nat) (q : Literal)
-    (h : q ∈ computeMinusd t fuel) :
+    Equivalently (by contrapositive of `plusD_implies_plusd`):
+    `+D q ∧ ¬(+D ~q) → +d q`. -/
+theorem not_plusd_implies_not_plusD_or_comp (t : Theory) (fuel : Nat) (q : Literal)
+    (h : q ∉ computePlusd t fuel) :
     q ∉ computePlusD t fuel ∨ q.complement ∈ computePlusD t fuel := by
-  by_cases hplusD : q ∈ computePlusD t fuel
-  · rcases level_coherence_plusD t fuel q hplusD with hplusd | hcomp
-    · exact absurd h (defeasible_consistency t fuel q hplusd)
+  rcases Classical.em (q ∈ computePlusD t fuel) with hpD | hnpD
+  · rcases Classical.em (q.complement ∈ computePlusD t fuel) with hcomp | hncomp
     · exact Or.inr hcomp
-  · exact Or.inl hplusD
+    · exact absurd (plusD_implies_plusd t fuel q hpD
+          (Bool.eq_false_iff.mpr (fun hc => hncomp (List.contains_iff_mem.mp hc)))) h
+  · exact Or.inl hnpD
 
 end Consistency

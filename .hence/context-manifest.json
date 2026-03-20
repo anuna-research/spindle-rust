@@ -1,11 +1,11 @@
 {
-  "task_id": "ambiguity-blocking",
+  "task_id": "prove-termination",
   "token_budget": 8000,
   "tokens_used": 351,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Formalize ambiguity blocking semantics (already the default mode from Phase 2). State and prove Ambiguity Locality theorem: if p and ~p are both -d (ambiguous), and rule r: => q has no body mentioning p or ~p, then q's provability is independent of the p/~p ambiguity. Test with theory: r1: => p, r2: => ~p, r3: => q — show q is +d.",
+      "content": "Prove the fixed-point computation terminates for any finite theory. Argument: each literal transitions from Unknown to decided at most once; only transitions enqueue work; number of literals is finite; total transitions bounded by 2*|literals| per phase. Provide explicit well-founded measure if Lean's termination checker needs it.",
       "token_cost": 83,
       "priority": "PlanMeta"
     },
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T22:29:25Z"
+  "constructed_at": "2026-03-20T12:47:49Z"
 }
