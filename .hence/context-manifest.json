@@ -1,12 +1,12 @@
 {
-  "task_id": "complement",
+  "task_id": "rule-classification",
   "token_budget": 8000,
-  "tokens_used": 270,
+  "tokens_used": 324,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define complement function on Literal that flips polarity. State and prove complement_involution: complement (complement l) = l for all Literal l. Proof should be by cases on l.",
-      "token_cost": 44,
+      "content": "Define rule-set functions: R(theory, q) returns all rules with head q; Rs(theory, q) returns strict rules with head q; Rsd(theory, q) returns strict or defeasible rules with head q. Define applicable(r, proved) checking all body literals are in proved list. Define discarded(r, disproved) checking some body literal is in disproved list.",
+      "token_cost": 84,
       "priority": "PlanMeta"
     },
     {
@@ -56,8 +56,14 @@
       "content": "Modified 1 files (+11, -5): .hence/context-manifest.json",
       "token_cost": 14,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-complement-changes",
+      "content": "Modified 1 files (+6, -1): lean/SpindleLean/Literal.lean",
+      "token_cost": 14,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:12:56Z"
+  "constructed_at": "2026-03-20T11:14:31Z"
 }

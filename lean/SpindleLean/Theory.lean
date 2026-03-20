@@ -70,4 +70,16 @@ def facts (t : Theory) : List Rule :=
 def rulesForHead (t : Theory) (l : Literal) : List Rule :=
   t.rules.filter fun r => r.head == l
 
+/-- `R` — all rules whose head matches literal `q`.
+    Alias for `rulesForHead`, matching the notation R(theory, q) from the literature. -/
+abbrev R := rulesForHead
+
+/-- `Rs` — all strict rules whose head matches literal `q`. -/
+def Rs (t : Theory) (q : Literal) : List Rule :=
+  t.rules.filter fun r => r.head == q && r.ruleType == .strict
+
+/-- `Rsd` — all strict or defeasible rules whose head matches literal `q`. -/
+def Rsd (t : Theory) (q : Literal) : List Rule :=
+  t.rules.filter fun r => r.head == q && (r.ruleType == .strict || r.ruleType == .defeasible)
+
 end Theory
