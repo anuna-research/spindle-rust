@@ -1189,3 +1189,39 @@
 (claims agent:claude
   :at "2026-03-20T23:04:09Z"
   (given completed-ambiguity-propagation))
+
+(claims agent:claude
+  :at "2026-03-20T23:05:15Z"
+  (given claim-v1-prove-confluence)
+  (normally r-cl-state-v1-prove-confluence claim-v1-prove-confluence state-claimed-v1-prove-confluence)
+  (normally r-cl-chain-v1-prove-confluence state-claimed-v1-prove-confluence claimed-prove-confluence)
+)
+
+;; Propagation rules: failures in 'prove-confluence' block downstream tasks
+(normally r-propagate-prove-equivalence-from-prove-confluence-failed failed-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-permanently-failed permanently-failed-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-stale-v1 stale-v1-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-timeout-v1 timeout-v1-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-blocked upstream-blocked-prove-confluence upstream-blocked-prove-equivalence)
+
+(claims evaluator:ed25519:3jB3fzQT
+  :at "2026-03-20T23:09:57Z"
+  (given completed-ambiguity-propagation)
+  (given eval-result-v1-ambiguity-propagation-by-claude)
+  (given eval-confidence-v1-ambiguity-propagation-1.00)
+)
+
+(claims agent:claude
+  :at "2026-03-20T23:11:11Z"
+  (given completed-prove-confluence))
+
+(claims agent:claude
+  :at "2026-03-20T23:11:12Z"
+  (given claim-v1-prove-equivalence)
+  (normally r-cl-state-v1-prove-equivalence claim-v1-prove-equivalence state-claimed-v1-prove-equivalence)
+  (normally r-cl-chain-v1-prove-equivalence state-claimed-v1-prove-equivalence claimed-prove-equivalence)
+)
+
+(claims agent:claude
+  :at "2026-03-20T23:11:17Z"
+  (given completed-prove-equivalence))
