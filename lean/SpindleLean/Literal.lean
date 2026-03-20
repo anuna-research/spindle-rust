@@ -49,8 +49,13 @@ def complement (l : Literal) : Literal :=
 def isComplement (l₁ l₂ : Literal) : Bool :=
   l₁.name == l₂.name && l₁.polarity != l₂.polarity
 
-theorem complement_involutive (l : Literal) : l.complement.complement = l := by
+theorem complement_involution (l : Literal) : complement (complement l) = l := by
+  cases l
   simp [complement, Bool.not_not]
+
+/-- Alias using dot notation. -/
+theorem complement_involutive (l : Literal) : l.complement.complement = l :=
+  complement_involution l
 
 theorem complement_name (l : Literal) : l.complement.name = l.name := by
   simp [complement]
