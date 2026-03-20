@@ -1,12 +1,12 @@
 {
-  "task_id": "encode-rust-tests",
+  "task_id": "lean-oracle",
   "token_budget": 8000,
-  "tokens_used": 351,
+  "tokens_used": 331,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Encode at least 50 test theories from crates/spindle-core/tests/ as Lean #eval or #check statements. Each test encodes the theory, runs reason, and asserts the conclusions match. Cover all categories: facts-only, strict chains, defeasible chains, superiority, defeaters, symmetric conflicts, ambiguity, empty theories, vacuous rules.",
-      "token_cost": 83,
+      "content": "Build Lean executable oracle: reads JSON-encoded theory from stdin, computes conclusions via reason function, outputs JSON conclusions to stdout. Use Lean 4 IO and JSON serialization (or simple custom parser). This enables automated comparison with Rust.",
+      "token_cost": 63,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:51:59Z"
+  "constructed_at": "2026-03-20T12:03:11Z"
 }
