@@ -3,26 +3,39 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 26,
-    "deletions": 7,
+    "files_changed": 16,
+    "insertions": 122,
+    "deletions": 0,
     "file_list": [
-      ".hence/context-manifest.json",
-      "lean/SpindleLean/Basic.lean",
-      "lean/lake-manifest.json"
+      "lean/SpindleLean.lean",
+      "lean/SpindleLean/AmbiguityBlocking.lean",
+      "lean/SpindleLean/AmbiguityPropagation.lean",
+      "lean/SpindleLean/Closure/Delta.lean",
+      "lean/SpindleLean/Closure/Lambda.lean",
+      "lean/SpindleLean/Closure/Partial.lean",
+      "lean/SpindleLean/DiffTest/Oracle.lean",
+      "lean/SpindleLean/Properties/Confluence.lean",
+      "lean/SpindleLean/Properties/Consistency.lean",
+      "lean/SpindleLean/Properties/Equivalence.lean",
+      "lean/SpindleLean/Properties/Soundness.lean",
+      "lean/SpindleLean/Properties/Subset.lean",
+      "lean/SpindleLean/Properties/Termination.lean",
+      "lean/SpindleLean/Rule.lean",
+      "lean/SpindleLean/Tests.lean",
+      "lean/SpindleLean/Theory.lean"
     ],
-    "dirty_files": 0
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-mathlib-deps-changes",
-      "content": "Modified 3 files (+26, -7): .hence/context-manifest.json, lean/SpindleLean/Basic.lean, lean/lake-manifest.json",
+      "key": "task-module-structure-changes",
+      "content": "Modified 16 files (+122, -0): lean/SpindleLean.lean, lean/SpindleLean/AmbiguityBlocking.lean, lean/SpindleLean/AmbiguityPropagation.lean, lean/SpindleLean/Closure/Delta.lean, lean/SpindleLean/Closure/Lambda.lean and 11 more",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/mathlib-deps-v1",
-  "evaluated_at": "2026-03-20T10:52:36Z",
+  "branch_name": "hence/module-structure-v1",
+  "evaluated_at": "2026-03-20T10:58:55Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
