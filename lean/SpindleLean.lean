@@ -1,4 +1,5 @@
 import SpindleLean.Basic
+import SpindleLean.Literal
 import SpindleLean.Rule
 import SpindleLean.Theory
 import SpindleLean.Closure.Delta
