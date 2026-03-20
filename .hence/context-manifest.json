@@ -1,12 +1,12 @@
 {
-  "task_id": "prove-consistency",
+  "task_id": "ambiguity-blocking",
   "token_budget": 8000,
-  "tokens_used": 337,
+  "tokens_used": 351,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Prove tag consistency and level coherence. Tag consistency: for any theory and literal q, +D q and -D q cannot both hold, and +d q and -d q cannot both hold. Level coherence: +D q implies +d q, and -d q implies -D q. Proofs follow from the structure of the closure computation.",
-      "token_cost": 69,
+      "content": "Formalize ambiguity blocking semantics (already the default mode from Phase 2). State and prove Ambiguity Locality theorem: if p and ~p are both -d (ambiguous), and rule r: => q has no body mentioning p or ~p, then q's provability is independent of the p/~p ambiguity. Test with theory: r1: => p, r2: => ~p, r3: => q — show q is +d.",
+      "token_cost": 83,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T22:09:55Z"
+  "constructed_at": "2026-03-20T22:29:25Z"
 }
