@@ -63,4 +63,20 @@ theorem complement_name (l : Literal) : l.complement.name = l.name := by
 theorem complement_polarity (l : Literal) : l.complement.polarity = !l.polarity := by
   simp [complement]
 
+instance : ReflBEq Literal where
+  rfl {a} := by
+    cases a with
+    | mk n p =>
+      simp [instBEqLiteral.beq, BEq.beq]
+
+instance : LawfulBEq Literal where
+  eq_of_beq {a b} h := by
+    cases a with
+    | mk na pa =>
+      cases b with
+      | mk nb pb =>
+        simp [instBEqLiteral.beq, BEq.beq] at h
+        obtain ⟨h1, h2⟩ := h
+        subst h1; subst h2; rfl
+
 end Literal
