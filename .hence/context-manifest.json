@@ -1,12 +1,12 @@
 {
-  "task_id": "literal-type",
+  "task_id": "rule-type",
   "token_budget": 8000,
-  "tokens_used": 181,
+  "tokens_used": 197,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define Literal inductive type: an atom name (String) paired with a polarity Bool. Positive = not negated, Negative = negated. Include DecidableEq, BEq, Hashable, Repr instances. Document correspondence to Rust literal.rs Literal struct.",
-      "token_cost": 59,
+      "content": "Define RuleType inductive (strict, defeasible, defeater). Define Rule structure with label: String, ruleType: RuleType, body: List Literal, head: Literal. Add DecidableEq, BEq, Repr. Document correspondence to Rust rule.rs.",
+      "token_cost": 55,
       "priority": "PlanMeta"
     },
     {
@@ -26,8 +26,14 @@
       "content": "Modified 16 files (+122, -0): lean/SpindleLean.lean, lean/SpindleLean/AmbiguityBlocking.lean, lean/SpindleLean/AmbiguityPropagation.lean, lean/SpindleLean/Closure/Delta.lean, lean/SpindleLean/Closure/Lambda.lean and 11 more",
       "token_cost": 55,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-literal-type-changes",
+      "content": "Modified 2 files (+62, -0): lean/SpindleLean.lean, lean/SpindleLean/Literal.lean",
+      "token_cost": 20,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T10:59:01Z"
+  "constructed_at": "2026-03-20T11:01:14Z"
 }
