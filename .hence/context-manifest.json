@@ -1,12 +1,12 @@
 {
-  "task_id": "defeasible-closure",
+  "task_id": "reason-function",
   "token_budget": 8000,
-  "tokens_used": 361,
+  "tokens_used": 321,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Implement defeasible closure: given definite closure results, compute +d/-d using the proof-theoretic conditions. For each undecided literal q: check if any rule in Rsd[q] is applicable, -D ~q holds, and all attackers in R[~q] are either discarded or defeated by a superior applicable rule in Rsd[q]. Iterate until fixed point. Implement ambiguity blocking mode (default).",
-      "token_cost": 93,
+      "content": "Define top-level reason function that composes definite and defeasible closures: reason(theory) returns List Conclusion. This mirrors Rust reason() and serves as the executable specification for cross-validation.",
+      "token_cost": 53,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:28:28Z"
+  "constructed_at": "2026-03-20T11:42:01Z"
 }
