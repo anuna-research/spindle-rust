@@ -4,25 +4,25 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 3,
-    "insertions": 31,
+    "insertions": 151,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/SpindleLean/Rule.lean",
-      "lean/SpindleLean/Theory.lean"
+      "lean/SpindleLean/Closure/Delta.lean",
+      "lean/SpindleLean/Literal.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-rule-classification-changes",
-      "content": "Modified 3 files (+31, -5): .hence/context-manifest.json, lean/SpindleLean/Rule.lean, lean/SpindleLean/Theory.lean",
+      "key": "task-definite-closure-changes",
+      "content": "Modified 3 files (+151, -5): .hence/context-manifest.json, lean/SpindleLean/Closure/Delta.lean, lean/SpindleLean/Literal.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/rule-classification-v1",
-  "evaluated_at": "2026-03-20T11:16:49Z",
+  "branch_name": "hence/definite-closure-v1",
+  "evaluated_at": "2026-03-20T11:28:21Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
