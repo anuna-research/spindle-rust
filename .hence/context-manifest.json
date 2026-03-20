@@ -1,12 +1,12 @@
 {
-  "task_id": "conclusion-type",
+  "task_id": "decidable-instances",
   "token_budget": 8000,
-  "tokens_used": 222,
+  "tokens_used": 252,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define ConclusionType inductive: plusD, minusD, plusd, minusd. Define Conclusion as ConclusionType * Literal pair. Add Repr instances for readable output.",
-      "token_cost": 38,
+      "content": "Ensure DecidableEq instances exist for all core types (Literal, RuleType, Rule, ConclusionType). These are required for List membership decisions and computation.",
+      "token_cost": 40,
       "priority": "PlanMeta"
     },
     {
@@ -44,8 +44,14 @@
       "content": "Modified 2 files (+78, -6): .hence/context-manifest.json, lean/SpindleLean/Theory.lean",
       "token_cost": 21,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-conclusion-type-changes",
+      "content": "Modified 3 files (+101, -5): .hence/context-manifest.json, lean/SpindleLean.lean, lean/SpindleLean/Conclusion.lean",
+      "token_cost": 28,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:06:00Z"
+  "constructed_at": "2026-03-20T11:08:38Z"
 }
