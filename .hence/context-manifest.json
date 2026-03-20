@@ -1,12 +1,12 @@
 {
-  "task_id": "definite-closure",
+  "task_id": "defeasible-closure",
   "token_budget": 8000,
-  "tokens_used": 330,
+  "tokens_used": 361,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Implement definite closure as iterative fixed-point: starting from facts, repeatedly fire strict rules whose bodies are all proved, until no new conclusions. Use fuel-bounded iteration. Compute both +D and -D for all literals mentioned in the theory.",
-      "token_cost": 62,
+      "content": "Implement defeasible closure: given definite closure results, compute +d/-d using the proof-theoretic conditions. For each undecided literal q: check if any rule in Rsd[q] is applicable, -D ~q holds, and all attackers in R[~q] are either discarded or defeated by a superior applicable rule in Rsd[q]. Iterate until fixed point. Implement ambiguity blocking mode (default).",
+      "token_cost": 93,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:16:55Z"
+  "constructed_at": "2026-03-20T11:28:28Z"
 }

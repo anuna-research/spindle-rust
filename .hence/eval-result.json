@@ -3,26 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 151,
-    "deletions": 5,
+    "files_changed": 2,
+    "insertions": 233,
+    "deletions": 7,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/SpindleLean/Closure/Delta.lean",
-      "lean/SpindleLean/Literal.lean"
+      "lean/SpindleLean/Closure/Lambda.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-definite-closure-changes",
-      "content": "Modified 3 files (+151, -5): .hence/context-manifest.json, lean/SpindleLean/Closure/Delta.lean, lean/SpindleLean/Literal.lean",
+      "key": "task-defeasible-closure-changes",
+      "content": "Modified 2 files (+233, -7): .hence/context-manifest.json, lean/SpindleLean/Closure/Lambda.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/definite-closure-v1",
-  "evaluated_at": "2026-03-20T11:28:21Z",
+  "branch_name": "hence/defeasible-closure-v1",
+  "evaluated_at": "2026-03-20T11:41:55Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
