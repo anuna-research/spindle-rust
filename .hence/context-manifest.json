@@ -1,12 +1,12 @@
 {
-  "task_id": "rule-type",
+  "task_id": "theory-type",
   "token_budget": 8000,
-  "tokens_used": 197,
+  "tokens_used": 232,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define RuleType inductive (strict, defeasible, defeater). Define Rule structure with label: String, ruleType: RuleType, body: List Literal, head: Literal. Add DecidableEq, BEq, Repr. Document correspondence to Rust rule.rs.",
-      "token_cost": 55,
+      "content": "Define Theory structure with rules: List Rule, superiority: List (String * String) (pairs of rule labels where first is superior). Define helper: sup (t: Theory) (r1 r2: Rule) : Bool checking if (r1.label, r2.label) is in t.superiority. Document correspondence to Rust theory.rs.",
+      "token_cost": 69,
       "priority": "PlanMeta"
     },
     {
@@ -32,8 +32,14 @@
       "content": "Modified 2 files (+62, -0): lean/SpindleLean.lean, lean/SpindleLean/Literal.lean",
       "token_cost": 20,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-rule-type-changes",
+      "content": "Modified 2 files (+117, -7): .hence/context-manifest.json, lean/SpindleLean/Rule.lean",
+      "token_cost": 21,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:01:14Z"
+  "constructed_at": "2026-03-20T11:03:31Z"
 }
