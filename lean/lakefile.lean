@@ -14,3 +14,6 @@ require mathlib from git
 
 @[default_target]
 lean_lib SpindleLean where
+
+lean_exe spindlelean_oracle where
+  root := `OracleMain
