@@ -1,12 +1,12 @@
 {
-  "task_id": "prove-defeater-asymmetry",
+  "task_id": "ci-pipeline",
   "token_budget": 8000,
-  "tokens_used": 316,
+  "tokens_used": 315,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Prove that defeater rules never appear in Rsd[q] (only in R[q]). This follows directly from the definition of Rsd filtering by RuleType. State as theorem and prove by unfolding Rsd definition.",
-      "token_cost": 48,
+      "content": "Add GitHub Actions workflow .github/workflows/lean-verify.yml: install Lean via elan, run lake build, run lake test (if applicable), run Rust differential tests. Build failure blocks merge.",
+      "token_cost": 47,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T12:44:40Z"
+  "constructed_at": "2026-03-20T13:08:19Z"
 }

@@ -4,23 +4,23 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 1,
-    "insertions": 10,
+    "insertions": 82,
     "deletions": 0,
     "file_list": [
-      "lean/SpindleLean/Theory.lean"
+      ".github/workflows/lean-verify.yml"
     ],
     "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-prove-defeater-asymmetry-changes",
-      "content": "Modified 1 files (+10, -0): lean/SpindleLean/Theory.lean",
+      "key": "task-ci-pipeline-changes",
+      "content": "Modified 1 files (+82, -0): .github/workflows/lean-verify.yml",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/prove-defeater-asymmetry-v1",
-  "evaluated_at": "2026-03-20T12:47:43Z",
+  "branch_name": "hence/ci-pipeline-v1",
+  "evaluated_at": "2026-03-20T13:09:22Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
