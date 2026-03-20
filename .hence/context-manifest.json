@@ -1,12 +1,12 @@
 {
-  "task_id": "rule-classification",
+  "task_id": "definite-closure",
   "token_budget": 8000,
-  "tokens_used": 324,
+  "tokens_used": 330,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define rule-set functions: R(theory, q) returns all rules with head q; Rs(theory, q) returns strict rules with head q; Rsd(theory, q) returns strict or defeasible rules with head q. Define applicable(r, proved) checking all body literals are in proved list. Define discarded(r, disproved) checking some body literal is in disproved list.",
-      "token_cost": 84,
+      "content": "Implement definite closure as iterative fixed-point: starting from facts, repeatedly fire strict rules whose bodies are all proved, until no new conclusions. Use fuel-bounded iteration. Compute both +D and -D for all literals mentioned in the theory.",
+      "token_cost": 62,
       "priority": "PlanMeta"
     },
     {
@@ -62,8 +62,14 @@
       "content": "Modified 1 files (+6, -1): lean/SpindleLean/Literal.lean",
       "token_cost": 14,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-rule-classification-changes",
+      "content": "Modified 3 files (+31, -5): .hence/context-manifest.json, lean/SpindleLean/Rule.lean, lean/SpindleLean/Theory.lean",
+      "token_cost": 28,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:14:31Z"
+  "constructed_at": "2026-03-20T11:16:55Z"
 }
