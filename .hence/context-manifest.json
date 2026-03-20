@@ -1,12 +1,12 @@
 {
-  "task_id": "prove-termination",
+  "task_id": "prove-definite-completeness",
   "token_budget": 8000,
-  "tokens_used": 351,
+  "tokens_used": 344,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Prove the fixed-point computation terminates for any finite theory. Argument: each literal transitions from Unknown to decided at most once; only transitions enqueue work; number of literals is finite; total transitions bounded by 2*|literals| per phase. Provide explicit well-founded measure if Lean's termination checker needs it.",
-      "token_cost": 83,
+      "content": "State and prove: if q satisfies the proof-theoretic condition for -D (not a fact AND every strict rule for q has a discarded body literal), then the algorithm marks q as -D. Proof by contradiction: assume q is not marked -D, derive that some strict rule must be applicable, contradicting the -D condition.",
+      "token_cost": 76,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T12:47:49Z"
+  "constructed_at": "2026-03-20T21:39:16Z"
 }
