@@ -1,12 +1,12 @@
 {
-  "task_id": "decidable-instances",
+  "task_id": "complement",
   "token_budget": 8000,
-  "tokens_used": 252,
+  "tokens_used": 270,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Ensure DecidableEq instances exist for all core types (Literal, RuleType, Rule, ConclusionType). These are required for List membership decisions and computation.",
-      "token_cost": 40,
+      "content": "Define complement function on Literal that flips polarity. State and prove complement_involution: complement (complement l) = l for all Literal l. Proof should be by cases on l.",
+      "token_cost": 44,
       "priority": "PlanMeta"
     },
     {
@@ -50,8 +50,14 @@
       "content": "Modified 3 files (+101, -5): .hence/context-manifest.json, lean/SpindleLean.lean, lean/SpindleLean/Conclusion.lean",
       "token_cost": 28,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-decidable-instances-changes",
+      "content": "Modified 1 files (+11, -5): .hence/context-manifest.json",
+      "token_cost": 14,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:08:38Z"
+  "constructed_at": "2026-03-20T11:12:56Z"
 }
