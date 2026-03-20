@@ -1,1 +1,16 @@
 import SpindleLean.Basic
+import SpindleLean.Rule
+import SpindleLean.Theory
+import SpindleLean.Closure.Delta
+import SpindleLean.Closure.Lambda
+import SpindleLean.Closure.Partial
+import SpindleLean.Properties.Soundness
+import SpindleLean.Properties.Subset
+import SpindleLean.Properties.Termination
+import SpindleLean.Properties.Consistency
+import SpindleLean.Properties.Confluence
+import SpindleLean.Properties.Equivalence
+import SpindleLean.AmbiguityBlocking
+import SpindleLean.AmbiguityPropagation
+import SpindleLean.Tests
+import SpindleLean.DiffTest.Oracle
