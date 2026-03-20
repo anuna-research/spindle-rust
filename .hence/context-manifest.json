@@ -1,12 +1,12 @@
 {
-  "task_id": "lean-oracle",
+  "task_id": "diff-harness",
   "token_budget": 8000,
-  "tokens_used": 331,
+  "tokens_used": 334,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Build Lean executable oracle: reads JSON-encoded theory from stdin, computes conclusions via reason function, outputs JSON conclusions to stdout. Use Lean 4 IO and JSON serialization (or simple custom parser). This enables automated comparison with Rust.",
-      "token_cost": 63,
+      "content": "Create Rust test harness in crates/spindle-core/tests/lean_oracle_difftest.rs: generate random theories via proptest, serialize to JSON, shell out to Lean oracle executable, parse JSON response, compare conclusion sets. Report first mismatch with full theory dump.",
+      "token_cost": 66,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T12:03:11Z"
+  "constructed_at": "2026-03-20T12:08:43Z"
 }
