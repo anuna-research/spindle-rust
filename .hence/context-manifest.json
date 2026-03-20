@@ -1,12 +1,12 @@
 {
-  "task_id": "prove-definite-completeness",
+  "task_id": "prove-consistency",
   "token_budget": 8000,
-  "tokens_used": 344,
+  "tokens_used": 337,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "State and prove: if q satisfies the proof-theoretic condition for -D (not a fact AND every strict rule for q has a discarded body literal), then the algorithm marks q as -D. Proof by contradiction: assume q is not marked -D, derive that some strict rule must be applicable, contradicting the -D condition.",
-      "token_cost": 76,
+      "content": "Prove tag consistency and level coherence. Tag consistency: for any theory and literal q, +D q and -D q cannot both hold, and +d q and -d q cannot both hold. Level coherence: +D q implies +d q, and -d q implies -D q. Proofs follow from the structure of the closure computation.",
+      "token_cost": 69,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T21:39:16Z"
+  "constructed_at": "2026-03-20T22:09:55Z"
 }
