@@ -1,12 +1,12 @@
 {
-  "task_id": "diff-harness",
+  "task_id": "prove-defeater-asymmetry",
   "token_budget": 8000,
-  "tokens_used": 334,
+  "tokens_used": 316,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Create Rust test harness in crates/spindle-core/tests/lean_oracle_difftest.rs: generate random theories via proptest, serialize to JSON, shell out to Lean oracle executable, parse JSON response, compare conclusion sets. Report first mismatch with full theory dump.",
-      "token_cost": 66,
+      "content": "Prove that defeater rules never appear in Rsd[q] (only in R[q]). This follows directly from the definition of Rsd filtering by RuleType. State as theorem and prove by unfolding Rsd definition.",
+      "token_cost": 48,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T12:08:43Z"
+  "constructed_at": "2026-03-20T12:44:40Z"
 }
