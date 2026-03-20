@@ -1,12 +1,12 @@
 {
-  "task_id": "ci-pipeline",
+  "task_id": "prove-definite-soundness",
   "token_budget": 8000,
-  "tokens_used": 315,
+  "tokens_used": 324,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Add GitHub Actions workflow .github/workflows/lean-verify.yml: install Lean via elan, run lake build, run lake test (if applicable), run Rust differential tests. Build failure blocks merge.",
-      "token_cost": 47,
+      "content": "State and prove: if the definite closure marks q as +D, then q is a fact or there exists a strict rule r with head q whose body literals are all +D. Proof by induction on the iteration step at which q was added to the closure.",
+      "token_cost": 56,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T13:08:19Z"
+  "constructed_at": "2026-03-20T12:13:23Z"
 }
