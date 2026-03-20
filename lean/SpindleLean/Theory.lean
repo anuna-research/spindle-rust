@@ -82,4 +82,14 @@ def Rs (t : Theory) (q : Literal) : List Rule :=
 def Rsd (t : Theory) (q : Literal) : List Rule :=
   t.rules.filter fun r => r.head == q && (r.ruleType == .strict || r.ruleType == .defeasible)
 
+/-- Defeater rules never appear in `Rsd`: the filter requires `strict ∨ defeasible`,
+    which excludes `defeater` by case analysis on `RuleType`. -/
+theorem defeater_not_in_Rsd (t : Theory) (q : Literal) (r : Rule)
+    (h : r ∈ t.Rsd q) : r.ruleType ≠ .defeater := by
+  simp [Rsd, List.mem_filter] at h
+  obtain ⟨_, _, h_type⟩ := h
+  intro h_def
+  rw [h_def] at h_type
+  exact absurd h_type (by decide)
+
 end Theory
