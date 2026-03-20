@@ -1,12 +1,12 @@
 {
-  "task_id": "smoke-tests",
+  "task_id": "encode-rust-tests",
   "token_budget": 8000,
-  "tokens_used": 338,
+  "tokens_used": 351,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Encode at least 10 test theories as Lean #eval statements exercising the reason function. Cover: empty theory, single fact, strict chain, defeasible chain, superiority override, defeater blocking, symmetric conflict, multiple conclusions, mixed strict+defeasible, vacuous body rules.",
-      "token_cost": 70,
+      "content": "Encode at least 50 test theories from crates/spindle-core/tests/ as Lean #eval or #check statements. Each test encodes the theory, runs reason, and asserts the conclusions match. Cover all categories: facts-only, strict chains, defeasible chains, superiority, defeaters, symmetric conflicts, ambiguity, empty theories, vacuous rules.",
+      "token_cost": 83,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-20T11:47:57Z"
+  "constructed_at": "2026-03-20T11:51:59Z"
 }

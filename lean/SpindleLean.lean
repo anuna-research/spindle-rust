@@ -16,4 +16,5 @@ import SpindleLean.Properties.Equivalence
 import SpindleLean.AmbiguityBlocking
 import SpindleLean.AmbiguityPropagation
 import SpindleLean.Tests
+import SpindleLean.RustTests
 import SpindleLean.DiffTest.Oracle
