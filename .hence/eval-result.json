@@ -3,25 +3,27 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 216,
-    "deletions": 6,
+    "files_changed": 4,
+    "insertions": 270,
+    "deletions": 52,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/Interval.lean"
+      "lean/Spindle/Arith/Constraint.lean",
+      "lean/Spindle/Arith/GroundLiteral.lean",
+      "lean/Spindle/Arith/Term.lean"
     ],
-    "dirty_files": 0
+    "dirty_files": 7
   },
   "learnings": [
     {
-      "key": "task-interval-type-changes",
-      "content": "Modified 2 files (+216, -6): .hence/context-manifest.json, lean/Spindle/Arith/Interval.lean",
+      "key": "task-arith-constraint-changes",
+      "content": "Modified 4 files (+270, -52): .hence/context-manifest.json, lean/Spindle/Arith/Constraint.lean, lean/Spindle/Arith/GroundLiteral.lean, lean/Spindle/Arith/Term.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/interval-type-v1",
-  "evaluated_at": "2026-03-21T10:14:06Z",
+  "branch_name": "hence/arith-constraint-v1",
+  "evaluated_at": "2026-03-21T10:25:55Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
