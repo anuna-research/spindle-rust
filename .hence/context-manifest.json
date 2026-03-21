@@ -1,12 +1,12 @@
 {
-  "task_id": "type-promotion",
+  "task_id": "term-type",
   "token_budget": 8000,
-  "tokens_used": 70,
+  "tokens_used": 95,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define type promotion rules: INT → DECIMAL → FLOAT. Prove promotion preserves value (promote(3) = 3.0). Prove promotion is transitive. Define numeric_eq as equality after mutual promotion.",
-      "token_cost": 48,
+      "content": "Define the Term type in Lean 4: Symbol, Integer, Decimal, FiniteFloat, Variable. Model the type hierarchy (INT < DECIMAL < FLOAT) and cross-type equality (numeric_eq). Include BEq/DecidableEq instances.",
+      "token_cost": 50,
       "priority": "PlanMeta"
     },
     {
@@ -14,8 +14,14 @@
       "content": "Modified 2 files (+97, -65): .hence/context-manifest.json, lean/Spindle/Arith/Types.lean",
       "token_cost": 22,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-type-promotion-changes",
+      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Promotion.lean",
+      "token_cost": 23,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T09:37:09Z"
+  "constructed_at": "2026-03-21T09:50:13Z"
 }
