@@ -1,12 +1,12 @@
 {
-  "task_id": "what-if-spec",
+  "task_id": "why-not-spec",
   "token_budget": 8000,
-  "tokens_used": 312,
+  "tokens_used": 1200,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Formalize what_if operator: given a theory T and hypothetical facts F, compute reason(T ∪ F) and return the delta (new conclusions minus original). Prove: what_if is monotone in F (more facts → more conclusions). Prove: what_if(T, ∅) = ∅.",
-      "token_cost": 61,
+      "content": "Formalize why_not operator: given theory T and literal q not in conclusions, return a BlockingReason: MissingPremise (which body literal is unproved), Defeated (which attacker won), Contradicted (+D ~q blocks +d q). Prove: if why_not returns MissingPremise(l), then l ∉ +d.",
+      "token_cost": 68,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T11:41:03Z"
+  "constructed_at": "2026-03-21T11:45:52Z"
 }
