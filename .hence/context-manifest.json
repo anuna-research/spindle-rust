@@ -1,16 +1,12 @@
 {
-  "task_id": "timepoint-type",
+  "task_id": "ground-literal",
   "token_budget": 8000,
-  "tokens_used": 167,
-  "files_modified": [
-    ".hence/context-manifest.json",
-    "lean/Spindle/Arith/TimePoint.lean"
-  ],
+  "tokens_used": 350,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define TimePoint in Lean 4: NegInf, Moment(Int), PosInf. Implement total ordering with NegInf < Moment(n) < PosInf. Prove: ordering is total, transitive, antisymmetric. Define successor/predecessor for closed-interval arithmetic.",
-      "token_cost": 57,
+      "content": "Define ground literal application: substitute variables in a literal's predicate arguments with terms from a substitution. A literal is 'ground' when it contains no variables. Prove that applying a complete substitution produces a ground literal.",
+      "token_cost": 61,
       "priority": "PlanMeta"
     },
     {
@@ -42,8 +38,20 @@
       "content": "Modified 2 files (+358, -5): .hence/context-manifest.json, lean/Spindle/Arith/Eval.lean",
       "token_cost": 21,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-timepoint-type-changes",
+      "content": "Modified 2 files (+200, -6): .hence/context-manifest.json, lean/Spindle/Arith/TimePoint.lean",
+      "token_cost": 23,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-ground-literal-changes",
+      "content": "Modified 2 files (+170, -48): .hence/context-manifest.json, lean/Spindle/Arith/GroundLiteral.lean",
+      "token_cost": 24,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:01:18Z"
+  "constructed_at": "2026-03-21T10:05:37Z"
 }
