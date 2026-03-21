@@ -1,12 +1,12 @@
 {
-  "task_id": "grounding-oracle",
+  "task_id": "end-to-end",
   "token_budget": 8000,
-  "tokens_used": 299,
+  "tokens_used": 308,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Build a Lean oracle for grounding: given a JSON theory with variables, compute the ground instances and serialize back to JSON. Enable differential testing: Rust grounding.rs vs Lean grounding.",
-      "token_cost": 48,
+      "content": "End-to-end test: take a non-ground theory through Lean grounding, then through the existing IMPL-015 Lean reasoner, and compare results with Rust pipeline. This validates the full chain: parse → ground → reason → conclude.",
+      "token_cost": 57,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T13:01:02Z"
+  "constructed_at": "2026-03-21T13:10:15Z"
 }

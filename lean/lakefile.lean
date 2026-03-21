@@ -18,3 +18,7 @@ lean_exe ArithOracle where
 lean_exe GroundingOracle where
   root := `Spindle.DiffTest.GroundingOracle
   supportInterpreter := true
+
+lean_exe EndToEndOracle where
+  root := `Spindle.DiffTest.EndToEndOracle
+  supportInterpreter := true
