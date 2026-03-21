@@ -1,12 +1,12 @@
 {
-  "task_id": "interval-type",
+  "task_id": "arith-constraint",
   "token_budget": 8000,
-  "tokens_used": 211,
+  "tokens_used": 244,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define Temporal (interval) as a pair (start: TimePoint, end: TimePoint) with start <= end invariant. Define intersection, containment, adjacency predicates. Prove interval well-formedness is preserved by intersection.",
-      "token_cost": 54,
+      "content": "Define arithmetic constraint evaluation in rule bodies: a BodyArg can be a literal, a constant, a variable, or an arithmetic expression. Define constraint satisfaction and prove: if all variables are bound to ground terms, constraint evaluation is deterministic.",
+      "token_cost": 65,
       "priority": "PlanMeta"
     },
     {
@@ -53,11 +53,11 @@
     },
     {
       "source": "memory/episodic/task-interval-type-changes",
-      "content": "Modified 2 files: .hence/context-manifest.json, lean/Spindle/Arith/Interval.lean",
-      "token_cost": 20,
+      "content": "Modified 2 files (+216, -6): .hence/context-manifest.json, lean/Spindle/Arith/Interval.lean",
+      "token_cost": 22,
       "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:10:49Z"
+  "constructed_at": "2026-03-21T10:14:12Z"
 }
