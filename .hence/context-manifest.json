@@ -1,12 +1,12 @@
 {
-  "task_id": "arith-constraint",
+  "task_id": "interval-sets",
   "token_budget": 8000,
-  "tokens_used": 244,
+  "tokens_used": 7500,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define arithmetic constraint evaluation in rule bodies: a BodyArg can be a literal, a constant, a variable, or an arithmetic expression. Define constraint satisfaction and prove: if all variables are bound to ground terms, constraint evaluation is deterministic.",
-      "token_cost": 65,
+      "content": "Formalize interval set operations from temporal.rs: normalize (sort + merge overlapping), intersection, subtraction. Prove: (1) normalize is idempotent, (2) intersection is commutative, (3) subtraction removes exactly the specified intervals, (4) normalize preserves the point-set semantics (a time point is covered iff it was covered before).",
+      "token_cost": 85,
       "priority": "PlanMeta"
     },
     {
@@ -56,8 +56,14 @@
       "content": "Modified 2 files (+216, -6): .hence/context-manifest.json, lean/Spindle/Arith/Interval.lean",
       "token_cost": 22,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-arith-constraint-changes",
+      "content": "Modified 4 files (+270, -52): .hence/context-manifest.json, lean/Spindle/Arith/Constraint.lean, lean/Spindle/Arith/GroundLiteral.lean, lean/Spindle/Arith/Term.lean",
+      "token_cost": 40,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:14:12Z"
+  "constructed_at": "2026-03-21T10:26:01Z"
 }
