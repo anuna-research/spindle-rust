@@ -1,12 +1,12 @@
 {
-  "task_id": "ground-literal",
+  "task_id": "interval-type",
   "token_budget": 8000,
-  "tokens_used": 350,
+  "tokens_used": 211,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define ground literal application: substitute variables in a literal's predicate arguments with terms from a substitution. A literal is 'ground' when it contains no variables. Prove that applying a complete substitution produces a ground literal.",
-      "token_cost": 61,
+      "content": "Define Temporal (interval) as a pair (start: TimePoint, end: TimePoint) with start <= end invariant. Define intersection, containment, adjacency predicates. Prove interval well-formedness is preserved by intersection.",
+      "token_cost": 54,
       "priority": "PlanMeta"
     },
     {
@@ -47,11 +47,17 @@
     },
     {
       "source": "memory/episodic/task-ground-literal-changes",
-      "content": "Modified 2 files (+170, -48): .hence/context-manifest.json, lean/Spindle/Arith/GroundLiteral.lean",
+      "content": "Modified 2 files (+224, -9): .hence/context-manifest.json, lean/Spindle/Arith/GroundLiteral.lean",
       "token_cost": 24,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-interval-type-changes",
+      "content": "Modified 2 files: .hence/context-manifest.json, lean/Spindle/Arith/Interval.lean",
+      "token_cost": 20,
       "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:05:37Z"
+  "constructed_at": "2026-03-21T10:10:49Z"
 }
