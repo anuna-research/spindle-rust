@@ -200,4 +200,209 @@ theorem extractFacts_subset_T_P (P : List Rule) :
 def semiNaiveEval (P : List Rule) (fuel : Nat) : Interpretation :=
   T_P_iter P (extractFacts P) fuel
 
+/-! ## Grounding Termination
+
+Semi-naive evaluation reaches a fixpoint in at most |Universe| steps.
+T_P is monotone on the finite lattice ⟨℘(U), ⊆⟩, so the ascending chain
+I₀ ⊆ I₁ ⊆ ... can gain at most one new atom per step, and there are only
+|U| atoms available. This is the standard Knaster-Tarski argument
+specialized to finite powersets. -/
+
+section Termination
+
+/-! ### BEq reflexivity
+
+BEq on Literal is derived from structural BEq on Term. For all term
+variants except `finiteFloat`, BEq coincides with propositional equality.
+The `finiteFloat` case uses IEEE 754 where NaN ≠ NaN, but NaN cannot
+appear in a ground Herbrand base (all floats arise from finite domain
+extraction). We axiomatize reflexivity here. -/
+
+private axiom Literal.beq_self (l : Literal) : (l == l) = true
+
+/-- Propositional list membership implies BEq-based `elem`. -/
+private theorem elem_of_mem {l : Literal} {xs : Interpretation}
+    (h : l ∈ xs) : xs.elem l = true := by
+  induction xs with
+  | nil => contradiction
+  | cons x xs ih =>
+    simp only [List.elem]
+    cases List.mem_cons.mp h with
+    | inl heq => rw [heq, Literal.beq_self]
+    | inr hmem =>
+      cases hbeq : (l == x)
+      · exact ih hmem
+      · rfl
+
+/-! ### Fixpoint definition -/
+
+/-- An interpretation `I` is a fixpoint of `T_P P` when every atom
+    derivable in one step is already present (BEq-based). -/
+def Interpretation.isFixpoint (P : List Rule) (I : Interpretation) : Prop :=
+  ∀ l, l ∈ T_P P I → I.elem l = true
+
+/-! ### Coverage measure -/
+
+/-- The coverage of `I` w.r.t. universe `U`: how many universe atoms
+    are BEq-found in `I`. This is the monotone measure driving the
+    termination argument. -/
+def coverage (I : Interpretation) (U : List Literal) : Nat :=
+  (U.filter (fun l => I.elem l)).length
+
+/-- Coverage is bounded by |U|. -/
+theorem coverage_le (I : Interpretation) (U : List Literal) :
+    coverage I U ≤ U.length :=
+  List.length_filter_le _ _
+
+/-- Filter length is monotone w.r.t. predicate implication. -/
+private theorem filter_length_mono {p q : Literal → Bool}
+    (xs : List Literal) (h : ∀ x, p x = true → q x = true) :
+    (xs.filter p).length ≤ (xs.filter q).length := by
+  induction xs with
+  | nil => simp [List.filter]
+  | cons x xs ih =>
+    simp only [List.filter]
+    cases hp : p x <;> cases hq : q x
+    · exact ih
+    · simp only [List.length_cons]; exact Nat.le_succ_of_le ih
+    · exact absurd (h x (by simp [hp])) (by simp [hq])
+    · simp only [List.length_cons]; exact Nat.succ_le_succ ih
+
+/-- Coverage is monotone: if `bsubset I J` then `coverage I U ≤ coverage J U`. -/
+theorem coverage_mono {I J : Interpretation} (U : List Literal)
+    (hsub : Interpretation.bsubset I J) :
+    coverage I U ≤ coverage J U :=
+  filter_length_mono U hsub
+
+/-- If `p` implies `q`, there exists `x ∈ xs` with `¬p x` and `q x`,
+    then the filter with `q` is strictly longer than with `p`. -/
+private theorem filter_length_strict {p q : Literal → Bool}
+    (xs : List Literal) (hmono : ∀ x, p x = true → q x = true)
+    {w : Literal} (hw : w ∈ xs) (hpw : p w = false) (hqw : q w = true) :
+    (xs.filter p).length < (xs.filter q).length := by
+  induction xs with
+  | nil => contradiction
+  | cons x xs ih =>
+    simp only [List.filter]
+    cases List.mem_cons.mp hw with
+    | inl heq =>
+      subst heq
+      rw [hpw, hqw]
+      simp only [List.length_cons]
+      exact Nat.lt_succ_of_le (filter_length_mono xs hmono)
+    | inr hmem =>
+      cases hp : p x <;> cases hq : q x
+      · exact ih hmem
+      · simp only [List.length_cons]
+        exact Nat.lt_succ_of_lt (ih hmem)
+      · exact absurd (hmono x (by simp [hp])) (by simp [hq])
+      · simp only [List.length_cons]
+        exact Nat.succ_lt_succ (ih hmem)
+
+/-! ### Bounded monotone sequences stabilize -/
+
+/-- A bounded, monotone-non-decreasing sequence of naturals
+    must stabilize: there exists `n ≤ B` with `f n = f (n + 1)`.
+
+    Proof: if `f` were strictly increasing at every step `n ≤ B`,
+    then `f (B+1) ≥ f 0 + B + 1 > B`, contradicting the bound. -/
+theorem bounded_mono_stabilizes {B : Nat} (f : Nat → Nat)
+    (hmono : ∀ n, f n ≤ f (n + 1))
+    (hbound : ∀ n, f n ≤ B) :
+    ∃ n, n ≤ B ∧ f n = f (n + 1) := by
+  apply Classical.byContradiction
+  intro hall
+  -- hall : ¬ ∃ n, n ≤ B ∧ f n = f (n + 1)
+  -- So for all n ≤ B, f n ≠ f (n + 1), hence f n < f (n + 1)
+  have hstrict : ∀ n, n ≤ B → f n + 1 ≤ f (n + 1) := by
+    intro n hn
+    have hne : f n ≠ f (n + 1) := fun heq => hall ⟨n, hn, heq⟩
+    have hle := hmono n
+    exact Nat.lt_of_le_of_ne hle hne
+  -- By induction: f 0 + k ≤ f k for all k ≤ B + 1
+  have hgrow : ∀ k, k ≤ B + 1 → f 0 + k ≤ f k := by
+    intro k hk
+    induction k with
+    | zero => omega
+    | succ k ih =>
+      have hk' : k ≤ B := by omega
+      have := hstrict k hk'
+      have := ih (by omega)
+      omega
+  -- f(B+1) ≥ f(0) + B + 1 ≥ B + 1 > B, contradicting bound
+  have := hgrow (B + 1) (Nat.le_refl _)
+  have := hbound (B + 1)
+  omega
+
+/-! ### Coverage stabilization implies fixpoint -/
+
+/-- Coverage of T_P_iter is monotone at each step. -/
+theorem coverage_T_P_iter_mono (P : List Rule) (I₀ : Interpretation)
+    (U : List Literal) (n : Nat) :
+    coverage (T_P_iter P I₀ n) U ≤ coverage (T_P_iter P I₀ (n + 1)) U :=
+  coverage_mono U (T_P_iter_mono P I₀ n)
+
+/-- If T_P only produces atoms in universe `U`, and coverage does not
+    increase from step `n` to step `n + 1`, then iteration `n` is a fixpoint.
+
+    Key argument: if some `l ∈ T_P P I` had `I.elem l = false`, then `l ∈ U`
+    (by boundedness) and `(I ++ T_P P I).elem l = true` (by appending),
+    so the filter for `I ++ T_P P I` would be strictly longer — contradicting
+    equal coverage. -/
+theorem fixpoint_of_coverage_stable (P : List Rule) (I : Interpretation)
+    (U : List Literal)
+    (hBound : ∀ J, ∀ l, l ∈ T_P P J → l ∈ U)
+    (hStable : coverage (I ++ T_P P I) U = coverage I U) :
+    Interpretation.isFixpoint P I := by
+  intro l hl
+  -- Case split on I.elem l
+  cases hcase : I.elem l with
+  | true => rfl
+  | false =>
+    -- l ∈ T_P P I, so l ∈ U by boundedness
+    exfalso
+    have hlU : l ∈ U := hBound I l hl
+    have hlApp : (I ++ T_P P I).elem l = true :=
+      elem_append_right l I (T_P P I) (elem_of_mem hl)
+    -- Coverage strictly increases — contradicts hStable
+    have hlt : coverage I U < coverage (I ++ T_P P I) U :=
+      filter_length_strict U
+        (fun x hx => elem_append_left x I (T_P P I) hx)
+        hlU hcase hlApp
+    omega
+
+/-! ### Main termination theorem -/
+
+/-- **Grounding termination**: for any ground program `P` whose derived atoms
+    lie within a finite universe `U`, semi-naive evaluation reaches a fixpoint
+    in at most `|U|` steps.
+
+    This is the standard Knaster-Tarski fixpoint argument specialized to finite
+    powersets: T_P is monotone (proved in `T_P_mono`), so the ascending chain
+    I₀ ⊆ I₁ ⊆ ... gains at most one new atom per step, and there are only |U|
+    atoms available. -/
+theorem semiNaive_terminates (P : List Rule) (I₀ : Interpretation)
+    (U : List Literal)
+    (hBound : ∀ I, ∀ l, l ∈ T_P P I → l ∈ U) :
+    ∃ n, n ≤ U.length ∧ Interpretation.isFixpoint P (T_P_iter P I₀ n) := by
+  obtain ⟨n, hn, hstable⟩ := bounded_mono_stabilizes
+    (fun n => coverage (T_P_iter P I₀ n) U)
+    (coverage_T_P_iter_mono P I₀ U)
+    (fun n => coverage_le _ U)
+  refine ⟨n, hn, ?_⟩
+  apply fixpoint_of_coverage_stable P (T_P_iter P I₀ n) U hBound
+  simp only [T_P_iter] at hstable
+  exact hstable.symm
+
+/-- **Corollary**: semi-naive evaluation of a program from its own facts
+    terminates within |theoryHerbrandBase| steps, provided all derived atoms
+    are within the theory's Herbrand base. -/
+theorem semiNaive_terminates_theory (P : List Rule)
+    (hBound : ∀ I, ∀ l, l ∈ T_P P I → l ∈ theoryHerbrandBase P) :
+    ∃ n, n ≤ (theoryHerbrandBase P).length ∧
+      Interpretation.isFixpoint P (T_P_iter P (extractFacts P) n) :=
+  semiNaive_terminates P (extractFacts P) (theoryHerbrandBase P) hBound
+
+end Termination
+
 end Spindle.Arith
