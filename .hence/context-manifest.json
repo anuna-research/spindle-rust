@@ -1,12 +1,12 @@
 {
-  "task_id": "abduce-spec",
+  "task_id": "grounding-completeness",
   "token_budget": 8000,
-  "tokens_used": 618,
+  "tokens_used": 302,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Formalize abduce operator: given theory T and goal literal q, find minimal sets of facts F such that q ∈ reason(T ∪ F). Prove: every returned F is a valid explanation (q ∈ reason(T ∪ F)). Known bug: Rust abduce doesn't verify solutions — the Lean version must.",
-      "token_cost": 67,
+      "content": "Prove grounding completeness: every ground instance of a rule that is relevant (some body literal matches a known fact) is produced by the grounding algorithm. This ensures no applicable rules are missed.",
+      "token_cost": 51,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T12:42:09Z"
+  "constructed_at": "2026-03-21T12:48:37Z"
 }
