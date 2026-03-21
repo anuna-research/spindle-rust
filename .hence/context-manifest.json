@@ -1,12 +1,12 @@
 {
-  "task_id": "arith-oracle",
+  "task_id": "grounding-termination",
   "token_budget": 8000,
-  "tokens_used": 300,
+  "tokens_used": 303,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Build a Lean oracle for arithmetic evaluation: given a JSON arithmetic expression and variable bindings, evaluate and return the result. Enable differential testing: Rust arith.rs vs Lean arithmetic.",
-      "token_cost": 49,
+      "content": "Prove that semi-naive grounding terminates for any finite theory. Argument: T_P is monotone on a finite lattice (subsets of the Herbrand base), so iteration reaches a fixed point in at most |HerbrandBase| steps.",
+      "token_cost": 52,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T12:19:41Z"
+  "constructed_at": "2026-03-21T12:29:53Z"
 }
