@@ -1,12 +1,12 @@
 {
-  "task_id": "matching",
+  "task_id": "ground-rule",
   "token_budget": 8000,
-  "tokens_used": 304,
+  "tokens_used": 308,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define pattern matching: given a non-ground literal and a ground literal, compute the most general unifier (MGU) if one exists. Prove: if match succeeds, applying the substitution to the pattern yields the target.",
-      "token_cost": 53,
+      "content": "Define ground rule application: apply a substitution to all literals in a rule (head + body). A rule is ground when all its literals are ground. Define the grounding of a rule as the set of all ground instances over a given domain.",
+      "token_cost": 57,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:42:15Z"
+  "constructed_at": "2026-03-21T10:53:00Z"
 }
