@@ -3,25 +3,27 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 223,
+    "files_changed": 4,
+    "insertions": 1161,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/GroundingCompleteness.lean"
+      "crates/spindle-core/tests/lean_grounding_oracle_difftest.rs",
+      "lean/Spindle/DiffTest/GroundingOracle.lean",
+      "lean/lakefile.lean"
     ],
-    "dirty_files": 8
+    "dirty_files": 19
   },
   "learnings": [
     {
-      "key": "task-grounding-completeness-changes",
-      "content": "Modified 2 files (+223, -5): .hence/context-manifest.json, lean/Spindle/Arith/GroundingCompleteness.lean",
+      "key": "task-grounding-oracle-changes",
+      "content": "Modified 4 files (+1161, -5): .hence/context-manifest.json, crates/spindle-core/tests/lean_grounding_oracle_difftest.rs, lean/Spindle/DiffTest/GroundingOracle.lean, lean/lakefile.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/grounding-completeness-v1",
-  "evaluated_at": "2026-03-21T13:00:55Z",
+  "branch_name": "hence/grounding-oracle-v1",
+  "evaluated_at": "2026-03-21T13:10:04Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
