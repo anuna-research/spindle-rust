@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 311,
+    "insertions": 223,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/Abduce.lean"
+      "lean/Spindle/Arith/GroundingCompleteness.lean"
     ],
     "dirty_files": 8
   },
   "learnings": [
     {
-      "key": "task-abduce-spec-changes",
-      "content": "Modified 2 files (+311, -5): .hence/context-manifest.json, lean/Spindle/Arith/Abduce.lean",
+      "key": "task-grounding-completeness-changes",
+      "content": "Modified 2 files (+223, -5): .hence/context-manifest.json, lean/Spindle/Arith/GroundingCompleteness.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/abduce-spec-v1",
-  "evaluated_at": "2026-03-21T12:48:30Z",
+  "branch_name": "hence/grounding-completeness-v1",
+  "evaluated_at": "2026-03-21T13:00:55Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
