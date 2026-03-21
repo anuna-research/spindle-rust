@@ -3,26 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 349,
+    "files_changed": 2,
+    "insertions": 338,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/IntervalSet.lean",
-      "lean/Spindle/Arith/TimePoint.lean"
+      "lean/Spindle/Arith/Matching.lean"
     ],
-    "dirty_files": 24
+    "dirty_files": 8
   },
   "learnings": [
     {
-      "key": "task-interval-sets-changes",
-      "content": "Modified 3 files (+349, -5): .hence/context-manifest.json, lean/Spindle/Arith/IntervalSet.lean, lean/Spindle/Arith/TimePoint.lean",
+      "key": "task-matching-changes",
+      "content": "Modified 2 files (+338, -5): .hence/context-manifest.json, lean/Spindle/Arith/Matching.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/interval-sets-v1",
-  "evaluated_at": "2026-03-21T10:42:10Z",
+  "branch_name": "hence/matching-v1",
+  "evaluated_at": "2026-03-21T10:52:55Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
