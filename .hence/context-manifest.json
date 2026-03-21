@@ -1,12 +1,12 @@
 {
-  "task_id": "grounding-termination",
+  "task_id": "abduce-spec",
   "token_budget": 8000,
-  "tokens_used": 303,
+  "tokens_used": 618,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Prove that semi-naive grounding terminates for any finite theory. Argument: T_P is monotone on a finite lattice (subsets of the Herbrand base), so iteration reaches a fixed point in at most |HerbrandBase| steps.",
-      "token_cost": 52,
+      "content": "Formalize abduce operator: given theory T and goal literal q, find minimal sets of facts F such that q ∈ reason(T ∪ F). Prove: every returned F is a valid explanation (q ∈ reason(T ∪ F)). Known bug: Rust abduce doesn't verify solutions — the Lean version must.",
+      "token_cost": 67,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T12:29:53Z"
+  "constructed_at": "2026-03-21T12:42:09Z"
 }
