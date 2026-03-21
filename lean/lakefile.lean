@@ -10,3 +10,7 @@ package SpindleArith where
 @[default_target]
 lean_lib Spindle where
   roots := #[`Spindle]
+
+lean_exe ArithOracle where
+  root := `Spindle.DiffTest.ArithOracle
+  supportInterpreter := true
