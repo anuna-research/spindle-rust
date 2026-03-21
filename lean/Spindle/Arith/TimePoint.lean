@@ -181,4 +181,11 @@ theorem TimePoint.le_posInf (a : TimePoint) : a ≤ TimePoint.posInf := by
   show TimePoint.le a TimePoint.posInf
   cases a <;> simp [TimePoint.le, TimePoint.lt]
 
+/-- If a < b then a.succ ≤ b. -/
+theorem TimePoint.succ_le_of_lt {a b : TimePoint} (h : TimePoint.lt a b) : a.succ ≤ b := by
+  show TimePoint.le a.succ b
+  simp [TimePoint.le]
+  cases a <;> cases b <;> simp_all [TimePoint.lt, TimePoint.succ, TimePoint.lt]
+  · omega
+
 end Spindle.Arith
