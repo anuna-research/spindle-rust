@@ -3,27 +3,26 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 4,
-    "insertions": 270,
-    "deletions": 52,
+    "files_changed": 3,
+    "insertions": 349,
+    "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/Constraint.lean",
-      "lean/Spindle/Arith/GroundLiteral.lean",
-      "lean/Spindle/Arith/Term.lean"
+      "lean/Spindle/Arith/IntervalSet.lean",
+      "lean/Spindle/Arith/TimePoint.lean"
     ],
-    "dirty_files": 7
+    "dirty_files": 24
   },
   "learnings": [
     {
-      "key": "task-arith-constraint-changes",
-      "content": "Modified 4 files (+270, -52): .hence/context-manifest.json, lean/Spindle/Arith/Constraint.lean, lean/Spindle/Arith/GroundLiteral.lean, lean/Spindle/Arith/Term.lean",
+      "key": "task-interval-sets-changes",
+      "content": "Modified 3 files (+349, -5): .hence/context-manifest.json, lean/Spindle/Arith/IntervalSet.lean, lean/Spindle/Arith/TimePoint.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/arith-constraint-v1",
-  "evaluated_at": "2026-03-21T10:25:55Z",
+  "branch_name": "hence/interval-sets-v1",
+  "evaluated_at": "2026-03-21T10:42:10Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
