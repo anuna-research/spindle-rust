@@ -1,12 +1,12 @@
 {
-  "task_id": "herbrand-base",
+  "task_id": "semi-naive",
   "token_budget": 8000,
-  "tokens_used": 298,
+  "tokens_used": 311,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define the Herbrand base: the set of all ground atoms constructible from the theory's constants and predicate symbols. Prove finiteness for finite theories. This bounds the grounding space.",
-      "token_cost": 47,
+      "content": "Formalize semi-naive Datalog evaluation: starting from facts, iteratively derive new ground atoms by matching rule bodies against known facts, then instantiate rule heads. Define the immediate consequence operator T_P. Prove T_P is monotone.",
+      "token_cost": 60,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T11:48:58Z"
+  "constructed_at": "2026-03-21T12:04:03Z"
 }
