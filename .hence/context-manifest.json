@@ -1,12 +1,12 @@
 {
-  "task_id": "grounding-completeness",
+  "task_id": "grounding-oracle",
   "token_budget": 8000,
-  "tokens_used": 302,
+  "tokens_used": 299,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Prove grounding completeness: every ground instance of a rule that is relevant (some body literal matches a known fact) is produced by the grounding algorithm. This ensures no applicable rules are missed.",
-      "token_cost": 51,
+      "content": "Build a Lean oracle for grounding: given a JSON theory with variables, compute the ground instances and serialize back to JSON. Enable differential testing: Rust grounding.rs vs Lean grounding.",
+      "token_cost": 48,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T12:48:37Z"
+  "constructed_at": "2026-03-21T13:01:02Z"
 }
