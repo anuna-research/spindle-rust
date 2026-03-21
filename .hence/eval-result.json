@@ -3,27 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 4,
-    "insertions": 965,
+    "files_changed": 2,
+    "insertions": 239,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/tests/lean_end_to_end_difftest.rs",
-      "lean/Spindle/DiffTest/EndToEndOracle.lean",
-      "lean/lakefile.lean"
+      "lean/Spindle/Arith/QuerySoundness.lean"
     ],
-    "dirty_files": 22
+    "dirty_files": 1
   },
   "learnings": [
     {
-      "key": "task-end-to-end-changes",
-      "content": "Modified 4 files (+965, -5): .hence/context-manifest.json, crates/spindle-core/tests/lean_end_to_end_difftest.rs, lean/Spindle/DiffTest/EndToEndOracle.lean, lean/lakefile.lean",
+      "key": "task-query-soundness-changes",
+      "content": "Modified 2 files (+239, -5): .hence/context-manifest.json, lean/Spindle/Arith/QuerySoundness.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/end-to-end-v1",
-  "evaluated_at": "2026-03-21T13:22:36Z",
+  "branch_name": "hence/query-soundness-v1",
+  "evaluated_at": "2026-03-21T13:27:45Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
