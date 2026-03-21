@@ -79,7 +79,7 @@ instance : BEq Term where
 
 /-- Decidable equality for Terms. Float equality is delegated to BEq
     (IEEE 754 semantics), so the float case uses the opaque beq. -/
-instance : DecidableEq Term := fun a b =>
+noncomputable instance : DecidableEq Term := fun a b =>
   match a, b with
   | .symbol s₁, .symbol s₂ =>
     if h : s₁ = s₂ then isTrue (congrArg Term.symbol h)
@@ -93,8 +93,8 @@ instance : DecidableEq Term := fun a b =>
       else isFalse (fun h' => by cases h'; exact hs rfl)
     else isFalse (fun h' => by cases h'; exact hn rfl)
   | .finiteFloat f₁, .finiteFloat f₂ =>
-    if h : f₁ = f₂ then isTrue (congrArg Term.finiteFloat h)
-    else isFalse (fun h' => by cases h'; exact h rfl)
+    -- Float has no DecidableEq; use Classical decidability
+    @Classical.propDecidable _
   | .variable v₁, .variable v₂ =>
     if h : v₁ = v₂ then isTrue (congrArg Term.variable h)
     else isFalse (fun h' => by cases h'; exact h rfl)
@@ -154,13 +154,13 @@ theorem Term.numeric_eq_symm (a b : Term) :
     a.numeric_eq b = b.numeric_eq a := by
   simp only [Term.numeric_eq]
   cases ha : a.toValue <;> cases hb : b.toValue <;> simp
-  exact numeric_eq_symm _ _
+  exact Spindle.Arith.numeric_eq_symm _ _
 
 /-- integer n is numerically equal to decimal n 0 (cross-type). -/
 theorem Term.numeric_eq_int_decimal_zero (n : Int) :
     (Term.integer n).numeric_eq (Term.decimal n 0) = true := by
   simp only [Term.numeric_eq, Term.toValue]
-  exact numeric_eq_int_decimal_zero n
+  exact Spindle.Arith.numeric_eq_int_decimal_zero n
 
 /-- Non-numeric terms are never numerically equal to anything. -/
 theorem Term.numeric_eq_symbol_false (s : String) (t : Term) :
@@ -182,16 +182,16 @@ def Term.typeLeq (a b : Term) : Bool :=
 /-- INT ≤ DECIMAL in the type hierarchy. -/
 theorem Term.int_leq_decimal (n : Int) (m : Int) (s : Nat) :
     Term.typeLeq (.integer n) (.decimal m s) = true := by
-  simp only [Term.typeLeq, Term.numericType, NumericType.lub]
+  simp only [Term.typeLeq, Term.numericType, NumericType.lub]; decide
 
 /-- INT ≤ FLOAT in the type hierarchy. -/
 theorem Term.int_leq_float (n : Int) (f : Float) :
     Term.typeLeq (.integer n) (.finiteFloat f) = true := by
-  simp only [Term.typeLeq, Term.numericType, NumericType.lub]
+  simp only [Term.typeLeq, Term.numericType, NumericType.lub]; decide
 
 /-- DECIMAL ≤ FLOAT in the type hierarchy. -/
 theorem Term.decimal_leq_float (n : Int) (s : Nat) (f : Float) :
     Term.typeLeq (.decimal n s) (.finiteFloat f) = true := by
-  simp only [Term.typeLeq, Term.numericType, NumericType.lub]
+  simp only [Term.typeLeq, Term.numericType, NumericType.lub]; decide
 
 end Spindle.Arith
