@@ -1,12 +1,12 @@
 {
-  "task_id": "term-type",
+  "task_id": "substitution-type",
   "token_budget": 8000,
-  "tokens_used": 95,
+  "tokens_used": 106,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define the Term type in Lean 4: Symbol, Integer, Decimal, FiniteFloat, Variable. Model the type hierarchy (INT < DECIMAL < FLOAT) and cross-type equality (numeric_eq). Include BEq/DecidableEq instances.",
-      "token_cost": 50,
+      "content": "Define Substitution as a partial map from variable names to ground terms. Include composition, domain, and application operations. Model occurs-check for safety.",
+      "token_cost": 40,
       "priority": "PlanMeta"
     },
     {
@@ -20,8 +20,14 @@
       "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Promotion.lean",
       "token_cost": 23,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-term-type-changes",
+      "content": "Modified 2 files (+208, -5): .hence/context-manifest.json, lean/Spindle/Arith/Term.lean",
+      "token_cost": 21,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T09:50:13Z"
+  "constructed_at": "2026-03-21T09:51:47Z"
 }

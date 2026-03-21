@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 208,
+    "insertions": 200,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/Term.lean"
+      "lean/Spindle/Arith/Substitution.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-term-type-changes",
-      "content": "Modified 2 files (+208, -5): .hence/context-manifest.json, lean/Spindle/Arith/Term.lean",
+      "key": "task-substitution-type-changes",
+      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Substitution.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/term-type-v1",
-  "evaluated_at": "2026-03-21T09:51:42Z",
+  "branch_name": "hence/substitution-type-v1",
+  "evaluated_at": "2026-03-21T09:55:39Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
