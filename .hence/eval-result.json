@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 200,
-    "deletions": 6,
+    "insertions": 224,
+    "deletions": 9,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/TimePoint.lean"
+      "lean/Spindle/Arith/GroundLiteral.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-timepoint-type-changes",
-      "content": "Modified 2 files (+200, -6): .hence/context-manifest.json, lean/Spindle/Arith/TimePoint.lean",
+      "key": "task-ground-literal-changes",
+      "content": "Modified 2 files (+224, -9): .hence/context-manifest.json, lean/Spindle/Arith/GroundLiteral.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/timepoint-type-v1",
-  "evaluated_at": "2026-03-21T10:05:31Z",
+  "branch_name": "hence/ground-literal-v1",
+  "evaluated_at": "2026-03-21T10:10:44Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
