@@ -1,12 +1,12 @@
 {
-  "task_id": "end-to-end",
+  "task_id": "query-soundness",
   "token_budget": 8000,
-  "tokens_used": 308,
+  "tokens_used": 310,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "End-to-end test: take a non-ground theory through Lean grounding, then through the existing IMPL-015 Lean reasoner, and compare results with Rust pipeline. This validates the full chain: parse → ground → reason → conclude.",
-      "token_cost": 57,
+      "content": "Prove cross-operator soundness: (1) if abduce returns F for goal q, then what_if(T, F) includes +d q. (2) if q ∉ conclusions, why_not returns a valid blocking reason. (3) what_if results are consistent (no +d q and -d q simultaneously).",
+      "token_cost": 59,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T13:10:15Z"
+  "constructed_at": "2026-03-21T13:22:48Z"
 }
