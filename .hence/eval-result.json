@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 751,
-    "deletions": 5,
+    "insertions": 97,
+    "deletions": 65,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-parser/tests/arithmetic_guard_tests.rs"
+      "lean/Spindle/Arith/Types.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-tests-parser-changes",
-      "content": "Modified 2 files (+751, -5): .hence/context-manifest.json, crates/spindle-parser/tests/arithmetic_guard_tests.rs",
+      "key": "task-arith-types-changes",
+      "content": "Modified 2 files (+97, -65): .hence/context-manifest.json, lean/Spindle/Arith/Types.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/tests-parser-v1",
-  "evaluated_at": "2026-02-25T06:15:10Z",
+  "branch_name": "hence/arith-types-v1",
+  "evaluated_at": "2026-03-21T09:37:04Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
