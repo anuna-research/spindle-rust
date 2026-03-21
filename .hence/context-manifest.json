@@ -1,15 +1,21 @@
 {
-  "task_id": "arith-types",
+  "task_id": "type-promotion",
   "token_budget": 8000,
-  "tokens_used": 62,
+  "tokens_used": 70,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define arithmetic operator types in Lean 4: NaryArithOp (sum, product, min, max), BinArithOp (sub, div, mod, pow), UnaryArithOp (neg, abs, sqrt, ceil, floor, round), CmpOp (eq, ne, lt, le, gt, ge). Define Value type with INT/DECIMAL/FLOAT variants.",
-      "token_cost": 62,
+      "content": "Define type promotion rules: INT → DECIMAL → FLOAT. Prove promotion preserves value (promote(3) = 3.0). Prove promotion is transitive. Define numeric_eq as equality after mutual promotion.",
+      "token_cost": 48,
       "priority": "PlanMeta"
+    },
+    {
+      "source": "memory/episodic/task-arith-types-changes",
+      "content": "Modified 2 files (+97, -65): .hence/context-manifest.json, lean/Spindle/Arith/Types.lean",
+      "token_cost": 22,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T09:35:27Z"
+  "constructed_at": "2026-03-21T09:37:09Z"
 }
