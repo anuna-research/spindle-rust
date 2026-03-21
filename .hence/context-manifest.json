@@ -1,12 +1,12 @@
 {
-  "task_id": "why-not-spec",
+  "task_id": "herbrand-base",
   "token_budget": 8000,
-  "tokens_used": 1200,
+  "tokens_used": 298,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Formalize why_not operator: given theory T and literal q not in conclusions, return a BlockingReason: MissingPremise (which body literal is unproved), Defeated (which attacker won), Contradicted (+D ~q blocks +d q). Prove: if why_not returns MissingPremise(l), then l ∉ +d.",
-      "token_cost": 68,
+      "content": "Define the Herbrand base: the set of all ground atoms constructible from the theory's constants and predicate symbols. Prove finiteness for finite theories. This bounds the grounding space.",
+      "token_cost": 47,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T11:45:52Z"
+  "constructed_at": "2026-03-21T11:48:58Z"
 }
