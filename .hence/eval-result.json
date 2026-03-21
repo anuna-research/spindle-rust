@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 180,
+    "insertions": 150,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/GroundRule.lean"
+      "lean/Spindle/Arith/WhatIf.lean"
     ],
-    "dirty_files": 0
+    "dirty_files": 16
   },
   "learnings": [
     {
-      "key": "task-ground-rule-changes",
-      "content": "Modified 2 files (+180, -5): .hence/context-manifest.json, lean/Spindle/Arith/GroundRule.lean",
+      "key": "task-what-if-spec-changes",
+      "content": "Modified 2 files (+150, -5): .hence/context-manifest.json, lean/Spindle/Arith/WhatIf.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/ground-rule-v1",
-  "evaluated_at": "2026-03-21T10:57:03Z",
+  "branch_name": "hence/what-if-spec-v1",
+  "evaluated_at": "2026-03-21T11:45:47Z",
   "checks_passed": 0,
   "checks_failed": 0
 }

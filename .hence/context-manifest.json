@@ -1,12 +1,12 @@
 {
-  "task_id": "ground-rule",
+  "task_id": "what-if-spec",
   "token_budget": 8000,
-  "tokens_used": 308,
+  "tokens_used": 312,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define ground rule application: apply a substitution to all literals in a rule (head + body). A rule is ground when all its literals are ground. Define the grounding of a rule as the set of all ground instances over a given domain.",
-      "token_cost": 57,
+      "content": "Formalize what_if operator: given a theory T and hypothetical facts F, compute reason(T ∪ F) and return the delta (new conclusions minus original). Prove: what_if is monotone in F (more facts → more conclusions). Prove: what_if(T, ∅) = ∅.",
+      "token_cost": 61,
       "priority": "PlanMeta"
     },
     {
@@ -71,5 +71,5 @@
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:53:00Z"
+  "constructed_at": "2026-03-21T11:41:03Z"
 }
