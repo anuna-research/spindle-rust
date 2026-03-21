@@ -3,25 +3,26 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 2,
-    "insertions": 292,
+    "files_changed": 3,
+    "insertions": 209,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/HerbrandBase.lean"
+      "lean/Spindle.lean",
+      "lean/Spindle/Arith/SemiNaive.lean"
     ],
-    "dirty_files": 0
+    "dirty_files": 24
   },
   "learnings": [
     {
-      "key": "task-herbrand-base-changes",
-      "content": "Modified 2 files (+292, -5): .hence/context-manifest.json, lean/Spindle/Arith/HerbrandBase.lean",
+      "key": "task-semi-naive-changes",
+      "content": "Modified 3 files (+209, -5): .hence/context-manifest.json, lean/Spindle.lean, lean/Spindle/Arith/SemiNaive.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/herbrand-base-v1",
-  "evaluated_at": "2026-03-21T12:03:58Z",
+  "branch_name": "hence/semi-naive-v1",
+  "evaluated_at": "2026-03-21T12:09:56Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
