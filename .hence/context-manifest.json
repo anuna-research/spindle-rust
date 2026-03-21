@@ -1,12 +1,16 @@
 {
-  "task_id": "arith-eval",
+  "task_id": "timepoint-type",
   "token_budget": 8000,
-  "tokens_used": 155,
+  "tokens_used": 167,
+  "files_modified": [
+    ".hence/context-manifest.json",
+    "lean/Spindle/Arith/TimePoint.lean"
+  ],
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define evaluation functions for each operator family. For NaryOps: sum is associative+commutative, product is associative+commutative, min/max are associative+commutative+idempotent. For BinOps: division by zero returns None. For CmpOps: comparison after promotion.",
-      "token_cost": 66,
+      "content": "Define TimePoint in Lean 4: NegInf, Moment(Int), PosInf. Implement total ordering with NegInf < Moment(n) < PosInf. Prove: ordering is total, transitive, antisymmetric. Define successor/predecessor for closed-interval arithmetic.",
+      "token_cost": 57,
       "priority": "PlanMeta"
     },
     {
@@ -32,8 +36,14 @@
       "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Substitution.lean",
       "token_cost": 23,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-arith-eval-changes",
+      "content": "Modified 2 files (+358, -5): .hence/context-manifest.json, lean/Spindle/Arith/Eval.lean",
+      "token_cost": 21,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T09:55:45Z"
+  "constructed_at": "2026-03-21T10:01:18Z"
 }
