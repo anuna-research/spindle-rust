@@ -1,0 +1,355 @@
+;; =============================================================================
+;; IMPL-016: Lean 4 Formal Verification — Grounding, Arithmetic, Temporal & Queries
+;; =============================================================================
+;;
+;; Formal verification of the four highest-risk unverified spindle-core modules:
+;;   1. Grounding (grounding.rs) — variable instantiation & Datalog iteration
+;;   2. Arithmetic (arith.rs) — typed evaluation with INT/DECIMAL/FLOAT promotion
+;;   3. Temporal (temporal.rs) — Allen interval algebra, interval set operations
+;;   4. Query operators (query/*.rs) — what_if, why_not, abduce
+;;
+;; These modules have known bugs documented in the Feb 2026 bug hunt and are
+;; critical to reasoning correctness.
+;;
+;; Depends on: IMPL-015 (Lean 4 core verification, complete)
+;; =============================================================================
+
+(meta plan
+  (id "IMPL-016")
+  (title "Lean 4 Verification: Grounding, Arithmetic, Temporal & Queries")
+  (version "1.0.0")
+  (status "active")
+  (created "2026-03-21")
+  (author "agent:claude")
+  (spec "SPEC-016")
+  (description "Formalize and verify grounding.rs, arith.rs, temporal.rs, and query operators in Lean 4. Prove substitution correctness, arithmetic type safety, Allen algebra properties, and query operator soundness. Builds on the IMPL-015 Lean 4 foundation (types, closures, properties)."))
+
+;; =============================================================================
+;; Agents
+;; =============================================================================
+
+(given agent-claude-available)
+
+;; =============================================================================
+;; Phase 1: Grounding Foundation (Types & Substitution)
+;; =============================================================================
+
+(given task-term-type)
+(given no-deps-term-type)
+(meta task-term-type
+  (description "Define the Term type in Lean 4: Symbol, Integer, Decimal, FiniteFloat, Variable. Model the type hierarchy (INT < DECIMAL < FLOAT) and cross-type equality (numeric_eq). Include BEq/DecidableEq instances.")
+  (acceptance "Term type compiles; numeric equality is reflexive, symmetric, transitive; type promotion preserves value")
+  (phase "1-grounding-types")
+  (req "REQ-101")
+  (target-file "Spindle/Grounding/Term.lean"))
+
+(given task-substitution-type)
+(meta task-substitution-type
+  (description "Define Substitution as a partial map from variable names to ground terms. Include composition, domain, and application operations. Model occurs-check for safety.")
+  (acceptance "Substitution type compiles; composition is associative; identity substitution is neutral element")
+  (phase "1-grounding-types")
+  (req "REQ-102")
+  (target-file "Spindle/Grounding/Substitution.lean"))
+
+(given task-ground-literal)
+(meta task-ground-literal
+  (description "Define ground literal application: substitute variables in a literal's predicate arguments with terms from a substitution. A literal is 'ground' when it contains no variables. Prove that applying a complete substitution produces a ground literal.")
+  (acceptance "Theorem compiles with no sorry; ground_of_complete_subst proved")
+  (phase "1-grounding-types")
+  (req "REQ-103")
+  (target-file "Spindle/Grounding/Ground.lean"))
+
+(given task-ground-rule)
+(meta task-ground-rule
+  (description "Define ground rule application: apply a substitution to all literals in a rule (head + body). A rule is ground when all its literals are ground. Define the grounding of a rule as the set of all ground instances over a given domain.")
+  (acceptance "Theorem compiles with no sorry; grounding preserves rule structure (type, label)")
+  (phase "1-grounding-types")
+  (req "REQ-104")
+  (target-file "Spindle/Grounding/Ground.lean"))
+
+;; Phase 1 readiness
+(normally r-ready-term-type (and task-term-type no-deps-term-type) ready-term-type)
+(normally r-ready-substitution-type (and task-substitution-type completed-term-type) ready-substitution-type)
+(normally r-ready-ground-literal (and task-ground-literal completed-substitution-type) ready-ground-literal)
+(normally r-ready-ground-rule (and task-ground-rule completed-ground-literal) ready-ground-rule)
+
+;; =============================================================================
+;; Phase 2: Grounding Algorithm
+;; =============================================================================
+
+(given task-herbrand-base)
+(meta task-herbrand-base
+  (description "Define the Herbrand base: the set of all ground atoms constructible from the theory's constants and predicate symbols. Prove finiteness for finite theories. This bounds the grounding space.")
+  (acceptance "Herbrand base definition compiles; finiteness theorem for finite theories proved")
+  (phase "2-grounding-algorithm")
+  (req "REQ-105")
+  (target-file "Spindle/Grounding/Herbrand.lean"))
+
+(given task-matching)
+(meta task-matching
+  (description "Define pattern matching: given a non-ground literal and a ground literal, compute the most general unifier (MGU) if one exists. Prove: if match succeeds, applying the substitution to the pattern yields the target.")
+  (acceptance "Matching function and correctness theorem compile with no sorry")
+  (phase "2-grounding-algorithm")
+  (req "REQ-106")
+  (target-file "Spindle/Grounding/Match.lean"))
+
+(given task-semi-naive)
+(meta task-semi-naive
+  (description "Formalize semi-naive Datalog evaluation: starting from facts, iteratively derive new ground atoms by matching rule bodies against known facts, then instantiate rule heads. Define the immediate consequence operator T_P. Prove T_P is monotone.")
+  (acceptance "T_P operator and monotonicity theorem compile with no sorry")
+  (phase "2-grounding-algorithm")
+  (req "REQ-107")
+  (target-file "Spindle/Grounding/SemiNaive.lean"))
+
+(given task-grounding-termination)
+(meta task-grounding-termination
+  (description "Prove that semi-naive grounding terminates for any finite theory. Argument: T_P is monotone on a finite lattice (subsets of the Herbrand base), so iteration reaches a fixed point in at most |HerbrandBase| steps.")
+  (acceptance "Termination theorem compiles; sorry allowed if blocked by lattice formalization")
+  (phase "2-grounding-algorithm")
+  (req "REQ-108")
+  (target-file "Spindle/Grounding/Termination.lean"))
+
+(given task-grounding-completeness)
+(meta task-grounding-completeness
+  (description "Prove grounding completeness: every ground instance of a rule that is relevant (some body literal matches a known fact) is produced by the grounding algorithm. This ensures no applicable rules are missed.")
+  (acceptance "Completeness theorem compiles with no sorry; or sorry count documented if blocked")
+  (phase "2-grounding-algorithm")
+  (req "REQ-109")
+  (target-file "Spindle/Grounding/Completeness.lean"))
+
+;; Phase 2 readiness
+(normally r-ready-herbrand-base (and task-herbrand-base completed-ground-rule) ready-herbrand-base)
+(normally r-ready-matching (and task-matching completed-ground-literal) ready-matching)
+(normally r-ready-semi-naive (and task-semi-naive completed-matching completed-herbrand-base) ready-semi-naive)
+(normally r-ready-grounding-termination (and task-grounding-termination completed-semi-naive) ready-grounding-termination)
+(normally r-ready-grounding-completeness (and task-grounding-completeness completed-semi-naive) ready-grounding-completeness)
+
+;; =============================================================================
+;; Phase 3: Arithmetic Evaluation
+;; =============================================================================
+
+(given task-arith-types)
+(meta task-arith-types
+  (description "Define arithmetic operator types in Lean 4: NaryArithOp (sum, product, min, max), BinArithOp (sub, div, mod, pow), UnaryArithOp (neg, abs, sqrt, ceil, floor, round), CmpOp (eq, ne, lt, le, gt, ge). Define Value type with INT/DECIMAL/FLOAT variants.")
+  (acceptance "All operator and value types compile with BEq/DecidableEq instances")
+  (phase "3-arithmetic")
+  (req "REQ-201")
+  (target-file "Spindle/Arith/Types.lean"))
+
+(given task-type-promotion)
+(meta task-type-promotion
+  (description "Define type promotion rules: INT → DECIMAL → FLOAT. Prove promotion preserves value (promote(3) = 3.0). Prove promotion is transitive. Define numeric_eq as equality after mutual promotion.")
+  (acceptance "Promotion theorems compile with no sorry; value preservation and transitivity proved")
+  (phase "3-arithmetic")
+  (req "REQ-202")
+  (target-file "Spindle/Arith/Promotion.lean"))
+
+(given task-arith-eval)
+(meta task-arith-eval
+  (description "Define evaluation functions for each operator family. For NaryOps: sum is associative+commutative, product is associative+commutative, min/max are associative+commutative+idempotent. For BinOps: division by zero returns None. For CmpOps: comparison after promotion.")
+  (acceptance "Evaluation functions compile; algebraic properties proved for sum, product, min, max")
+  (phase "3-arithmetic")
+  (req "REQ-203")
+  (target-file "Spindle/Arith/Eval.lean"))
+
+(given task-arith-constraint)
+(meta task-arith-constraint
+  (description "Define arithmetic constraint evaluation in rule bodies: a BodyArg can be a literal, a constant, a variable, or an arithmetic expression. Define constraint satisfaction and prove: if all variables are bound to ground terms, constraint evaluation is deterministic.")
+  (acceptance "Constraint satisfaction definition and determinism theorem compile")
+  (phase "3-arithmetic")
+  (req "REQ-204")
+  (target-file "Spindle/Arith/Constraint.lean"))
+
+(given task-arith-grounding-compat)
+(meta task-arith-grounding-compat
+  (description "Prove compatibility between arithmetic evaluation and grounding: if a substitution satisfies all arithmetic constraints in a rule body, then the ground rule preserves the constraint truth values. This bridges grounding.rs and arith.rs.")
+  (acceptance "Compatibility theorem compiles with no sorry; or sorry count documented")
+  (phase "3-arithmetic")
+  (req "REQ-205")
+  (target-file "Spindle/Arith/GroundingCompat.lean"))
+
+;; Phase 3 readiness
+(normally r-ready-arith-types (and task-arith-types no-deps-term-type) ready-arith-types)
+(normally r-ready-type-promotion (and task-type-promotion completed-arith-types) ready-type-promotion)
+(normally r-ready-arith-eval (and task-arith-eval completed-type-promotion) ready-arith-eval)
+(normally r-ready-arith-constraint (and task-arith-constraint completed-arith-eval completed-ground-literal) ready-arith-constraint)
+(normally r-ready-arith-grounding-compat (and task-arith-grounding-compat completed-arith-constraint completed-semi-naive) ready-arith-grounding-compat)
+
+;; =============================================================================
+;; Phase 4: Temporal Reasoning (Allen Interval Algebra)
+;; =============================================================================
+
+(given task-timepoint-type)
+(given no-deps-timepoint-type)
+(meta task-timepoint-type
+  (description "Define TimePoint in Lean 4: NegInf, Moment(Int), PosInf. Implement total ordering with NegInf < Moment(n) < PosInf. Prove: ordering is total, transitive, antisymmetric. Define successor/predecessor for closed-interval arithmetic.")
+  (acceptance "TimePoint type with Ord instance compiles; totality and transitivity proved with no sorry")
+  (phase "4-temporal")
+  (req "REQ-501")
+  (target-file "Spindle/Temporal/TimePoint.lean"))
+
+(given task-interval-type)
+(meta task-interval-type
+  (description "Define Temporal (interval) as a pair (start: TimePoint, end: TimePoint) with start <= end invariant. Define intersection, containment, adjacency predicates. Prove interval well-formedness is preserved by intersection.")
+  (acceptance "Temporal type compiles; intersection preserves well-formedness; at least 3 interval operations proved correct")
+  (phase "4-temporal")
+  (req "REQ-502")
+  (target-file "Spindle/Temporal/Interval.lean"))
+
+(given task-allen-relations)
+(meta task-allen-relations
+  (description "Define all 13 Allen interval relations (before, after, meets, met-by, overlaps, overlapped-by, starts, started-by, during, contains, finishes, finished-by, equals). Prove the key algebraic properties: (1) exactly one relation holds between any two non-empty intervals (JEPD - jointly exhaustive, pairwise disjoint), (2) inverse is an involution (inverse(inverse(r)) = r), (3) equals is reflexive.")
+  (acceptance "All 13 relations defined; JEPD theorem compiles with no sorry; inverse involution proved")
+  (phase "4-temporal")
+  (req "REQ-503")
+  (target-file "Spindle/Temporal/Allen.lean"))
+
+(given task-allen-composition)
+(meta task-allen-composition
+  (description "Define the Allen composition table: given relations R(A,B) and R(B,C), compute the set of possible relations R(A,C). The 13x13 table is well-known from Allen 1983. Prove: composition is associative. Prove: if R1(A,B) and R2(B,C), then the actual relation R(A,C) is in compose(R1,R2).")
+  (acceptance "Composition table defined; soundness theorem compiles with no sorry")
+  (phase "4-temporal")
+  (req "REQ-504")
+  (target-file "Spindle/Temporal/Composition.lean"))
+
+(given task-interval-sets)
+(meta task-interval-sets
+  (description "Formalize interval set operations from temporal.rs: normalize (sort + merge overlapping), intersection, subtraction. Prove: (1) normalize is idempotent, (2) intersection is commutative, (3) subtraction removes exactly the specified intervals, (4) normalize preserves the point-set semantics (a time point is covered iff it was covered before).")
+  (acceptance "All three operations defined; idempotence of normalize and commutativity of intersection proved; point-set equivalence for normalize proved")
+  (phase "4-temporal")
+  (req "REQ-505")
+  (target-file "Spindle/Temporal/IntervalSets.lean"))
+
+(given task-temporal-grounding)
+(meta task-temporal-grounding
+  (description "Formalize temporal constraint evaluation during grounding: AllenConstraint binds two interval variables and an Allen relation. During grounding, both variables must be bound to concrete intervals, and the relation must hold. Prove: constraint evaluation is deterministic given ground bindings. Connect to the grounding phase 2 machinery.")
+  (acceptance "Temporal constraint evaluation compiles; determinism proved; integration with grounding substitutions shown")
+  (phase "4-temporal")
+  (req "REQ-506")
+  (target-file "Spindle/Temporal/Grounding.lean"))
+
+;; Phase 4 readiness (temporal)
+(normally r-ready-timepoint-type (and task-timepoint-type no-deps-timepoint-type) ready-timepoint-type)
+(normally r-ready-interval-type (and task-interval-type completed-timepoint-type) ready-interval-type)
+(normally r-ready-allen-relations (and task-allen-relations completed-interval-type) ready-allen-relations)
+(normally r-ready-allen-composition (and task-allen-composition completed-allen-relations) ready-allen-composition)
+(normally r-ready-interval-sets (and task-interval-sets completed-interval-type) ready-interval-sets)
+(normally r-ready-temporal-grounding (and task-temporal-grounding completed-allen-relations completed-interval-sets completed-semi-naive) ready-temporal-grounding)
+
+;; =============================================================================
+;; Phase 5: Query Operators (renumbered from 4)
+;; =============================================================================
+
+(given task-what-if-spec)
+(meta task-what-if-spec
+  (description "Formalize what_if operator: given a theory T and hypothetical facts F, compute reason(T ∪ F) and return the delta (new conclusions minus original). Prove: what_if is monotone in F (more facts → more conclusions). Prove: what_if(T, ∅) = ∅.")
+  (acceptance "what_if definition and monotonicity theorem compile with no sorry")
+  (phase "5-queries")
+  (req "REQ-301")
+  (target-file "Spindle/Query/WhatIf.lean"))
+
+(given task-why-not-spec)
+(meta task-why-not-spec
+  (description "Formalize why_not operator: given theory T and literal q not in conclusions, return a BlockingReason: MissingPremise (which body literal is unproved), Defeated (which attacker won), Contradicted (+D ~q blocks +d q). Prove: if why_not returns MissingPremise(l), then l ∉ +d.")
+  (acceptance "why_not definition and correctness theorem compile with no sorry")
+  (phase "5-queries")
+  (req "REQ-302")
+  (target-file "Spindle/Query/WhyNot.lean"))
+
+(given task-abduce-spec)
+(meta task-abduce-spec
+  (description "Formalize abduce operator: given theory T and goal literal q, find minimal sets of facts F such that q ∈ reason(T ∪ F). Prove: every returned F is a valid explanation (q ∈ reason(T ∪ F)). Known bug: Rust abduce doesn't verify solutions — the Lean version must.")
+  (acceptance "abduce definition and verification theorem compile; solution verification is mandatory")
+  (phase "5-queries")
+  (req "REQ-303")
+  (target-file "Spindle/Query/Abduce.lean"))
+
+(given task-query-soundness)
+(meta task-query-soundness
+  (description "Prove cross-operator soundness: (1) if abduce returns F for goal q, then what_if(T, F) includes +d q. (2) if q ∉ conclusions, why_not returns a valid blocking reason. (3) what_if results are consistent (no +d q and -d q simultaneously).")
+  (acceptance "All three cross-operator theorems compile with no sorry")
+  (phase "5-queries")
+  (req "REQ-304")
+  (target-file "Spindle/Query/Soundness.lean"))
+
+;; Phase 4 readiness
+(normally r-ready-what-if-spec (and task-what-if-spec completed-ground-rule) ready-what-if-spec)
+(normally r-ready-why-not-spec (and task-why-not-spec completed-ground-rule) ready-why-not-spec)
+(normally r-ready-abduce-spec (and task-abduce-spec completed-what-if-spec) ready-abduce-spec)
+(normally r-ready-query-soundness (and task-query-soundness completed-what-if-spec completed-why-not-spec completed-abduce-spec) ready-query-soundness)
+
+;; =============================================================================
+;; Phase 5: Integration & Differential Testing
+;; =============================================================================
+
+(given task-grounding-oracle)
+(meta task-grounding-oracle
+  (description "Build a Lean oracle for grounding: given a JSON theory with variables, compute the ground instances and serialize back to JSON. Enable differential testing: Rust grounding.rs vs Lean grounding.")
+  (acceptance "Oracle compiles and produces JSON output; at least 5 differential test cases pass")
+  (phase "6-integration")
+  (req "REQ-401")
+  (target-file "Spindle/DiffTest/GroundingOracle.lean"))
+
+(given task-arith-oracle)
+(meta task-arith-oracle
+  (description "Build a Lean oracle for arithmetic evaluation: given a JSON arithmetic expression and variable bindings, evaluate and return the result. Enable differential testing: Rust arith.rs vs Lean arithmetic.")
+  (acceptance "Oracle compiles; at least 10 differential test cases covering type promotion")
+  (phase "6-integration")
+  (req "REQ-402")
+  (target-file "Spindle/DiffTest/ArithOracle.lean"))
+
+(given task-end-to-end)
+(meta task-end-to-end
+  (description "End-to-end test: take a non-ground theory through Lean grounding, then through the existing IMPL-015 Lean reasoner, and compare results with Rust pipeline. This validates the full chain: parse → ground → reason → conclude.")
+  (acceptance "At least 3 end-to-end theories produce matching results between Lean and Rust")
+  (phase "6-integration")
+  (req "REQ-403")
+  (target-file "Spindle/DiffTest/EndToEnd.lean"))
+
+;; Phase 5 readiness
+(normally r-ready-grounding-oracle (and task-grounding-oracle completed-grounding-completeness) ready-grounding-oracle)
+(normally r-ready-arith-oracle (and task-arith-oracle completed-arith-grounding-compat) ready-arith-oracle)
+(normally r-ready-end-to-end (and task-end-to-end completed-grounding-oracle completed-arith-oracle) ready-end-to-end)
+
+;; =============================================================================
+;; Assignment rules — all tasks to claude
+;; =============================================================================
+
+;; Phase 1
+(normally r-assign-term-type (and ready-term-type agent-claude-available) assign-to-term-type-claude)
+(normally r-assign-substitution-type (and ready-substitution-type agent-claude-available) assign-to-substitution-type-claude)
+(normally r-assign-ground-literal (and ready-ground-literal agent-claude-available) assign-to-ground-literal-claude)
+(normally r-assign-ground-rule (and ready-ground-rule agent-claude-available) assign-to-ground-rule-claude)
+
+;; Phase 2
+(normally r-assign-herbrand-base (and ready-herbrand-base agent-claude-available) assign-to-herbrand-base-claude)
+(normally r-assign-matching (and ready-matching agent-claude-available) assign-to-matching-claude)
+(normally r-assign-semi-naive (and ready-semi-naive agent-claude-available) assign-to-semi-naive-claude)
+(normally r-assign-grounding-termination (and ready-grounding-termination agent-claude-available) assign-to-grounding-termination-claude)
+(normally r-assign-grounding-completeness (and ready-grounding-completeness agent-claude-available) assign-to-grounding-completeness-claude)
+
+;; Phase 3
+(normally r-assign-arith-types (and ready-arith-types agent-claude-available) assign-to-arith-types-claude)
+(normally r-assign-type-promotion (and ready-type-promotion agent-claude-available) assign-to-type-promotion-claude)
+(normally r-assign-arith-eval (and ready-arith-eval agent-claude-available) assign-to-arith-eval-claude)
+(normally r-assign-arith-constraint (and ready-arith-constraint agent-claude-available) assign-to-arith-constraint-claude)
+(normally r-assign-arith-grounding-compat (and ready-arith-grounding-compat agent-claude-available) assign-to-arith-grounding-compat-claude)
+
+;; Phase 4 (temporal)
+(normally r-assign-timepoint-type (and ready-timepoint-type agent-claude-available) assign-to-timepoint-type-claude)
+(normally r-assign-interval-type (and ready-interval-type agent-claude-available) assign-to-interval-type-claude)
+(normally r-assign-allen-relations (and ready-allen-relations agent-claude-available) assign-to-allen-relations-claude)
+(normally r-assign-allen-composition (and ready-allen-composition agent-claude-available) assign-to-allen-composition-claude)
+(normally r-assign-interval-sets (and ready-interval-sets agent-claude-available) assign-to-interval-sets-claude)
+(normally r-assign-temporal-grounding (and ready-temporal-grounding agent-claude-available) assign-to-temporal-grounding-claude)
+
+;; Phase 5 (queries)
+(normally r-assign-what-if-spec (and ready-what-if-spec agent-claude-available) assign-to-what-if-spec-claude)
+(normally r-assign-why-not-spec (and ready-why-not-spec agent-claude-available) assign-to-why-not-spec-claude)
+(normally r-assign-abduce-spec (and ready-abduce-spec agent-claude-available) assign-to-abduce-spec-claude)
+(normally r-assign-query-soundness (and ready-query-soundness agent-claude-available) assign-to-query-soundness-claude)
+
+;; Phase 6
+(normally r-assign-grounding-oracle (and ready-grounding-oracle agent-claude-available) assign-to-grounding-oracle-claude)
+(normally r-assign-arith-oracle (and ready-arith-oracle agent-claude-available) assign-to-arith-oracle-claude)
+(normally r-assign-end-to-end (and ready-end-to-end agent-claude-available) assign-to-end-to-end-claude)
