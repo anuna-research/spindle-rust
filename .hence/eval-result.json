@@ -4,26 +4,26 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 4,
-    "insertions": 1161,
+    "insertions": 965,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/tests/lean_grounding_oracle_difftest.rs",
-      "lean/Spindle/DiffTest/GroundingOracle.lean",
+      "crates/spindle-core/tests/lean_end_to_end_difftest.rs",
+      "lean/Spindle/DiffTest/EndToEndOracle.lean",
       "lean/lakefile.lean"
     ],
-    "dirty_files": 19
+    "dirty_files": 22
   },
   "learnings": [
     {
-      "key": "task-grounding-oracle-changes",
-      "content": "Modified 4 files (+1161, -5): .hence/context-manifest.json, crates/spindle-core/tests/lean_grounding_oracle_difftest.rs, lean/Spindle/DiffTest/GroundingOracle.lean, lean/lakefile.lean",
+      "key": "task-end-to-end-changes",
+      "content": "Modified 4 files (+965, -5): .hence/context-manifest.json, crates/spindle-core/tests/lean_end_to_end_difftest.rs, lean/Spindle/DiffTest/EndToEndOracle.lean, lean/lakefile.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/grounding-oracle-v1",
-  "evaluated_at": "2026-03-21T13:10:04Z",
+  "branch_name": "hence/end-to-end-v1",
+  "evaluated_at": "2026-03-21T13:22:36Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
