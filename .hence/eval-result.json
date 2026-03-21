@@ -3,27 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 4,
-    "insertions": 921,
-    "deletions": 10,
+    "files_changed": 2,
+    "insertions": 210,
+    "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "crates/spindle-core/tests/lean_arith_oracle_difftest.rs",
-      "lean/Spindle/DiffTest/ArithOracle.lean",
-      "lean/lakefile.lean"
+      "lean/Spindle/Arith/SemiNaive.lean"
     ],
-    "dirty_files": 27
+    "dirty_files": 10
   },
   "learnings": [
     {
-      "key": "task-arith-oracle-changes",
-      "content": "Modified 4 files (+921, -10): .hence/context-manifest.json, crates/spindle-core/tests/lean_arith_oracle_difftest.rs, lean/Spindle/DiffTest/ArithOracle.lean, lean/lakefile.lean",
+      "key": "task-grounding-termination-changes",
+      "content": "Modified 2 files (+210, -5): .hence/context-manifest.json, lean/Spindle/Arith/SemiNaive.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/arith-oracle-v1",
-  "evaluated_at": "2026-03-21T12:29:43Z",
+  "branch_name": "hence/grounding-termination-v1",
+  "evaluated_at": "2026-03-21T12:42:02Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
