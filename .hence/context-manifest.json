@@ -1,12 +1,12 @@
 {
-  "task_id": "substitution-type",
+  "task_id": "arith-eval",
   "token_budget": 8000,
-  "tokens_used": 106,
+  "tokens_used": 155,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Define Substitution as a partial map from variable names to ground terms. Include composition, domain, and application operations. Model occurs-check for safety.",
-      "token_cost": 40,
+      "content": "Define evaluation functions for each operator family. For NaryOps: sum is associative+commutative, product is associative+commutative, min/max are associative+commutative+idempotent. For BinOps: division by zero returns None. For CmpOps: comparison after promotion.",
+      "token_cost": 66,
       "priority": "PlanMeta"
     },
     {
@@ -26,8 +26,14 @@
       "content": "Modified 2 files (+208, -5): .hence/context-manifest.json, lean/Spindle/Arith/Term.lean",
       "token_cost": 21,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-substitution-type-changes",
+      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Substitution.lean",
+      "token_cost": 23,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T09:51:47Z"
+  "constructed_at": "2026-03-21T09:55:45Z"
 }
