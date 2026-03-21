@@ -1,12 +1,12 @@
 {
-  "task_id": "interval-sets",
+  "task_id": "matching",
   "token_budget": 8000,
-  "tokens_used": 7500,
+  "tokens_used": 304,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Formalize interval set operations from temporal.rs: normalize (sort + merge overlapping), intersection, subtraction. Prove: (1) normalize is idempotent, (2) intersection is commutative, (3) subtraction removes exactly the specified intervals, (4) normalize preserves the point-set semantics (a time point is covered iff it was covered before).",
-      "token_cost": 85,
+      "content": "Define pattern matching: given a non-ground literal and a ground literal, compute the most general unifier (MGU) if one exists. Prove: if match succeeds, applying the substitution to the pattern yields the target.",
+      "token_cost": 53,
       "priority": "PlanMeta"
     },
     {
@@ -62,8 +62,14 @@
       "content": "Modified 4 files (+270, -52): .hence/context-manifest.json, lean/Spindle/Arith/Constraint.lean, lean/Spindle/Arith/GroundLiteral.lean, lean/Spindle/Arith/Term.lean",
       "token_cost": 40,
       "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-interval-sets-changes",
+      "content": "Modified 3 files (+349, -5): .hence/context-manifest.json, lean/Spindle/Arith/IntervalSet.lean, lean/Spindle/Arith/TimePoint.lean",
+      "token_cost": 32,
+      "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-21T10:26:01Z"
+  "constructed_at": "2026-03-21T10:42:15Z"
 }
