@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 200,
+    "insertions": 358,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/Substitution.lean"
+      "lean/Spindle/Arith/Eval.lean"
     ],
-    "dirty_files": 0
+    "dirty_files": 3
   },
   "learnings": [
     {
-      "key": "task-substitution-type-changes",
-      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Substitution.lean",
+      "key": "task-arith-eval-changes",
+      "content": "Modified 2 files (+358, -5): .hence/context-manifest.json, lean/Spindle/Arith/Eval.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/substitution-type-v1",
-  "evaluated_at": "2026-03-21T09:55:39Z",
+  "branch_name": "hence/arith-eval-v1",
+  "evaluated_at": "2026-03-21T10:01:13Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
