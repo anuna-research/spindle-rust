@@ -3,26 +3,25 @@
   "confidence": 1.0,
   "exit_code": 0,
   "diff_summary": {
-    "files_changed": 3,
-    "insertions": 209,
-    "deletions": 5,
+    "files_changed": 2,
+    "insertions": 341,
+    "deletions": 64,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle.lean",
-      "lean/Spindle/Arith/SemiNaive.lean"
+      "lean/Spindle/Arith/GroundingCompat.lean"
     ],
-    "dirty_files": 24
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-semi-naive-changes",
-      "content": "Modified 3 files (+209, -5): .hence/context-manifest.json, lean/Spindle.lean, lean/Spindle/Arith/SemiNaive.lean",
+      "key": "task-arith-grounding-compat-changes",
+      "content": "Modified 2 files (+341, -64): .hence/context-manifest.json, lean/Spindle/Arith/GroundingCompat.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/semi-naive-v1",
-  "evaluated_at": "2026-03-21T12:09:56Z",
+  "branch_name": "hence/arith-grounding-compat-v1",
+  "evaluated_at": "2026-03-21T12:19:36Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
