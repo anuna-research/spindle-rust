@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 176,
+    "insertions": 292,
     "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/WhyNot.lean"
+      "lean/Spindle/Arith/HerbrandBase.lean"
     ],
-    "dirty_files": 8
+    "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-why-not-spec-changes",
-      "content": "Modified 2 files (+176, -5): .hence/context-manifest.json, lean/Spindle/Arith/WhyNot.lean",
+      "key": "task-herbrand-base-changes",
+      "content": "Modified 2 files (+292, -5): .hence/context-manifest.json, lean/Spindle/Arith/HerbrandBase.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/why-not-spec-v1",
-  "evaluated_at": "2026-03-21T11:48:52Z",
+  "branch_name": "hence/herbrand-base-v1",
+  "evaluated_at": "2026-03-21T12:03:58Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
