@@ -4,24 +4,24 @@
   "exit_code": 0,
   "diff_summary": {
     "files_changed": 2,
-    "insertions": 97,
-    "deletions": 65,
+    "insertions": 200,
+    "deletions": 5,
     "file_list": [
       ".hence/context-manifest.json",
-      "lean/Spindle/Arith/Types.lean"
+      "lean/Spindle/Arith/Promotion.lean"
     ],
     "dirty_files": 0
   },
   "learnings": [
     {
-      "key": "task-arith-types-changes",
-      "content": "Modified 2 files (+97, -65): .hence/context-manifest.json, lean/Spindle/Arith/Types.lean",
+      "key": "task-type-promotion-changes",
+      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Promotion.lean",
       "memory_type": "episodic",
       "confidence": 0.8
     }
   ],
-  "branch_name": "hence/arith-types-v1",
-  "evaluated_at": "2026-03-21T09:37:04Z",
+  "branch_name": "hence/type-promotion-v1",
+  "evaluated_at": "2026-03-21T09:50:08Z",
   "checks_passed": 0,
   "checks_failed": 0
 }
