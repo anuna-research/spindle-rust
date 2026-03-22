@@ -1,75 +1,75 @@
 {
-  "task_id": "final-review",
-  "token_budget": 4000,
-  "tokens_used": 333,
+  "task_id": "query-soundness",
+  "token_budget": 8000,
+  "tokens_used": 310,
   "elements_selected": [
     {
       "source": "plan-meta/description",
-      "content": "Architecture review: verify complexity locality, no synthetic rules leak, trust/superiority use original labels throughout",
-      "token_cost": 30,
+      "content": "Prove cross-operator soundness: (1) if abduce returns F for goal q, then what_if(T, F) includes +d q. (2) if q ∉ conclusions, why_not returns a valid blocking reason. (3) what_if results are consistent (no +d q and -d q simultaneously).",
+      "token_cost": 59,
       "priority": "PlanMeta"
     },
     {
-      "source": "memory/episodic/task-observability-changes",
-      "content": "Modified 4 files (+275, -9): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs, crates/spindle-core/src/shadow.rs",
-      "token_cost": 40,
-      "priority": "AgentMemory"
-    },
-    {
-      "source": "memory/episodic/task-projection-token-types-changes",
-      "content": "Modified 3 files (+124, -66): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
-      "token_cost": 32,
-      "priority": "AgentMemory"
-    },
-    {
-      "source": "memory/episodic/task-family-id-type-changes",
-      "content": "Modified 3 files (+237, -17): .hence/context-manifest.json, crates/spindle-core/src/literal.rs, crates/spindle-core/src/projection.rs",
-      "token_cost": 33,
-      "priority": "AgentMemory"
-    },
-    {
-      "source": "memory/episodic/task-exact-family-indexing-changes",
-      "content": "Modified 2 files (+281, -8): .hence/context-manifest.json, crates/spindle-core/src/index.rs",
+      "source": "memory/episodic/task-arith-types-changes",
+      "content": "Modified 2 files (+97, -65): .hence/context-manifest.json, lean/Spindle/Arith/Types.lean",
       "token_cost": 22,
       "priority": "AgentMemory"
     },
     {
-      "source": "memory/episodic/task-rule-compilation-changes",
-      "content": "Modified 3 files (+423, -7): .hence/context-manifest.json, crates/spindle-core/src/compilation.rs, crates/spindle-core/src/lib.rs",
-      "token_cost": 32,
+      "source": "memory/episodic/task-type-promotion-changes",
+      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Promotion.lean",
+      "token_cost": 23,
       "priority": "AgentMemory"
     },
     {
-      "source": "memory/episodic/task-projection-engine-changes",
-      "content": "Modified 3 files (+442, -7): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/projection.rs",
-      "token_cost": 32,
+      "source": "memory/episodic/task-term-type-changes",
+      "content": "Modified 2 files (+208, -5): .hence/context-manifest.json, lean/Spindle/Arith/Term.lean",
+      "token_cost": 21,
       "priority": "AgentMemory"
     },
     {
-      "source": "memory/episodic/task-shadow-mode-changes",
-      "content": "Modified 4 files (+636, -6): .hence/context-manifest.json, crates/spindle-core/src/lib.rs, crates/spindle-core/src/reason/mod.rs, crates/spindle-core/src/shadow.rs",
+      "source": "memory/episodic/task-substitution-type-changes",
+      "content": "Modified 2 files (+200, -5): .hence/context-manifest.json, lean/Spindle/Arith/Substitution.lean",
+      "token_cost": 23,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-arith-eval-changes",
+      "content": "Modified 2 files (+358, -5): .hence/context-manifest.json, lean/Spindle/Arith/Eval.lean",
+      "token_cost": 21,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-timepoint-type-changes",
+      "content": "Modified 2 files (+200, -6): .hence/context-manifest.json, lean/Spindle/Arith/TimePoint.lean",
+      "token_cost": 23,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-ground-literal-changes",
+      "content": "Modified 2 files (+224, -9): .hence/context-manifest.json, lean/Spindle/Arith/GroundLiteral.lean",
+      "token_cost": 24,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-interval-type-changes",
+      "content": "Modified 2 files (+216, -6): .hence/context-manifest.json, lean/Spindle/Arith/Interval.lean",
+      "token_cost": 22,
+      "priority": "AgentMemory"
+    },
+    {
+      "source": "memory/episodic/task-arith-constraint-changes",
+      "content": "Modified 4 files (+270, -52): .hence/context-manifest.json, lean/Spindle/Arith/Constraint.lean, lean/Spindle/Arith/GroundLiteral.lean, lean/Spindle/Arith/Term.lean",
       "token_cost": 40,
       "priority": "AgentMemory"
     },
     {
-      "source": "memory/episodic/task-differential-tests-changes",
-      "content": "Modified 2 files (+564, -6): .hence/context-manifest.json, crates/spindle-core/tests/differential_tests.rs",
-      "token_cost": 26,
-      "priority": "AgentMemory"
-    },
-    {
-      "source": "memory/episodic/task-pbt-nontemporal-parity-changes",
-      "content": "Modified 2 files (+473, -6): .hence/context-manifest.json, crates/spindle-core/tests/pbt_nontemporal_parity.rs",
-      "token_cost": 27,
-      "priority": "AgentMemory"
-    },
-    {
-      "source": "memory/episodic/task-pbt-family-invariants-changes",
-      "content": "Modified 1 files (+427, -0): crates/spindle-core/tests/pbt_family_invariants.rs",
-      "token_cost": 19,
+      "source": "memory/episodic/task-interval-sets-changes",
+      "content": "Modified 3 files (+349, -5): .hence/context-manifest.json, lean/Spindle/Arith/IntervalSet.lean, lean/Spindle/Arith/TimePoint.lean",
+      "token_cost": 32,
       "priority": "AgentMemory"
     }
   ],
   "elements_excluded": [],
-  "constructed_at": "2026-03-10T02:53:41Z"
+  "constructed_at": "2026-03-21T13:22:48Z"
 }
