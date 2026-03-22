@@ -69,10 +69,7 @@ fn normalize_literal_json(j: &JValue) -> NormalizedLiteral {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let negation = j
-        .get("negation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let negation = j.get("negation").and_then(|v| v.as_bool()).unwrap_or(false);
     let args: Vec<String> = j
         .get("args")
         .and_then(|v| v.as_array())
@@ -167,10 +164,7 @@ fn call_oracle(input_json: &str, oracle_path: &std::path::Path) -> Option<JValue
     serde_json::from_str(&stdout).ok()
 }
 
-fn call_oracle_batch(
-    cases: &[JValue],
-    oracle_path: &std::path::Path,
-) -> Option<Vec<JValue>> {
+fn call_oracle_batch(cases: &[JValue], oracle_path: &std::path::Path) -> Option<Vec<JValue>> {
     let batch = json!({"cases": cases});
     let input = serde_json::to_string(&batch).ok()?;
     let output = call_oracle(&input, oracle_path)?;
@@ -194,11 +188,11 @@ fn rust_pipeline_derive(theory: &Theory) -> BTreeSet<NormalizedLiteral> {
         ..Default::default()
     };
 
-    let prepared = spindle_core::pipeline::prepare(theory, opts)
-        .expect("Rust pipeline prepare() failed");
+    let prepared =
+        spindle_core::pipeline::prepare(theory, opts).expect("Rust pipeline prepare() failed");
 
-    let conclusions = reason::reason_prepared(&prepared.theory)
-        .expect("Rust reason_prepared() failed");
+    let conclusions =
+        reason::reason_prepared(&prepared.theory).expect("Rust reason_prepared() failed");
 
     // Only take +D conclusions (definite, positive) since Lean's semi-naive
     // is monotone forward chaining without defeasibility.
@@ -234,7 +228,7 @@ fn args_to_json(args: &[String]) -> Vec<JValue> {
 /// Build a test theory with facts (as empty-body rules) and strict rules
 /// with variables. Returns both the Rust Theory and the Lean JSON input.
 fn build_theory(
-    facts: &[(String, Vec<String>)],          // (name, args)
+    facts: &[(String, Vec<String>)], // (name, args)
     rules: &[(String, Vec<String>, Vec<(String, Vec<String>)>)], // (head_name, head_args, body[(name, args)])
     domain: &[String],
 ) -> TestTheory {
@@ -313,10 +307,7 @@ fn build_theory(
         theory.add_rule(rule);
     }
 
-    let lean_domain: Vec<JValue> = domain
-        .iter()
-        .map(|d| json!({"symbol": d}))
-        .collect();
+    let lean_domain: Vec<JValue> = domain.iter().map(|d| json!({"symbol": d})).collect();
 
     let lean_json = json!({
         "rules": lean_rules,
@@ -365,8 +356,7 @@ fn smoke_test_end_to_end() {
 
     // Lean oracle
     let input = serde_json::to_string(&tt.lean_json).unwrap();
-    let lean_result = call_oracle(&input, &oracle_path)
-        .expect("Lean oracle call failed");
+    let lean_result = call_oracle(&input, &oracle_path).expect("Lean oracle call failed");
 
     let lean_facts: BTreeSet<NormalizedLiteral> = lean_result
         .get("derived_facts")
@@ -387,11 +377,15 @@ fn smoke_test_end_to_end() {
 
     // Verify expected facts
     assert!(
-        lean_facts.iter().any(|f| f.name == "flies" && f.args == vec!["alice"]),
+        lean_facts
+            .iter()
+            .any(|f| f.name == "flies" && f.args == vec!["alice"]),
         "Expected flies(alice) in derived facts"
     );
     assert!(
-        lean_facts.iter().any(|f| f.name == "flies" && f.args == vec!["bob"]),
+        lean_facts
+            .iter()
+            .any(|f| f.name == "flies" && f.args == vec!["bob"]),
         "Expected flies(bob) in derived facts"
     );
 }
@@ -436,8 +430,7 @@ fn test_transitive_chain() {
     );
 
     let input = serde_json::to_string(&tt.lean_json).unwrap();
-    let lean_result = call_oracle(&input, &oracle_path)
-        .expect("Lean oracle call failed");
+    let lean_result = call_oracle(&input, &oracle_path).expect("Lean oracle call failed");
 
     let lean_facts: BTreeSet<NormalizedLiteral> = lean_result
         .get("derived_facts")
@@ -457,9 +450,9 @@ fn test_transitive_chain() {
 
     // Must derive ancestor(alice, carol) via transitive closure
     assert!(
-        lean_facts.iter().any(|f| {
-            f.name == "ancestor" && f.args == vec!["alice", "carol"]
-        }),
+        lean_facts
+            .iter()
+            .any(|f| { f.name == "ancestor" && f.args == vec!["alice", "carol"] }),
         "Expected ancestor(alice, carol) via transitive closure"
     );
 }
@@ -485,8 +478,7 @@ fn test_ground_facts_only() {
     );
 
     let input = serde_json::to_string(&tt.lean_json).unwrap();
-    let lean_result = call_oracle(&input, &oracle_path)
-        .expect("Lean oracle call failed");
+    let lean_result = call_oracle(&input, &oracle_path).expect("Lean oracle call failed");
 
     let lean_facts: BTreeSet<NormalizedLiteral> = lean_result
         .get("derived_facts")
@@ -532,8 +524,7 @@ fn test_ground_strict_chain() {
     );
 
     let input = serde_json::to_string(&tt.lean_json).unwrap();
-    let lean_result = call_oracle(&input, &oracle_path)
-        .expect("Lean oracle call failed");
+    let lean_result = call_oracle(&input, &oracle_path).expect("Lean oracle call failed");
 
     let lean_facts: BTreeSet<NormalizedLiteral> = lean_result
         .get("derived_facts")
@@ -553,7 +544,9 @@ fn test_ground_strict_chain() {
 
     // c(alice) should be derived through the chain
     assert!(
-        lean_facts.iter().any(|f| f.name == "c" && f.args == vec!["alice"]),
+        lean_facts
+            .iter()
+            .any(|f| f.name == "c" && f.args == vec!["alice"]),
         "Expected c(alice)"
     );
 }
@@ -596,8 +589,7 @@ fn test_join_rule() {
     );
 
     let input = serde_json::to_string(&tt.lean_json).unwrap();
-    let lean_result = call_oracle(&input, &oracle_path)
-        .expect("Lean oracle call failed");
+    let lean_result = call_oracle(&input, &oracle_path).expect("Lean oracle call failed");
 
     let lean_facts: BTreeSet<NormalizedLiteral> = lean_result
         .get("derived_facts")
@@ -617,11 +609,15 @@ fn test_join_rule() {
 
     // scholar(alice) should be derived (human + wise), not scholar(bob) (no wise(bob))
     assert!(
-        lean_facts.iter().any(|f| f.name == "scholar" && f.args == vec!["alice"]),
+        lean_facts
+            .iter()
+            .any(|f| f.name == "scholar" && f.args == vec!["alice"]),
         "Expected scholar(alice)"
     );
     assert!(
-        !lean_facts.iter().any(|f| f.name == "scholar" && f.args == vec!["bob"]),
+        !lean_facts
+            .iter()
+            .any(|f| f.name == "scholar" && f.args == vec!["bob"]),
         "Unexpected scholar(bob)"
     );
 }
@@ -647,9 +643,9 @@ fn arb_domain() -> impl Strategy<Value = Vec<String>> {
 /// Ensures rule safety: all head variables must also appear in the body.
 fn arb_e2e_case() -> impl Strategy<
     Value = (
-        Vec<(String, Vec<String>)>,           // facts
+        Vec<(String, Vec<String>)>,                             // facts
         Vec<(String, Vec<String>, Vec<(String, Vec<String>)>)>, // rules
-        Vec<String>,                          // domain
+        Vec<String>,                                            // domain
     ),
 > {
     (
@@ -703,18 +699,13 @@ fn proptest_end_to_end_match() {
         }
     };
 
-    let mut runner = proptest::test_runner::TestRunner::new(
-        proptest::test_runner::Config {
-            cases: 50,
-            ..Default::default()
-        },
-    );
+    let mut runner = proptest::test_runner::TestRunner::new(proptest::test_runner::Config {
+        cases: 50,
+        ..Default::default()
+    });
 
     // Collect cases for batch mode
-    let mut test_cases: Vec<(
-        Theory,
-        JValue,
-    )> = Vec::new();
+    let mut test_cases: Vec<(Theory, JValue)> = Vec::new();
 
     for _ in 0..50 {
         let strategy = arb_e2e_case();
@@ -729,15 +720,13 @@ fn proptest_end_to_end_match() {
 
     // Call oracle in batch mode
     let lean_inputs: Vec<JValue> = test_cases.iter().map(|(_, j)| j.clone()).collect();
-    let lean_results = call_oracle_batch(&lean_inputs, &oracle_path)
-        .expect("Batch oracle call failed");
+    let lean_results =
+        call_oracle_batch(&lean_inputs, &oracle_path).expect("Batch oracle call failed");
 
     assert_eq!(lean_results.len(), test_cases.len());
 
     let mut mismatches = 0;
-    for (i, ((theory, _), lean_result)) in
-        test_cases.iter().zip(lean_results.iter()).enumerate()
-    {
+    for (i, ((theory, _), lean_result)) in test_cases.iter().zip(lean_results.iter()).enumerate() {
         let lean_facts: BTreeSet<NormalizedLiteral> = lean_result
             .get("derived_facts")
             .and_then(|v| v.as_array())
@@ -761,7 +750,8 @@ fn proptest_end_to_end_match() {
     }
 
     assert_eq!(
-        mismatches, 0,
+        mismatches,
+        0,
         "{mismatches} out of {} cases had mismatches",
         test_cases.len()
     );

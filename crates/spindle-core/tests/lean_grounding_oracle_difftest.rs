@@ -124,10 +124,7 @@ fn normalize_literal_json(j: &JValue) -> NormalizedLiteral {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let negation = j
-        .get("negation")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let negation = j.get("negation").and_then(|v| v.as_bool()).unwrap_or(false);
     let args: Vec<String> = j
         .get("args")
         .and_then(|v| v.as_array())
@@ -240,10 +237,7 @@ fn collect_vars_from_literal(lit: &Literal, vars: &mut Vec<String>) {
 }
 
 /// Enumerate all substitutions from variables to domain terms.
-fn all_substitutions(
-    vars: &[String],
-    domain: &[Term],
-) -> Vec<Vec<(String, Term)>> {
+fn all_substitutions(vars: &[String], domain: &[Term]) -> Vec<Vec<(String, Term)>> {
     if vars.is_empty() {
         return vec![vec![]];
     }
@@ -260,10 +254,7 @@ fn all_substitutions(
 }
 
 /// Apply a substitution to a literal, producing a normalized result.
-fn apply_subst_literal(
-    lit: &Literal,
-    subst: &[(String, Term)],
-) -> NormalizedLiteral {
+fn apply_subst_literal(lit: &Literal, subst: &[(String, Term)]) -> NormalizedLiteral {
     let args: Vec<String> = lit
         .predicate_args()
         .iter()
@@ -371,10 +362,7 @@ fn call_oracle(input_json: &str, oracle_path: &std::path::Path) -> Option<JValue
     serde_json::from_str(&stdout).ok()
 }
 
-fn call_oracle_batch(
-    cases: &[JValue],
-    oracle_path: &std::path::Path,
-) -> Option<Vec<JValue>> {
+fn call_oracle_batch(cases: &[JValue], oracle_path: &std::path::Path) -> Option<Vec<JValue>> {
     let batch = json!({"cases": cases});
     let input = serde_json::to_string(&batch).ok()?;
     let output = call_oracle(&input, oracle_path)?;
@@ -400,8 +388,7 @@ fn arb_domain() -> impl Strategy<Value = Vec<String>> {
 }
 
 /// Generate a single rule with variables and a domain for testing.
-fn arb_grounding_case()
--> impl Strategy<Value = (Rule, Vec<String>)> {
+fn arb_grounding_case() -> impl Strategy<Value = (Rule, Vec<String>)> {
     (
         // Head predicate name
         proptest::sample::select(PRED_NAMES).prop_map(String::from),
@@ -422,30 +409,34 @@ fn arb_grounding_case()
         // Whether head is negated
         proptest::bool::ANY,
     )
-        .prop_filter("head and body pred names must differ", |(h, b, _, _, _, _)| h != b)
-        .prop_map(|(head_name, body_name, head_vars, body_vars, domain, head_neg)| {
-            let head_lit = Literal::new(
-                head_name.as_str(),
-                head_neg,
-                Mode::empty(),
-                Temporal::empty(),
-                head_vars,
-            );
-            let body_lit = Literal::new(
-                body_name.as_str(),
-                false,
-                Mode::empty(),
-                Temporal::empty(),
-                body_vars,
-            );
-            let rule = Rule::defeasible("r_test", vec![body_lit], head_lit);
-            (rule, domain)
-        })
+        .prop_filter(
+            "head and body pred names must differ",
+            |(h, b, _, _, _, _)| h != b,
+        )
+        .prop_map(
+            |(head_name, body_name, head_vars, body_vars, domain, head_neg)| {
+                let head_lit = Literal::new(
+                    head_name.as_str(),
+                    head_neg,
+                    Mode::empty(),
+                    Temporal::empty(),
+                    head_vars,
+                );
+                let body_lit = Literal::new(
+                    body_name.as_str(),
+                    false,
+                    Mode::empty(),
+                    Temporal::empty(),
+                    body_vars,
+                );
+                let rule = Rule::defeasible("r_test", vec![body_lit], head_lit);
+                (rule, domain)
+            },
+        )
 }
 
 /// Generate a ground-only rule (no variables) for edge case testing.
-fn arb_ground_rule_case()
--> impl Strategy<Value = (Rule, Vec<String>)> {
+fn arb_ground_rule_case() -> impl Strategy<Value = (Rule, Vec<String>)> {
     (
         proptest::sample::select(PRED_NAMES).prop_map(String::from),
         proptest::sample::select(PRED_NAMES).prop_map(String::from),
@@ -453,7 +444,9 @@ fn arb_ground_rule_case()
         proptest::collection::vec(arb_constant(), 1..=2),
         arb_domain(),
     )
-        .prop_filter("head and body pred names must differ", |(h, b, _, _, _)| h != b)
+        .prop_filter("head and body pred names must differ", |(h, b, _, _, _)| {
+            h != b
+        })
         .prop_map(|(head_name, body_name, head_args, body_args, domain)| {
             let head_lit = Literal::new(
                 head_name.as_str(),
@@ -475,18 +468,16 @@ fn arb_ground_rule_case()
 }
 
 /// Generate a multi-body rule with shared variables (join pattern).
-fn arb_join_rule_case()
--> impl Strategy<Value = (Rule, Vec<String>)> {
+fn arb_join_rule_case() -> impl Strategy<Value = (Rule, Vec<String>)> {
     (
         proptest::sample::select(PRED_NAMES).prop_map(String::from),
         proptest::sample::select(PRED_NAMES).prop_map(String::from),
         proptest::sample::select(PRED_NAMES).prop_map(String::from),
         arb_domain(),
     )
-        .prop_filter(
-            "all pred names must differ",
-            |(h, b1, b2, _)| h != b1 && h != b2 && b1 != b2,
-        )
+        .prop_filter("all pred names must differ", |(h, b1, b2, _)| {
+            h != b1 && h != b2 && b1 != b2
+        })
         .prop_map(|(head_name, body1_name, body2_name, domain)| {
             // head(?x, ?z) :- body1(?x, ?y), body2(?y, ?z)
             let head_lit = Literal::new(
@@ -562,10 +553,8 @@ fn smoke_test_lean_grounding_oracle() {
     );
 
     // Verify the instances contain alice and bob
-    let instance_set: BTreeSet<NormalizedRule> = instances
-        .iter()
-        .map(normalize_rule_json)
-        .collect();
+    let instance_set: BTreeSet<NormalizedRule> =
+        instances.iter().map(normalize_rule_json).collect();
 
     let expected_alice = NormalizedRule {
         head: NormalizedLiteral {
@@ -660,10 +649,7 @@ fn proptest_rust_lean_grounding_agreement() {
     let mut rust_results = Vec::new();
 
     for (rule, domain) in &cases_vec {
-        let domain_terms: Vec<Term> = domain
-            .iter()
-            .map(|s| Term::Symbol(intern(s)))
-            .collect();
+        let domain_terms: Vec<Term> = domain.iter().map(|s| Term::Symbol(intern(s))).collect();
 
         // Compute Rust ground instances
         let rust_instances = rust_ground_instances(rule, &domain_terms);
@@ -679,8 +665,8 @@ fn proptest_rust_lean_grounding_agreement() {
     }
 
     // Call oracle in batch
-    let lean_results = call_oracle_batch(&oracle_cases, &oracle_path)
-        .expect("oracle batch should succeed");
+    let lean_results =
+        call_oracle_batch(&oracle_cases, &oracle_path).expect("oracle batch should succeed");
 
     assert_eq!(
         rust_results.len(),
@@ -691,8 +677,7 @@ fn proptest_rust_lean_grounding_agreement() {
     let mut agreements = 0;
     let mut disagreements = Vec::new();
 
-    for (i, (rust_instances, lean_json)) in
-        rust_results.iter().zip(lean_results.iter()).enumerate()
+    for (i, (rust_instances, lean_json)) in rust_results.iter().zip(lean_results.iter()).enumerate()
     {
         // Parse Lean results
         let lean_instances_json = lean_json
@@ -783,8 +768,8 @@ fn proptest_ground_rules_single_instance() {
         oracle_cases.push(case);
     }
 
-    let lean_results = call_oracle_batch(&oracle_cases, &oracle_path)
-        .expect("oracle batch should succeed");
+    let lean_results =
+        call_oracle_batch(&oracle_cases, &oracle_path).expect("oracle batch should succeed");
 
     for (i, lean_json) in lean_results.iter().enumerate() {
         let instances = lean_json
@@ -826,10 +811,7 @@ fn proptest_join_rule_grounding() {
     let mut rust_results = Vec::new();
 
     for (rule, domain) in &cases_vec {
-        let domain_terms: Vec<Term> = domain
-            .iter()
-            .map(|s| Term::Symbol(intern(s)))
-            .collect();
+        let domain_terms: Vec<Term> = domain.iter().map(|s| Term::Symbol(intern(s))).collect();
 
         let rust_instances = rust_ground_instances(rule, &domain_terms);
         rust_results.push(rust_instances);
@@ -842,12 +824,11 @@ fn proptest_join_rule_grounding() {
         oracle_cases.push(case);
     }
 
-    let lean_results = call_oracle_batch(&oracle_cases, &oracle_path)
-        .expect("oracle batch should succeed");
+    let lean_results =
+        call_oracle_batch(&oracle_cases, &oracle_path).expect("oracle batch should succeed");
 
     let mut disagreements = 0;
-    for (i, (rust_instances, lean_json)) in
-        rust_results.iter().zip(lean_results.iter()).enumerate()
+    for (i, (rust_instances, lean_json)) in rust_results.iter().zip(lean_results.iter()).enumerate()
     {
         let lean_instances = lean_json
             .get("results")
@@ -945,12 +926,10 @@ fn proptest_instance_count_matches_domain_power() {
         oracle_cases.push(case);
     }
 
-    let lean_results = call_oracle_batch(&oracle_cases, &oracle_path)
-        .expect("oracle batch should succeed");
+    let lean_results =
+        call_oracle_batch(&oracle_cases, &oracle_path).expect("oracle batch should succeed");
 
-    for (i, (expected, lean_json)) in
-        expected_counts.iter().zip(lean_results.iter()).enumerate()
-    {
+    for (i, (expected, lean_json)) in expected_counts.iter().zip(lean_results.iter()).enumerate() {
         let instances = lean_json
             .get("results")
             .and_then(|v| v.as_array())

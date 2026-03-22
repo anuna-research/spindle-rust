@@ -17,9 +17,7 @@ use proptest::strategy::ValueTree;
 use rust_decimal::Decimal;
 use serde_json::{Value as JValue, json};
 
-use spindle_core::arith::{
-    ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
-};
+use spindle_core::arith::{ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp};
 use spindle_core::grounding::Substitution;
 use spindle_core::term::NumericValue;
 
@@ -98,8 +96,7 @@ fn expr_to_json(expr: &ArithExpr) -> Option<JValue> {
                 }
                 _ => {
                     let lean_op = nary_op_to_lean(op)?;
-                    let json_args: Option<Vec<JValue>> =
-                        args.iter().map(expr_to_json).collect();
+                    let json_args: Option<Vec<JValue>> = args.iter().map(expr_to_json).collect();
                     Some(json!({"naryOp": {"op": lean_op, "args": json_args?}}))
                 }
             }
@@ -277,10 +274,7 @@ fn call_oracle(input_json: &str, oracle_path: &std::path::Path) -> Option<JValue
     serde_json::from_str(&stdout).ok()
 }
 
-fn call_oracle_batch(
-    cases: &[JValue],
-    oracle_path: &std::path::Path,
-) -> Option<Vec<JValue>> {
+fn call_oracle_batch(cases: &[JValue], oracle_path: &std::path::Path) -> Option<Vec<JValue>> {
     let batch = json!({"cases": cases});
     let input = serde_json::to_string(&batch).ok()?;
     let output = call_oracle(&input, oracle_path)?;
@@ -313,17 +307,15 @@ fn arb_lean_compatible_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> 
     leaf.prop_recursive(max_depth, 32, 3, |inner| {
         prop_oneof![
             // N-ary sum with 1-3 args
-            proptest::collection::vec(inner.clone(), 1..=3)
-                .prop_map(|args| ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
-                    args,
-                }),
+            proptest::collection::vec(inner.clone(), 1..=3).prop_map(|args| ArithExpr::NaryOp {
+                op: NaryArithOp::Add,
+                args,
+            }),
             // N-ary product with 1-3 args
-            proptest::collection::vec(inner.clone(), 1..=3)
-                .prop_map(|args| ArithExpr::NaryOp {
-                    op: NaryArithOp::Mul,
-                    args,
-                }),
+            proptest::collection::vec(inner.clone(), 1..=3).prop_map(|args| ArithExpr::NaryOp {
+                op: NaryArithOp::Mul,
+                args,
+            }),
             // N-ary min/max with 1-3 args
             (
                 prop_oneof![Just(NaryArithOp::Min), Just(NaryArithOp::Max)],
@@ -369,7 +361,9 @@ fn smoke_test_lean_arith_oracle() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
         None => {
-            eprintln!("Skipping: Lean ArithOracle not built. Run `lake build ArithOracle` in lean/");
+            eprintln!(
+                "Skipping: Lean ArithOracle not built. Run `lake build ArithOracle` in lean/"
+            );
             return;
         }
     };
@@ -461,8 +455,8 @@ fn proptest_rust_lean_arith_agreement() {
     }
 
     // Call oracle in batch
-    let lean_results = call_oracle_batch(&cases, &oracle_path)
-        .expect("oracle batch should succeed");
+    let lean_results =
+        call_oracle_batch(&cases, &oracle_path).expect("oracle batch should succeed");
 
     assert_eq!(
         rust_results.len(),
@@ -529,12 +523,16 @@ fn proptest_rust_lean_comparison_agreement() {
     let config = ProptestConfig::with_cases(50);
     let mut runner = proptest::test_runner::TestRunner::new(config);
 
-    let cmp_ops = [CmpOp::Eq, CmpOp::Ne, CmpOp::Lt, CmpOp::Le, CmpOp::Gt, CmpOp::Ge];
+    let cmp_ops = [
+        CmpOp::Eq,
+        CmpOp::Ne,
+        CmpOp::Lt,
+        CmpOp::Le,
+        CmpOp::Gt,
+        CmpOp::Ge,
+    ];
 
-    let strategy = proptest::collection::vec(
-        (arb_int_value(), arb_int_value(), 0..6usize),
-        30,
-    );
+    let strategy = proptest::collection::vec((arb_int_value(), arb_int_value(), 0..6usize), 30);
     let triples = strategy.new_tree(&mut runner).unwrap().current();
 
     let mut cases = Vec::new();
@@ -568,22 +566,24 @@ fn proptest_rust_lean_comparison_agreement() {
         rust_results.push(rust_result);
     }
 
-    let lean_results = call_oracle_batch(&cases, &oracle_path)
-        .expect("oracle batch should succeed");
+    let lean_results =
+        call_oracle_batch(&cases, &oracle_path).expect("oracle batch should succeed");
 
     let mut disagreements = 0;
-    for (i, (rust_result, lean_json)) in
-        rust_results.iter().zip(lean_results.iter()).enumerate()
-    {
+    for (i, (rust_result, lean_json)) in rust_results.iter().zip(lean_results.iter()).enumerate() {
         let rust_ok = rust_result.is_ok();
         let lean_satisfied = lean_json.get("satisfied").is_some();
         let lean_unsatisfied = lean_json.get("unsatisfied").is_some();
 
-        let agree = (rust_ok && lean_satisfied) || (!rust_ok && (lean_unsatisfied || lean_json.get("error").is_some()));
+        let agree = (rust_ok && lean_satisfied)
+            || (!rust_ok && (lean_unsatisfied || lean_json.get("error").is_some()));
         if !agree {
             eprintln!(
                 "Comparison case {}: rust_ok={}, lean={}, input={}",
-                i, rust_ok, lean_json, serde_json::to_string(&cases[i]).unwrap()
+                i,
+                rust_ok,
+                lean_json,
+                serde_json::to_string(&cases[i]).unwrap()
             );
             disagreements += 1;
         }
