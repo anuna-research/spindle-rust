@@ -1,13 +1,25 @@
 import Lake
 open Lake DSL
 
-package SpindleArith where
+package SpindleLean where
   leanOptions := #[
     ⟨`pp.unicode.fun, true⟩,
+    ⟨`autoImplicit, false⟩,
     ⟨`relaxedAutoImplicit, false⟩
   ]
 
+require mathlib from git
+  "https://github.com/leanprover-community/mathlib4" @ "v4.27.0"
+
+-- IMPL-015: Core verification (types, closures, properties)
 @[default_target]
+lean_lib SpindleLean where
+  srcDir := "."
+
+lean_exe spindlelean where
+  root := `Main
+
+-- IMPL-016: Grounding, arithmetic, temporal, queries
 lean_lib Spindle where
   roots := #[`Spindle]
 
