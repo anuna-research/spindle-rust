@@ -228,14 +228,7 @@ impl Theory {
 
     /// Check if any rule in the theory has non-empty temporal bounds on its literals.
     pub fn has_temporal_literals(&self) -> bool {
-        self.rules.values().any(|r| {
-            r.body
-                .iter()
-                .any(|bl| bl.is_temporal() || bl.has_temporal_variables())
-                || r.head
-                    .iter()
-                    .any(|lit| lit.is_temporal() || lit.has_temporal_variables())
-        })
+        self.rules.values().any(Rule::has_temporal_literals)
     }
 
     /// Perform defeasible reasoning on this theory and return conclusions.

@@ -46,6 +46,7 @@ pub mod analysis;
 pub mod arith;
 pub mod body;
 pub mod claims;
+pub mod compilation;
 pub mod conclusion;
 pub mod error;
 pub mod explanation;
@@ -56,9 +57,11 @@ pub mod literal;
 pub mod mining;
 pub mod mode;
 pub mod pipeline;
+pub mod projection;
 pub mod query;
 pub mod reason;
 pub mod rule;
+pub mod shadow;
 pub mod superiority;
 pub mod temporal;
 pub mod term;
@@ -73,6 +76,7 @@ pub mod prelude {
     };
     pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
     pub use crate::claims::ClaimsBlock;
+    pub use crate::compilation::{BodyMatchKey, CompiledBody, compile_rule, compile_theory};
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};
     pub use crate::intern::{
@@ -83,11 +87,22 @@ pub mod prelude {
     pub use crate::pipeline::{
         Pipeline, PipelineBuilder, PipelineContext, PipelineResult, PipelineStage, PrepareOptions,
     };
-    pub use crate::query::{QueryResult, QueryStatus, query, query_with_options};
+    pub use crate::projection::{
+        ExactLitId, ExactSupport, FamilyAttack, FamilyId, FamilySupport, ProjectionDiagnostics,
+        ProjectionEngine, ProjectionSnapshot, ProjectionToken,
+    };
+    pub use crate::query::{
+        QueryMatchMode, QueryResult, QueryStatus, abduce_with_conclusions, query,
+        query_with_match_mode, query_with_options, why_not_with_conclusions,
+    };
     pub use crate::reason::{
-        Reasoner, StandardReasoner, reason, reason_with_options, select_reasoner,
+        ReasonResult, Reasoner, StandardReasoner, reason, reason_full, reason_full_prepared,
+        reason_full_with_options, reason_with_options, select_reasoner,
     };
     pub use crate::rule::{IntoRuleBody, Rule, RuleLabel, RuleType};
+    pub use crate::shadow::{
+        Divergence, DivergenceKind, ShadowConfig, ShadowReasoner, ShadowResult,
+    };
     pub use crate::superiority::{Superiority, SuperiorityIndex};
     pub use crate::temporal::{
         AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,

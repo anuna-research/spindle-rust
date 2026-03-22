@@ -371,6 +371,14 @@ impl Literal {
         self.temporal_expr.is_some() || self.interval_var.is_some()
     }
 
+    /// Extract the [`FamilyId`](crate::projection::FamilyId) for this literal.
+    ///
+    /// The family identity includes functor, predicate arguments, mode, and
+    /// polarity but **excludes** temporal bounds.
+    pub fn family_id(&self) -> crate::projection::FamilyId {
+        crate::projection::FamilyId::from(self)
+    }
+
     /// Get the LiteralId for this literal (name + negation combined).
     ///
     /// **WARNING:** This ID is based on name + negation ONLY. It ignores

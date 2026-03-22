@@ -40,7 +40,8 @@ pub(crate) fn resolve_defeasible(
     let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
 
     // --- Seed +d from +D (subsumption), but respect condition (2) ---
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
     for &lit_id in &all_ids {
         if state.definite_proven.contains(lit_id) {
             let comp_id = lit_id.complement();
@@ -100,7 +101,23 @@ pub(crate) fn resolve_defeasible(
     }
 
     // --- Seed empty-body defeasible/strict rules not yet decided ---
-    for rule in theory.rules() {
+    let mut empty_body_rules: Vec<_> = theory
+        .rules()
+        .filter(|rule| {
+            rule.body.is_empty()
+                && matches!(
+                    rule.rule_type,
+                    RuleType::Defeasible | RuleType::Strict | RuleType::Fact
+                )
+        })
+        .collect();
+    empty_body_rules.sort_by(|lhs, rhs| {
+        lhs.head_literal()
+            .to_spl()
+            .cmp(&rhs.head_literal().to_spl())
+            .then_with(|| lhs.label.cmp(&rhs.label))
+    });
+    for rule in empty_body_rules {
         if rule.body.is_empty()
             && matches!(
                 rule.rule_type,
@@ -119,6 +136,7 @@ pub(crate) fn resolve_defeasible(
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
                 &state.rule_discarded,
+                &mut state.projection_labels,
                 &mut worklist,
                 &mut state.conclusions,
             );
@@ -128,11 +146,26 @@ pub(crate) fn resolve_defeasible(
     // --- Fixed-point loop ---
     while let Some((q_id, proved)) = worklist.pop_front() {
         // Update rule counters for ALL rules containing q in body
-        let rules_with_q: Vec<String> = indexed
+        let mut rules_with_q: Vec<String> = indexed
             .rules_with_body_id(q_id)
             .iter()
             .map(|r| r.label.clone())
             .collect();
+        rules_with_q.sort_by(|lhs, rhs| {
+            theory
+                .get_rule(lhs)
+                .expect("rule label from body index must exist")
+                .head_literal()
+                .to_spl()
+                .cmp(
+                    &theory
+                        .get_rule(rhs)
+                        .expect("rule label from body index must exist")
+                        .head_literal()
+                        .to_spl(),
+                )
+                .then_with(|| lhs.cmp(rhs))
+        });
 
         for rule_label in &rules_with_q {
             if proved {
@@ -174,6 +207,7 @@ pub(crate) fn resolve_defeasible(
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
                         &state.rule_discarded,
+                        &mut state.projection_labels,
                         &mut worklist,
                         &mut state.conclusions,
                     );
@@ -188,6 +222,7 @@ pub(crate) fn resolve_defeasible(
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
                         &state.rule_discarded,
+                        &mut state.projection_labels,
                         &mut worklist,
                         &mut state.conclusions,
                     );
@@ -227,6 +262,7 @@ pub(crate) fn resolve_defeasible(
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
                         &state.rule_discarded,
+                        &mut state.projection_labels,
                         &mut worklist,
                         &mut state.conclusions,
                     );
@@ -295,6 +331,7 @@ pub(crate) fn resolve_defeasible(
                     &mut state.defeasible_disproven,
                     &state.defeasible_body_remaining,
                     &state.rule_discarded,
+                    &mut state.projection_labels,
                     &mut worklist,
                     &mut state.conclusions,
                 );
@@ -312,6 +349,7 @@ pub(crate) fn resolve_defeasible(
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
                 &state.rule_discarded,
+                &mut state.projection_labels,
                 &mut worklist,
                 &mut state.conclusions,
             );
@@ -321,7 +359,8 @@ pub(crate) fn resolve_defeasible(
     // ====================================================================
     // PHASE 3: Emit remaining conclusions (-D, -d)
     // ====================================================================
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
 
     for lit_id in all_ids {
         if !state.definite_proven.contains(lit_id) {
@@ -357,6 +396,7 @@ fn try_prove_defeasible(
     defeasible_disproven: &mut LiteralBitSet,
     body_remaining: &FxHashMap<&str, usize>,
     rule_discarded: &FxHashMap<&str, bool>,
+    projection_labels: &mut FxHashSet<String>,
     worklist: &mut VecDeque<(LitId, bool)>,
     conclusions: &mut Vec<Conclusion>,
 ) {
@@ -409,6 +449,13 @@ fn try_prove_defeasible(
         .copied()
         .collect();
 
+    // Keep scanning applicable attackers even after the proof is known to fail.
+    // Projection labels drive the shadow engine's explanation surface, so
+    // blocked literals should retain every grounded attacker/supporter that
+    // actually participated instead of whichever blocker happened to appear
+    // first in iteration order.
+    let mut blocked_by_applicable_attacker = false;
+
     for attacker in &attacking_rules {
         let att_discarded = rule_discarded
             .get(attacker.label.as_str())
@@ -431,6 +478,8 @@ fn try_prove_defeasible(
         if att_remaining > 0 {
             // Strict attackers cannot be defeated by superiority
             if attacker.rule_type == RuleType::Strict {
+                projection_labels
+                    .extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
                 return;
             }
             // Defeasible attacker with undecided body: if a superior
@@ -438,18 +487,27 @@ fn try_prove_defeasible(
             if defeated_by_superior {
                 continue;
             }
+            projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
             return;
         }
 
         // Strict attackers always block (cannot be defeated by superiority)
         if attacker.rule_type == RuleType::Strict {
-            return;
+            projection_labels.insert(attacker.label.clone());
+            blocked_by_applicable_attacker = true;
+            continue;
         }
 
         // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s
         if !defeated_by_superior {
-            return; // undefeated attacker
+            projection_labels.insert(attacker.label.clone());
+            blocked_by_applicable_attacker = true;
         }
+    }
+
+    if blocked_by_applicable_attacker {
+        projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
+        return;
     }
 
     // All conditions met.

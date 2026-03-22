@@ -186,6 +186,20 @@ impl Rule {
         self.body.is_empty()
     }
 
+    /// Check whether the rule participates in temporal reasoning.
+    ///
+    /// This is `true` when any body or head literal carries concrete temporal
+    /// bounds or unresolved temporal variables.
+    pub fn has_temporal_literals(&self) -> bool {
+        self.body
+            .iter()
+            .any(|bl| bl.is_temporal() || bl.has_temporal_variables())
+            || self
+                .head
+                .iter()
+                .any(|lit| lit.is_temporal() || lit.has_temporal_variables())
+    }
+
     /// Get the single head literal (panics if multiple heads)
     pub fn head_literal(&self) -> &Literal {
         assert_eq!(self.head.len(), 1, "Expected single head literal");

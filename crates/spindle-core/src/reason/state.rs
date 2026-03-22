@@ -7,7 +7,7 @@
 use std::collections::VecDeque;
 
 use fixedbitset::FixedBitSet;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::conclusion::Conclusion;
 use crate::index::LitId;
@@ -114,6 +114,10 @@ pub(crate) struct ReasoningState<'a> {
 
     /// Accumulated conclusions.
     pub(crate) conclusions: Vec<Conclusion>,
+
+    /// Additional rule labels that should be projected even when they do not
+    /// appear on a positive conclusion, such as applicable blockers.
+    pub(crate) projection_labels: FxHashSet<String>,
 }
 
 impl<'a> ReasoningState<'a> {
@@ -138,6 +142,7 @@ impl<'a> ReasoningState<'a> {
             ),
             rule_discarded: FxHashMap::with_capacity_and_hasher(rule_count, Default::default()),
             conclusions: Vec::with_capacity(estimated_conclusions),
+            projection_labels: FxHashSet::with_capacity_and_hasher(rule_count, Default::default()),
         }
     }
 
@@ -245,6 +250,7 @@ mod tests {
         assert!(state.definite_body_remaining.is_empty());
         assert!(state.defeasible_body_remaining.is_empty());
         assert!(state.rule_discarded.is_empty());
+        assert!(state.projection_labels.is_empty());
     }
 
     #[test]
