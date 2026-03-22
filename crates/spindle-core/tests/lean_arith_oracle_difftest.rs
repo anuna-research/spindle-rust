@@ -357,6 +357,7 @@ fn arb_lean_compatible_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> 
 
 /// Smoke test: evaluate a simple integer addition in both Rust and Lean.
 #[test]
+#[ignore] // requires `lake build ArithOracle` in lean/
 fn smoke_test_lean_arith_oracle() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -389,6 +390,7 @@ fn smoke_test_lean_arith_oracle() {
 
 /// Smoke test: constraint evaluation.
 #[test]
+#[ignore] // requires `lake build ArithOracle` in lean/
 fn smoke_test_lean_constraint_oracle() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -419,6 +421,7 @@ fn smoke_test_lean_constraint_oracle() {
 
 /// Property test: Rust and Lean agree on arithmetic expression evaluation.
 #[test]
+#[ignore] // requires `lake build ArithOracle` in lean/
 fn proptest_rust_lean_arith_agreement() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -511,6 +514,7 @@ fn proptest_rust_lean_arith_agreement() {
 
 /// Property test: comparison operators agree between Rust and Lean.
 #[test]
+#[ignore] // requires `lake build ArithOracle` in lean/
 fn proptest_rust_lean_comparison_agreement() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,

@@ -329,6 +329,7 @@ fn build_theory(
 /// bird(alice). bird(bob). flies(?x) :- bird(?x).
 /// Expected derived: bird(alice), bird(bob), flies(alice), flies(bob)
 #[test]
+#[ignore] // requires Lean oracle binary
 fn smoke_test_end_to_end() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -395,6 +396,7 @@ fn smoke_test_end_to_end() {
 /// ancestor(?x, ?y) :- parent(?x, ?y).
 /// ancestor(?x, ?z) :- parent(?x, ?y), ancestor(?y, ?z).
 #[test]
+#[ignore] // requires Lean oracle binary
 fn test_transitive_chain() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -459,6 +461,7 @@ fn test_transitive_chain() {
 
 /// Ground-only theory (no variables): facts only.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn test_ground_facts_only() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -496,6 +499,7 @@ fn test_ground_facts_only() {
 
 /// Ground facts with predicates (no variables).
 #[test]
+#[ignore] // requires Lean oracle binary
 fn test_ground_strict_chain() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -553,6 +557,7 @@ fn test_ground_strict_chain() {
 
 /// Multi-predicate join: head depends on two different body predicates.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn test_join_rule() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -687,6 +692,7 @@ fn arb_e2e_case() -> impl Strategy<
 
 /// Proptest: random theories produce matching results.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn proptest_end_to_end_match() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,

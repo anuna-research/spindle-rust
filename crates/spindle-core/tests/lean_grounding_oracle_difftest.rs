@@ -512,6 +512,7 @@ fn arb_join_rule_case() -> impl Strategy<Value = (Rule, Vec<String>)> {
 
 /// Smoke test: ground a simple rule with one variable over a small domain.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn smoke_test_lean_grounding_oracle() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -593,6 +594,7 @@ fn smoke_test_lean_grounding_oracle() {
 
 /// Smoke test: ground rule with no variables returns itself.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn smoke_test_ground_rule_unchanged() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -630,6 +632,7 @@ fn smoke_test_ground_rule_unchanged() {
 
 /// Property test: Rust and Lean agree on ground instances for random rules.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn proptest_rust_lean_grounding_agreement() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -742,6 +745,7 @@ fn lean_set(s: &BTreeSet<NormalizedRule>) -> BTreeSet<NormalizedRule> {
 
 /// Property test: ground rules produce exactly one instance (themselves).
 #[test]
+#[ignore] // requires Lean oracle binary
 fn proptest_ground_rules_single_instance() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -792,6 +796,7 @@ fn proptest_ground_rules_single_instance() {
 
 /// Property test: join rules with shared variables produce correct instance count.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn proptest_join_rule_grounding() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
@@ -861,6 +866,7 @@ fn proptest_join_rule_grounding() {
 
 /// Property test: instance count equals domain^(num_unique_vars) for simple rules.
 #[test]
+#[ignore] // requires Lean oracle binary
 fn proptest_instance_count_matches_domain_power() {
     let oracle_path = match find_oracle_binary() {
         Some(p) => p,
