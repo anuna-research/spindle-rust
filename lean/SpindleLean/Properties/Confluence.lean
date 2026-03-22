@@ -55,7 +55,13 @@ theorem bodySatisfied_mono (r : Rule) (s₁ s₂ : List Literal)
     r.bodySatisfied s₂ = true := by
   -- bodySatisfied = r.body.all (fun l => current.contains l)
   -- If every body literal is in s₁ ⊆ s₂, it's also in s₂
-  sorry
+  simp only [Rule.bodySatisfied] at h ⊢
+  rw [List.all_eq_true] at h ⊢
+  intro x hx
+  have h1 := h x hx
+  have hmem : x ∈ s₁ := List.mem_of_elem_eq_true h1
+  have hmem2 : x ∈ s₂ := hsub x hmem
+  exact List.elem_eq_true_of_mem hmem2
 
 /-- deltaStep is monotone: enlarging current can only enlarge the output.
     Formally: if current₁ ⊆ current₂ then deltaStep T current₁ ⊆ deltaStep T current₂.
@@ -91,11 +97,18 @@ theorem deltaStep_mono (t : Theory) (s₁ s₂ : List Literal)
       split at hcond
       · -- The guard was true for s₁
         rename_i hguard
-        -- hguard: r.isDefinite && r.bodySatisfied s₁ && !s₁.contains r.head = true
         simp only [Option.some.injEq] at hcond
-        -- r.head = l, and l not in s₂, and r.isDefinite,
-        -- and body satisfied in s₁ implies satisfied in s₂ (monotone)
-        sorry -- Requires bodySatisfied monotonicity + Bool manipulation
+        subst hcond
+        -- Need to show the same if-guard is true for s₂
+        simp only [Bool.and_eq_true, Bool.not_eq_true'] at hguard
+        obtain ⟨⟨hdef, hbody⟩, _⟩ := hguard
+        have hbody2 := bodySatisfied_mono r s₁ s₂ hsub hbody
+        have hnotmem : s₂.contains r.head = false := by
+          cases h : s₂.contains r.head
+          · rfl
+          · exfalso; exact hmem h
+        -- Now show the guard is true and the result is some r.head
+        simp only [hdef, hbody2, hnotmem, Bool.true_and, Bool.not_false, ite_true]
       · simp at hcond
 
 /-- lambdaStep is monotone -/
@@ -116,7 +129,17 @@ theorem lambdaStep_mono (t : Theory) (delta : List Literal) (s₁ s₂ : List Li
       simp only [List.mem_filterMap]
       use r, hrmem
       split at hcond
-      · sorry -- Same pattern as deltaStep_mono
+      · rename_i hguard
+        simp only [Option.some.injEq] at hcond
+        subst hcond
+        simp only [Bool.and_eq_true, Bool.not_eq_true'] at hguard
+        obtain ⟨⟨⟨hprod, hbody⟩, _⟩, hdelta⟩ := hguard
+        have hbody2 := bodySatisfied_mono r s₁ s₂ hsub hbody
+        have hnotmem : s₂.contains r.head = false := by
+          cases h : s₂.contains r.head
+          · rfl
+          · exfalso; exact hmem h
+        simp only [hprod, hbody2, hnotmem, hdelta, Bool.true_and, Bool.not_false, ite_true]
       · simp at hcond
 
 -- ═══════════════════════════════════════════════════════════════
@@ -176,6 +199,75 @@ theorem partialStep_fixpoint_stable (t : Theory) (delta lambda s : List Literal)
     simp
 
 -- ═══════════════════════════════════════════════════════════════
+-- Stability helpers: once go converges, extra fuel doesn't help
+-- ═══════════════════════════════════════════════════════════════
+
+/-- Propagation: if go stabilizes at n, it stabilizes at n+1 too (deltaClose) -/
+theorem deltaClose_go_propagate (t : Theory) (s : List Literal) (n : Nat)
+    (h : Closure.deltaClose.go t s n = Closure.deltaClose.go t s (n + 1)) :
+    Closure.deltaClose.go t s (n + 1) = Closure.deltaClose.go t s (n + 2) := by
+  induction n generalizing s with
+  | zero =>
+    change s = _ at h
+    cases hcheck : ((Closure.deltaStep t s).length == s.length) with
+    | true => simp [Closure.deltaClose.go, hcheck]
+    | false =>
+      -- length check fails: go s 1 = step s, h says s = step s
+      simp only [Closure.deltaClose.go, hcheck, Bool.false_eq_true, ↓reduceIte] at h
+      -- h : s = step s, so lengths equal, contradicting hcheck
+      have hlen := congrArg List.length h
+      simp [hlen] at hcheck
+  | succ n ih =>
+    simp only [Closure.deltaClose.go] at h ⊢
+    split
+    · rfl
+    · rename_i hlen
+      simp only [hlen] at h ⊢
+      exact ih (Closure.deltaStep t s) h
+
+/-- Propagation: if go stabilizes at n, it stabilizes at n+1 too (lambdaClose) -/
+theorem lambdaClose_go_propagate (t : Theory) (delta s : List Literal) (n : Nat)
+    (h : Closure.lambdaClose.go t delta s n = Closure.lambdaClose.go t delta s (n + 1)) :
+    Closure.lambdaClose.go t delta s (n + 1) = Closure.lambdaClose.go t delta s (n + 2) := by
+  induction n generalizing s with
+  | zero =>
+    change s = _ at h
+    cases hcheck : ((Closure.lambdaStep t delta s).length == s.length) with
+    | true => simp [Closure.lambdaClose.go, hcheck]
+    | false =>
+      simp only [Closure.lambdaClose.go, hcheck, Bool.false_eq_true, ↓reduceIte] at h
+      have hlen := congrArg List.length h
+      simp [hlen] at hcheck
+  | succ n ih =>
+    simp only [Closure.lambdaClose.go] at h ⊢
+    split
+    · rfl
+    · rename_i hlen
+      simp only [hlen] at h ⊢
+      exact ih (Closure.lambdaStep t delta s) h
+
+/-- Propagation: if go stabilizes at n, it stabilizes at n+1 too (partialClose) -/
+theorem partialClose_go_propagate (t : Theory) (delta lambda s : List Literal) (n : Nat)
+    (h : Closure.partialClose.go t delta lambda s n = Closure.partialClose.go t delta lambda s (n + 1)) :
+    Closure.partialClose.go t delta lambda s (n + 1) = Closure.partialClose.go t delta lambda s (n + 2) := by
+  induction n generalizing s with
+  | zero =>
+    change s = _ at h
+    cases hcheck : ((Closure.partialStep t delta lambda s).length == s.length) with
+    | true => simp [Closure.partialClose.go, hcheck]
+    | false =>
+      simp only [Closure.partialClose.go, hcheck, Bool.false_eq_true, ↓reduceIte] at h
+      have hlen := congrArg List.length h
+      simp [hlen] at hcheck
+  | succ n ih =>
+    simp only [Closure.partialClose.go] at h ⊢
+    split
+    · rfl
+    · rename_i hlen
+      simp only [hlen] at h ⊢
+      exact ih (Closure.partialStep t delta lambda s) h
+
+-- ═══════════════════════════════════════════════════════════════
 -- The main confluence result: go converges to a unique fixed point
 -- ═══════════════════════════════════════════════════════════════
 
@@ -203,8 +295,22 @@ theorem delta_confluence (t : Theory) (fuel₁ fuel₂ : Nat)
     (h₂ : fuel₁ ≤ fuel₂) :
     Closure.deltaClose.go t (t.facts.map (·.head)).dedup fuel₁ =
     Closure.deltaClose.go t (t.facts.map (·.head)).dedup fuel₂ := by
-  -- Once the iteration stabilizes at fuel₁, more fuel doesn't help
-  sorry
+  set seed := (t.facts.map (·.head)).dedup with hseed
+  obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_le h₂
+  -- First: show stabilization propagates forward
+  suffices hprop : ∀ k, Closure.deltaClose.go t seed (fuel₁ + k) =
+      Closure.deltaClose.go t seed (fuel₁ + k + 1) by
+    induction m with
+    | zero => simp
+    | succ m ih =>
+        have h1 := ih (by omega)
+        have h2 := hprop m
+        rw [show fuel₁ + (m + 1) = fuel₁ + m + 1 from by omega]
+        exact Eq.trans h1 h2
+  intro k
+  induction k with
+  | zero => simp; exact h₁
+  | succ k ih => exact deltaClose_go_propagate t seed (fuel₁ + k) ih
 
 /-- Confluence of lambda closure -/
 theorem lambda_confluence (t : Theory) (delta : List Literal) (fuel₁ fuel₂ : Nat)
@@ -213,7 +319,20 @@ theorem lambda_confluence (t : Theory) (delta : List Literal) (fuel₁ fuel₂ :
     (h₂ : fuel₁ ≤ fuel₂) :
     Closure.lambdaClose.go t delta delta fuel₁ =
     Closure.lambdaClose.go t delta delta fuel₂ := by
-  sorry
+  obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_le h₂
+  suffices hprop : ∀ k, Closure.lambdaClose.go t delta delta (fuel₁ + k) =
+      Closure.lambdaClose.go t delta delta (fuel₁ + k + 1) by
+    induction m with
+    | zero => simp
+    | succ m ih =>
+        have h1 := ih (by omega)
+        have h2 := hprop m
+        rw [show fuel₁ + (m + 1) = fuel₁ + m + 1 from by omega]
+        exact Eq.trans h1 h2
+  intro k
+  induction k with
+  | zero => simp; exact h₁
+  | succ k ih => exact lambdaClose_go_propagate t delta delta (fuel₁ + k) ih
 
 /-- Confluence of partial closure -/
 theorem partial_confluence (t : Theory) (delta lambda : List Literal) (fuel₁ fuel₂ : Nat)
@@ -222,7 +341,20 @@ theorem partial_confluence (t : Theory) (delta lambda : List Literal) (fuel₁ f
     (h₂ : fuel₁ ≤ fuel₂) :
     Closure.partialClose.go t delta lambda delta fuel₁ =
     Closure.partialClose.go t delta lambda delta fuel₂ := by
-  sorry
+  obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_le h₂
+  suffices hprop : ∀ k, Closure.partialClose.go t delta lambda delta (fuel₁ + k) =
+      Closure.partialClose.go t delta lambda delta (fuel₁ + k + 1) by
+    induction m with
+    | zero => simp
+    | succ m ih =>
+        have h1 := ih (by omega)
+        have h2 := hprop m
+        rw [show fuel₁ + (m + 1) = fuel₁ + m + 1 from by omega]
+        exact Eq.trans h1 h2
+  intro k
+  induction k with
+  | zero => simp; exact h₁
+  | succ k ih => exact partialClose_go_propagate t delta lambda delta (fuel₁ + k) ih
 
 -- ═══════════════════════════════════════════════════════════════
 -- Full reasoning confluence

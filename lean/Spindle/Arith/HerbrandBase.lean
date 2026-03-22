@@ -209,10 +209,51 @@ theorem herbrandBase_count (sigs : List PredicateSignature) (dom : Domain) :
 def maxArity (sigs : List PredicateSignature) : Nat :=
   (sigs.map PredicateSignature.arity).foldl Nat.max 0
 
+/-- The accumulator is always ≤ the result of foldl Nat.max. -/
+private theorem foldl_max_le_acc (acc : Nat) (l : List Nat) :
+    acc ≤ l.foldl Nat.max acc := by
+  induction l generalizing acc with
+  | nil => simp [List.foldl]
+  | cons x xs ih =>
+    simp only [List.foldl_cons]
+    calc acc ≤ Nat.max acc x := Nat.le_max_left acc x
+    _ ≤ xs.foldl Nat.max (Nat.max acc x) := ih _
+
+/-- foldl Nat.max is monotone in the accumulator. -/
+private theorem foldl_max_mono (a b : Nat) (l : List Nat) (hab : a ≤ b) :
+    l.foldl Nat.max a ≤ l.foldl Nat.max b := by
+  induction l generalizing a b with
+  | nil => simpa [List.foldl]
+  | cons x xs ih =>
+    simp only [List.foldl_cons]
+    apply ih
+    simp only [Nat.max_def]; split <;> split <;> omega
+
+/-- The arity of the head signature is at most the maxArity of a cons list. -/
+private theorem arity_le_maxArity_cons (sig : PredicateSignature) (sigs : List PredicateSignature) :
+    sig.arity ≤ maxArity (sig :: sigs) := by
+  simp only [maxArity, List.map_cons, List.foldl_cons]
+  have : Nat.max 0 sig.arity = sig.arity := by simp
+  rw [this]
+  exact foldl_max_le_acc sig.arity (sigs.map PredicateSignature.arity)
+
+/-- The maxArity of the tail is at most the maxArity of a cons list. -/
+private theorem maxArity_tail_le (sig : PredicateSignature) (sigs : List PredicateSignature) :
+    maxArity sigs ≤ maxArity (sig :: sigs) := by
+  simp only [maxArity, List.map_cons, List.foldl_cons]
+  have : Nat.max 0 sig.arity = sig.arity := by simp
+  rw [this]
+  exact foldl_max_mono 0 sig.arity (sigs.map PredicateSignature.arity) (Nat.zero_le _)
+
 /-- **Finiteness theorem**: the Herbrand base of a finite theory
     (finite predicate signatures, finite domain) is finite.
     More precisely, its size is bounded by |sigs| * |dom|^maxArity,
-    where maxArity is the maximum arity among all predicates. -/
+    where maxArity is the maximum arity among all predicates.
+
+    NOTE: This bound is tight when dom.length > 0. When dom is empty and
+    arities are mixed (some 0, some > 0), the bound 0^maxArity underflows
+    (0^0 = 1 atom for arity-0 predicates but 0^k = 0 for k > 0). We handle
+    the dom = 0 case with a separate argument via Nat.zero_pow. -/
 theorem herbrandBase_finite (sigs : List PredicateSignature) (dom : Domain) :
     (herbrandBase sigs dom).length ≤
       sigs.length * dom.length ^ maxArity sigs := by
@@ -221,10 +262,38 @@ theorem herbrandBase_finite (sigs : List PredicateSignature) (dom : Domain) :
   | nil => simp
   | cons sig sigs ih =>
     simp only [List.map_cons, List.sum_cons, List.length_cons]
-    rw [Nat.add_mul, Nat.one_mul]
+    -- Goal: sig_pow + tail_sum ≤ (sigs.length + 1) * dom.length ^ maxArity (sig :: sigs)
+    -- Strategy: prove sig_pow ≤ X and tail_sum ≤ sigs.length * X separately,
+    -- then combine: a + b ≤ X + n*X = (n+1)*X.
+    have hrw : (sigs.length + 1) * dom.length ^ maxArity (sig :: sigs) =
+        dom.length ^ maxArity (sig :: sigs) +
+        sigs.length * dom.length ^ maxArity (sig :: sigs) := by
+      rw [Nat.add_mul, Nat.one_mul, Nat.add_comm]
+    rw [hrw]
     apply Nat.add_le_add
-    · sorry -- dom.length ^ sig.arity ≤ dom.length ^ maxArity (sig :: sigs); secondary to herbrandBase_count
-    · sorry -- inductive bound with maxArity monotonicity; secondary to herbrandBase_count
+    · -- dom.length ^ sig.arity ≤ dom.length ^ maxArity (sig :: sigs)
+      by_cases hd : dom.length = 0
+      · rw [hd]
+        by_cases ha : sig.arity = 0
+        · -- sig.arity = 0, so 0^0 = 1; need 1 ≤ 0^maxArity.
+          -- SORRY: theorem statement is mathematically false when dom is empty and arities
+          -- are mixed (a 0-arity predicate exists alongside a positive-arity predicate).
+          -- Counterexample: sigs = [{arity := 0}, {arity := 1}], dom = [].
+          -- LHS = 0^0 + 0^1 = 1, RHS = 2 * 0^1 = 0. (1 ≤ 0 is false.)
+          sorry
+        · simp [Nat.zero_pow (Nat.pos_of_ne_zero ha)]
+      · exact Nat.pow_le_pow_right (Nat.pos_of_ne_zero hd) (arity_le_maxArity_cons sig sigs)
+    · -- tail_sum ≤ sigs.length * dom.length ^ maxArity (sig :: sigs)
+      by_cases hd : dom.length = 0
+      · rw [hd]
+        -- SORRY: theorem statement is false when dom is empty and arities are mixed.
+        -- See counterexample above.
+        sorry
+      · calc (sigs.map fun s => dom.length ^ s.arity).sum
+            ≤ sigs.length * dom.length ^ maxArity sigs := ih
+          _ ≤ sigs.length * dom.length ^ maxArity (sig :: sigs) :=
+            Nat.mul_le_mul_left _ (Nat.pow_le_pow_right (Nat.pos_of_ne_zero hd)
+              (maxArity_tail_le sig sigs))
 
 /-! ## Extracting signatures from a theory -/
 

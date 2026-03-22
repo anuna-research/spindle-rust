@@ -22,6 +22,8 @@ import SpindleLean.Reason
 import SpindleLean.Properties.Subset
 import SpindleLean.Properties.Soundness
 import Mathlib.Data.List.Dedup
+import Mathlib.Data.Finset.Dedup
+import Mathlib.Data.Finset.Card
 
 namespace Properties
 
@@ -124,17 +126,236 @@ theorem reason_plusd_sound (t : Theory) (l : Literal)
     l ∈ (reason t).delta ∨ l ∉ (reason t).delta := by
   exact em (l ∈ (reason t).delta)
 
-/-- Completeness of +D: if l has a definite derivation chain of length ≤ fuel,
-    then l ∈ delta(T). This requires showing that the iteration correctly
-    fires all applicable definite rules within the fuel budget. -/
+/-- Nodup subset with equal length: if s1 ⊆ s2, both Nodup, same length,
+    but a ∈ s2 and a ∉ s1, that's a contradiction. -/
+private theorem nodup_subset_length_absurd {α : Type*} [DecidableEq α]
+    {s1 s2 : List α} (hnd1 : s1.Nodup) (hnd2 : s2.Nodup)
+    (hsub : ∀ x, x ∈ s1 → x ∈ s2) (hlen : s2.length = s1.length)
+    {a : α} (ha2 : a ∈ s2) (ha1 : a ∉ s1) : False := by
+  have h_sub : s1.toFinset ⊆ s2.toFinset :=
+    fun x hx => List.mem_toFinset.mpr (hsub x (List.mem_toFinset.mp hx))
+  have h_ne : s1.toFinset ≠ s2.toFinset := by
+    intro heq
+    have : a ∉ s1.toFinset := by rwa [List.mem_toFinset]
+    exact this (heq ▸ List.mem_toFinset.mpr ha2)
+  have h_ssubset : s1.toFinset ⊂ s2.toFinset :=
+    lt_of_le_of_ne h_sub h_ne
+  have h_lt := Finset.card_lt_card h_ssubset
+  rw [List.toFinset_card_of_nodup hnd1, List.toFinset_card_of_nodup hnd2] at h_lt
+  omega
+
+/-- deltaClose.go result is Nodup. -/
+private theorem deltaClose_go_nodup' (t : Theory) (current : List Literal) (fuel : Nat)
+    (hnodup : current.Nodup) :
+    (Closure.deltaClose.go t current fuel).Nodup := by
+  induction fuel generalizing current with
+  | zero => simp only [Closure.deltaClose.go]; exact hnodup
+  | succ n ih =>
+    simp only [Closure.deltaClose.go]
+    split
+    · exact hnodup
+    · apply ih; simp only [Closure.deltaStep]; exact List.nodup_dedup _
+
+/-- deltaStep preserves subset of allLiterals -/
+private theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
+    (hnodup : current.Nodup)
+    (hsub : ∀ x ∈ current, x ∈ t.allLiterals) :
+    ∀ x ∈ Closure.deltaStep t current, x ∈ t.allLiterals := by
+  intro x hx
+  simp only [Closure.deltaStep, List.mem_dedup, List.mem_append] at hx
+  cases hx with
+  | inl h => exact hsub x h
+  | inr h =>
+    simp only [List.mem_filterMap] at h
+    obtain ⟨r, hrmem, hcond⟩ := h
+    split at hcond
+    · simp only [Option.some.injEq] at hcond; subst hcond
+      exact List.subset_dedup _ (List.mem_append.mpr (Or.inl (List.mem_map.mpr ⟨r, hrmem, rfl⟩)))
+    · simp at hcond
+
+/-- When current contains all of allLiterals, deltaStep cannot add new elements,
+    so the fixpoint length check passes. -/
+private theorem deltaStep_fixpoint_of_full (t : Theory) (current : List Literal)
+    (hnodup : current.Nodup)
+    (hsub : ∀ x ∈ current, x ∈ t.allLiterals)
+    (hfull : t.allLiterals.length ≤ current.length) :
+    ((Closure.deltaStep t current).length == current.length) = true := by
+  rw [beq_iff_eq]
+  -- deltaStep t current = (current ++ newLits).dedup where newLits are rule heads not in current
+  -- All newLits are in allLiterals. But current already covers all of allLiterals by pigeonhole.
+  -- So there are no new elements to add.
+  have h_step_sub : ∀ x ∈ Closure.deltaStep t current, x ∈ current := by
+    intro x hx
+    simp only [Closure.deltaStep, List.mem_dedup, List.mem_append] at hx
+    cases hx with
+    | inl h => exact h
+    | inr h =>
+      simp only [List.mem_filterMap] at h
+      obtain ⟨r, hrmem, hcond⟩ := h
+      -- The filterMap returns `some r.head` only when the condition
+      -- `r.isDefinite && r.bodySatisfied current && !current.contains r.head` is true.
+      -- This means r.head ∉ current. But r.head ∈ allLiterals and current covers allLiterals.
+      -- Contradiction.
+      exfalso
+      split at hcond
+      · -- `some r.head` case: condition was true
+        simp only [Option.some.injEq] at hcond; subst hcond
+        rename_i hcond'
+        -- hcond' : (r.isDefinite && r.bodySatisfied current && !current.contains r.head) = true
+        have h_not_in : current.contains r.head = false := by
+          simp only [Bool.and_eq_true] at hcond'
+          simp only [Bool.not_eq_true'] at hcond'
+          exact hcond'.2
+        have h_head_all : r.head ∈ t.allLiterals :=
+          List.subset_dedup _ (List.mem_append.mpr (Or.inl (List.mem_map.mpr ⟨r, hrmem, rfl⟩)))
+        -- Show allLiterals ⊆ current by pigeonhole
+        have h_all_nodup : t.allLiterals.Nodup := List.nodup_dedup _
+        have h_fin_sub : current.toFinset ⊆ t.allLiterals.toFinset :=
+          fun y hy => List.mem_toFinset.mpr (hsub y (List.mem_toFinset.mp hy))
+        have h_card_le : t.allLiterals.toFinset.card ≤ current.toFinset.card := by
+          rw [List.toFinset_card_of_nodup hnodup,
+              List.toFinset_card_of_nodup h_all_nodup]
+          exact hfull
+        have h_eq := Finset.eq_of_subset_of_card_le h_fin_sub h_card_le
+        have h_in_current : r.head ∈ current := by
+          have : r.head ∈ t.allLiterals.toFinset := List.mem_toFinset.mpr h_head_all
+          rw [← h_eq] at this
+          exact List.mem_toFinset.mp this
+        have h_contains : current.contains r.head = true := by
+          rw [List.contains_eq_any_beq]
+          exact List.any_eq_true.mpr ⟨r.head, h_in_current, beq_self_eq_true _⟩
+        rw [h_not_in] at h_contains
+        exact Bool.false_ne_true h_contains
+      · simp at hcond
+  -- Now: current ⊆ deltaStep (by mem_deltaStep_of_mem) and deltaStep ⊆ current
+  -- Both Nodup, so same length
+  have h_cur_sub : ∀ x ∈ current, x ∈ Closure.deltaStep t current :=
+    fun x hx => mem_deltaStep_of_mem t current x hx
+  have h_step_nodup : (Closure.deltaStep t current).Nodup := by
+    simp only [Closure.deltaStep]; exact List.nodup_dedup _
+  -- Equal sets with Nodup have equal lengths
+  have h_le1 : current.toFinset.card ≤ (Closure.deltaStep t current).toFinset.card := by
+    exact Finset.card_le_card (fun x hx =>
+      List.mem_toFinset.mpr (h_cur_sub x (List.mem_toFinset.mp hx)))
+  have h_le2 : (Closure.deltaStep t current).toFinset.card ≤ current.toFinset.card := by
+    exact Finset.card_le_card (fun x hx =>
+      List.mem_toFinset.mpr (h_step_sub x (List.mem_toFinset.mp hx)))
+  rw [List.toFinset_card_of_nodup hnodup,
+      List.toFinset_card_of_nodup h_step_nodup] at h_le1 h_le2
+  omega
+
+/-- deltaClose.go fixpoint completeness: if a definite rule has body satisfied
+    in the result, its head is in the result. Requires sufficient fuel. -/
+private theorem deltaClose_go_fixpoint' (t : Theory) (current : List Literal)
+    (fuel : Nat) (hnodup : current.Nodup)
+    (hsub : ∀ x ∈ current, x ∈ t.allLiterals)
+    (hfuel : t.allLiterals.length - current.length ≤ fuel)
+    (r : Rule) (hr : r ∈ t.rules) (hdef : r.isDefinite = true)
+    (hbody : r.bodySatisfied (Closure.deltaClose.go t current fuel) = true) :
+    r.head ∈ Closure.deltaClose.go t current fuel := by
+  induction fuel generalizing current with
+  | zero =>
+    -- Fuel = 0, but hfuel says allLiterals.length ≤ current.length.
+    -- So current is full, and is a fixpoint.
+    simp only [Closure.deltaClose.go] at *
+    -- current is full, so deltaStep doesn't change it => the fixpoint branch
+    -- would be taken. But at fuel=0, go returns current directly.
+    -- We need: r.head ∈ current. Since body is satisfied and r is definite,
+    -- r.head ∈ deltaStep t current. But deltaStep t current ⊆ current (by fullness).
+    by_contra h_not_mem
+    have h_in_step : r.head ∈ Closure.deltaStep t current := by
+      simp only [Closure.deltaStep, List.mem_dedup, List.mem_append]
+      right; simp only [List.mem_filterMap]
+      exact ⟨r, hr, by simp [hdef, hbody, h_not_mem]⟩
+    -- deltaStep when full: every element of deltaStep is in current
+    have hfull : t.allLiterals.length ≤ current.length := by omega
+    have h_fix := deltaStep_fixpoint_of_full t current hnodup hsub hfull
+    exact nodup_subset_length_absurd hnodup
+      (by simp only [Closure.deltaStep]; exact List.nodup_dedup _)
+      (fun x hx => mem_deltaStep_of_mem t current x hx)
+      (by simp only [beq_iff_eq] at h_fix; exact h_fix)
+      h_in_step h_not_mem
+  | succ n ih =>
+    simp only [Closure.deltaClose.go] at hbody
+    simp only [Closure.deltaClose.go]
+    split
+    · -- Fixpoint: deltaStep t current has same length as current
+      rename_i hlen
+      split at hbody
+      · -- hbody is about current (fixpoint confirmed in both goal and hyp)
+        by_contra h_not_mem
+        have h_in_step : r.head ∈ Closure.deltaStep t current := by
+          simp only [Closure.deltaStep, List.mem_dedup, List.mem_append]
+          right; simp only [List.mem_filterMap]
+          exact ⟨r, hr, by simp [hdef, hbody, h_not_mem]⟩
+        exact nodup_subset_length_absurd hnodup
+          (by simp only [Closure.deltaStep]; exact List.nodup_dedup _)
+          (fun x hx => mem_deltaStep_of_mem t current x hx)
+          (by simp only [beq_iff_eq] at hlen; exact hlen)
+          h_in_step h_not_mem
+      · rename_i hlen2; exact absurd hlen hlen2
+    · -- Not fixpoint: recurse with deltaStep
+      rename_i hlen
+      split at hbody
+      · rename_i hlen2; exact absurd hlen2 hlen
+      · -- Need to provide: deltaStep sub allLiterals and fuel bound
+        have h_step_nodup : (Closure.deltaStep t current).Nodup := by
+          simp only [Closure.deltaStep]; exact List.nodup_dedup _
+        have h_step_sub := deltaStep_sub_allLiterals t current hnodup hsub
+        -- deltaStep strictly increases length when not fixpoint
+        have h_strict : current.length < (Closure.deltaStep t current).length := by
+          simp only [beq_iff_eq] at hlen
+          have h_le : current.toFinset.card ≤ (Closure.deltaStep t current).toFinset.card :=
+            Finset.card_le_card (fun x hx =>
+              List.mem_toFinset.mpr (mem_deltaStep_of_mem t current x (List.mem_toFinset.mp hx)))
+          rw [List.toFinset_card_of_nodup hnodup,
+              List.toFinset_card_of_nodup h_step_nodup] at h_le
+          omega
+        have h_fuel' : t.allLiterals.length - (Closure.deltaStep t current).length ≤ n := by
+          -- allLiterals.length - current.length ≤ n + 1
+          -- current.length < deltaStep.length
+          -- deltaStep ⊆ allLiterals, so deltaStep.length ≤ allLiterals.length
+          have h_step_le : (Closure.deltaStep t current).length ≤ t.allLiterals.length := by
+            have h_all_nodup : t.allLiterals.Nodup := List.nodup_dedup _
+            have : (Closure.deltaStep t current).toFinset.card ≤ t.allLiterals.toFinset.card :=
+              Finset.card_le_card (fun x hx =>
+                List.mem_toFinset.mpr (h_step_sub x (List.mem_toFinset.mp hx)))
+            rw [List.toFinset_card_of_nodup h_step_nodup,
+                List.toFinset_card_of_nodup h_all_nodup] at this
+            exact this
+          omega
+        exact ih _ h_step_nodup h_step_sub h_fuel' hbody
+
+/-- Helper: initial seed for deltaClose is Nodup and subset of allLiterals -/
+private theorem deltaClose_init_nodup (t : Theory) :
+    (t.facts.map (·.head)).dedup.Nodup := List.nodup_dedup _
+
+private theorem deltaClose_init_sub_allLiterals (t : Theory) :
+    ∀ x ∈ (t.facts.map (·.head)).dedup, x ∈ t.allLiterals := by
+  intro x hx
+  have := List.dedup_subset _ hx
+  simp only [List.mem_map, Theory.facts, List.mem_filter] at this
+  obtain ⟨r, ⟨hrmem, _⟩, hrfl⟩ := this; subst hrfl
+  exact List.subset_dedup _ (List.mem_append.mpr (Or.inl (List.mem_map.mpr ⟨r, hrmem, rfl⟩)))
+
+/-- Completeness of +D: if there exists a definite rule with head l whose body
+    is satisfied in deltaClose t, then l ∈ deltaClose t.
+
+    Note: requires that the theory has at most 1000 distinct literals, since
+    deltaClose uses fuel=1000. For larger theories, use a custom fuel value. -/
 theorem reason_plusD_complete (t : Theory) (l : Literal)
+    (hsmall : t.allLiterals.length ≤ 1000)
     (hderiv : ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l
               ∧ r.bodySatisfied (Closure.deltaClose t) = true) :
     l ∈ Closure.deltaClose t := by
-  -- The derivation chain shows the rule fires; by fixpoint property,
-  -- if the body is satisfied in delta, the head must be in delta
-  -- (otherwise the fixpoint wasn't reached, contradicting convergence)
-  sorry
+  obtain ⟨r, hr, hdef, hhead, hbody⟩ := hderiv
+  rw [← hhead]
+  simp only [Closure.deltaClose]
+  apply deltaClose_go_fixpoint' t _ 1000 (List.nodup_dedup _)
+    (deltaClose_init_sub_allLiterals t) _ r hr hdef hbody
+  -- Fuel bound: allLiterals.length - init.length ≤ 1000
+  -- Since init.length ≥ 0 and allLiterals.length ≤ 1000
+  omega
 
 /-- The three-phase decomposition preserves the subset chain:
     delta ⊆ partial ⊆ lambda.
