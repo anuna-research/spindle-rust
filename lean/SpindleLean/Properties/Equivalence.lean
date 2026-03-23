@@ -157,7 +157,7 @@ private theorem deltaClose_go_nodup' (t : Theory) (current : List Literal) (fuel
     · apply ih; simp only [Closure.deltaStep]; exact List.nodup_dedup _
 
 /-- deltaStep preserves subset of allLiterals -/
-private theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
+theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
     (hnodup : current.Nodup)
     (hsub : ∀ x ∈ current, x ∈ t.allLiterals) :
     ∀ x ∈ Closure.deltaStep t current, x ∈ t.allLiterals := by
@@ -175,7 +175,7 @@ private theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
 
 /-- When current contains all of allLiterals, deltaStep cannot add new elements,
     so the fixpoint length check passes. -/
-private theorem deltaStep_fixpoint_of_full (t : Theory) (current : List Literal)
+theorem deltaStep_fixpoint_of_full (t : Theory) (current : List Literal)
     (hnodup : current.Nodup)
     (hsub : ∀ x ∈ current, x ∈ t.allLiterals)
     (hfull : t.allLiterals.length ≤ current.length) :

@@ -254,7 +254,8 @@ private theorem maxArity_tail_le (sig : PredicateSignature) (sigs : List Predica
     arities are mixed (some 0, some > 0), the bound 0^maxArity underflows
     (0^0 = 1 atom for arity-0 predicates but 0^k = 0 for k > 0). We handle
     the dom = 0 case with a separate argument via Nat.zero_pow. -/
-theorem herbrandBase_finite (sigs : List PredicateSignature) (dom : Domain) :
+theorem herbrandBase_finite (sigs : List PredicateSignature) (dom : Domain)
+    (hdom : 0 < dom.length) :
     (herbrandBase sigs dom).length ≤
       sigs.length * dom.length ^ maxArity sigs := by
   rw [herbrandBase_count]
@@ -272,28 +273,13 @@ theorem herbrandBase_finite (sigs : List PredicateSignature) (dom : Domain) :
     rw [hrw]
     apply Nat.add_le_add
     · -- dom.length ^ sig.arity ≤ dom.length ^ maxArity (sig :: sigs)
-      by_cases hd : dom.length = 0
-      · rw [hd]
-        by_cases ha : sig.arity = 0
-        · -- sig.arity = 0, so 0^0 = 1; need 1 ≤ 0^maxArity.
-          -- SORRY: theorem statement is mathematically false when dom is empty and arities
-          -- are mixed (a 0-arity predicate exists alongside a positive-arity predicate).
-          -- Counterexample: sigs = [{arity := 0}, {arity := 1}], dom = [].
-          -- LHS = 0^0 + 0^1 = 1, RHS = 2 * 0^1 = 0. (1 ≤ 0 is false.)
-          sorry
-        · simp [Nat.zero_pow (Nat.pos_of_ne_zero ha)]
-      · exact Nat.pow_le_pow_right (Nat.pos_of_ne_zero hd) (arity_le_maxArity_cons sig sigs)
+      exact Nat.pow_le_pow_right hdom (arity_le_maxArity_cons sig sigs)
     · -- tail_sum ≤ sigs.length * dom.length ^ maxArity (sig :: sigs)
-      by_cases hd : dom.length = 0
-      · rw [hd]
-        -- SORRY: theorem statement is false when dom is empty and arities are mixed.
-        -- See counterexample above.
-        sorry
-      · calc (sigs.map fun s => dom.length ^ s.arity).sum
-            ≤ sigs.length * dom.length ^ maxArity sigs := ih
-          _ ≤ sigs.length * dom.length ^ maxArity (sig :: sigs) :=
-            Nat.mul_le_mul_left _ (Nat.pow_le_pow_right (Nat.pos_of_ne_zero hd)
-              (maxArity_tail_le sig sigs))
+      calc (sigs.map fun s => dom.length ^ s.arity).sum
+          ≤ sigs.length * dom.length ^ maxArity sigs := ih
+        _ ≤ sigs.length * dom.length ^ maxArity (sig :: sigs) :=
+          Nat.mul_le_mul_left _ (Nat.pow_le_pow_right hdom
+            (maxArity_tail_le sig sigs))
 
 /-! ## Extracting signatures from a theory -/
 

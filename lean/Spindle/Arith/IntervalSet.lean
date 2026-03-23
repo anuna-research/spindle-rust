@@ -601,30 +601,179 @@ private theorem TimePoint.posInf_le_iff (t : TimePoint) : TimePoint.posInf ≤ t
 private theorem TimePoint.le_negInf_iff (t : TimePoint) : t ≤ TimePoint.negInf ↔ t = .negInf :=
   ⟨fun h => TimePoint.le_antisymm h (TimePoint.negInf_le _), fun h => h ▸ TimePoint.le_refl _⟩
 
-/-- Subtracting a single interval removes exactly the blocked points. -/
-/- Note: subtract_spec requires detailed case analysis on TimePoint constructors.
-   The subtract function uses explicit moment matching for pred/succ to avoid infinity
-   edge cases (negInf.pred = negInf and posInf.succ = posInf). The backward direction
-   of this spec is fully proved for finite (moment) endpoints. Two edge cases where
-   blocker = {negInf} or {posInf} and a contains that boundary require representing
-   half-open intervals, which the closed-interval type cannot express.
-   The proof is structured but Lean 4.27.0 type-class resolution makes the `simp`
-   and `split` interactions with `match`-in-`let` fragile, so we keep a single sorry
-   here. The backward direction (lines below) IS fully proved for the main
-   moment/moment case; the forward direction needs `Interval.mk?` characterization
-   that interacts poorly with the `let`-bound match. -/
-theorem Interval.subtract_spec (a blocker : Interval) (t : TimePoint) :
+private theorem Interval.mk?_eq (s e : TimePoint) (h : s ≤ e) :
+    Interval.mk? s e = some ⟨s, e, h⟩ := by
+  simp [Interval.mk?, h]
+
+private theorem Interval.mk?_contains {s e : TimePoint} {i : Interval} (t : TimePoint)
+    (h : Interval.mk? s e = some i) : i.contains t ↔ (s ≤ t ∧ t ≤ e) := by
+  unfold Interval.mk? at h
+  split at h
+  · next hle => injection h with h; subst h; exact Iff.rfl
+  · exact absurd h (by simp)
+
+/-- Subtracting a single interval removes exactly the blocked points.
+    Excludes the degenerate case where blocker is a singleton at ±∞,
+    since subtracting {negInf} or {posInf} would require half-open intervals. -/
+theorem Interval.subtract_spec (a blocker : Interval) (t : TimePoint)
+    (hblocker : blocker.start ≠ blocker.stop ∨ (∃ n, blocker.start = .moment n)) :
     IntervalSet.covers (Interval.subtract a blocker) t ↔
     a.contains t ∧ ¬blocker.contains t := by
-  sorry
+  -- Unfold subtract and reduce the matches on blocker endpoints
+  unfold Interval.subtract
+  cases hbs : blocker.start <;> cases hbe : blocker.stop <;> simp only []
+  · -- (negInf, negInf): excluded — singleton at negInf
+    exfalso; rcases hblocker with hne | ⟨n, hn⟩
+    · exact hne (hbs ▸ hbe ▸ rfl)
+    · rw [hbs] at hn; exact TimePoint.noConfusion hn
+  · -- (negInf, moment m)
+    rename_i m
+    -- result: [] ++ (match mk? ... with | some r => [r] | none => [])
+    constructor
+    · intro hcov
+      rw [IntervalSet.covers_append] at hcov
+      rcases hcov with ⟨_, hm, _⟩ | hcov
+      · exact absurd hm (List.not_mem_nil)
+      · cases hmk : Interval.mk? (TimePoint.max a.start (.moment (m + 1))) a.stop with
+        | none => simp [hmk] at hcov; exact absurd hcov (IntervalSet.covers_nil _)
+        | some r =>
+          simp [hmk] at hcov; rw [IntervalSet.covers_cons] at hcov
+          rcases hcov with hc | hnil
+          · rw [mk?_contains t hmk] at hc
+            exact ⟨⟨TimePoint.le_trans (TimePoint.le_max_left _ _) hc.1, hc.2⟩,
+                   by simp [Interval.contains, hbs, hbe]; intro _ hte
+                      exact TimePoint.succ_le_not_le t m
+                        (TimePoint.le_trans (TimePoint.le_max_right _ _) hc.1) hte⟩
+          · exact absurd hnil (IntervalSet.covers_nil _)
+    · intro ⟨⟨has, hae⟩, hnb⟩
+      simp [Interval.contains, hbs, hbe] at hnb
+      have hnle : ¬(t ≤ .moment m) := hnb (TimePoint.negInf_le _)
+      have hsucc := TimePoint.not_le_moment_to_succ_le t m hnle
+      rw [IntervalSet.covers_append]
+      right
+      have hmax_le : TimePoint.max a.start (.moment (m + 1)) ≤ a.stop := by
+        simp [TimePoint.max]; split
+        · exact TimePoint.le_trans hsucc hae
+        · exact a.valid
+      cases hmk : Interval.mk? (TimePoint.max a.start (.moment (m + 1))) a.stop with
+      | none => exfalso; simp [Interval.mk?] at hmk; exact hmk hmax_le
+      | some r =>
+        simp; rw [IntervalSet.covers_cons]; left; rw [mk?_contains t hmk]
+        exact ⟨by simp [TimePoint.max]; split; exact hsucc; exact has, hae⟩
+  · -- (negInf, posInf): blocker = full, result = [] ++ []
+    constructor
+    · intro hcov
+      rw [IntervalSet.covers_append] at hcov
+      rcases hcov with ⟨_, hm, _⟩ | ⟨_, hm, _⟩ <;> exact absurd hm (List.not_mem_nil)
+    · intro ⟨_, hnb⟩; exfalso
+      exact hnb ⟨by rw [hbs]; exact TimePoint.negInf_le _, by rw [hbe]; exact TimePoint.le_posInf _⟩
+  · -- (moment n, negInf): impossible
+    rename_i n; exfalso; have := blocker.valid; rw [hbs, hbe] at this
+    rcases this with heq | hlt; exact TimePoint.noConfusion heq; simp [TimePoint.lt] at hlt
+  · -- (moment n, moment m)
+    rename_i n m
+    rw [IntervalSet.covers_append]
+    constructor
+    · -- Forward
+      rintro (hcov | hcov)
+      · -- left piece
+        cases hmk : Interval.mk? a.start (TimePoint.min a.stop (.moment (n - 1))) with
+        | none => simp [hmk] at hcov; exact absurd hcov (IntervalSet.covers_nil _)
+        | some l =>
+          simp [hmk] at hcov; rw [IntervalSet.covers_cons] at hcov
+          rcases hcov with hc | hnil
+          · rw [mk?_contains t hmk] at hc
+            refine ⟨⟨hc.1, TimePoint.le_trans hc.2 (TimePoint.min_le_left _ _)⟩, ?_⟩
+            simp [Interval.contains, hbs, hbe]; intro hbs'
+            exact absurd hbs' (TimePoint.le_pred_not_le t n
+              (TimePoint.le_trans hc.2 (TimePoint.min_le_right _ _)))
+          · exact absurd hnil (IntervalSet.covers_nil _)
+      · -- right piece
+        cases hmk : Interval.mk? (TimePoint.max a.start (.moment (m + 1))) a.stop with
+        | none => simp [hmk] at hcov; exact absurd hcov (IntervalSet.covers_nil _)
+        | some r =>
+          simp [hmk] at hcov; rw [IntervalSet.covers_cons] at hcov
+          rcases hcov with hc | hnil
+          · rw [mk?_contains t hmk] at hc
+            refine ⟨⟨TimePoint.le_trans (TimePoint.le_max_left _ _) hc.1, hc.2⟩, ?_⟩
+            simp [Interval.contains, hbs, hbe]; intro _ hbe'
+            exact absurd hbe'
+              (TimePoint.succ_le_not_le t m (TimePoint.le_trans (TimePoint.le_max_right _ _) hc.1))
+          · exact absurd hnil (IntervalSet.covers_nil _)
+    · -- Backward
+      intro ⟨⟨has, hae⟩, hnb⟩
+      simp [Interval.contains, hbs, hbe] at hnb
+      by_cases hn : TimePoint.moment n ≤ t
+      · have hnle : ¬(t ≤ .moment m) := hnb hn
+        have hsucc := TimePoint.not_le_moment_to_succ_le t m hnle
+        right
+        have hmax_le : TimePoint.max a.start (.moment (m + 1)) ≤ a.stop := by
+          simp [TimePoint.max]; split
+          · exact TimePoint.le_trans hsucc hae
+          · exact a.valid
+        cases hmk : Interval.mk? (TimePoint.max a.start (.moment (m + 1))) a.stop with
+        | none => exfalso; simp [Interval.mk?] at hmk; exact hmk hmax_le
+        | some r =>
+          simp; rw [IntervalSet.covers_cons]; left; rw [mk?_contains t hmk]
+          exact ⟨by simp [TimePoint.max]; split; exact hsucc; exact has, hae⟩
+      · have hpred := TimePoint.not_moment_le_to_le_pred t n hn
+        left
+        have hmin_le : a.start ≤ TimePoint.min a.stop (.moment (n - 1)) := by
+          simp [TimePoint.min]; split; exact a.valid; exact TimePoint.le_trans has hpred
+        cases hmk : Interval.mk? a.start (TimePoint.min a.stop (.moment (n - 1))) with
+        | none => exfalso; simp [Interval.mk?] at hmk; exact hmk hmin_le
+        | some l =>
+          simp; rw [IntervalSet.covers_cons]; left; rw [mk?_contains t hmk]
+          exact ⟨has, by simp [TimePoint.min]; split; exact hae; exact hpred⟩
+  · -- (moment n, posInf)
+    rename_i n
+    constructor
+    · intro hcov
+      rw [IntervalSet.covers_append] at hcov
+      rcases hcov with hcov | ⟨_, hm, _⟩
+      · cases hmk : Interval.mk? a.start (TimePoint.min a.stop (.moment (n - 1))) with
+        | none => simp [hmk] at hcov; exact absurd hcov (IntervalSet.covers_nil _)
+        | some l =>
+          simp [hmk] at hcov; rw [IntervalSet.covers_cons] at hcov
+          rcases hcov with hc | hnil
+          · rw [mk?_contains t hmk] at hc
+            refine ⟨⟨hc.1, TimePoint.le_trans hc.2 (TimePoint.min_le_left _ _)⟩, ?_⟩
+            simp [Interval.contains, hbs, hbe]; intro hbs'
+            exact absurd hbs' (TimePoint.le_pred_not_le t n
+              (TimePoint.le_trans hc.2 (TimePoint.min_le_right _ _)))
+          · exact absurd hnil (IntervalSet.covers_nil _)
+      · exact absurd hm (List.not_mem_nil)
+    · intro ⟨⟨has, hae⟩, hnb⟩
+      simp [Interval.contains, hbs, hbe] at hnb
+      have hn : ¬(TimePoint.moment n ≤ t) := fun h => hnb h (TimePoint.le_posInf _)
+      have hpred := TimePoint.not_moment_le_to_le_pred t n hn
+      rw [IntervalSet.covers_append]; left
+      have hmin_le : a.start ≤ TimePoint.min a.stop (.moment (n - 1)) := by
+        simp [TimePoint.min]; split; exact a.valid; exact TimePoint.le_trans has hpred
+      cases hmk : Interval.mk? a.start (TimePoint.min a.stop (.moment (n - 1))) with
+      | none => exfalso; simp [Interval.mk?] at hmk; exact hmk hmin_le
+      | some l =>
+        simp; rw [IntervalSet.covers_cons]; left; rw [mk?_contains t hmk]
+        exact ⟨has, by simp [TimePoint.min]; split; exact hae; exact hpred⟩
+  · -- (posInf, negInf): impossible
+    exfalso; have := blocker.valid; rw [hbs, hbe] at this
+    rcases this with heq | hlt; exact TimePoint.noConfusion heq; simp [TimePoint.lt] at hlt
+  · -- (posInf, moment m): impossible
+    rename_i m; exfalso; have := blocker.valid; rw [hbs, hbe] at this
+    rcases this with heq | hlt; exact TimePoint.noConfusion heq; simp [TimePoint.lt] at hlt
+  · -- (posInf, posInf): excluded — singleton at posInf
+    exfalso; rcases hblocker with hne | ⟨n, hn⟩
+    · exact hne (hbs ▸ hbe ▸ rfl)
+    · rw [hbs] at hn; exact TimePoint.noConfusion hn
 
 /-- Subtracting one blocker from a set preserves the specification. -/
 theorem IntervalSet.subtractOne_spec (is_ : IntervalSet) (blocker : Interval)
-    (t : TimePoint) :
+    (t : TimePoint)
+    (hblocker : blocker.start ≠ blocker.stop ∨ (∃ n, blocker.start = .moment n)) :
     IntervalSet.covers (IntervalSet.subtractOne is_ blocker) t ↔
     IntervalSet.covers is_ t ∧ ¬blocker.contains t := by
   simp only [IntervalSet.subtractOne]
-  have h := foldl_subtract_covers is_ blocker [] t (fun a => Interval.subtract_spec a blocker t)
+  have h := foldl_subtract_covers is_ blocker [] t (fun a => Interval.subtract_spec a blocker t hblocker)
   constructor
   · intro hcov
     rcases h.mp hcov with hnil | hex
@@ -634,8 +783,10 @@ theorem IntervalSet.subtractOne_spec (is_ : IntervalSet) (blocker : Interval)
 
 /-- **Theorem (4)**: subtraction removes exactly the blocked points.
     A point is covered after subtraction iff it was covered before
-    and is not covered by any blocker. -/
-theorem IntervalSet.subtraction_spec (is_ blockers : IntervalSet) (t : TimePoint) :
+    and is not covered by any blocker.
+    Requires that no blocker is a singleton at ±∞. -/
+theorem IntervalSet.subtraction_spec (is_ blockers : IntervalSet) (t : TimePoint)
+    (hblockers : ∀ b ∈ blockers, b.start ≠ b.stop ∨ (∃ n, b.start = .moment n)) :
     IntervalSet.covers (IntervalSet.subtraction is_ blockers) t ↔
     IntervalSet.covers is_ t ∧ ¬IntervalSet.covers blockers t := by
   simp only [IntervalSet.subtraction]
@@ -648,8 +799,8 @@ theorem IntervalSet.subtraction_spec (is_ blockers : IntervalSet) (t : TimePoint
     · intro ⟨h, _⟩; exact h
   | cons b bs ih =>
     simp only [List.foldl]
-    rw [ih]
-    rw [subtractOne_spec]
+    rw [ih _ (fun b' hb' => hblockers b' (List.mem_cons_of_mem _ hb'))]
+    rw [subtractOne_spec _ _ _ (hblockers b (List.mem_cons_self ..))]
     constructor
     · intro ⟨⟨hcov, hnb⟩, hnbs⟩
       exact ⟨hcov, fun hcov_blockers => by

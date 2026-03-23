@@ -62,6 +62,10 @@ def allLiterals (t : Theory) : List Literal :=
   let bodies := t.rules.flatMap (fun r => r.body)
   (heads ++ bodies).dedup
 
+/-- A theory is well-formed if every fact rule has an empty body -/
+def WellFormed (t : Theory) : Prop :=
+  ∀ r ∈ t.rules, r.ruleType = .fact → r.body = []
+
 end Theory
 
 instance : Inhabited Theory := ⟨Theory.empty⟩

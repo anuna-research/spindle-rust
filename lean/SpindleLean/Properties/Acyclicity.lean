@@ -111,7 +111,8 @@ private theorem supReachable_addSuperiority (t : Theory) (w l : String)
     provided the new pair doesn't create a cycle -/
 theorem addSuperiority_preserves_acyclic (t : Theory) (w l : String)
     (hacyc : supAcyclic t)
-    (hnocycle : ¬ supReachable t l w) :
+    (hnocycle : ¬ supReachable t l w)
+    (hne : w ≠ l) :
     supAcyclic (t.addSuperiority w l) := by
   intro x hreach
   cases supReachable_addSuperiority t w l hnocycle x x hreach with
@@ -123,12 +124,8 @@ theorem addSuperiority_preserves_acyclic (t : Theory) (w l : String)
     | inl hxl =>
       cases hnew.1 with
       | inl hxw =>
-        -- x = w and x = l, so w = l. Adding a self-loop w > w always creates a cycle,
-        -- but the premises don't prevent w = l. The theorem statement is missing a
-        -- premise like w ≠ l. This subgoal is supReachable t l w with l = w, which
-        -- would require supReachable t l l -- unprovable without an edge.
-        -- SORRY: theorem statement is false when w = l (self-loop counterexample).
-        sorry
+        -- x = w and x = l, so w = l — contradicts hne
+        exact absurd (hxw.symm.trans hxl) hne
       | inr hxw => exact hxl ▸ hxw
     | inr hlx =>
       cases hnew.1 with
