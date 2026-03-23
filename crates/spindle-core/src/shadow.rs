@@ -201,19 +201,10 @@ impl ShadowReasoner {
             return Ok(ShadowResult {
                 primary,
                 projection_tokens: Vec::new(),
-                compiled_bodies: FxHashMap::default(),
+                compiled_bodies: Default::default(),
                 divergences: Vec::new(),
-                diagnostics: ProjectionDiagnostics {
-                    exact_supports: 0,
-                    family_supports: 0,
-                    family_attacks: 0,
-                    contributing_labels: std::collections::BTreeSet::new(),
-                },
-                snapshot: ProjectionSnapshot {
-                    exact: Vec::new(),
-                    family: Vec::new(),
-                    attack: Vec::new(),
-                },
+                diagnostics: Default::default(),
+                snapshot: Default::default(),
             });
         }
 
@@ -222,6 +213,10 @@ impl ShadowReasoner {
 
         // Step 3: Run projection for positive contributors plus any rule
         // that blocked a proof and therefore determined the outcome.
+        // Note: `projection_labels` includes both supporting rules (from
+        // conclusions) and blocking rules (attackers, defeaters) — see
+        // `resolve_defeasible_literal` in defeasible.rs which inserts
+        // attacker labels when they block a conclusion.
         let mut engine = ProjectionEngine::with_capacity(primary.len() * 2);
         let contributing_labels = trace.projection_labels;
         let theory = indexed.theory();
@@ -343,6 +338,7 @@ fn detect_divergences(
             ProjectionToken::Attack(fa) if !all_concluded_families.contains(&fa.family_id) => {
                 divergences.push(Divergence::unmatched_token(token.clone()));
             }
+            // Matched tokens — no divergence.
             ProjectionToken::Exact(_) | ProjectionToken::Family(_) | ProjectionToken::Attack(_) => {
             }
         }

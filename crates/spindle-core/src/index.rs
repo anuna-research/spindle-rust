@@ -125,6 +125,12 @@ pub struct IndexedTheory<'a> {
 
 impl<'a> IndexedTheory<'a> {
     /// Build an indexed theory from a theory reference.
+    ///
+    /// Build an indexed theory, panicking on ID-space exhaustion.
+    ///
+    /// # Panics
+    /// Panics if exact-literal interning exhausts the 31-bit ID space.
+    /// Prefer [`try_build`](Self::try_build) for fallible construction.
     pub fn build(theory: &'a Theory) -> Self {
         Self::try_build(theory)
             .expect("exact literal capacity exceeded while building theory index")
@@ -404,12 +410,14 @@ impl<'a> IndexedTheory<'a> {
         let exact_atoms = &self.exact_atoms;
         let new_temporal = exact_atoms[exact.atom_index() as usize].temporal.clone();
         let members = self.family_to_exact.entry(family).or_default();
+        // Use strict Less so that equal temporal windows preserve insertion order
+        // (stable insertion into a sorted sequence).
         let insert_at = members.partition_point(|existing| {
             exact_atoms
                 .get(existing.atom_index() as usize)
                 .map(|existing_key| {
                     Self::compare_temporal(&existing_key.temporal, &new_temporal)
-                        != Ordering::Greater
+                        == Ordering::Less
                 })
                 .unwrap_or(true)
         });

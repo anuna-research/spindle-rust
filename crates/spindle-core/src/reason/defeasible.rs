@@ -40,6 +40,9 @@ pub(crate) fn resolve_defeasible(
     let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
 
     // --- Seed +d from +D (subsumption), but respect condition (2) ---
+    // Sort by SPL string for deterministic iteration order. This is
+    // lexicographic (not temporal), which is intentional: we only need a
+    // stable, reproducible ordering here, not temporal precedence.
     let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
     all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
     for &lit_id in &all_ids {

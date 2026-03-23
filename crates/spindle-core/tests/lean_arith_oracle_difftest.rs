@@ -122,6 +122,7 @@ fn expr_to_json(expr: &ArithExpr) -> Option<JValue> {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum LeanResult {
     Ok(LeanValue),
     Error(String),

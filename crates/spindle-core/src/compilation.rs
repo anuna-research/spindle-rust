@@ -101,10 +101,7 @@ impl CompiledBody {
             .all(|k| matches!(k, BodyMatchKey::Family(_) | BodyMatchKey::Arithmetic))
     }
 
-    /// Returns `true` if every logic key uses family matching.
-    ///
-    /// `Arithmetic` keys are treated as neutral for this legacy predicate, so
-    /// this is equivalent to [`CompiledBody::has_no_exact`].
+    /// Alias for [`has_no_exact`](Self::has_no_exact). Prefer the latter.
     pub fn is_all_family(&self) -> bool {
         self.has_no_exact()
     }

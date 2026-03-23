@@ -73,6 +73,10 @@ fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
     labels
 }
 
+/// Whether a rule should participate in shadow projection.
+///
+/// Currently all rules are projected. This hook exists as an extension point
+/// for future filtering (e.g. skip meta-rules or auxiliary definitions).
 pub(crate) fn should_project_rule(_rule: &Rule) -> bool {
     true
 }

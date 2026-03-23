@@ -30,7 +30,15 @@ impl ExactLitId {
     const ATOM_MASK: u32 = !Self::NEGATION_BIT;
 
     /// Create an exact literal ID from an exact-atom slot and negation flag.
+    ///
+    /// # Panics (debug only)
+    /// Panics if `atom_index` exceeds the 31-bit address space (`2^31 - 1`),
+    /// which would silently corrupt the negation bit.
     pub fn new(atom_index: u32, negated: bool) -> Self {
+        debug_assert!(
+            atom_index <= Self::ATOM_MASK,
+            "ExactLitId::new: atom_index {atom_index} exceeds 31-bit capacity"
+        );
         if negated {
             Self(atom_index | Self::NEGATION_BIT)
         } else {
@@ -516,7 +524,7 @@ fn debug_assert_counts(engine: &ProjectionEngine) {
 /// Summarizes the number of exact supports, family supports, family attacks,
 /// and the set of rule labels that contributed projected evidence. This
 /// validates that projection activity is explainable and bounded.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectionDiagnostics {
     /// Number of [`ExactSupport`] tokens emitted.
     pub exact_supports: usize,
@@ -561,7 +569,7 @@ impl std::fmt::Display for ProjectionDiagnostics {
 /// All entries are sorted by a stable key so that non-deterministic iteration
 /// order does not cause test regressions. Useful for golden-file or snapshot
 /// testing of projected evidence ordering and tie-break label selection.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectionSnapshot {
     /// Sorted `(rule_label, exact_lit_display)` pairs for exact support tokens.
     pub exact: Vec<(String, String)>,
