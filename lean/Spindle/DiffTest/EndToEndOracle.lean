@@ -60,7 +60,6 @@ private def termToJson : Term → Json
       ("n", jsonInt n),
       ("scale", jsonNat s)
     ])]
-  | .finiteFloat f => Json.mkObj [("float", Json.str (toString f))]
   | .variable v => Json.mkObj [("variable", Json.str v)]
 
 private def parseTerm (j : Json) : Except String Term := do
@@ -72,8 +71,6 @@ private def parseTerm (j : Json) : Except String Term := do
     let n ← obj.getObjValAs? Int "n"
     let scale ← obj.getObjValAs? Nat "scale"
     return .decimal n scale
-  if let some f := j.getObjValAs? Float "float" |>.toOption then
-    return .finiteFloat f
   if let some v := j.getObjValAs? String "variable" |>.toOption then
     return .variable v
   .error s!"invalid Term JSON: {j}"

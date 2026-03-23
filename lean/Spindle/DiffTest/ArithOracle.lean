@@ -54,7 +54,6 @@ private def valueToJson : Value → Json
       ("n", jsonInt n),
       ("scale", jsonNat s)
     ])]
-  | .float f => Json.mkObj [("float", Json.str (toString f))]
 
 private def parseValue (j : Json) : Except String Value := do
   -- Try int
@@ -65,9 +64,6 @@ private def parseValue (j : Json) : Except String Value := do
     let n ← obj.getObjValAs? Int "n"
     let scale ← obj.getObjValAs? Nat "scale"
     return .decimal n scale
-  -- Try float (as number or string)
-  if let some f := j.getObjValAs? Float "float" |>.toOption then
-    return .float f
   .error s!"invalid Value JSON: {j}"
 
 /-! ## Operator JSON -/

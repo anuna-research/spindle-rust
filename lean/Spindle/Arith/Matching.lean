@@ -10,21 +10,12 @@ import Spindle.Arith.GroundLiteral
 
 namespace Spindle.Arith
 
-/-! ## Float BEq reflection
-
-    Float.beq is opaque (IEEE 754). We axiomatize that our finiteFloat values
-    have well-behaved equality (no NaN). This is consistent with the type name
-    `finiteFloat` which excludes NaN/Inf. -/
-
-axiom Float.eq_of_beq_true : ∀ (a b : Float), a.beq b = true → a = b
-
 /-! ## Term BEq reflection -/
 
 /-- BEq true implies propositional equality for Term. -/
 theorem Term.eq_of_beq {a b : Term} (h : (a == b) = true) : a = b := by
   cases a <;> cases b <;> simp [BEq.beq] at h <;> try (obtain rfl := h; rfl)
   · obtain ⟨h1, h2⟩ := h; subst h1; subst h2; rfl
-  · exact congrArg Term.finiteFloat (Float.eq_of_beq_true _ _ h)
 
 /-! ## Term-level matching -/
 
@@ -206,9 +197,6 @@ theorem matchTerms_sound (σ : Substitution) (pats targets : List Term) (σ' : S
           simp [Substitution.applyTerm] at this ⊢; exact this
         | decimal n sc =>
           have := matchTerm_sound σ (.decimal n sc) t σ_mid hmid
-          simp [Substitution.applyTerm] at this ⊢; exact this
-        | finiteFloat f =>
-          have := matchTerm_sound σ (.finiteFloat f) t σ_mid hmid
           simp [Substitution.applyTerm] at this ⊢; exact this
 
 /-! ## Main theorem: matchLiteral soundness -/

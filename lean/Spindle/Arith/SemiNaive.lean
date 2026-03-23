@@ -213,12 +213,10 @@ section Termination
 /-! ### BEq reflexivity
 
 BEq on Literal is derived from structural BEq on Term. For all term
-variants except `finiteFloat`, BEq coincides with propositional equality.
-The `finiteFloat` case uses IEEE 754 where NaN ≠ NaN, but NaN cannot
-appear in a ground Herbrand base (all floats arise from finite domain
-extraction). We axiomatize reflexivity here. -/
+variants, BEq coincides with propositional equality (no opaque Float). -/
 
-private axiom Literal.beq_self (l : Literal) : (l == l) = true
+private theorem Literal.beq_self (l : Literal) : (l == l) = true := by
+  simp [BEq.beq]
 
 /-- Propositional list membership implies BEq-based `elem`. -/
 private theorem elem_of_mem {l : Literal} {xs : Interpretation}

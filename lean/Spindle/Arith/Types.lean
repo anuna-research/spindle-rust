@@ -10,11 +10,10 @@ namespace Spindle.Arith
 
 /-! ## Numeric values -/
 
-/-- Runtime numeric value with three representations. -/
+/-- Runtime numeric value with two representations. -/
 inductive Value where
   | int (n : Int)
   | decimal (n : Int) (scale : Nat)  -- fixed-point: value = n / 10^scale
-  | float (val : Float)
   deriving Repr, BEq, Inhabited
 
 /-! ## Operator enums -/
@@ -84,7 +83,6 @@ inductive ArithError where
   | decimalOverflow
   | unboundVariable (id : VarId)
   | typeMismatch (op : String) (expected got : String)
-  | nonFiniteFloat
   | reciprocalOfZero
   | comparisonFailed
   deriving Repr, BEq, Inhabited

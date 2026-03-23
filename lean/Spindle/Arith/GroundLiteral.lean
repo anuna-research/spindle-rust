@@ -103,9 +103,6 @@ theorem Substitution.groundsTerm_nonvar_integer (σ : Substitution) (n : Int) :
 theorem Substitution.groundsTerm_nonvar_decimal (σ : Substitution) (n : Int) (s : Nat) :
     σ.groundsTerm (.decimal n s) = true := rfl
 
-theorem Substitution.groundsTerm_nonvar_float (σ : Substitution) (f : Float) :
-    σ.groundsTerm (.finiteFloat f) = true := rfl
-
 /-! ## Main theorem: complete substitution produces ground literal -/
 
 /-- Helper: applying a substitution to a list preserves the all-ground property
@@ -194,7 +191,6 @@ private theorem groundsTerm_all_of_covering (σ : Substitution) (ts : List Term)
       | .symbol _ => rfl
       | .integer _ => rfl
       | .decimal _ _ => rfl
-      | .finiteFloat _ => rfl
     · apply ih
       intro v hv
       apply hcov
@@ -206,7 +202,6 @@ private theorem groundsTerm_all_of_covering (σ : Substitution) (ts : List Term)
       | .symbol _ => exact hv
       | .integer _ => exact hv
       | .decimal _ _ => exact hv
-      | .finiteFloat _ => exact hv
 
 /-- **Corollary**: a ground substitution that covers all variables in a literal
     is complete for that literal. -/

@@ -19,7 +19,6 @@ def Term.isGround : Term → Bool
 theorem Term.isGround_symbol (s : String) : (Term.symbol s).isGround = true := rfl
 theorem Term.isGround_integer (n : Int) : (Term.integer n).isGround = true := rfl
 theorem Term.isGround_decimal (n : Int) (s : Nat) : (Term.decimal n s).isGround = true := rfl
-theorem Term.isGround_float (f : Float) : (Term.finiteFloat f).isGround = true := rfl
 theorem Term.isGround_variable (v : String) : (Term.variable v).isGround = false := rfl
 
 /-! ## Substitution type -/
@@ -164,9 +163,6 @@ theorem Substitution.applyTerm_integer (σ : Substitution) (n : Int) :
 
 theorem Substitution.applyTerm_decimal (σ : Substitution) (n : Int) (s : Nat) :
     σ.applyTerm (.decimal n s) = .decimal n s := rfl
-
-theorem Substitution.applyTerm_float (σ : Substitution) (f : Float) :
-    σ.applyTerm (.finiteFloat f) = .finiteFloat f := rfl
 
 /-- A variable does not occur in a non-variable term. -/
 theorem Term.occurs_symbol (v : String) (s : String) :

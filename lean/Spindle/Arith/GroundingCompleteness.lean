@@ -72,14 +72,12 @@ theorem Substitution.applyTerms_eq_of_agree (σ₁ σ₂ : Substitution) (ts : L
       | symbol _ => rfl
       | integer _ => rfl
       | decimal _ _ => rfl
-      | finiteFloat _ => rfl
     · apply ih; intro v hv; apply h
       cases t with
       | «variable» w => simp only [List.filterMap_cons] at hv ⊢; exact .tail _ hv
       | symbol _ => simp only [List.filterMap_cons] at hv ⊢; exact hv
       | integer _ => simp only [List.filterMap_cons] at hv ⊢; exact hv
       | decimal _ _ => simp only [List.filterMap_cons] at hv ⊢; exact hv
-      | finiteFloat _ => simp only [List.filterMap_cons] at hv ⊢; exact hv
 
 /-- Two substitutions agreeing on literal variables produce the same result. -/
 theorem Literal.applySubst_eq_of_agree (σ₁ σ₂ : Substitution) (l : Literal)

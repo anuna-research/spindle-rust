@@ -30,7 +30,6 @@ def Value.add (a b : Value) : Option Value :=
   | .decimal x sx, .decimal y sy =>
     let (x', y', s) := alignScales x sx y sy
     some (.decimal (x' + y') s)
-  | .float x, .float y => some (.float (x + y))
   | _, _ => none
 
 /-- Multiply two values after promoting to their LUB type. -/
@@ -39,7 +38,6 @@ def Value.mul (a b : Value) : Option Value :=
   match a.promote t, b.promote t with
   | .int x, .int y => some (.int (x * y))
   | .decimal x sx, .decimal y sy => some (.decimal (x * y) (sx + sy))
-  | .float x, .float y => some (.float (x * y))
   | _, _ => none
 
 /-- Minimum of two values after promoting to their LUB type. -/
@@ -50,7 +48,6 @@ def Value.min (a b : Value) : Option Value :=
   | .decimal x sx, .decimal y sy =>
     let (x', y', s) := alignScales x sx y sy
     if x' ≤ y' then some (.decimal x' s) else some (.decimal y' s)
-  | .float x, .float y => some (.float (if x < y then x else y))
   | _, _ => none
 
 /-- Maximum of two values after promoting to their LUB type. -/
@@ -61,7 +58,6 @@ def Value.max (a b : Value) : Option Value :=
   | .decimal x sx, .decimal y sy =>
     let (x', y', s) := alignScales x sx y sy
     if x' ≤ y' then some (.decimal y' s) else some (.decimal x' s)
-  | .float x, .float y => some (.float (if x > y then x else y))
   | _, _ => none
 
 /-! ## N-ary operator evaluation -/
@@ -103,14 +99,12 @@ def Value.sub (a b : Value) : Option Value :=
   | .decimal x sx, .decimal y sy =>
     let (x', y', s) := alignScales x sx y sy
     some (.decimal (x' - y') s)
-  | .float x, .float y => some (.float (x - y))
   | _, _ => none
 
 /-- Check if a value is zero. -/
 def Value.isZero : Value → Bool
   | .int 0 => true
   | .decimal 0 _ => true
-  | .float f => f == 0.0
   | _ => false
 
 /-- Divide two values. Returns none on division by zero. -/
@@ -125,7 +119,6 @@ def Value.div (a b : Value) : Option Value :=
       -- Result scale = sy (we keep the divisor's scale for consistency)
       let (x', y', _) := alignScales x sx y sy
       some (.decimal (x' / y') sx)
-    | .float x, .float y => some (.float (x / y))
     | _, _ => none
 
 /-- Modulo two values. Returns none on division by zero. -/
@@ -138,33 +131,17 @@ def Value.mod (a b : Value) : Option Value :=
     | .decimal x sx, .decimal y sy =>
       let (x', y', s) := alignScales x sx y sy
       some (.decimal (x' % y') s)
-    | .float x, .float y => some (.float (x - y * (x / y).floor))  -- approximate fmod
     | _, _ => none
 
-/-- Integer power. For non-integer exponents, promotes to float. -/
+/-- Integer power. Negative or decimal exponents are not supported (returns none). -/
 def Value.pow (base exp : Value) : Option Value :=
   match exp with
   | .int (.ofNat n) =>
     match base with
     | .int b => some (.int (b ^ n))
     | .decimal b s => some (.decimal (b ^ n) (s * n))
-    | .float b => some (.float (Float.pow b (Float.ofNat n)))
-  | .int (.negSucc _) =>
-    -- Negative exponent: promote to float
-    let bf := base.promote .float
-    let ef := exp.promote .float
-    match bf, ef with
-    | .float b, .float e => some (.float (Float.pow b e))
-    | _, _ => none
-  | .float e =>
-    match base.promote .float with
-    | .float b => some (.float (Float.pow b e))
-    | _ => none
-  | .decimal n s =>
-    -- Promote both to float
-    match base.promote .float, (Value.decimal n s).promote .float with
-    | .float b, .float e => some (.float (Float.pow b e))
-    | _, _ => none
+  | .int (.negSucc _) => none  -- negative exponent not supported without float
+  | .decimal _ _ => none  -- decimal exponent not supported without float
 
 /-- Evaluate a binary operator. Returns none on division by zero or type errors. -/
 def evalBin (op : BinArithOp) (lhs rhs : Value) : Option Value :=
@@ -188,16 +165,11 @@ def evalUnary (op : UnaryArithOp) (v : Value) : Option Value :=
     match v with
     | .int n => some (.int (-n))
     | .decimal n s => some (.decimal (-n) s)
-    | .float f => some (.float (-f))
   | .abs =>
     match v with
     | .int n => some (.int (Int.abs' n))
     | .decimal n s => some (.decimal (Int.abs' n) s)
-    | .float f => some (.float f.abs)
-  | .sqrt =>
-    match v.promote .float with
-    | .float f => if f ≥ 0.0 then some (.float f.sqrt) else none
-    | _ => none
+  | .sqrt => none  -- sqrt not supported without float
   | .ceil =>
     match v with
     | .int n => some (.int n)
@@ -205,14 +177,12 @@ def evalUnary (op : UnaryArithOp) (v : Value) : Option Value :=
       let divisor : Int := (10 ^ s : Nat)
       let q := n / divisor
       if n % divisor == 0 then some (.int q) else some (.int (q + 1))
-    | .float f => some (.float f.ceil)
   | .floor =>
     match v with
     | .int n => some (.int n)
     | .decimal n s =>
       let divisor : Int := (10 ^ s : Nat)
       some (.int (n / divisor))
-    | .float f => some (.float f.floor)
   | .round =>
     match v with
     | .int n => some (.int n)
@@ -222,7 +192,6 @@ def evalUnary (op : UnaryArithOp) (v : Value) : Option Value :=
       let r := (n % divisor).natAbs
       let half := (divisor.natAbs + 1) / 2
       if r ≥ half then some (.int (q + 1)) else some (.int q)
-    | .float f => some (.float f.round)
 
 /-! ## Comparison operator evaluation -/
 
@@ -234,11 +203,6 @@ def Value.compare (a b : Value) : Option Ordering :=
   | .decimal x sx, .decimal y sy =>
     let (x', y', _) := alignScales x sx y sy
     some (Ord.compare x' y')
-  | .float x, .float y =>
-    if x < y then some .lt
-    else if x > y then some .gt
-    else if x == y then some .eq
-    else none  -- NaN
   | _, _ => none
 
 /-- Evaluate a comparison operator on two values.
