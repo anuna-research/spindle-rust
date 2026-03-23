@@ -21,7 +21,7 @@ structure Literal where
   negation : Bool
   /-- Predicate arguments (e.g., for parent(alice, bob)). -/
   args : List Term
-  deriving Repr, Inhabited, BEq
+  deriving Repr, Inhabited, BEq, DecidableEq
 
 /-! ## Groundness -/
 

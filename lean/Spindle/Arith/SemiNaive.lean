@@ -216,7 +216,8 @@ BEq on Literal is derived from structural BEq on Term. For all term
 variants, BEq coincides with propositional equality (no opaque Float). -/
 
 private theorem Literal.beq_self (l : Literal) : (l == l) = true := by
-  simp [BEq.beq]
+  unfold BEq.beq instBEqLiteral
+  simp only [Literal.mk.injEq, and_self]
 
 /-- Propositional list membership implies BEq-based `elem`. -/
 private theorem elem_of_mem {l : Literal} {xs : Interpretation}

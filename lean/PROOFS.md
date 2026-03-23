@@ -310,3 +310,23 @@ Only standard Lean 4 axioms are used:
 - `Lean.ofReduceBool` / `Lean.trustCompiler` (kernel reduction trust, from `simp`/`decide`)
 
 No custom axioms.
+
+## Differential Testing (Lean vs Rust)
+
+Three proptest-based test suites verify that the Lean formalization agrees with the Rust implementation on concrete inputs. Each test generates random inputs, evaluates them in both Rust and Lean (via JSON over stdin/stdout), and asserts the results match.
+
+| Test suite | What it compares | Cases |
+|-----------|-----------------|-------|
+| `lean_arith_oracle_difftest.rs` | Rust `arith.rs` vs Lean `Eval.lean` | Random arithmetic expressions |
+| `lean_grounding_oracle_difftest.rs` | Rust `grounding.rs` vs Lean `GroundRule.lean` | Random rules + domains → ground instances |
+| `lean_end_to_end_difftest.rs` | Full Rust pipeline vs full Lean pipeline | Non-ground theories → ground + reason → +D conclusions |
+
+Run with:
+```bash
+cd lean && lake build                    # Build Lean oracles
+cd .. && cargo test --test lean_arith_oracle_difftest -- --ignored
+cargo test --test lean_grounding_oracle_difftest -- --ignored
+cargo test --test lean_end_to_end_difftest -- --ignored
+```
+
+Tests are `#[ignore]` by default (CI environments may lack the Lean toolchain).
