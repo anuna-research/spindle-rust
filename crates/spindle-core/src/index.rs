@@ -412,8 +412,7 @@ impl<'a> IndexedTheory<'a> {
             exact_atoms
                 .get(existing.atom_index() as usize)
                 .map(|existing_key| {
-                    Self::compare_temporal(&existing_key.temporal, &new_temporal)
-                        == Ordering::Less
+                    Self::compare_temporal(&existing_key.temporal, &new_temporal) == Ordering::Less
                 })
                 .unwrap_or(true)
         });

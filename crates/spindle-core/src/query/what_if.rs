@@ -116,7 +116,10 @@ pub(crate) fn next_hyp_label(theory: &Theory, unique_id: u64, start_index: usize
             return candidate;
         }
         index += 1;
-        assert!(index < limit, "next_hyp_label: exceeded 10,000 collision attempts");
+        assert!(
+            index < limit,
+            "next_hyp_label: exceeded 10,000 collision attempts"
+        );
     }
 }
 

@@ -42,6 +42,23 @@ steps:
       - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - cd crates/spindle-wasm && wasm-pack build --target web --release
 
+  - name: difftest
+    image: rust:1.88-bookworm
+    commands:
+      - cargo test --package spindle-core --test difftest
+    environment:
+      PROPTEST_CASES: 500
+
+  - name: lean-oracle
+    image: rust:1.88-bookworm
+    commands:
+      - curl https://elan-init.github.io/elan/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+      - export PATH="$HOME/.elan/bin:$PATH"
+      - cd lean && lake build
+      - cd .. && cargo test --package spindle-core --test lean_oracle_difftest -- --ignored
+    when:
+      - path: "lean/**"
+
   - name: deploy-docs
     image: node:22-bookworm
     when:

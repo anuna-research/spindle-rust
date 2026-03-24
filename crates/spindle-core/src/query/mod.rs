@@ -30,12 +30,12 @@ use crate::error::Result;
 use crate::index::IndexedTheory;
 use crate::literal::Literal;
 use crate::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
-use crate::trust::WeightedConclusion;
 use crate::projection::FamilyId;
 use crate::reason::{Reasoner, reason_with_options};
 use crate::temporal::TimePoint;
 use crate::theory::MetaValue;
 use crate::theory::Theory;
+use crate::trust::WeightedConclusion;
 use crate::trust::{TrustPolicy, TrustValue};
 
 pub mod abduce;
@@ -440,8 +440,7 @@ impl TrustFilter {
             let weighted = if let Some(cache) = weighted_cache {
                 cache
             } else {
-                owned =
-                    compute_weighted_conclusions(conclusions, theory, policy, reference_time);
+                owned = compute_weighted_conclusions(conclusions, theory, policy, reference_time);
                 &owned
             };
             let wc = weighted.iter().find(|wc| {
