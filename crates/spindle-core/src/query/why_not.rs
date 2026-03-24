@@ -120,6 +120,7 @@ impl BlockingCondition {
 
 /// Result of a why-not query
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct WhyNotResult {
     /// The literal queried
     pub literal: Literal,

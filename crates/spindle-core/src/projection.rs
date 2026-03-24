@@ -325,7 +325,6 @@ impl ProjectionEngine {
     ///   reasoning results (grounded instances keep their grounded labels).
     /// - Does not materialize synthetic rules in `Theory`.
     pub fn try_project_rule(&mut self, rule: &Rule, index: &mut IndexedTheory<'_>) -> Result<()> {
-        let label = rule.label.clone();
         let rule_type = rule.rule_type;
 
         for head_lit in &rule.head {
@@ -334,7 +333,7 @@ impl ProjectionEngine {
 
             self.push_exact(ExactSupport {
                 exact_lit: exact,
-                rule_label: label.clone(),
+                rule_label: rule.label.clone(),
                 rule_type,
             });
 
@@ -343,7 +342,7 @@ impl ProjectionEngine {
                 self.push_attack(FamilyAttack {
                     family_id: family,
                     source_exact_lit: exact,
-                    rule_label: label.clone(),
+                    rule_label: rule.label.clone(),
                     rule_type,
                 });
             } else {
@@ -351,7 +350,7 @@ impl ProjectionEngine {
                 self.push_family(FamilySupport {
                     family_id: family,
                     source_exact_lit: exact,
-                    rule_label: label.clone(),
+                    rule_label: rule.label.clone(),
                     rule_type,
                 });
             }

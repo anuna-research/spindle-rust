@@ -83,13 +83,9 @@ struct AtomKey {
 }
 
 /// Key used for interning exact literals (includes temporal bounds).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct ExactAtomKey {
-    functor: SymbolId,
-    mode: (SymbolId, bool),
-    args: Vec<Term>,
-    temporal: Temporal,
-}
+/// Structurally identical to `AtomKey` but kept as a type alias to
+/// separate the two interning namespaces.
+type ExactAtomKey = AtomKey;
 
 /// An indexed theory for efficient rule lookup.
 ///

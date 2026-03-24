@@ -30,6 +30,7 @@ use crate::error::Result;
 use crate::index::IndexedTheory;
 use crate::literal::Literal;
 use crate::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
+use crate::trust::WeightedConclusion;
 use crate::projection::FamilyId;
 use crate::reason::{Reasoner, reason_with_options};
 use crate::temporal::TimePoint;
@@ -293,6 +294,7 @@ impl fmt::Display for QueryStatus {
 
 /// Result of querying a literal from a theory
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct QueryResult {
     /// The queried literal
     pub literal: Literal,
@@ -371,8 +373,10 @@ impl TrustFilter {
 
     /// Check if a conclusion passes this filter using derived (weakest-link) trust.
     ///
-    /// Computes trust degrees via `compute_weighted_conclusions`, so a high-trust
-    /// rule with low-trust premises gets the minimum trust across the chain.
+    /// When `min_degree` is set, trust degrees are needed. Pass a pre-computed
+    /// `weighted_cache` (from [`compute_weighted_conclusions`]) to avoid
+    /// recomputing on every call when filtering multiple conclusions in a loop.
+    /// If `None`, the weighted conclusions are computed on the fly.
     ///
     /// For the source pattern check, rule metadata is consulted directly (with
     /// template_label fallback for grounded instances).
@@ -382,6 +386,7 @@ impl TrustFilter {
         conclusions: &[Conclusion],
         theory: &Theory,
         reference_time: Option<TimePoint>,
+        weighted_cache: Option<&[WeightedConclusion]>,
     ) -> bool {
         let policy = match &self.policy {
             Some(p) => p,
@@ -426,10 +431,19 @@ impl TrustFilter {
             }
         }
 
-        // Check minimum degree using derived (weakest-link) trust
+        // Check minimum degree using derived (weakest-link) trust.
+        //
+        // When `weighted_cache` is provided, use it directly to avoid
+        // recomputing `compute_weighted_conclusions` on every call.
         if let Some(min) = self.min_degree {
-            let weighted =
-                compute_weighted_conclusions(conclusions, theory, policy, reference_time);
+            let owned;
+            let weighted = if let Some(cache) = weighted_cache {
+                cache
+            } else {
+                owned =
+                    compute_weighted_conclusions(conclusions, theory, policy, reference_time);
+                &owned
+            };
             let wc = weighted.iter().find(|wc| {
                 wc.literal.to_spl() == conclusion.literal.to_spl()
                     && wc.conclusion_type == conclusion.conclusion_type
@@ -1710,7 +1724,7 @@ mod tests {
         let filter = TrustFilter::new();
         let theory = Theory::new();
         let conclusion = Conclusion::defeasibly_provable(Literal::simple("a")).with_rule("r1");
-        assert!(filter.passes(&conclusion, &[], &theory, None));
+        assert!(filter.passes(&conclusion, &[], &theory, None, None));
     }
 
     #[test]
@@ -1738,8 +1752,8 @@ mod tests {
             .unwrap();
 
         // 0.9 >= 0.7 → passes; 0.3 < 0.7 → fails
-        assert!(filter.passes(c_a, &conclusions, &theory, None));
-        assert!(!filter.passes(c_b, &conclusions, &theory, None));
+        assert!(filter.passes(c_a, &conclusions, &theory, None, None));
+        assert!(!filter.passes(c_b, &conclusions, &theory, None, None));
     }
 
     #[test]
@@ -1763,8 +1777,8 @@ mod tests {
             .find(|c| c.literal.name() == "b" && c.is_positive())
             .unwrap();
 
-        assert!(filter.passes(c_a, &conclusions, &theory, None)); // matches "agent:"
-        assert!(!filter.passes(c_b, &conclusions, &theory, None)); // doesn't match
+        assert!(filter.passes(c_a, &conclusions, &theory, None, None)); // matches "agent:"
+        assert!(!filter.passes(c_b, &conclusions, &theory, None, None)); // doesn't match
     }
 
     #[test]
@@ -1775,7 +1789,7 @@ mod tests {
         // No policy set, so filter should pass everything
         let theory = Theory::new();
         let conclusion = Conclusion::defeasibly_provable(Literal::simple("a"));
-        assert!(filter.passes(&conclusion, &[], &theory, None));
+        assert!(filter.passes(&conclusion, &[], &theory, None, None));
     }
 
     #[test]
@@ -1811,9 +1825,9 @@ mod tests {
             .find(|c| c.literal.name() == "c" && c.is_positive())
             .unwrap();
 
-        assert!(filter.passes(c_a, &conclusions, &theory, None)); // agent: + 0.9 >= 0.5
-        assert!(!filter.passes(c_b, &conclusions, &theory, None)); // agent: + 0.3 < 0.5
-        assert!(!filter.passes(c_c, &conclusions, &theory, None)); // system: no match
+        assert!(filter.passes(c_a, &conclusions, &theory, None, None)); // agent: + 0.9 >= 0.5
+        assert!(!filter.passes(c_b, &conclusions, &theory, None, None)); // agent: + 0.3 < 0.5
+        assert!(!filter.passes(c_c, &conclusions, &theory, None, None)); // system: no match
     }
 
     #[test]
@@ -1841,7 +1855,7 @@ mod tests {
 
         // Derived conclusion should have weakest-link degree 0.3 < 0.5 → fails
         assert!(
-            !filter.passes(c_derived, &conclusions, &theory, None),
+            !filter.passes(c_derived, &conclusions, &theory, None, None),
             "Derived conclusion should fail filter because weakest-link degree (0.3) < min (0.5)"
         );
     }

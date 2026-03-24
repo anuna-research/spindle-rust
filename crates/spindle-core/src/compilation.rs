@@ -102,6 +102,7 @@ impl CompiledBody {
     }
 
     /// Alias for [`has_no_exact`](Self::has_no_exact). Prefer the latter.
+    #[deprecated(note = "use has_no_exact instead")]
     pub fn is_all_family(&self) -> bool {
         self.has_no_exact()
     }
@@ -220,7 +221,7 @@ mod tests {
         let compiled = compile_rule(rule, &mut idx);
 
         assert_eq!(compiled.len(), 1);
-        assert!(compiled.is_all_family());
+        assert!(compiled.has_no_exact());
         assert!(!compiled.has_exact());
 
         let expected_family = FamilyId::from(&Literal::simple("bird"));
@@ -249,7 +250,7 @@ mod tests {
 
         assert_eq!(compiled.len(), 1);
         assert!(compiled.has_exact());
-        assert!(!compiled.is_all_family());
+        assert!(!compiled.has_no_exact());
         assert!(compiled.keys()[0].is_exact());
     }
 
@@ -277,7 +278,7 @@ mod tests {
 
         assert_eq!(compiled.len(), 2);
         assert!(compiled.has_exact());
-        assert!(!compiled.is_all_family());
+        assert!(!compiled.has_no_exact());
 
         assert!(compiled.keys()[0].is_exact());
         assert!(compiled.keys()[1].is_family());
@@ -311,7 +312,7 @@ mod tests {
         assert!(compiled.keys()[0].is_family());
         assert!(compiled.keys()[1].is_arithmetic());
         assert_eq!(compiled.logic_key_count(), 1);
-        assert!(compiled.is_all_family()); // arithmetic doesn't break all_family
+        assert!(compiled.has_no_exact()); // arithmetic doesn't break all_family
     }
 
     #[test]
@@ -342,7 +343,7 @@ mod tests {
         assert!(compiled.contains_key("s1"));
 
         assert!(compiled["f1"].is_empty());
-        assert!(compiled["r1"].is_all_family());
+        assert!(compiled["r1"].has_no_exact());
         assert!(compiled["s1"].has_exact());
     }
 

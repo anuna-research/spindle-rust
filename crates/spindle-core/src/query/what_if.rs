@@ -15,7 +15,7 @@ use crate::reason::reason;
 use crate::rule::Rule;
 use crate::theory::Theory;
 
-use super::{QueryResult, QueryStatus};
+use super::{QueryResult, QueryStatus, semantic_literal_matches};
 
 // =============================================================================
 // TYPES
@@ -109,12 +109,14 @@ fn strongest_conclusions_by_literal(
 
 pub(crate) fn next_hyp_label(theory: &Theory, unique_id: u64, start_index: usize) -> String {
     let mut index = start_index.max(1);
+    let limit = index + 10_000;
     loop {
         let candidate = format!("__hyp_{unique_id}_{index}");
         if theory.get_rule(&candidate).is_none() {
             return candidate;
         }
         index += 1;
+        assert!(index < limit, "next_hyp_label: exceeded 10,000 collision attempts");
     }
 }
 
@@ -151,11 +153,12 @@ pub fn what_if(
     // Reason on modified theory (only once, not via query which reasons again)
     let modified_conclusions = reason(&modified)?;
 
-    // Determine goal status directly from conclusions (avoids calling query->reason again)
+    // Determine goal status directly from conclusions (avoids calling query->reason again).
+    // Use semantic_literal_matches for consistency with query()/why_not()/abduce().
     let goal_complement = goal.complement();
     let mut result = QueryResult::new(goal.clone(), QueryStatus::Unknown);
     for conc in &modified_conclusions {
-        if conc.literal == *goal && conc.conclusion_type.is_positive() {
+        if semantic_literal_matches(goal, &conc.literal) && conc.conclusion_type.is_positive() {
             result = QueryResult::new(goal.clone(), QueryStatus::Provable)
                 .with_conclusion_type(conc.conclusion_type);
             break;
@@ -163,7 +166,9 @@ pub fn what_if(
     }
     if result.status == QueryStatus::Unknown {
         for conc in &modified_conclusions {
-            if conc.literal == goal_complement && conc.conclusion_type.is_positive() {
+            if semantic_literal_matches(&goal_complement, &conc.literal)
+                && conc.conclusion_type.is_positive()
+            {
                 result = QueryResult::new(goal.clone(), QueryStatus::Refuted);
                 break;
             }

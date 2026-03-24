@@ -12,8 +12,9 @@
 //! defeaters or conflicts are considered. Use [`super::requires`] for verified
 //! fact-set search.
 
-use std::collections::HashSet;
 use std::fmt;
+
+use rustc_hash::FxHashSet;
 
 use crate::conclusion::Conclusion;
 use crate::error::Result;
@@ -32,19 +33,19 @@ use super::{has_positive_match, semantic_literal_matches};
 #[derive(Debug, Clone)]
 pub struct AbductionSolution {
     /// Facts that need to be assumed
-    pub facts: HashSet<Literal>,
+    pub facts: FxHashSet<Literal>,
     /// Rules that would be used in the derivation
-    pub rules_used: HashSet<String>,
+    pub rules_used: FxHashSet<String>,
     /// Confidence score (if trust-weighted)
     pub confidence: f64,
 }
 
 impl AbductionSolution {
     /// Create a new abduction solution
-    pub fn new(facts: HashSet<Literal>) -> Self {
+    pub fn new(facts: FxHashSet<Literal>) -> Self {
         Self {
             facts,
-            rules_used: HashSet::new(),
+            rules_used: FxHashSet::default(),
             confidence: 1.0,
         }
     }
@@ -62,6 +63,7 @@ impl AbductionSolution {
 
 /// Result of an abduction query
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct AbductionResult {
     /// The goal literal
     pub goal: Literal,
@@ -107,7 +109,7 @@ impl fmt::Display for AbductionResult {
             if sol.is_already_provable() {
                 writeln!(f, "  {}. Already provable", i + 1)?;
             } else {
-                let facts: Vec<_> = sol.facts.iter().map(|l| l.to_string()).collect();
+                let facts: Vec<_> = sol.facts.iter().map(|l: &Literal| l.to_string()).collect();
                 writeln!(f, "  {}. Add facts: {{{}}}", i + 1, facts.join(", "))?;
             }
         }
@@ -158,13 +160,13 @@ pub fn abduce_with_conclusions(
     if is_goal_provable(goal, conclusions) {
         result
             .solutions
-            .push(AbductionSolution::new(HashSet::new()));
+            .push(AbductionSolution::new(FxHashSet::default()));
         return Ok(result);
     }
 
     // Find rules that could derive the goal according to the goal's own match
     // semantics: exact when bounded, family-aware when atemporal.
-    let mut candidates: Vec<(HashSet<Literal>, HashSet<String>)> = Vec::new();
+    let mut candidates: Vec<(FxHashSet<Literal>, FxHashSet<String>)> = Vec::new();
 
     for rule in theory.rules() {
         if semantic_literal_matches(goal, rule.head_literal())
@@ -176,7 +178,7 @@ pub fn abduce_with_conclusions(
                 .iter()
                 .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
                 .collect();
-            let missing: HashSet<_> = body_lits
+            let missing: FxHashSet<_> = body_lits
                 .into_iter()
                 .filter(|b| !is_body_satisfied(b, conclusions))
                 .collect();
@@ -192,7 +194,7 @@ pub fn abduce_with_conclusions(
             {
                 rules_used.insert(rule.label.clone());
             } else {
-                let mut rules_used = HashSet::new();
+                let mut rules_used: FxHashSet<String> = FxHashSet::default();
                 rules_used.insert(rule.label.clone());
                 candidates.push((missing, rules_used));
             }
@@ -201,13 +203,13 @@ pub fn abduce_with_conclusions(
 
     // If no direct rules, try the trivial solution (add goal itself)
     if candidates.is_empty() {
-        let mut trivial = HashSet::new();
+        let mut trivial: FxHashSet<Literal> = FxHashSet::default();
         trivial.insert(goal.clone());
-        candidates.push((trivial, HashSet::new()));
+        candidates.push((trivial, FxHashSet::default()));
     }
 
     // Sort by size (smallest first)
-    candidates.sort_by_key(|(facts, _)| facts.len());
+    candidates.sort_by_key(|(facts, _): &(FxHashSet<Literal>, FxHashSet<String>)| facts.len());
 
     for (facts, rules_used) in candidates.into_iter().take(max_solutions) {
         let mut sol = AbductionSolution::new(facts);
@@ -593,7 +595,7 @@ mod tests {
             result
                 .solutions
                 .iter()
-                .any(|sol| sol.facts == HashSet::from([Literal::simple("bird")]))
+                .any(|sol| sol.facts == FxHashSet::from_iter([Literal::simple("bird")]))
         );
     }
 

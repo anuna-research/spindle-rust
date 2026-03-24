@@ -68,35 +68,25 @@ pub enum DivergenceKind {
 }
 
 /// A single divergence between standard and projection-based reasoning.
-#[derive(Debug, Clone)]
-pub struct Divergence {
-    /// What kind of divergence was detected.
-    pub kind: DivergenceKind,
-}
+pub type Divergence = DivergenceKind;
 
-impl Divergence {
+impl DivergenceKind {
     fn missing_family_support(family: FamilyId) -> Self {
-        Self {
-            kind: DivergenceKind::MissingFamilySupport { family },
-        }
+        DivergenceKind::MissingFamilySupport { family }
     }
 
     fn unmatched_token(token: ProjectionToken) -> Self {
-        Self {
-            kind: DivergenceKind::UnmatchedProjectionToken { token },
-        }
+        DivergenceKind::UnmatchedProjectionToken { token }
     }
 
     fn missing_rule(label: String) -> Self {
-        Self {
-            kind: DivergenceKind::MissingRule { label },
-        }
+        DivergenceKind::MissingRule { label }
     }
 }
 
-impl fmt::Display for Divergence {
+impl fmt::Display for DivergenceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
+        match self {
             DivergenceKind::MissingFamilySupport { family } => {
                 write!(f, "missing family support for {family}")
             }
@@ -120,6 +110,7 @@ impl fmt::Display for Divergence {
 /// projection tokens from the redesign path, the compiled body keys,
 /// and any divergences detected between the two.
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct ShadowResult {
     /// Conclusions from the primary (standard) reasoner.
     pub primary: Vec<Conclusion>,
@@ -159,8 +150,7 @@ impl ShadowResult {
 ///
 /// 1. Compiles all rule bodies into [`BodyMatchKey`]s.
 /// 2. Runs the [`ProjectionEngine`] on positive contributors and blocker
-///    rules that determined a negative or ambiguous outcome, but only when
-///    those rules participate in temporal reasoning.
+///    rules that determined a negative or ambiguous outcome.
 /// 3. Cross-checks projection tokens against standard conclusions.
 /// 4. Reports divergences via [`ShadowResult`].
 #[derive(Debug, Clone)]
@@ -678,7 +668,7 @@ mod tests {
         );
 
         assert!(divergences.iter().any(|d| matches!(
-            &d.kind,
+            d,
             DivergenceKind::MissingFamilySupport { family: missing } if missing == &family
         )));
     }
@@ -707,7 +697,7 @@ mod tests {
         assert!(
             !divergences
                 .iter()
-                .any(|d| matches!(&d.kind, DivergenceKind::UnmatchedProjectionToken { .. }))
+                .any(|d| matches!(d, DivergenceKind::UnmatchedProjectionToken { .. }))
         );
     }
 
@@ -772,7 +762,7 @@ mod tests {
         assert!(
             divergences
                 .iter()
-                .any(|d| matches!(&d.kind, DivergenceKind::MissingRule { label } if label == "r1")),
+                .any(|d| matches!(d, DivergenceKind::MissingRule { label } if label == "r1")),
             "Check 1 should detect that r1 was expected but not projected"
         );
     }
