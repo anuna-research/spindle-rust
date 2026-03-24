@@ -45,7 +45,7 @@ steps:
   - name: difftest
     image: rust:1.88-bookworm
     commands:
-      - cargo test --package spindle-core --test difftest
+      - cargo test --package spindle-core --test differential_tests
     environment:
       PROPTEST_CASES: 500
 
@@ -55,7 +55,9 @@ steps:
       - curl https://elan-init.github.io/elan/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
       - export PATH="$HOME/.elan/bin:$PATH"
       - cd lean && lake build
-      - cd .. && cargo test --package spindle-core --test lean_oracle_difftest -- --ignored
+      - cd .. && cargo test --package spindle-core --test lean_end_to_end_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_arith_oracle_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_grounding_oracle_difftest -- --ignored
     when:
       - path: "lean/**"
 
