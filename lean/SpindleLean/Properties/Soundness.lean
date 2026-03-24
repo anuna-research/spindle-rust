@@ -37,7 +37,7 @@ theorem deltaStep_new_has_rule (t : Theory) (current : List Literal) (l : Litera
     · -- isTrue: guard true, result is some r.head
       rename_i hguard
       simp only [Option.some.injEq] at hcond
-      simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_false_iff_not] at hguard
+      simp only [Bool.and_eq_true, Bool.not_eq_true'] at hguard
       exact ⟨r, hrmem, hguard.1.1, hcond, hguard.1.2⟩
     · -- isFalse: guard false, result is none (absurd)
       simp at hcond

@@ -16,6 +16,7 @@
 -/
 import SpindleLean.Reason
 import SpindleLean.Properties.Subset
+import SpindleLean.Properties.Util
 import Mathlib.Data.List.Dedup
 
 namespace Properties
@@ -43,26 +44,6 @@ theorem partialStep_extensive (t : Theory) (delta lambda current : List Literal)
 -- Monotonicity of step functions
 -- ═══════════════════════════════════════════════════════════════
 
-/-- A list is a subset of another list -/
-def ListSubset (l₁ l₂ : List Literal) : Prop :=
-  ∀ (x : Literal), x ∈ l₁ → x ∈ l₂
-
-/-- If body_satisfied holds on a subset, it holds on the superset.
-    body_satisfied checks that every body literal is in the current set,
-    so enlarging the set preserves satisfaction. -/
-theorem bodySatisfied_mono (r : Rule) (s₁ s₂ : List Literal)
-    (hsub : ListSubset s₁ s₂) (h : r.bodySatisfied s₁ = true) :
-    r.bodySatisfied s₂ = true := by
-  -- bodySatisfied = r.body.all (fun l => current.contains l)
-  -- If every body literal is in s₁ ⊆ s₂, it's also in s₂
-  simp only [Rule.bodySatisfied] at h ⊢
-  rw [List.all_eq_true] at h ⊢
-  intro x hx
-  have h1 := h x hx
-  have hmem : x ∈ s₁ := List.mem_of_elem_eq_true h1
-  have hmem2 : x ∈ s₂ := hsub x hmem
-  exact List.elem_eq_true_of_mem hmem2
-
 /-- deltaStep is monotone: enlarging current can only enlarge the output.
     Formally: if current₁ ⊆ current₂ then deltaStep T current₁ ⊆ deltaStep T current₂.
 
@@ -74,15 +55,15 @@ theorem bodySatisfied_mono (r : Rule) (s₁ s₂ : List Literal)
 
     This is the key property that ensures fixpoint uniqueness. -/
 theorem deltaStep_mono (t : Theory) (s₁ s₂ : List Literal)
-    (hsub : ListSubset s₁ s₂) :
-    ListSubset (Closure.deltaStep t s₁) (Closure.deltaStep t s₂) := by
+    (hsub : s₁ ⊆ s₂) :
+    Closure.deltaStep t s₁ ⊆ Closure.deltaStep t s₂ := by
   intro l hl
   simp only [Closure.deltaStep] at hl ⊢
   rw [List.mem_dedup, List.mem_append] at hl ⊢
   cases hl with
   | inl h =>
     -- l was in s₁, so l ∈ s₂ ⊆ s₂ ++ newLits
-    exact Or.inl (hsub l h)
+    exact Or.inl (hsub h)
   | inr h =>
     -- l was a new literal derived from a rule with body in s₁
     simp only [List.mem_filterMap] at h
@@ -102,7 +83,7 @@ theorem deltaStep_mono (t : Theory) (s₁ s₂ : List Literal)
         -- Need to show the same if-guard is true for s₂
         simp only [Bool.and_eq_true, Bool.not_eq_true'] at hguard
         obtain ⟨⟨hdef, hbody⟩, _⟩ := hguard
-        have hbody2 := bodySatisfied_mono r s₁ s₂ hsub hbody
+        have hbody2 := bodySatisfied_mono r s₁ s₂ (fun x hm => hsub hm) hbody
         have hnotmem : s₂.contains r.head = false := by
           cases h : s₂.contains r.head
           · rfl
@@ -113,13 +94,13 @@ theorem deltaStep_mono (t : Theory) (s₁ s₂ : List Literal)
 
 /-- lambdaStep is monotone -/
 theorem lambdaStep_mono (t : Theory) (delta : List Literal) (s₁ s₂ : List Literal)
-    (hsub : ListSubset s₁ s₂) :
-    ListSubset (Closure.lambdaStep t delta s₁) (Closure.lambdaStep t delta s₂) := by
+    (hsub : s₁ ⊆ s₂) :
+    Closure.lambdaStep t delta s₁ ⊆ Closure.lambdaStep t delta s₂ := by
   intro l hl
   simp only [Closure.lambdaStep] at hl ⊢
   rw [List.mem_dedup, List.mem_append] at hl ⊢
   cases hl with
-  | inl h => exact Or.inl (hsub l h)
+  | inl h => exact Or.inl (hsub h)
   | inr h =>
     simp only [List.mem_filterMap] at h
     obtain ⟨r, hrmem, hcond⟩ := h
@@ -134,7 +115,7 @@ theorem lambdaStep_mono (t : Theory) (delta : List Literal) (s₁ s₂ : List Li
         subst hcond
         simp only [Bool.and_eq_true, Bool.not_eq_true'] at hguard
         obtain ⟨⟨⟨hprod, hbody⟩, _⟩, hdelta⟩ := hguard
-        have hbody2 := bodySatisfied_mono r s₁ s₂ hsub hbody
+        have hbody2 := bodySatisfied_mono r s₁ s₂ (fun x hm => hsub hm) hbody
         have hnotmem : s₂.contains r.head = false := by
           cases h : s₂.contains r.head
           · rfl
@@ -145,18 +126,6 @@ theorem lambdaStep_mono (t : Theory) (delta : List Literal) (s₁ s₂ : List Li
 -- ═══════════════════════════════════════════════════════════════
 -- Determinism of go functions
 -- ═══════════════════════════════════════════════════════════════
-
-/-- The go functions are deterministic: given the same theory, seed, and fuel,
-    they always produce the same result. This is trivially true since they are
-    pure functions with no hidden state — but we state it explicitly. -/
-theorem deltaClose_deterministic (t : Theory) :
-    Closure.deltaClose t = Closure.deltaClose t := rfl
-
-theorem lambdaClose_deterministic (t : Theory) (delta : List Literal) :
-    Closure.lambdaClose t delta = Closure.lambdaClose t delta := rfl
-
-theorem partialClose_deterministic (t : Theory) (delta lambda : List Literal) :
-    Closure.partialClose t delta lambda = Closure.partialClose t delta lambda := rfl
 
 -- ═══════════════════════════════════════════════════════════════
 -- Idempotence at fixpoint
@@ -359,14 +328,5 @@ theorem partial_confluence (t : Theory) (delta lambda : List Literal) (fuel₁ f
 -- ═══════════════════════════════════════════════════════════════
 -- Full reasoning confluence
 -- ═══════════════════════════════════════════════════════════════
-
-/-- The full reasoning pipeline is confluent: for a given theory,
-    the `reason` function always produces the same result.
-
-    This follows trivially from the fact that `reason` is a pure
-    deterministic function. The deeper content is that the result
-    is the unique fixed point of the step functions. -/
-theorem reason_deterministic (t : Theory) :
-    reason t = reason t := rfl
 
 end Properties

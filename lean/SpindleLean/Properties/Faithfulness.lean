@@ -6,6 +6,7 @@ import SpindleLean.Reason
 import SpindleLean.Properties.Subset
 import SpindleLean.Properties.Soundness
 import SpindleLean.Properties.Equivalence
+import SpindleLean.Properties.Util
 import Mathlib.Data.List.Dedup
 import Mathlib.Data.Finset.Dedup
 import Mathlib.Data.Finset.Card
@@ -21,26 +22,6 @@ def PaperDefeasibleProvable (t : Theory) (delta lambda partial_ : List Literal)
   ∨ (¬ (delta.contains l.complement = true)
      ∧ (∃ r ∈ t.rules, r.isProductive = true ∧ r.head = l ∧ r.bodySatisfied partial_ = true)
      ∧ Closure.allAttacksDefeated t l lambda partial_ = true)
-
-private theorem bodySatisfied_mono (r : Rule) (s1 s2 : List Literal)
-    (hsub : ∀ x, x ∈ s1 → x ∈ s2)
-    (hsat : r.bodySatisfied s1 = true) : r.bodySatisfied s2 = true := by
-  simp only [Rule.bodySatisfied, List.all_eq_true] at hsat ⊢
-  intro x hx
-  exact List.contains_iff_mem.mpr (hsub _ (List.contains_iff_mem.mp (hsat x hx)))
-
-private theorem nodup_subset_length_absurd {α : Type} [DecidableEq α]
-    {s1 s2 : List α} (hnd1 : s1.Nodup) (hnd2 : s2.Nodup)
-    (hsub : ∀ x, x ∈ s1 → x ∈ s2) (hlen : s2.length = s1.length)
-    {a : α} (ha2 : a ∈ s2) (ha1 : a ∉ s1) : False := by
-  have hsf : s1.toFinset ⊆ s2.toFinset :=
-    fun x hx => List.mem_toFinset.mpr (hsub x (List.mem_toFinset.mp hx))
-  have hne : s1.toFinset ≠ s2.toFinset := by
-    intro heq; exact (List.mem_toFinset.not.mpr ha1) (heq ▸ List.mem_toFinset.mpr ha2)
-  have hlt : s1.toFinset.card < s2.toFinset.card :=
-    Finset.card_lt_card (ssubset_of_subset_of_ne hsf hne)
-  rw [List.toFinset_card_of_nodup hnd1, List.toFinset_card_of_nodup hnd2] at hlt
-  omega
 
 private theorem deltaClose_go_nodup (t : Theory) (current : List Literal) (fuel : Nat)
     (hnodup : current.Nodup) : (Closure.deltaClose.go t current fuel).Nodup := by
@@ -93,7 +74,7 @@ private theorem mem_lambdaStep_of_productive (t : Theory) (delta current : List 
     cases hc : delta.contains r.head.complement
     · rfl
     · exact absurd hc hnotcomp
-  simp only [hprod, hbody, hnotmem_bool, hnotcomp_bool, Bool.and_self, Bool.true_and,
+  simp only [hprod, hbody, hnotmem_bool, hnotcomp_bool, Bool.and_self,
     Bool.not_false, ite_true]
 
 -- At a lambda fixpoint, if the rule conditions hold, head must be in the set
@@ -119,7 +100,7 @@ private theorem lambda_fixpoint_mem (t : Theory) (delta current : List Literal)
     simp only [Closure.lambdaStep, List.mem_dedup, List.mem_append]
     right; simp only [List.mem_filterMap]
     refine ⟨r, hr, ?_⟩
-    simp only [hprod, hbody, hnotcontains_bool, hnotcomp_bool, Bool.and_self, Bool.true_and,
+    simp only [hprod, hbody, hnotcontains_bool, hnotcomp_bool, Bool.and_self,
       Bool.not_false, ite_true]
   exact nodup_subset_length_absurd hnodup
     (by simp only [Closure.lambdaStep]; exact List.nodup_dedup _)
@@ -275,7 +256,7 @@ private theorem delta_go_strong (t : Theory) (current : List Literal) (l : Liter
           split at hcond
           · rename_i hguard
             simp only [Option.some.injEq] at hcond
-            simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_false_iff_not] at hguard
+            simp only [Bool.and_eq_true, Bool.not_eq_true'] at hguard
             exact ⟨r, hrmem, hguard.1.1, hcond, bodySatisfied_mono r current _
               (fun y hy => mem_deltaClose_go_of_mem t _ y n
                 (mem_deltaStep_of_mem t current y hy)) hguard.1.2⟩
@@ -299,9 +280,9 @@ theorem faithful_plusD_forward (t : Theory) (l : Literal)
           have h2 := hr.2
           match r.ruleType, h2 with
           | .fact, _ => rfl
-          | .strict, h => exact absurd h (by native_decide)
-          | .defeasible, h => exact absurd h (by native_decide)
-          | .defeater, h => exact absurd h (by native_decide)
+          | .strict, h => exact absurd h (by decide)
+          | .defeasible, h => exact absurd h (by decide)
+          | .defeater, h => exact absurd h (by decide)
         have hbody_empty : r.body = [] := hwf r hr.1 hfact
         rw [Rule.bodySatisfied, hbody_empty]; rfl) h
 
@@ -407,11 +388,11 @@ private theorem allAttacksDefeated_mono (t : Theory) (lit : Literal) (lambda : L
   · simp only [hf, Bool.false_or] at h1 ⊢
     cases ha : Closure.attackReaches lambda attacker
     · -- attackReaches = false, so !false = true, disjunction is trivially true
-      simp only [ha, Bool.not_false, Bool.true_or]
+      simp only [Bool.not_false, Bool.true_or]
     · -- attackReaches = true, so !true = false, need teamDefeats
       simp only [ha, Bool.not_true, Bool.false_or] at h1 ⊢
       exact teamDefeats_mono t lit attacker s1 s2 hsub h1
-  · simp only [hf, Bool.true_or]
+  · simp only [Bool.true_or]
 
 -- +d forward
 private theorem partial_go_sound (t : Theory) (delta lambda current : List Literal)
@@ -438,7 +419,7 @@ private theorem partial_go_sound (t : Theory) (delta lambda current : List Liter
           simp only [List.mem_filter, Bool.and_eq_true] at hmem
           obtain ⟨_, _, hcan⟩ := hmem
           simp only [Closure.canProve] at hcan ⊢
-          cases hdx : delta.contains x <;> simp only [hdx, ite_true, ite_false] at hcan ⊢
+          cases hdx : delta.contains x <;> simp only [hdx, ite_true] at hcan ⊢
           · cases hdc : delta.contains x.complement
             · -- complement = false: main case
               simp only [hdc, Bool.false_eq_true, ite_false] at hcan ⊢
@@ -699,7 +680,7 @@ private theorem plusd_backward_core (t : Theory)
       · simp only [List.any_eq_true]
         refine ⟨r, ?_, ?_⟩
         · simp only [Theory.rulesWithHead, List.mem_filter]
-          exact ⟨hr, by simp [beq_iff_eq]⟩
+          exact ⟨hr, by simp⟩
         · simp only [Bool.and_eq_true]; exact ⟨hprod, hbody⟩
       · exact hattacks
   -- Apply partial fixpoint

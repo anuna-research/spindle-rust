@@ -20,6 +20,7 @@
   admit counterexamples when `current` contains duplicates.
 -/
 import SpindleLean.Reason
+import SpindleLean.Properties.Util
 import Mathlib.Data.List.Dedup
 
 namespace Properties
@@ -373,9 +374,6 @@ theorem partialClose_converges_bound (t : Theory) (delta lambda current : List L
 -- ═══════════════════════════════════════════════════════════════
 -- Fuel independence
 -- ═══════════════════════════════════════════════════════════════
-
-private lemma deltaClose_init_nodup (t : Theory) :
-    (t.facts.map (·.head)).dedup.Nodup := List.nodup_dedup _
 
 private lemma deltaClose_init_sub_all (t : Theory) :
     ∀ x ∈ (t.facts.map (·.head)).dedup, x ∈ t.allLiterals := by

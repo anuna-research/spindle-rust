@@ -6,6 +6,7 @@ import SpindleLean.Closure.Delta
 import SpindleLean.Closure.Lambda
 import SpindleLean.Closure.Partial
 import SpindleLean.Reason
+import SpindleLean.Properties.Util
 import SpindleLean.Properties.Subset
 import SpindleLean.Properties.Soundness
 import SpindleLean.Properties.Termination

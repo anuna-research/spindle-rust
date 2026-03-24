@@ -21,6 +21,7 @@
 import SpindleLean.Reason
 import SpindleLean.Properties.Subset
 import SpindleLean.Properties.Soundness
+import SpindleLean.Properties.Util
 import Mathlib.Data.List.Dedup
 import Mathlib.Data.Finset.Dedup
 import Mathlib.Data.Finset.Card
@@ -118,32 +119,6 @@ theorem reason_plusD_sound (t : Theory) (l : Literal)
     ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l :=
   delta_sound t l h
 
-/-- Soundness of +d: if reason concludes +d l, then either:
-    (a) l was already in delta, or
-    (b) l satisfies canProve against the three closure sets -/
-theorem reason_plusd_sound (t : Theory) (l : Literal)
-    (h : l ∈ (reason t).partial_) :
-    l ∈ (reason t).delta ∨ l ∉ (reason t).delta := by
-  exact em (l ∈ (reason t).delta)
-
-/-- Nodup subset with equal length: if s1 ⊆ s2, both Nodup, same length,
-    but a ∈ s2 and a ∉ s1, that's a contradiction. -/
-private theorem nodup_subset_length_absurd {α : Type*} [DecidableEq α]
-    {s1 s2 : List α} (hnd1 : s1.Nodup) (hnd2 : s2.Nodup)
-    (hsub : ∀ x, x ∈ s1 → x ∈ s2) (hlen : s2.length = s1.length)
-    {a : α} (ha2 : a ∈ s2) (ha1 : a ∉ s1) : False := by
-  have h_sub : s1.toFinset ⊆ s2.toFinset :=
-    fun x hx => List.mem_toFinset.mpr (hsub x (List.mem_toFinset.mp hx))
-  have h_ne : s1.toFinset ≠ s2.toFinset := by
-    intro heq
-    have : a ∉ s1.toFinset := by rwa [List.mem_toFinset]
-    exact this (heq ▸ List.mem_toFinset.mpr ha2)
-  have h_ssubset : s1.toFinset ⊂ s2.toFinset :=
-    lt_of_le_of_ne h_sub h_ne
-  have h_lt := Finset.card_lt_card h_ssubset
-  rw [List.toFinset_card_of_nodup hnd1, List.toFinset_card_of_nodup hnd2] at h_lt
-  omega
-
 /-- deltaClose.go result is Nodup. -/
 private theorem deltaClose_go_nodup' (t : Theory) (current : List Literal) (fuel : Nat)
     (hnodup : current.Nodup) :
@@ -158,7 +133,7 @@ private theorem deltaClose_go_nodup' (t : Theory) (current : List Literal) (fuel
 
 /-- deltaStep preserves subset of allLiterals -/
 theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
-    (hnodup : current.Nodup)
+    (_hnodup : current.Nodup)
     (hsub : ∀ x ∈ current, x ∈ t.allLiterals) :
     ∀ x ∈ Closure.deltaStep t current, x ∈ t.allLiterals := by
   intro x hx
@@ -325,10 +300,6 @@ private theorem deltaClose_go_fixpoint' (t : Theory) (current : List Literal)
             exact this
           omega
         exact ih _ h_step_nodup h_step_sub h_fuel' hbody
-
-/-- Helper: initial seed for deltaClose is Nodup and subset of allLiterals -/
-private theorem deltaClose_init_nodup (t : Theory) :
-    (t.facts.map (·.head)).dedup.Nodup := List.nodup_dedup _
 
 private theorem deltaClose_init_sub_allLiterals (t : Theory) :
     ∀ x ∈ (t.facts.map (·.head)).dedup, x ∈ t.allLiterals := by

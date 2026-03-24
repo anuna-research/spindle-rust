@@ -48,7 +48,7 @@ end Literal
 instance : LawfulBEq Mode where
   eq_of_beq {a b} h := by
     cases a <;> cases b <;> (first | rfl | (simp only [BEq.beq] at h; exact absurd h (by decide)))
-  rfl {a} := by cases a <;> native_decide
+  rfl {a} := by cases a <;> decide
 
 instance : LawfulBEq Literal where
   eq_of_beq {a b} h := by
@@ -63,8 +63,8 @@ instance : LawfulBEq Literal where
     simp only [BEq.beq, instBEqLiteral.beq, decide_true, Bool.true_and]
     have : ∀ (m : Option Mode), (Option.instBEq.beq m m) = true := by
       intro m; cases m with
-      | none => native_decide
-      | some v => cases v <;> native_decide
+      | none => decide
+      | some v => cases v <;> decide
     exact this _
 
 instance : Inhabited Literal := ⟨Literal.pos ""⟩
