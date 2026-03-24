@@ -61,7 +61,6 @@ pub mod projection;
 pub mod query;
 pub mod reason;
 pub mod rule;
-pub mod shadow;
 pub mod superiority;
 pub mod temporal;
 pub mod term;
@@ -100,9 +99,6 @@ pub mod prelude {
         reason_full_with_options, reason_with_options, select_reasoner,
     };
     pub use crate::rule::{IntoRuleBody, Rule, RuleLabel, RuleType};
-    pub use crate::shadow::{
-        Divergence, DivergenceKind, ShadowConfig, ShadowReasoner, ShadowResult,
-    };
     pub use crate::superiority::{Superiority, SuperiorityIndex};
     pub use crate::temporal::{
         AllenConstraint, AllenRelation, Temporal, TemporalExpr, TimeExpr, TimePoint,

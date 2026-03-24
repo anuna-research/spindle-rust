@@ -42,7 +42,6 @@ use crate::pipeline::{PrepareOptions, prepare};
 use crate::projection::{
     ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
 };
-use crate::rule::Rule;
 use crate::theory::Theory;
 
 use self::state::ReasoningState;
@@ -73,13 +72,6 @@ fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
     labels
 }
 
-/// Whether a rule should participate in shadow projection.
-///
-/// All rules are projected, including purely atemporal ones, to enable
-/// full consistency checking between standard and projection-based reasoning.
-pub(crate) fn should_project_rule(_rule: &Rule) -> bool {
-    true
-}
 
 // ---------------------------------------------------------------------------
 // Reasoner trait
@@ -147,7 +139,6 @@ impl Reasoner for StandardReasoner {
 pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
     match name {
         "standard" => Box::new(StandardReasoner),
-        "shadow" => Box::new(crate::shadow::ShadowReasoner::enabled()),
         _ => Box::new(StandardReasoner),
     }
 }

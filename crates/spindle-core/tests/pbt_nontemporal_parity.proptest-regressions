@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 12327e5760424a05481a7c95d4ad52206881e361c331816883cafa85112292a8 # shrinks to theory = Theory { rules: {"f1": Rule { label: "f1", template_label: None, rule_type: Fact, mode: Mode { name: None, negation: false }, temporal: Temporal { start: NegInf, end: PosInf }, body: [], head: [Literal { name_id: InternedLiteralName(SymbolId(6: "a")), negation: false, mode: Mode { name: None, negation: false }, temporal: Temporal { start: NegInf, end: PosInf }, temporal_expr: None, predicate_args: [], interval_var: None }], constraints: [], state_queries: [] }}, superiorities: [], sup_index: SuperiorityIndex { pairs: {}, inferiors: {}, superiors: {} }, metadata: {}, label_counter: 1, trust_policy: TrustPolicy { trust_map: {}, thresholds: {}, default_trust: 0.0, decay_map: {} } }

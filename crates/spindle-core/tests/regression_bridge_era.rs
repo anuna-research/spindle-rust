@@ -18,22 +18,14 @@ use spindle_core::index::IndexedTheory;
 use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
 use spindle_core::projection::{FamilyId, ProjectionEngine, ProjectionToken};
-use spindle_core::reason::reason;
+use spindle_core::reason::{reason, reason_full};
 use spindle_core::rule::{Rule, RuleType};
-use spindle_core::shadow::{ShadowReasoner, ShadowResult};
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::theory::Theory;
 
 // ===========================================================================
 // Helpers
 // ===========================================================================
-
-fn shadow(theory: &Theory) -> ShadowResult {
-    let mut indexed = IndexedTheory::build(theory);
-    ShadowReasoner::enabled()
-        .reason_shadow(&mut indexed)
-        .expect("shadow reasoning failed")
-}
 
 fn has_conclusion(
     conclusions: &[Conclusion],
@@ -663,9 +655,9 @@ fn no_bridge_rules_with_temporal_theory() {
 // ===========================================================================
 
 #[test]
-fn shadow_consistent_temporal_defeasible_projection() {
+fn reason_full_temporal_defeasible_projection() {
     // Temporal defeasible rule projects to atemporal family with correct
-    // strength — no divergences.
+    // strength — reason and reason_full must agree on conclusions.
     let head = Literal::new(
         "q",
         false,
@@ -677,16 +669,21 @@ fn shadow_consistent_temporal_defeasible_projection() {
     theory.add_fact("a");
     theory.add_rule(Rule::defeasible("r1", vec![Literal::simple("a")], head));
 
-    let result = shadow(&theory);
+    let standard = reason(&theory).unwrap();
+    let full = reason_full(&theory).unwrap();
+    assert_eq!(
+        conclusion_set(&standard),
+        conclusion_set(&full.conclusions),
+        "reason and reason_full should agree on temporal defeasible projection"
+    );
     assert!(
-        result.is_consistent(),
-        "shadow divergences on temporal defeasible: {:?}",
-        result.divergences
+        !full.projection_tokens.is_empty(),
+        "temporal defeasible rule should produce projection tokens"
     );
 }
 
 #[test]
-fn shadow_consistent_temporal_defeater_with_superiority() {
+fn reason_full_temporal_defeater_with_superiority() {
     // A temporal defeater that interacts with superiority — this was a
     // bridge-era pain point because __bridge labels broke superiority lookup.
     let mut theory = Theory::new();
@@ -699,17 +696,18 @@ fn shadow_consistent_temporal_defeater_with_superiority() {
     theory.add_superiority(&r2, &r1);
     theory.add_defeater(&["injured"], "~flies");
 
-    let result = shadow(&theory);
-    assert!(
-        result.is_consistent(),
-        "shadow divergences on temporal defeater + superiority: {:?}",
-        result.divergences
+    let standard = reason(&theory).unwrap();
+    let full = reason_full(&theory).unwrap();
+    assert_eq!(
+        conclusion_set(&standard),
+        conclusion_set(&full.conclusions),
+        "reason and reason_full should agree on temporal defeater + superiority"
     );
 
     // Penguin rule should still win via superiority.
     assert!(
         has_conclusion(
-            &result.primary,
+            &full.conclusions,
             "flies",
             true,
             ConclusionType::DefeasiblyProvable
@@ -719,7 +717,7 @@ fn shadow_consistent_temporal_defeater_with_superiority() {
 }
 
 #[test]
-fn shadow_consistent_multiple_temporal_windows() {
+fn reason_full_multiple_temporal_windows() {
     // Multiple temporal windows for the same predicate — bridge dedup
     // used to fail here.
     let mut theory = Theory::new();
@@ -750,16 +748,17 @@ fn shadow_consistent_multiple_temporal_windows() {
         head_late,
     ));
 
-    let result = shadow(&theory);
-    assert!(
-        result.is_consistent(),
-        "shadow divergences on multiple temporal windows: {:?}",
-        result.divergences
+    let standard = reason(&theory).unwrap();
+    let full = reason_full(&theory).unwrap();
+    assert_eq!(
+        conclusion_set(&standard),
+        conclusion_set(&full.conclusions),
+        "reason and reason_full should agree on multiple temporal windows"
     );
 }
 
 #[test]
-fn shadow_consistent_modal_temporal_interaction() {
+fn reason_full_modal_temporal_interaction() {
     // Modal + temporal combination — the bridge had trouble with modes.
     let mut theory = Theory::new();
     theory.add_fact("citizen");
@@ -777,11 +776,12 @@ fn shadow_consistent_modal_temporal_interaction() {
         head,
     ));
 
-    let result = shadow(&theory);
-    assert!(
-        result.is_consistent(),
-        "shadow divergences on modal+temporal: {:?}",
-        result.divergences
+    let standard = reason(&theory).unwrap();
+    let full = reason_full(&theory).unwrap();
+    assert_eq!(
+        conclusion_set(&standard),
+        conclusion_set(&full.conclusions),
+        "reason and reason_full should agree on modal+temporal interaction"
     );
 }
 
@@ -1004,7 +1004,7 @@ fn defeaters_block_without_proving() {
 }
 
 #[test]
-fn standard_and_shadow_agree_on_all_fixtures() {
+fn reason_and_reason_full_agree_on_all_fixtures() {
     let fixture_theories: Vec<(&str, Theory)> = vec![
         ("tweety", fixtures::tweety_triangle()),
         ("nixon", fixtures::nixon_diamond()),
@@ -1016,20 +1016,14 @@ fn standard_and_shadow_agree_on_all_fixtures() {
 
     for (name, theory) in fixture_theories {
         let standard = reason(&theory).unwrap();
-        let shadow_result = shadow(&theory);
+        let full = reason_full(&theory).unwrap();
 
         let standard_set = conclusion_set(&standard);
-        let shadow_set = conclusion_set(&shadow_result.primary);
+        let full_set = conclusion_set(&full.conclusions);
 
         assert_eq!(
-            standard_set, shadow_set,
-            "bridge-era regression: standard and shadow disagree on fixture '{name}'"
-        );
-
-        assert!(
-            shadow_result.is_consistent(),
-            "bridge-era regression: shadow divergences on fixture '{name}': {:?}",
-            shadow_result.divergences
+            standard_set, full_set,
+            "bridge-era regression: reason and reason_full disagree on fixture '{name}'"
         );
     }
 }

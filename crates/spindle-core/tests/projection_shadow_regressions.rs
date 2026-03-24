@@ -1,11 +1,8 @@
 use std::collections::BTreeSet;
 
 use spindle_core::conclusion::ConclusionType;
-use spindle_core::index::IndexedTheory;
-use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::projection::ProjectionToken;
 use spindle_core::reason::reason_full;
-use spindle_core::shadow::ShadowReasoner;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::{Literal, Rule, Theory};
 
@@ -85,7 +82,7 @@ fn reason_full_projects_ambiguity_blockers_without_positive_conclusions() {
 }
 
 #[test]
-fn shadow_projects_defeater_attack_tokens_when_defeater_only_blocks() {
+fn reason_full_projects_defeater_attack_tokens_when_defeater_only_blocks() {
     let mut theory = Theory::new();
     theory.add_rule(Rule::fact("f1", temporal_literal("bird", false, vec![])));
     theory.add_rule(Rule::fact(
@@ -103,13 +100,10 @@ fn shadow_projects_defeater_attack_tokens_when_defeater_only_blocks() {
         temporal_literal("flies", true, vec![]),
     ));
 
-    let mut indexed = IndexedTheory::build(&theory);
-    let result = ShadowReasoner::enabled()
-        .reason_shadow(&mut indexed)
-        .unwrap();
+    let result = reason_full(&theory).unwrap();
 
     assert!(
-        !result.primary.iter().any(|c| {
+        !result.conclusions.iter().any(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && c.literal.name() == "flies"
                 && !c.literal.negation
@@ -125,7 +119,7 @@ fn shadow_projects_defeater_attack_tokens_when_defeater_only_blocks() {
     );
     assert!(
         result.diagnostics.contributing_labels.contains("d1"),
-        "shadow diagnostics should include the blocking defeater label"
+        "diagnostics should include the blocking defeater label"
     );
 }
 
@@ -158,7 +152,7 @@ fn reason_full_keeps_grounded_projection_labels_aligned_with_conclusions() {
 }
 
 #[test]
-fn shadow_keeps_grounded_projection_labels_aligned_with_compiled_bodies() {
+fn reason_full_keeps_grounded_projection_labels_aligned_with_tokens() {
     let mut theory = Theory::new();
     theory.add_rule(Rule::fact("f1", temporal_literal("p", false, vec!["a"])));
     theory.add_rule(Rule::defeasible(
@@ -167,12 +161,8 @@ fn shadow_keeps_grounded_projection_labels_aligned_with_compiled_bodies() {
         temporal_literal("q", false, vec!["?x"]),
     ));
 
-    let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
-    let mut indexed = IndexedTheory::build(&prepared.theory);
-    let result = ShadowReasoner::enabled()
-        .reason_shadow(&mut indexed)
-        .unwrap();
-    let grounded_rule_label = grounded_q_rule_label(&result.primary);
+    let result = reason_full(&theory).unwrap();
+    let grounded_rule_label = grounded_q_rule_label(&result.conclusions);
     let projection_labels = token_labels(&result.projection_tokens);
 
     assert_ne!(
@@ -181,14 +171,10 @@ fn shadow_keeps_grounded_projection_labels_aligned_with_compiled_bodies() {
     );
     assert!(
         projection_labels.contains(grounded_rule_label),
-        "shadow projection tokens should stay in the grounded label space"
-    );
-    assert!(
-        result.compiled_bodies.contains_key(grounded_rule_label),
-        "compiled bodies should use the same grounded label as the conclusion"
+        "projection tokens should stay in the grounded label space"
     );
     assert!(
         !projection_labels.contains("r1"),
-        "shadow projection tokens should not fall back to the template label"
+        "projection tokens should not fall back to the template label"
     );
 }
