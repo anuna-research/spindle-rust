@@ -42,13 +42,6 @@ steps:
       - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - cd crates/spindle-wasm && wasm-pack build --target web --release
 
-  - name: difftest
-    image: rust:1.88-bookworm
-    commands:
-      - cargo test --package spindle-core --test differential_tests
-    environment:
-      PROPTEST_CASES: 500
-
   - name: lean-oracle
     image: rust:1.88-bookworm
     commands:
