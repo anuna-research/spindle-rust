@@ -96,14 +96,39 @@ theorem mem_partialClose_go_of_mem (t : Theory) (delta lambda current : List Lit
 -- Main theorems
 -- ═══════════════════════════════════════════════════════════════
 
-/-- Every literal in delta is also in partial.
-    Proof: partialClose starts from delta as initial set (go t delta lambda delta fuel),
-    so any element in delta is preserved through iteration. -/
-theorem delta_subset_partial (t : Theory) :
-    ∀ l, l ∈ Closure.deltaClose t → l ∈ Closure.partialClose t (Closure.deltaClose t) (Closure.lambdaClose t (Closure.deltaClose t)) := by
+/-- The gated seed is a subset of delta. -/
+theorem gatedDelta_subset (delta : List Literal) :
+    ∀ l, l ∈ Closure.gatedDelta delta → l ∈ delta := by
   intro l hl
+  exact (List.mem_filter.mp hl).1
+
+/-- Membership in the gated seed, from delta-membership plus consistency. -/
+theorem mem_gatedDelta (delta : List Literal) (l : Literal)
+    (hl : l ∈ delta) (hcons : l.complement ∉ delta) :
+    l ∈ Closure.gatedDelta delta := by
+  simp only [Closure.gatedDelta, List.mem_filter]
+  refine ⟨hl, ?_⟩
+  simp only [Bool.not_eq_true']
+  cases hc : delta.contains l.complement
+  · rfl
+  · exact absurd (List.contains_iff_mem.mp hc) hcons
+
+/-- Every delta literal whose complement is not also in delta is in partial.
+    Proof: partialClose starts from the gated delta seed
+    (go t delta lambda (gatedDelta delta) fuel), so any delta-consistent
+    definite literal is preserved through iteration.
+
+    NOTE: the delta-consistency hypothesis is required — when +D l and
+    +D ~l both hold, the engine deliberately withholds +d from both
+    (spec condition (2); see lean/DIVERGENCES.md class 1). -/
+theorem delta_subset_partial (t : Theory) :
+    ∀ l, l ∈ Closure.deltaClose t →
+      l.complement ∉ Closure.deltaClose t →
+      l ∈ Closure.partialClose t (Closure.deltaClose t)
+            (Closure.lambdaClose t (Closure.deltaClose t)) := by
+  intro l hl hcons
   simp only [Closure.partialClose]
-  exact mem_partialClose_go_of_mem t _ _ _ l 1000 hl
+  exact mem_partialClose_go_of_mem t _ _ _ l 1000 (mem_gatedDelta _ l hl hcons)
 
 /-- Delta is a subset of lambda.
     Proof: lambdaClose starts from delta as initial set. -/
@@ -140,13 +165,14 @@ theorem partial_go_subset_lambda (t : Theory) (delta lambda current : List Liter
 
 /-- Every literal in partial is also in lambda.
     Proof: partialStep only adds candidates from lambda (it filters lambda),
-    and starts from delta ⊆ lambda. By induction, every element added
-    to partial was drawn from lambda. -/
+    and starts from gatedDelta delta ⊆ delta ⊆ lambda. By induction, every
+    element added to partial was drawn from lambda. -/
 theorem partial_subset_lambda (t : Theory) :
     ∀ l, l ∈ Closure.partialClose t (Closure.deltaClose t) (Closure.lambdaClose t (Closure.deltaClose t))
        → l ∈ Closure.lambdaClose t (Closure.deltaClose t) := by
   intro l hl
   simp only [Closure.partialClose] at hl
-  exact partial_go_subset_lambda t _ _ _ l 1000 (delta_subset_lambda t) hl
+  exact partial_go_subset_lambda t _ _ _ l 1000
+    (fun x hx => delta_subset_lambda t x (gatedDelta_subset _ x hx)) hl
 
 end Properties

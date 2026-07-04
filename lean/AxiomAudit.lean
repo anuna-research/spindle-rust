@@ -16,6 +16,8 @@ import Spindle.Arith.WhyNot
 #print axioms Properties.delta_confluence
 #print axioms Properties.deltaClose_converges_bound
 #print axioms Properties.ambiguity_blocks_both
+#print axioms Properties.partial_consistent
+#print axioms Properties.partial_consistent_no_superiority
 
 -- Arithmetic / temporal / grounding results
 #print axioms Spindle.Arith.AllenRelation.compose_sound

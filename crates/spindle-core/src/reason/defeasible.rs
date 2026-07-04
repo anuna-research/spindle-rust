@@ -28,6 +28,98 @@ use crate::theory::Theory;
 
 use super::state::{LiteralBitSet, ReasoningState};
 
+/// Compute the lambda over-approximation: everything that COULD be
+/// defeasibly provable, ignoring attacks and superiority. Mirrors
+/// `lean/SpindleLean/Closure/Lambda.lean` (`lambdaClose`).
+///
+/// Seeds from the definite conclusions (+D), then repeatedly fires
+/// productive rules (fact/strict/defeasible — not defeaters) whose logic
+/// body literals are all already in lambda, excluding heads whose
+/// complement is definite. Arithmetic body constraints and un-interned
+/// body literals are treated as satisfiable, keeping this a genuine
+/// over-approximation.
+///
+/// Literals OUTSIDE lambda can never be defeasibly proved — in particular,
+/// rules with circular, unfounded bodies (e.g. `p => p`) never place their
+/// head in lambda. Seeding such literals as -d lets the worklist discard
+/// unfounded attackers instead of letting a rule that can never fire block
+/// conclusions forever (well-founded reading; see lean/DIVERGENCES.md
+/// class 2).
+fn compute_lambda<'t>(
+    theory: &'t Theory,
+    indexed: &IndexedTheory<'t>,
+    definite_proven: &LiteralBitSet,
+    body_remaining_init: &FxHashMap<&'t str, usize>,
+) -> LiteralBitSet {
+    let mut lambda = definite_proven.clone();
+    // Mirror the main worklist's counter mechanics — including family-aware
+    // body matching via rules_with_body_id — with all attack and superiority
+    // checks ignored. Starting from a pristine clone of the body counters
+    // keeps lambda's notion of "body satisfiable" identical to the fixed
+    // point's notion of "body satisfied".
+    let mut remaining = body_remaining_init.clone();
+    let mut queue: VecDeque<LitId> = VecDeque::new();
+
+    // Seed with all definite literals.
+    for &id in indexed.all_literal_ids() {
+        if definite_proven.contains(id) {
+            queue.push_back(id);
+        }
+    }
+
+    // Fire rules whose bodies are already fully satisfied (e.g. empty bodies).
+    for rule in theory.rules() {
+        if !matches!(
+            rule.rule_type,
+            RuleType::Fact | RuleType::Strict | RuleType::Defeasible
+        ) {
+            continue;
+        }
+        if remaining.get(rule.label.as_str()).copied().unwrap_or(0) == 0 {
+            for head in &rule.head {
+                if let Some(head_id) = indexed.get_lit_id(head)
+                    && !lambda.contains(head_id)
+                    && !definite_proven.contains(head_id.complement())
+                {
+                    lambda.insert(head_id);
+                    queue.push_back(head_id);
+                }
+            }
+        }
+    }
+
+    // Propagate to fixpoint.
+    while let Some(id) = queue.pop_front() {
+        for rule in indexed.rules_with_body_id(id) {
+            if !matches!(
+                rule.rule_type,
+                RuleType::Fact | RuleType::Strict | RuleType::Defeasible
+            ) {
+                continue;
+            }
+            let Some(rem) = remaining.get_mut(rule.label.as_str()) else {
+                continue;
+            };
+            if *rem > 0 {
+                *rem -= 1;
+            }
+            if *rem == 0 {
+                for head in &rule.head {
+                    if let Some(head_id) = indexed.get_lit_id(head)
+                        && !lambda.contains(head_id)
+                        && !definite_proven.contains(head_id.complement())
+                    {
+                        lambda.insert(head_id);
+                        queue.push_back(head_id);
+                    }
+                }
+            }
+        }
+    }
+
+    lambda
+}
+
 /// Run Phase 2 (defeasible fixed-point) and Phase 3 (negative emission).
 pub(crate) fn resolve_defeasible(
     theory: &Theory,
@@ -77,6 +169,16 @@ pub(crate) fn resolve_defeasible(
     }
 
     // --- Seed -d for literals that can never be defeasibly proved ---
+    // Lambda over-approximation: literals outside it are unfounded (no
+    // non-circular support path exists), so they seed -d and the worklist
+    // discards any attacker that depends on them (well-founded reading,
+    // mirrors the Lean model's lambda-based attack discard).
+    let lambda = compute_lambda(
+        theory,
+        indexed,
+        &state.definite_proven,
+        &state.defeasible_body_remaining,
+    );
     for &lit_id in &all_ids {
         if state.defeasible_proven.contains(lit_id) || state.defeasible_disproven.contains(lit_id) {
             continue;
@@ -89,15 +191,11 @@ pub(crate) fn resolve_defeasible(
             continue;
         }
 
-        // -D q: check if Rsd[q] is empty (no strict/defeasible rules can fire)
-        let has_sd_rule = indexed.rules_with_head_id(lit_id).iter().any(|r| {
-            matches!(
-                r.rule_type,
-                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
-            )
-        });
-
-        if !has_sd_rule {
+        // -D q and unfounded: q is outside the lambda over-approximation,
+        // so no chain of productive rules can ever establish it. This
+        // subsumes the "Rsd[q] is empty" check (a literal with no
+        // productive rules never enters lambda unless definite).
+        if !lambda.contains(lit_id) {
             state.defeasible_disproven.insert(lit_id);
             worklist.push_back((lit_id, false));
         }
@@ -479,26 +577,18 @@ fn try_prove_defeasible(
             .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
 
         if att_remaining > 0 {
-            // Strict attackers cannot be defeated by superiority
-            if attacker.rule_type == RuleType::Strict {
-                projection_labels
-                    .extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
-                return;
-            }
-            // Defeasible attacker with undecided body: if a superior
-            // applicable rule defeats it, the attacker is countered.
+            // Attacker with undecided body: if a superior applicable rule
+            // defeats it, the attacker is countered. Spec condition (3)'s
+            // beaten disjunct (∃t ∈ Rsd[q]: t applicable AND t > s) applies
+            // to strict attackers too — a strict rule that is DEFINITELY
+            // applicable already blocks via condition (2) (+D ~q), so
+            // superiority here only ever overrides a merely defeasibly
+            // applicable strict attacker.
             if defeated_by_superior {
                 continue;
             }
             projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
             return;
-        }
-
-        // Strict attackers always block (cannot be defeated by superiority)
-        if attacker.rule_type == RuleType::Strict {
-            projection_labels.insert(attacker.label.clone());
-            blocked_by_applicable_attacker = true;
-            continue;
         }
 
         // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s

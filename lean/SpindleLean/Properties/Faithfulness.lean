@@ -16,12 +16,16 @@ namespace Properties
 def PaperDefiniteProvable (t : Theory) (delta : List Literal) (l : Literal) : Prop :=
   ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l ∧ r.bodySatisfied delta = true
 
+/-- The spec's +d condition (DEFEASIBLE-LOGIC-SEMANTICS.md): the
+    complement-not-definite gate (condition (2)) applies to BOTH the
+    delta-subsumption clause and the rule clause. When +D l and +D ~l
+    both hold, neither is defeasibly provable (worked example 1). -/
 def PaperDefeasibleProvable (t : Theory) (delta lambda partial_ : List Literal)
     (l : Literal) : Prop :=
-  l ∈ delta
-  ∨ (¬ (delta.contains l.complement = true)
-     ∧ (∃ r ∈ t.rules, r.isProductive = true ∧ r.head = l ∧ r.bodySatisfied partial_ = true)
-     ∧ Closure.allAttacksDefeated t l lambda partial_ = true)
+  ¬ (delta.contains l.complement = true)
+  ∧ (l ∈ delta
+     ∨ ((∃ r ∈ t.rules, r.isProductive = true ∧ r.head = l ∧ r.bodySatisfied partial_ = true)
+        ∧ Closure.allAttacksDefeated t l lambda partial_ = true))
 
 private theorem deltaClose_go_nodup (t : Theory) (current : List Literal) (fuel : Nat)
     (hnodup : current.Nodup) : (Closure.deltaClose.go t current fuel).Nodup := by
@@ -419,25 +423,25 @@ private theorem partial_go_sound (t : Theory) (delta lambda current : List Liter
           simp only [List.mem_filter, Bool.and_eq_true] at hmem
           obtain ⟨_, _, hcan⟩ := hmem
           simp only [Closure.canProve] at hcan ⊢
-          cases hdx : delta.contains x <;> simp only [hdx, ite_true] at hcan ⊢
-          · cases hdc : delta.contains x.complement
-            · -- complement = false: main case
-              simp only [hdc, Bool.false_eq_true, ite_false] at hcan ⊢
-              simp only [Bool.and_eq_true] at hcan ⊢
-              exact ⟨by
-                simp only [List.any_eq_true] at hcan ⊢
-                obtain ⟨r, hr, hp⟩ := hcan.1
-                simp only [Bool.and_eq_true] at hp ⊢
-                exact ⟨r, hr, hp.1, bodySatisfied_mono r current _
-                  (fun y hy => mem_partialClose_go_of_mem t delta lambda _ y n
-                    (mem_partialStep_of_mem t delta lambda current y hy)) hp.2⟩,
-              by
-                exact allAttacksDefeated_mono t x lambda current _
-                  (fun y hy => mem_partialClose_go_of_mem t delta lambda _ y n
-                    (mem_partialStep_of_mem t delta lambda current y hy)) hcan.2⟩
-            · -- complement = true: canProve returns false
-              simp only [hdc, ite_true] at hcan
-              exact absurd hcan Bool.false_ne_true
+          -- Gate first: complement in delta makes canProve false (absurd hcan).
+          cases hdc : delta.contains x.complement <;>
+            simp only [hdc, Bool.false_eq_true, ite_false, ite_true] at hcan ⊢
+          -- Only the complement = false branch survives.
+          cases hdx : delta.contains x <;>
+            simp only [hdx, Bool.false_eq_true, ite_false, ite_true] at hcan ⊢
+          -- Only the x ∉ delta branch survives; monotonicity as before.
+          simp only [Bool.and_eq_true] at hcan ⊢
+          exact ⟨by
+            simp only [List.any_eq_true] at hcan ⊢
+            obtain ⟨r, hr, hp⟩ := hcan.1
+            simp only [Bool.and_eq_true] at hp ⊢
+            exact ⟨r, hr, hp.1, bodySatisfied_mono r current _
+              (fun y hy => mem_partialClose_go_of_mem t delta lambda _ y n
+                (mem_partialStep_of_mem t delta lambda current y hy)) hp.2⟩,
+          by
+            exact allAttacksDefeated_mono t x lambda current _
+              (fun y hy => mem_partialClose_go_of_mem t delta lambda _ y n
+                (mem_partialStep_of_mem t delta lambda current y hy)) hcan.2⟩
       · exact h
 
 theorem faithful_plusd_forward (t : Theory) (l : Literal)
@@ -451,17 +455,25 @@ theorem faithful_plusd_forward (t : Theory) (l : Literal)
   set partial_ := Closure.partialClose t delta lambda
   have hcan : Closure.canProve t l delta lambda partial_ = true := by
     simp only [Closure.partialClose, partial_] at h ⊢
-    exact partial_go_sound t delta lambda delta l 1000
+    exact partial_go_sound t delta lambda (Closure.gatedDelta delta) l 1000
       (fun x hx => by
-        simp only [Closure.canProve]; rw [if_pos (List.contains_iff_mem.mpr hx)]) h
+        have hxd := (List.mem_filter.mp hx).1
+        have hxc : delta.contains x.complement = false := by
+          have := (List.mem_filter.mp hx).2
+          simpa only [Bool.not_eq_true'] using this
+        simp only [Closure.canProve]
+        rw [if_neg (by rw [hxc]; exact Bool.false_ne_true),
+            if_pos (List.contains_iff_mem.mpr hxd)]) h
   simp only [Closure.canProve] at hcan
   split at hcan
-  · exact Or.inl (List.contains_iff_mem.mp (by assumption))
+  · exact absurd hcan Bool.false_ne_true
   · split at hcan
-    · simp at hcan
-    · rename_i h1 h2; right
+    · rename_i hnc hd
+      exact ⟨hnc, Or.inl (List.contains_iff_mem.mp hd)⟩
+    · rename_i hnc hnd
+      refine ⟨hnc, Or.inr ?_⟩
       simp only [Bool.and_eq_true] at hcan
-      refine ⟨h2, ?_, hcan.2⟩
+      refine ⟨?_, hcan.2⟩
       simp only [List.any_eq_true] at hcan
       obtain ⟨r, hr, hp⟩ := hcan.1
       simp only [Bool.and_eq_true] at hp
@@ -667,14 +679,10 @@ private theorem plusd_backward_core (t : Theory)
     · exact absurd hc hnotcomp
   have hcan : Closure.canProve t r.head delta lambda partial_ = true := by
     simp only [Closure.canProve]
+    rw [if_neg (by rw [hnotcomp_bool]; exact Bool.false_ne_true)]
     by_cases hdl : delta.contains r.head = true
     · rw [if_pos hdl]
-    · have hdl_false : delta.contains r.head = false := by
-        cases hc : delta.contains r.head
-        · rfl
-        · exact absurd hc hdl
-      rw [if_neg (by rw [hdl_false]; exact Bool.false_ne_true),
-          if_neg (by rw [hnotcomp_bool]; exact Bool.false_ne_true)]
+    · rw [if_neg hdl]
       simp only [Bool.and_eq_true]
       constructor
       · simp only [List.any_eq_true]
@@ -683,13 +691,15 @@ private theorem plusd_backward_core (t : Theory)
           exact ⟨hr, by simp⟩
         · simp only [Bool.and_eq_true]; exact ⟨hprod, hbody⟩
       · exact hattacks
-  -- Apply partial fixpoint
+  -- Apply partial fixpoint (seed is the gated delta)
   subst hp
   have hsub_lam : ∀ x ∈ lambda, x ∈ t.allLiterals := by
     subst hl
     exact lambdaClose_sub_allLiterals t delta hnodup_delta hsub_delta
-  exact partial_go_fixpoint t delta lambda delta 1000 hnodup_delta hsub_delta hsub_lam
-    (by omega) r.head hlam hcan
+  exact partial_go_fixpoint t delta lambda (Closure.gatedDelta delta) 1000
+    (hnodup_delta.filter _)
+    (fun x hx => hsub_delta x (gatedDelta_subset delta x hx))
+    hsub_lam (by omega) r.head hlam hcan
 
 -- +d backward
 theorem faithful_plusd_backward (t : Theory) (l : Literal)
@@ -700,10 +710,13 @@ theorem faithful_plusd_backward (t : Theory) (l : Literal)
             (Closure.lambdaClose t (Closure.deltaClose t))) l) :
     l ∈ Closure.partialClose t (Closure.deltaClose t)
           (Closure.lambdaClose t (Closure.deltaClose t)) := by
-  cases h with
-  | inl hdelta => exact delta_subset_partial t l hdelta
+  obtain ⟨hnotcomp, hrest⟩ := h
+  cases hrest with
+  | inl hdelta =>
+    exact delta_subset_partial t l hdelta
+      (fun hmem => hnotcomp (List.contains_iff_mem.mpr hmem))
   | inr h =>
-    obtain ⟨hnotcomp, ⟨r, hr, hprod, hhead, hbody⟩, hattacks⟩ := h
+    obtain ⟨⟨r, hr, hprod, hhead, hbody⟩, hattacks⟩ := h
     subst hhead
     exact plusd_backward_core t hsize _ rfl _ rfl _ rfl r hr hprod hbody hnotcomp hattacks
 
@@ -717,10 +730,15 @@ theorem faithful_ambiguity_blocking (t : Theory) (l : Literal)
     ∧ Closure.canProve t l.complement delta lambda partial_ = false :=
   ambiguity_blocks_both t l delta lambda partial_ hnotD hnotDcomp hattack hattack_comp
 
+/-- +D l implies +d l, PROVIDED the definite level is consistent for l
+    (~l is not also definite). The consistency hypothesis is required:
+    when +D l and +D ~l both hold, the engine deliberately withholds +d
+    from both — spec condition (2), worked example 1. -/
 theorem faithful_D_implies_d (t : Theory) (l : Literal)
-    (h : l ∈ Closure.deltaClose t) :
+    (h : l ∈ Closure.deltaClose t)
+    (hcons : l.complement ∉ Closure.deltaClose t) :
     l ∈ Closure.partialClose t (Closure.deltaClose t)
           (Closure.lambdaClose t (Closure.deltaClose t)) :=
-  delta_subset_partial t l h
+  delta_subset_partial t l h hcons
 
 end Properties

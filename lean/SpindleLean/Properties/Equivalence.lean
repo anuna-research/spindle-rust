@@ -331,13 +331,17 @@ theorem reason_plusD_complete (t : Theory) (l : Literal)
   omega
 
 /-- The three-phase decomposition preserves the subset chain:
-    delta ⊆ partial ⊆ lambda.
-    This is the fundamental invariant that makes the decomposition valid. -/
+    (delta-consistent part of) delta ⊆ partial ⊆ lambda.
+    This is the fundamental invariant that makes the decomposition valid.
+
+    The delta → partial inclusion carries a consistency hypothesis: a
+    definite literal whose complement is also definite is deliberately
+    withheld from partial (spec condition (2); lean/DIVERGENCES.md class 1). -/
 theorem three_phase_subset_chain (t : Theory) :
     let delta := Closure.deltaClose t
     let lambda := Closure.lambdaClose t delta
     let partial_ := Closure.partialClose t delta lambda
-    (∀ l, l ∈ delta → l ∈ partial_)
+    (∀ l, l ∈ delta → l.complement ∉ delta → l ∈ partial_)
     ∧ (∀ l, l ∈ partial_ → l ∈ lambda) := by
   constructor
   · exact delta_subset_partial t

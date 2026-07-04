@@ -2,13 +2,20 @@
   SpindleLean.Closure.Partial
   Partial closure: actual defeasible provability with conflict resolution.
 
-  A literal p is defeasibly provable (+d) if:
+  A literal p is defeasibly provable (+d) if ~p is NOT in Delta, AND either:
   1. p is in Delta (already definite), OR
-  2. ~p is NOT in Delta, AND
-     there exists a supporting strict/defeasible rule with body in Partial, AND
+  2. there exists a supporting strict/defeasible rule with body in Partial, AND
      every attacker (rule with ~p in head) is either:
        - inapplicable (body not in Lambda), OR
        - defeated by a superior defender (team defeat)
+
+  The `~p ∉ Delta` gate applies to BOTH clauses (spec condition (2),
+  DEFEASIBLE-LOGIC-SEMANTICS.md worked example 1): when the definite level
+  is itself contradictory (+D p and +D ~p), neither literal is defeasibly
+  provable — strict contradictions are quarantined rather than propagated.
+  This is a deliberate paraconsistent deviation from Antoniou et al., and
+  it makes the defeasible level unconditionally consistent (up to
+  superiority cycles).
 
   This implements skeptical/ambiguity-blocking semantics.
 -/
@@ -38,18 +45,26 @@ def allAttacksDefeated (t : Theory) (lit : Literal)
     || !attackReaches lambda attacker  -- attack body unreachable
     || teamDefeats t lit attacker partial_  -- superior defender exists
 
-/-- Check if a literal can be proven defeasibly -/
+/-- Check if a literal can be proven defeasibly.
+
+    The complement-in-delta check comes FIRST: it gates the delta-subsumption
+    clause as well as the rule clause (spec condition (2)). -/
 def canProve (t : Theory) (lit : Literal)
     (delta lambda partial_ : List Literal) : Bool :=
-  -- Already in delta
-  if delta.contains lit then true
-  -- Complement in delta blocks
-  else if delta.contains lit.complement then false
+  -- Complement in delta blocks everything (condition (2), gating subsumption)
+  if delta.contains lit.complement then false
+  -- Already in delta (and complement is not): subsumption
+  else if delta.contains lit then true
   -- Need a supporting rule with body satisfied in partial
   else
     let hasSupport := (t.rulesWithHead lit).any fun r =>
       r.isProductive && r.bodySatisfied partial_
     hasSupport && allAttacksDefeated t lit lambda partial_
+
+/-- The delta-consistent seed for partial closure: definite literals whose
+    complement is not also definite. -/
+def gatedDelta (delta : List Literal) : List Literal :=
+  delta.filter fun l => !delta.contains l.complement
 
 /-- One step of partial closure -/
 def partialStep (t : Theory) (delta lambda current : List Literal) : List Literal :=
@@ -60,7 +75,7 @@ def partialStep (t : Theory) (delta lambda current : List Literal) : List Litera
 /-- Compute partial closure by iterating to fixpoint -/
 def partialClose (t : Theory) (delta lambda : List Literal)
     (fuel : Nat := 1000) : List Literal :=
-  go t delta lambda delta fuel
+  go t delta lambda (gatedDelta delta) fuel
 where
   go (t : Theory) (delta lambda current : List Literal) : Nat → List Literal
     | 0 => current

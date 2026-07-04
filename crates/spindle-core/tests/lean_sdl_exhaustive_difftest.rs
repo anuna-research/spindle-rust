@@ -29,10 +29,9 @@
 //! - `full`    — default + all 3-rule theories with every single
 //!               superiority pair (6 orientations)
 //!
-//! Two documented defeasible-level divergence classes between the engine
-//! and the model are tolerated (counted, never fatal) by default — see
-//! `lean/DIVERGENCES.md`. Set `SPINDLE_STRICT=1` to make them fatal too.
-//! The test always fails on any divergence outside those two classes.
+//! The engine and the verified model agree exactly (both historical
+//! divergence classes were resolved — see `lean/DIVERGENCES.md`), so any
+//! divergence at all fails the test.
 //!
 //! Run with:
 //!   cargo test --test lean_sdl_exhaustive_difftest -- --ignored --nocapture
@@ -450,31 +449,13 @@ fn exhaustive_sdl_difftest() {
         if level.is_empty() { "default" } else { &level }
     );
 
-    // Two documented divergence classes exist between the Rust engine and
-    // the Lean model (see lean/DIVERGENCES.md for minimal witnesses and
-    // analysis). Both are defeasible-level only; +D/-D agree on every
-    // theory in scope.
-    //
-    // Class 1 — inconsistent-delta subsumption: when +D l and +D ~l both
-    // hold, Rust gates +D → +d on -D ~l (the spec's worked example 1);
-    // Lean follows the spec's formal clause `+d q iff +D q OR (…)`
-    // (standard Antoniou et al.), granting +d to both.
-    //
-    // Class 2 — circular-attacker discard: for never-provable attackers
-    // with circular bodies (e.g. `p => p` attacking `=> ~p`), Lean's
-    // lambda over-approximation discards the attacker and proves +d ~p;
-    // Rust's constructive fixed point leaves the attacker undecided,
-    // which blocks, yielding -d. Strictly one-directional: Lean's +d is
-    // always a superset of Rust's within scope.
-    //
-    // By default both known classes are tolerated (counted, not fatal), so
-    // this test guards against any NEW divergence. Set SPINDLE_STRICT=1 to
-    // make every divergence fatal.
-    let strict = std::env::var("SPINDLE_STRICT").is_ok();
-
+    // Historical note: two divergence classes were found by this test and
+    // subsequently RESOLVED (see lean/DIVERGENCES.md): the inconsistent-delta
+    // subsumption gate was adopted in the Lean model (spec condition (2)),
+    // and the well-founded lambda-discard was adopted in the Rust engine.
+    // The engine and the verified model now agree exactly on every theory
+    // in scope, so every divergence is fatal.
     let mut mismatches = 0usize;
-    let mut tolerated_class1 = 0usize;
-    let mut tolerated_class2 = 0usize;
     let mut checked = 0usize;
 
     for chunk in cases.chunks(BATCH_SIZE) {
@@ -560,21 +541,6 @@ fn exhaustive_sdl_difftest() {
             .collect();
 
             if !diffs.is_empty() {
-                let only_defeasible_diffs = diffs
-                    .iter()
-                    .all(|(kind, _, _)| *kind == "+d" || *kind == "-d");
-                let lean_superset = restrict(&rust.plus_d_lower).is_subset(&lean.plus_d_lower)
-                    && lean.minus_d_lower.is_subset(&restrict(&rust.minus_d_lower));
-
-                if !strict && only_defeasible_diffs && delta_inconsistent {
-                    tolerated_class1 += 1;
-                    continue;
-                }
-                if !strict && only_defeasible_diffs && lean_superset {
-                    tolerated_class2 += 1;
-                    continue;
-                }
-
                 mismatches += 1;
                 if mismatches <= MAX_REPORTED {
                     eprintln!(
@@ -590,16 +556,10 @@ fn exhaustive_sdl_difftest() {
         }
     }
 
-    eprintln!(
-        "Checked {checked} theories: {mismatches} unexplained mismatches, \
-         {tolerated_class1} class-1 (inconsistent-delta subsumption), \
-         {tolerated_class2} class-2 (circular-attacker discard) — \
-         see lean/DIVERGENCES.md"
-    );
+    eprintln!("Checked {checked} theories: {mismatches} mismatches");
     assert_eq!(
         mismatches, 0,
         "{mismatches} of {checked} exhaustively enumerated theories diverge \
-         between the Rust reasoner and the verified Lean model outside the \
-         two documented divergence classes (lean/DIVERGENCES.md)"
+         between the Rust reasoner and the verified Lean model"
     );
 }

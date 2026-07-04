@@ -24,6 +24,7 @@ use crate::literal::Literal;
 /// is inserted, it stays inserted for the lifetime of the reasoning pass.
 /// This matches DL(d) semantics where derivations are permanent within a
 /// single pass.
+#[derive(Clone)]
 pub(crate) struct LiteralBitSet {
     bits: FixedBitSet,
 }

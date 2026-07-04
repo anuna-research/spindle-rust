@@ -84,20 +84,43 @@ The implementation computes exactly the DL(d) consequence operator.
 |---------|-----------|
 | `reason_plusD_sound` | If the engine concludes +D l, then l has a definite derivation |
 | `reason_plusD_complete` | If l has a definite derivation, then the engine concludes +D l |
-| `three_phase_subset_chain` | delta ⊆ partial ⊆ lambda holds for the three-phase decomposition |
+| `three_phase_subset_chain` | (delta-consistent) delta ⊆ partial ⊆ lambda for the three-phase decomposition |
 
 #### Faithfulness (`Properties/Faithfulness.lean`)
 
-The implementation matches the paper's formal definitions of +D and +d.
+The implementation matches the spec's formal definitions of +D and +d
+(`specs/DEFEASIBLE-LOGIC-SEMANTICS.md`). Note the spec's +d deliberately
+deviates from Antoniou et al.: condition (2) (`-D ~q`) gates the
+delta-subsumption clause too, quarantining strict contradictions.
 
 | Theorem | Statement |
 |---------|-----------|
 | `faithful_plusD_forward` | l ∈ delta(T) implies l satisfies the paper's +D condition |
 | `faithful_plusD_backward` | The paper's +D condition implies l ∈ delta(T) |
-| `faithful_plusd_forward` | l ∈ partial(T) implies l satisfies the paper's +d condition |
-| `faithful_plusd_backward` | The paper's +d condition implies l ∈ partial(T) |
+| `faithful_plusd_forward` | l ∈ partial(T) implies l satisfies the spec's (gated) +d condition |
+| `faithful_plusd_backward` | The spec's +d condition implies l ∈ partial(T) |
 | `faithful_ambiguity_blocking` | Ambiguity blocking matches the paper's semantics |
-| `faithful_D_implies_d` | +D l → +d l (definite provability implies defeasible provability) |
+| `faithful_D_implies_d` | +D l → +d l whenever ~l is not also +D (delta-consistency hypothesis) |
+
+#### Consistency (`Properties/Consistency.lean`)
+
+The payoff of the gated subsumption: the defeasible level is consistent
+for **every** input — a theorem standard DL does not have (there, an
+inconsistent strict part propagates +∂p and +∂~p).
+
+| Theorem | Statement |
+|---------|-----------|
+| `partial_consistent` | For well-formed theories with well-founded superiority, partial(T) never contains both l and ~l |
+| `partial_consistent_no_superiority` | Specialization: consistency for theories with no superiority declarations |
+| `supRel_wellFounded_of_no_superiority` | Empty superiority is trivially well-founded |
+
+Proof technique: well-founded induction on the superiority relation
+replaces the classic infinite-descent argument — each side's supporter is
+an applicable attacker of the other side, and team defeat forces a
+strictly superior applicable defender, ascending forever unless the
+relation is well-founded. Superiority cycles genuinely break consistency
+(two mutually-superior opposing rules both win), so the hypothesis is
+necessary.
 
 #### Acyclicity (`Properties/Acyclicity.lean`)
 

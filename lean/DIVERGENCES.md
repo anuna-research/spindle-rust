@@ -1,4 +1,31 @@
-# Known Divergences: Rust Engine vs Verified Lean Model
+# Divergences: Rust Engine vs Verified Lean Model — RESOLVED
+
+> **Resolution (2026-07-04).** Both classes below are resolved; the engine
+> and the verified model now agree on **all 297,760 theories** at full
+> exhaustive scope (0 divergences).
+>
+> - **Class 1** — resolved by adopting the engine's paraconsistent gate in
+>   the Lean model (`Closure/Partial.lean`: `canProve` checks the
+>   complement-in-delta condition first; `partialClose` seeds from
+>   `gatedDelta`). `delta_subset_partial` and `faithful_D_implies_d` are now
+>   conditional on delta-consistency, and the spec's formal `+d` clause was
+>   corrected to match its own worked example 1. Payoff: the new
+>   `Properties/Consistency.lean` proves **`partial_consistent`** — the
+>   defeasible level never contains a complementary pair, for ANY
+>   well-formed input whose superiority relation is well-founded. Standard
+>   Antoniou et al. DL cannot have this theorem.
+> - **Class 2** — resolved by adopting the model's well-founded
+>   lambda-discard in the Rust engine (`reason/defeasible.rs`:
+>   `compute_lambda` + seeding `-d` for literals outside lambda), and
+>   removing an unspecified "strict attackers cannot be beaten by
+>   superiority" carve-out that contradicted spec condition (3). The spec
+>   gained a "well-founded strengthening" section documenting the lambda
+>   reading.
+>
+> The analysis below is retained as the historical record of what the
+> exhaustive difftest found and why each decision was taken.
+
+# Known Divergences: Rust Engine vs Verified Lean Model (historical)
 
 Found by the exhaustive small-scope differential test
 (`crates/spindle-core/tests/lean_sdl_exhaustive_difftest.rs`), which
@@ -110,7 +137,5 @@ blocks"). The divergence is strictly one-directional in scope: Lean's
 
 ## Status
 
-Both classes are **tolerated but counted** by the exhaustive difftest by
-default, so it remains a strict regression gate against any *new*
-divergence. `SPINDLE_STRICT=1` makes them fatal. Update this file and the
-tolerance logic when either decision is taken.
+**Resolved** — see the header. The exhaustive difftest now fails on any
+divergence whatsoever; the tolerance machinery has been removed.

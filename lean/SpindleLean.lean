@@ -14,4 +14,5 @@ import SpindleLean.Properties.Acyclicity
 import SpindleLean.Properties.Confluence
 import SpindleLean.Properties.Equivalence
 import SpindleLean.Properties.Faithfulness
+import SpindleLean.Properties.Consistency
 import SpindleLean.DiffTest.Oracle
