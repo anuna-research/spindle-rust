@@ -1,0 +1,292 @@
+; SDL Conformance Fix Plan — spindle-rust reasoning engine
+; Addresses deviations from specs/DEFEASIBLE-LOGIC-SEMANTICS.md
+
+; ============================================================
+; Agents
+; ============================================================
+
+(given agent-dev-available)
+
+; ============================================================
+; Tasks
+; ============================================================
+
+(given task-fix-blocking-condition)
+(given task-unify-attacker-logic)
+(given task-update-blocking-tests)
+(given task-add-spec-compliance-tests)
+(given task-two-phase-reasoning)
+(given task-negative-propagation)
+(given task-check-all-rsd-rules)
+(given task-resolve-fact-classification)
+
+; ============================================================
+; Dependencies
+; ============================================================
+
+; Issue 1 (critical) — fix the blocking condition — has no deps
+(given no-deps-fix-blocking-condition)
+
+; Issue 2 — unifying attacker logic is part of fixing the blocking condition
+(given no-deps-unify-attacker-logic)
+
+; Update existing tests after changing blocking semantics
+; Depends on the blocking condition fix landing first
+; (no no-deps fact — readiness requires completed-fix-blocking-condition)
+
+; New spec compliance tests depend on both blocking fixes
+; (no no-deps fact — requires completed-unify-attacker-logic)
+
+; Issue 3 — two-phase reasoning depends on blocking fix being stable
+; (no no-deps fact — requires completed-update-blocking-tests)
+
+; Issue 4 — negative propagation depends on two-phase being done
+; (no no-deps fact — requires completed-two-phase-reasoning)
+
+; Issue 5 — checking all Rsd rules depends on blocking fix
+; (no no-deps fact — requires completed-fix-blocking-condition)
+
+; Issue 6 — fact classification is independent research/decision
+(given no-deps-resolve-fact-classification)
+
+; ============================================================
+; Readiness rules
+; ============================================================
+
+; Phase 1: Core blocking fix (Issues 1 + 2)
+(normally r-ready-fix-blocking
+  (and task-fix-blocking-condition no-deps-fix-blocking-condition)
+  ready-fix-blocking-condition)
+
+(normally r-ready-unify-attacker
+  (and task-unify-attacker-logic no-deps-unify-attacker-logic)
+  ready-unify-attacker-logic)
+
+; Phase 2: Update tests
+(normally r-ready-update-tests
+  (and task-update-blocking-tests completed-fix-blocking-condition completed-unify-attacker-logic)
+  ready-update-blocking-tests)
+
+; Phase 3: Spec compliance tests
+(normally r-ready-spec-tests
+  (and task-add-spec-compliance-tests completed-update-blocking-tests)
+  ready-add-spec-compliance-tests)
+
+; Phase 4: Two-phase reasoning (Issue 3)
+(normally r-ready-two-phase
+  (and task-two-phase-reasoning completed-update-blocking-tests)
+  ready-two-phase-reasoning)
+
+; Phase 5: Negative propagation (Issue 4)
+(normally r-ready-neg-prop
+  (and task-negative-propagation completed-two-phase-reasoning)
+  ready-negative-propagation)
+
+; Phase 4b: Check all Rsd rules (Issue 5)
+(normally r-ready-check-rsd
+  (and task-check-all-rsd-rules completed-fix-blocking-condition)
+  ready-check-all-rsd-rules)
+
+; Independent: Fact classification (Issue 6)
+(normally r-ready-fact-class
+  (and task-resolve-fact-classification no-deps-resolve-fact-classification)
+  ready-resolve-fact-classification)
+
+; ============================================================
+; Assignment rules
+; ============================================================
+
+(normally r-assign-fix-blocking
+  (and ready-fix-blocking-condition agent-dev-available)
+  assign-to-fix-blocking-condition-dev)
+
+(normally r-assign-unify-attacker
+  (and ready-unify-attacker-logic agent-dev-available)
+  assign-to-unify-attacker-logic-dev)
+
+(normally r-assign-update-tests
+  (and ready-update-blocking-tests agent-dev-available)
+  assign-to-update-blocking-tests-dev)
+
+(normally r-assign-spec-tests
+  (and ready-add-spec-compliance-tests agent-dev-available)
+  assign-to-add-spec-compliance-tests-dev)
+
+(normally r-assign-two-phase
+  (and ready-two-phase-reasoning agent-dev-available)
+  assign-to-two-phase-reasoning-dev)
+
+(normally r-assign-neg-prop
+  (and ready-negative-propagation agent-dev-available)
+  assign-to-negative-propagation-dev)
+
+(normally r-assign-check-rsd
+  (and ready-check-all-rsd-rules agent-dev-available)
+  assign-to-check-all-rsd-rules-dev)
+
+(normally r-assign-fact-class
+  (and ready-resolve-fact-classification agent-dev-available)
+  assign-to-resolve-fact-classification-dev)
+
+; ============================================================
+; Metadata
+; ============================================================
+
+(meta r-ready-fix-blocking
+  (description "Issue 1 (CRITICAL): Fix is_blocked_by_superior to block defeasible attackers when no superiority exists. Current code at reason.rs:364 only blocks when attacker_superior && !rule_superior. Must change to: block UNLESS rule > attacker (matching defeater logic). This is the defining property of SDL — without it, every unsuperior conflict produces inconsistent +d q AND +d ~q.")
+  (priority "critical")
+  (file "crates/spindle-core/src/reason.rs")
+  (lines "354-371"))
+
+(meta r-ready-unify-attacker
+  (description "Issue 2 (MODERATE): Unify blocking logic for defeaters and defeasible attackers. Currently defeaters block unless rule > defeater (correct), but defeasible attackers block only if attacker > rule (wrong). Both should use the same condition from spec condition (3): block unless there exists t in Rsd[q] with t applicable AND t > s.")
+  (priority "moderate")
+  (file "crates/spindle-core/src/reason.rs")
+  (lines "336-371"))
+
+(meta r-ready-update-tests
+  (description "Update test_mutual_non_superiority_allows_both_conclusions (line 893) to expect NEITHER +d q NOR +d ~q (ambiguity blocking). Add tests for the spec worked example: >> p, >> -p should yield -d p, -d -p. Review all existing tests for conformance with the new blocking semantics.")
+  (priority "critical")
+  (file "crates/spindle-core/src/reason.rs")
+  (lines "893-923"))
+
+(meta r-ready-spec-tests
+  (description "Add comprehensive spec compliance tests: (1) conflicting defeasible rules without superiority, (2) conflicting defeasible rules WITH superiority resolving, (3) defeater blocks without proving, (4) defeater overridden by superior rule, (5) strict chain blocks defeasible, (6) cascading chains, (7) the worked example from the spec verbatim.")
+  (priority "high"))
+
+(meta r-ready-two-phase
+  (description "Issue 3 (MODERATE): Separate definite and defeasible computation into two distinct phases. Phase 1 computes ALL +D/-D using only strict rules. Phase 2 uses complete definite results for defeasible reasoning. Current single-pass can derive +d p before discovering +D -p through a multi-hop strict chain.")
+  (priority "moderate")
+  (file "crates/spindle-core/src/reason.rs")
+  (lines "110-288"))
+
+(meta r-ready-neg-prop
+  (description "Issue 4 (MODERATE): Implement negative conclusion propagation during defeasible reasoning. When a literal is proved -d, propagate it: discard rules with that literal in body, and try to prove the complement. Currently negatives are only computed as a passive sweep in Phase 3.")
+  (priority "moderate")
+  (file "crates/spindle-core/src/reason.rs")
+  (lines "290-303"))
+
+(meta r-ready-check-rsd
+  (description "Issue 5 (MINOR): Expand is_blocked_by_superior to check ALL applicable Rsd[q] rules, not just the single rule being fired. Spec condition (3) says there exists ANY t in Rsd[q] with t > s. Current code only checks the triggering rule.")
+  (priority "minor")
+  (file "crates/spindle-core/src/reason.rs")
+  (lines "309-374"))
+
+(meta r-ready-fact-class
+  (description "Issue 6 (SPEC INCONSISTENCY): Resolve contradiction in the spec. Rule type table says facts are Defeasible level, pseudocode seeds them as +D, worked example treats them as not +D. Decide which interpretation to follow and align both spec and implementation.")
+  (priority "low"))
+
+(claims agent:dev
+  :at "2026-02-11T18:02:19Z"
+  (given claim-v1-fix-blocking-condition)
+  (normally r-state-v1-fix-blocking-condition claim-v1-fix-blocking-condition state-claimed-v1-fix-blocking-condition)
+  (normally r-chain-v1-fix-blocking-condition state-claimed-v1-fix-blocking-condition claimed-fix-blocking-condition))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:31Z"
+  (given claim-v1-resolve-fact-classification)
+  (normally r-cl-state-v1-resolve-fact-classification claim-v1-resolve-fact-classification state-claimed-v1-resolve-fact-classification)
+  (normally r-cl-chain-v1-resolve-fact-classification state-claimed-v1-resolve-fact-classification claimed-resolve-fact-classification)
+)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:31Z"
+  (given completed-resolve-fact-classification))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:31Z"
+  (given claim-v1-unify-attacker-logic)
+  (normally r-cl-state-v1-unify-attacker-logic claim-v1-unify-attacker-logic state-claimed-v1-unify-attacker-logic)
+  (normally r-cl-chain-v1-unify-attacker-logic state-claimed-v1-unify-attacker-logic claimed-unify-attacker-logic)
+)
+
+;; Propagation rules: failures in 'unify-attacker-logic' block downstream tasks
+(normally r-propagate-update-blocking-tests-from-unify-attacker-logic-failed failed-unify-attacker-logic upstream-blocked-update-blocking-tests)
+(normally r-propagate-update-blocking-tests-from-unify-attacker-logic-permanently-failed permanently-failed-unify-attacker-logic upstream-blocked-update-blocking-tests)
+(normally r-propagate-update-blocking-tests-from-unify-attacker-logic-stale-v1 stale-v1-unify-attacker-logic upstream-blocked-update-blocking-tests)
+(normally r-propagate-update-blocking-tests-from-unify-attacker-logic-timeout-v1 timeout-v1-unify-attacker-logic upstream-blocked-update-blocking-tests)
+(normally r-propagate-update-blocking-tests-from-unify-attacker-logic-blocked upstream-blocked-unify-attacker-logic upstream-blocked-update-blocking-tests)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-add-spec-compliance-tests-from-update-blocking-tests-blocked upstream-blocked-update-blocking-tests upstream-blocked-add-spec-compliance-tests)
+(normally r-propagate-two-phase-reasoning-from-update-blocking-tests-blocked upstream-blocked-update-blocking-tests upstream-blocked-two-phase-reasoning)
+(normally r-propagate-negative-propagation-from-two-phase-reasoning-blocked upstream-blocked-two-phase-reasoning upstream-blocked-negative-propagation)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:31Z"
+  (given completed-unify-attacker-logic))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given completed-fix-blocking-condition))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given claim-v1-check-all-rsd-rules)
+  (normally r-cl-state-v1-check-all-rsd-rules claim-v1-check-all-rsd-rules state-claimed-v1-check-all-rsd-rules)
+  (normally r-cl-chain-v1-check-all-rsd-rules state-claimed-v1-check-all-rsd-rules claimed-check-all-rsd-rules)
+)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given completed-check-all-rsd-rules))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given claim-v1-update-blocking-tests)
+  (normally r-cl-state-v1-update-blocking-tests claim-v1-update-blocking-tests state-claimed-v1-update-blocking-tests)
+  (normally r-cl-chain-v1-update-blocking-tests state-claimed-v1-update-blocking-tests claimed-update-blocking-tests)
+)
+
+;; Propagation rules: failures in 'update-blocking-tests' block downstream tasks
+(normally r-propagate-add-spec-compliance-tests-from-update-blocking-tests-failed failed-update-blocking-tests upstream-blocked-add-spec-compliance-tests)
+(normally r-propagate-add-spec-compliance-tests-from-update-blocking-tests-permanently-failed permanently-failed-update-blocking-tests upstream-blocked-add-spec-compliance-tests)
+(normally r-propagate-add-spec-compliance-tests-from-update-blocking-tests-stale-v1 stale-v1-update-blocking-tests upstream-blocked-add-spec-compliance-tests)
+(normally r-propagate-add-spec-compliance-tests-from-update-blocking-tests-timeout-v1 timeout-v1-update-blocking-tests upstream-blocked-add-spec-compliance-tests)
+(normally r-propagate-two-phase-reasoning-from-update-blocking-tests-failed failed-update-blocking-tests upstream-blocked-two-phase-reasoning)
+(normally r-propagate-two-phase-reasoning-from-update-blocking-tests-permanently-failed permanently-failed-update-blocking-tests upstream-blocked-two-phase-reasoning)
+(normally r-propagate-two-phase-reasoning-from-update-blocking-tests-stale-v1 stale-v1-update-blocking-tests upstream-blocked-two-phase-reasoning)
+(normally r-propagate-two-phase-reasoning-from-update-blocking-tests-timeout-v1 timeout-v1-update-blocking-tests upstream-blocked-two-phase-reasoning)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given completed-update-blocking-tests))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given claim-v1-add-spec-compliance-tests)
+  (normally r-cl-state-v1-add-spec-compliance-tests claim-v1-add-spec-compliance-tests state-claimed-v1-add-spec-compliance-tests)
+  (normally r-cl-chain-v1-add-spec-compliance-tests state-claimed-v1-add-spec-compliance-tests claimed-add-spec-compliance-tests)
+)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given completed-add-spec-compliance-tests))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given claim-v1-two-phase-reasoning)
+  (normally r-cl-state-v1-two-phase-reasoning claim-v1-two-phase-reasoning state-claimed-v1-two-phase-reasoning)
+  (normally r-cl-chain-v1-two-phase-reasoning state-claimed-v1-two-phase-reasoning claimed-two-phase-reasoning)
+)
+
+;; Propagation rules: failures in 'two-phase-reasoning' block downstream tasks
+(normally r-propagate-negative-propagation-from-two-phase-reasoning-failed failed-two-phase-reasoning upstream-blocked-negative-propagation)
+(normally r-propagate-negative-propagation-from-two-phase-reasoning-permanently-failed permanently-failed-two-phase-reasoning upstream-blocked-negative-propagation)
+(normally r-propagate-negative-propagation-from-two-phase-reasoning-stale-v1 stale-v1-two-phase-reasoning upstream-blocked-negative-propagation)
+(normally r-propagate-negative-propagation-from-two-phase-reasoning-timeout-v1 timeout-v1-two-phase-reasoning upstream-blocked-negative-propagation)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given completed-two-phase-reasoning))
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given claim-v1-negative-propagation)
+  (normally r-cl-state-v1-negative-propagation claim-v1-negative-propagation state-claimed-v1-negative-propagation)
+  (normally r-cl-chain-v1-negative-propagation state-claimed-v1-negative-propagation claimed-negative-propagation)
+)
+
+(claims agent:dev
+  :at "2026-07-04T11:05:45Z"
+  (given completed-negative-propagation))

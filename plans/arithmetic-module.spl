@@ -1232,3 +1232,103 @@
   (normally r-ucl-unclaimed-v3-tests-grounding unclaim-v3-tests-grounding (not claimed-tests-grounding))
   (prefer r-ucl-unclaimed-v3-tests-grounding r-cl-chain-v2-tests-grounding)
 )
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given claim-v4-tests-grounding)
+  (normally r-cl-state-v4-tests-grounding claim-v4-tests-grounding state-claimed-v4-tests-grounding)
+  (normally r-cl-chain-v4-tests-grounding state-claimed-v4-tests-grounding claimed-tests-grounding)
+  (normally r-cl-cancel-v3-tests-grounding claim-v4-tests-grounding (not state-unclaimed-v3-tests-grounding))
+  (prefer r-cl-cancel-v3-tests-grounding r-ucl-state-v3-tests-grounding)
+  (prefer r-cl-chain-v4-tests-grounding r-ucl-unclaimed-v3-tests-grounding)
+)
+
+;; Propagation rules: failures in 'tests-grounding' block downstream tasks
+(normally r-propagate-tests-nfr-from-tests-grounding-stale-v4 stale-v4-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-nfr-from-tests-grounding-timeout-v4 timeout-v4-tests-grounding upstream-blocked-tests-nfr)
+(normally r-propagate-tests-pbt-from-tests-grounding-stale-v4 stale-v4-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-pbt-from-tests-grounding-timeout-v4 timeout-v4-tests-grounding upstream-blocked-tests-pbt)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-stale-v4 stale-v4-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-tests-worked-examples-from-tests-grounding-timeout-v4 timeout-v4-tests-grounding upstream-blocked-tests-worked-examples)
+(normally r-propagate-v2-json-schema-from-tests-grounding-stale-v4 stale-v4-tests-grounding upstream-blocked-v2-json-schema)
+(normally r-propagate-v2-json-schema-from-tests-grounding-timeout-v4 timeout-v4-tests-grounding upstream-blocked-v2-json-schema)
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given completed-tests-grounding))
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given claim-v1-tests-nfr)
+  (normally r-cl-state-v1-tests-nfr claim-v1-tests-nfr state-claimed-v1-tests-nfr)
+  (normally r-cl-chain-v1-tests-nfr state-claimed-v1-tests-nfr claimed-tests-nfr)
+)
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given completed-tests-nfr))
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given claim-v1-tests-pbt)
+  (normally r-cl-state-v1-tests-pbt claim-v1-tests-pbt state-claimed-v1-tests-pbt)
+  (normally r-cl-chain-v1-tests-pbt state-claimed-v1-tests-pbt claimed-tests-pbt)
+)
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given completed-tests-pbt))
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given claim-v1-tests-worked-examples)
+  (normally r-cl-state-v1-tests-worked-examples claim-v1-tests-worked-examples state-claimed-v1-tests-worked-examples)
+  (normally r-cl-chain-v1-tests-worked-examples state-claimed-v1-tests-worked-examples claimed-tests-worked-examples)
+)
+
+(claims agent:core
+  :at "2026-07-04T11:08:05Z"
+  (given completed-tests-worked-examples))
+
+(claims agent:contracts
+  :at "2026-07-04T11:08:30Z"
+  (given claim-v1-v2-json-schema)
+  (normally r-cl-state-v1-v2-json-schema claim-v1-v2-json-schema state-claimed-v1-v2-json-schema)
+  (normally r-cl-chain-v1-v2-json-schema state-claimed-v1-v2-json-schema claimed-v2-json-schema)
+)
+
+;; Propagation rules: failures in 'v2-json-schema' block downstream tasks
+(normally r-propagate-tests-v2-json-from-v2-json-schema-failed failed-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-tests-v2-json-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-tests-v2-json)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-failed failed-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-permanently-failed permanently-failed-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-stale-v1 stale-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
+(normally r-propagate-v2-cli-wasm-from-v2-json-schema-timeout-v1 timeout-v1-v2-json-schema upstream-blocked-v2-cli-wasm)
+
+(claims agent:contracts
+  :at "2026-07-04T11:08:30Z"
+  (given completed-v2-json-schema))
+
+(claims agent:contracts
+  :at "2026-07-04T11:08:30Z"
+  (given claim-v1-v2-cli-wasm)
+  (normally r-cl-state-v1-v2-cli-wasm claim-v1-v2-cli-wasm state-claimed-v1-v2-cli-wasm)
+  (normally r-cl-chain-v1-v2-cli-wasm state-claimed-v1-v2-cli-wasm claimed-v2-cli-wasm)
+)
+
+(claims agent:contracts
+  :at "2026-07-04T11:08:30Z"
+  (given completed-v2-cli-wasm))
+
+(claims agent:core
+  :at "2026-07-04T11:08:42Z"
+  (given claim-v1-tests-v2-json)
+  (normally r-cl-state-v1-tests-v2-json claim-v1-tests-v2-json state-claimed-v1-tests-v2-json)
+  (normally r-cl-chain-v1-tests-v2-json state-claimed-v1-tests-v2-json claimed-tests-v2-json)
+)
+
+(claims agent:core
+  :at "2026-07-04T11:08:42Z"
+  (given completed-tests-v2-json))

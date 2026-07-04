@@ -2,10 +2,10 @@
 |---|---|
 | Document ID | SPEC-020 |
 | Title | First-Class Temporal Family Reasoning Without Synthetic Bridge Rules |
-| Version | 1.0.0 |
-| Status | Draft |
+| Version | 1.1.0 |
+| Status | Implemented |
 | Created | 2026-03-10 |
-| Last Updated | 2026-03-10 |
+| Last Updated | 2026-07-04 |
 | Authors | GPT-5 Codex (AI agent) |
 | Reviewers | Core Maintainers |
 | Protocol | [USDD Agent Protocol v1.3.0](../../handbook/engineering/usdd-agent-protocol.md) |

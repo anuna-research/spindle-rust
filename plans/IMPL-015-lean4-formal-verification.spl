@@ -510,3 +510,469 @@
 (meta r-ready-oracle
   (description "Oracle can start once executable model works")
   (justification "Oracle wraps the reason function in IO; does not need proofs, just the executable model from Phase 2"))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:07Z"
+  (given claim-v1-scaffold-lakefile)
+  (normally r-cl-state-v1-scaffold-lakefile claim-v1-scaffold-lakefile state-claimed-v1-scaffold-lakefile)
+  (normally r-cl-chain-v1-scaffold-lakefile state-claimed-v1-scaffold-lakefile claimed-scaffold-lakefile)
+)
+
+;; Propagation rules: failures in 'scaffold-lakefile' block downstream tasks
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-failed failed-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-permanently-failed permanently-failed-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-stale-v1 stale-v1-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-timeout-v1 timeout-v1-scaffold-lakefile upstream-blocked-mathlib-deps)
+(normally r-propagate-mathlib-deps-from-scaffold-lakefile-blocked upstream-blocked-scaffold-lakefile upstream-blocked-mathlib-deps)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-module-structure-from-mathlib-deps-blocked upstream-blocked-mathlib-deps upstream-blocked-module-structure)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:07Z"
+  (given completed-scaffold-lakefile))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-mathlib-deps)
+  (normally r-cl-state-v1-mathlib-deps claim-v1-mathlib-deps state-claimed-v1-mathlib-deps)
+  (normally r-cl-chain-v1-mathlib-deps state-claimed-v1-mathlib-deps claimed-mathlib-deps)
+)
+
+;; Propagation rules: failures in 'mathlib-deps' block downstream tasks
+(normally r-propagate-module-structure-from-mathlib-deps-failed failed-mathlib-deps upstream-blocked-module-structure)
+(normally r-propagate-module-structure-from-mathlib-deps-permanently-failed permanently-failed-mathlib-deps upstream-blocked-module-structure)
+(normally r-propagate-module-structure-from-mathlib-deps-stale-v1 stale-v1-mathlib-deps upstream-blocked-module-structure)
+(normally r-propagate-module-structure-from-mathlib-deps-timeout-v1 timeout-v1-mathlib-deps upstream-blocked-module-structure)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-mathlib-deps))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-module-structure)
+  (normally r-cl-state-v1-module-structure claim-v1-module-structure state-claimed-v1-module-structure)
+  (normally r-cl-chain-v1-module-structure state-claimed-v1-module-structure claimed-module-structure)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-module-structure))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-literal-type)
+  (normally r-cl-state-v1-literal-type claim-v1-literal-type state-claimed-v1-literal-type)
+  (normally r-cl-chain-v1-literal-type state-claimed-v1-literal-type claimed-literal-type)
+)
+
+;; Propagation rules: failures in 'literal-type' block downstream tasks
+(normally r-propagate-complement-from-literal-type-failed failed-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-permanently-failed permanently-failed-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-stale-v1 stale-v1-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-timeout-v1 timeout-v1-literal-type upstream-blocked-complement)
+(normally r-propagate-complement-from-literal-type-blocked upstream-blocked-literal-type upstream-blocked-complement)
+(normally r-propagate-conclusion-type-from-literal-type-failed failed-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-permanently-failed permanently-failed-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-stale-v1 stale-v1-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-timeout-v1 timeout-v1-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-conclusion-type-from-literal-type-blocked upstream-blocked-literal-type upstream-blocked-conclusion-type)
+(normally r-propagate-rule-type-from-literal-type-failed failed-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-permanently-failed permanently-failed-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-stale-v1 stale-v1-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-timeout-v1 timeout-v1-literal-type upstream-blocked-rule-type)
+(normally r-propagate-rule-type-from-literal-type-blocked upstream-blocked-literal-type upstream-blocked-rule-type)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-theory-type-from-rule-type-blocked upstream-blocked-rule-type upstream-blocked-theory-type)
+(normally r-propagate-decidable-instances-from-theory-type-blocked upstream-blocked-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-rule-classification-from-theory-type-blocked upstream-blocked-theory-type upstream-blocked-rule-classification)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-literal-type))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-complement)
+  (normally r-cl-state-v1-complement claim-v1-complement state-claimed-v1-complement)
+  (normally r-cl-chain-v1-complement state-claimed-v1-complement claimed-complement)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-complement))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-conclusion-type)
+  (normally r-cl-state-v1-conclusion-type claim-v1-conclusion-type state-claimed-v1-conclusion-type)
+  (normally r-cl-chain-v1-conclusion-type state-claimed-v1-conclusion-type claimed-conclusion-type)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-conclusion-type))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-rule-type)
+  (normally r-cl-state-v1-rule-type claim-v1-rule-type state-claimed-v1-rule-type)
+  (normally r-cl-chain-v1-rule-type state-claimed-v1-rule-type claimed-rule-type)
+)
+
+;; Propagation rules: failures in 'rule-type' block downstream tasks
+(normally r-propagate-theory-type-from-rule-type-failed failed-rule-type upstream-blocked-theory-type)
+(normally r-propagate-theory-type-from-rule-type-permanently-failed permanently-failed-rule-type upstream-blocked-theory-type)
+(normally r-propagate-theory-type-from-rule-type-stale-v1 stale-v1-rule-type upstream-blocked-theory-type)
+(normally r-propagate-theory-type-from-rule-type-timeout-v1 timeout-v1-rule-type upstream-blocked-theory-type)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-rule-type))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-theory-type)
+  (normally r-cl-state-v1-theory-type claim-v1-theory-type state-claimed-v1-theory-type)
+  (normally r-cl-chain-v1-theory-type state-claimed-v1-theory-type claimed-theory-type)
+)
+
+;; Propagation rules: failures in 'theory-type' block downstream tasks
+(normally r-propagate-decidable-instances-from-theory-type-failed failed-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-decidable-instances-from-theory-type-permanently-failed permanently-failed-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-decidable-instances-from-theory-type-stale-v1 stale-v1-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-decidable-instances-from-theory-type-timeout-v1 timeout-v1-theory-type upstream-blocked-decidable-instances)
+(normally r-propagate-rule-classification-from-theory-type-failed failed-theory-type upstream-blocked-rule-classification)
+(normally r-propagate-rule-classification-from-theory-type-permanently-failed permanently-failed-theory-type upstream-blocked-rule-classification)
+(normally r-propagate-rule-classification-from-theory-type-stale-v1 stale-v1-theory-type upstream-blocked-rule-classification)
+(normally r-propagate-rule-classification-from-theory-type-timeout-v1 timeout-v1-theory-type upstream-blocked-rule-classification)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-theory-type))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-decidable-instances)
+  (normally r-cl-state-v1-decidable-instances claim-v1-decidable-instances state-claimed-v1-decidable-instances)
+  (normally r-cl-chain-v1-decidable-instances state-claimed-v1-decidable-instances claimed-decidable-instances)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-decidable-instances))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-rule-classification)
+  (normally r-cl-state-v1-rule-classification claim-v1-rule-classification state-claimed-v1-rule-classification)
+  (normally r-cl-chain-v1-rule-classification state-claimed-v1-rule-classification claimed-rule-classification)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-rule-classification))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-definite-closure)
+  (normally r-cl-state-v1-definite-closure claim-v1-definite-closure state-claimed-v1-definite-closure)
+  (normally r-cl-chain-v1-definite-closure state-claimed-v1-definite-closure claimed-definite-closure)
+)
+
+;; Propagation rules: failures in 'definite-closure' block downstream tasks
+(normally r-propagate-defeasible-closure-from-definite-closure-failed failed-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-permanently-failed permanently-failed-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-stale-v1 stale-v1-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-timeout-v1 timeout-v1-definite-closure upstream-blocked-defeasible-closure)
+(normally r-propagate-defeasible-closure-from-definite-closure-blocked upstream-blocked-definite-closure upstream-blocked-defeasible-closure)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-reason-function-from-defeasible-closure-blocked upstream-blocked-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-encode-rust-tests-from-reason-function-blocked upstream-blocked-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-smoke-tests-from-reason-function-blocked upstream-blocked-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-diff-harness-from-encode-rust-tests-blocked upstream-blocked-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-ci-pipeline-from-diff-harness-blocked upstream-blocked-diff-harness upstream-blocked-ci-pipeline)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-definite-closure))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-defeasible-closure)
+  (normally r-cl-state-v1-defeasible-closure claim-v1-defeasible-closure state-claimed-v1-defeasible-closure)
+  (normally r-cl-chain-v1-defeasible-closure state-claimed-v1-defeasible-closure claimed-defeasible-closure)
+)
+
+;; Propagation rules: failures in 'defeasible-closure' block downstream tasks
+(normally r-propagate-reason-function-from-defeasible-closure-failed failed-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-reason-function-from-defeasible-closure-permanently-failed permanently-failed-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-reason-function-from-defeasible-closure-stale-v1 stale-v1-defeasible-closure upstream-blocked-reason-function)
+(normally r-propagate-reason-function-from-defeasible-closure-timeout-v1 timeout-v1-defeasible-closure upstream-blocked-reason-function)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-defeasible-closure))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-reason-function)
+  (normally r-cl-state-v1-reason-function claim-v1-reason-function state-claimed-v1-reason-function)
+  (normally r-cl-chain-v1-reason-function state-claimed-v1-reason-function claimed-reason-function)
+)
+
+;; Propagation rules: failures in 'reason-function' block downstream tasks
+(normally r-propagate-encode-rust-tests-from-reason-function-failed failed-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-encode-rust-tests-from-reason-function-permanently-failed permanently-failed-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-encode-rust-tests-from-reason-function-stale-v1 stale-v1-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-encode-rust-tests-from-reason-function-timeout-v1 timeout-v1-reason-function upstream-blocked-encode-rust-tests)
+(normally r-propagate-smoke-tests-from-reason-function-failed failed-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-smoke-tests-from-reason-function-permanently-failed permanently-failed-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-smoke-tests-from-reason-function-stale-v1 stale-v1-reason-function upstream-blocked-smoke-tests)
+(normally r-propagate-smoke-tests-from-reason-function-timeout-v1 timeout-v1-reason-function upstream-blocked-smoke-tests)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-reason-function))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-encode-rust-tests)
+  (normally r-cl-state-v1-encode-rust-tests claim-v1-encode-rust-tests state-claimed-v1-encode-rust-tests)
+  (normally r-cl-chain-v1-encode-rust-tests state-claimed-v1-encode-rust-tests claimed-encode-rust-tests)
+)
+
+;; Propagation rules: failures in 'encode-rust-tests' block downstream tasks
+(normally r-propagate-diff-harness-from-encode-rust-tests-failed failed-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-encode-rust-tests-permanently-failed permanently-failed-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-encode-rust-tests-stale-v1 stale-v1-encode-rust-tests upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-encode-rust-tests-timeout-v1 timeout-v1-encode-rust-tests upstream-blocked-diff-harness)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-encode-rust-tests))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-smoke-tests)
+  (normally r-cl-state-v1-smoke-tests claim-v1-smoke-tests state-claimed-v1-smoke-tests)
+  (normally r-cl-chain-v1-smoke-tests state-claimed-v1-smoke-tests claimed-smoke-tests)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-smoke-tests))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-lean-oracle)
+  (normally r-cl-state-v1-lean-oracle claim-v1-lean-oracle state-claimed-v1-lean-oracle)
+  (normally r-cl-chain-v1-lean-oracle state-claimed-v1-lean-oracle claimed-lean-oracle)
+)
+
+;; Propagation rules: failures in 'lean-oracle' block downstream tasks
+(normally r-propagate-diff-harness-from-lean-oracle-failed failed-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-permanently-failed permanently-failed-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-stale-v1 stale-v1-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-timeout-v1 timeout-v1-lean-oracle upstream-blocked-diff-harness)
+(normally r-propagate-diff-harness-from-lean-oracle-blocked upstream-blocked-lean-oracle upstream-blocked-diff-harness)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-lean-oracle))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-diff-harness)
+  (normally r-cl-state-v1-diff-harness claim-v1-diff-harness state-claimed-v1-diff-harness)
+  (normally r-cl-chain-v1-diff-harness state-claimed-v1-diff-harness claimed-diff-harness)
+)
+
+;; Propagation rules: failures in 'diff-harness' block downstream tasks
+(normally r-propagate-ci-pipeline-from-diff-harness-failed failed-diff-harness upstream-blocked-ci-pipeline)
+(normally r-propagate-ci-pipeline-from-diff-harness-permanently-failed permanently-failed-diff-harness upstream-blocked-ci-pipeline)
+(normally r-propagate-ci-pipeline-from-diff-harness-stale-v1 stale-v1-diff-harness upstream-blocked-ci-pipeline)
+(normally r-propagate-ci-pipeline-from-diff-harness-timeout-v1 timeout-v1-diff-harness upstream-blocked-ci-pipeline)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-diff-harness))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-ci-pipeline)
+  (normally r-cl-state-v1-ci-pipeline claim-v1-ci-pipeline state-claimed-v1-ci-pipeline)
+  (normally r-cl-chain-v1-ci-pipeline state-claimed-v1-ci-pipeline claimed-ci-pipeline)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-ci-pipeline))
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given claim-v1-prove-defeater-asymmetry)
+  (normally r-cl-state-v1-prove-defeater-asymmetry claim-v1-prove-defeater-asymmetry state-claimed-v1-prove-defeater-asymmetry)
+  (normally r-cl-chain-v1-prove-defeater-asymmetry state-claimed-v1-prove-defeater-asymmetry claimed-prove-defeater-asymmetry)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:04:59Z"
+  (given completed-prove-defeater-asymmetry))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-definite-soundness)
+  (normally r-cl-state-v1-prove-definite-soundness claim-v1-prove-definite-soundness state-claimed-v1-prove-definite-soundness)
+  (normally r-cl-chain-v1-prove-definite-soundness state-claimed-v1-prove-definite-soundness claimed-prove-definite-soundness)
+)
+
+;; Propagation rules: failures in 'prove-definite-soundness' block downstream tasks
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-failed failed-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-permanently-failed permanently-failed-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-stale-v1 stale-v1-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-timeout-v1 timeout-v1-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+(normally r-propagate-prove-definite-completeness-from-prove-definite-soundness-blocked upstream-blocked-prove-definite-soundness upstream-blocked-prove-definite-completeness)
+
+;; Transitive propagation: upstream-blocked cascades through dependency chain
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-blocked upstream-blocked-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-blocked upstream-blocked-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-blocked upstream-blocked-prove-defeasible-completeness upstream-blocked-prove-consistency)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-definite-soundness))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-definite-completeness)
+  (normally r-cl-state-v1-prove-definite-completeness claim-v1-prove-definite-completeness state-claimed-v1-prove-definite-completeness)
+  (normally r-cl-chain-v1-prove-definite-completeness state-claimed-v1-prove-definite-completeness claimed-prove-definite-completeness)
+)
+
+;; Propagation rules: failures in 'prove-definite-completeness' block downstream tasks
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-failed failed-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-permanently-failed permanently-failed-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-stale-v1 stale-v1-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+(normally r-propagate-prove-defeasible-soundness-from-prove-definite-completeness-timeout-v1 timeout-v1-prove-definite-completeness upstream-blocked-prove-defeasible-soundness)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-definite-completeness))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-defeasible-soundness)
+  (normally r-cl-state-v1-prove-defeasible-soundness claim-v1-prove-defeasible-soundness state-claimed-v1-prove-defeasible-soundness)
+  (normally r-cl-chain-v1-prove-defeasible-soundness state-claimed-v1-prove-defeasible-soundness claimed-prove-defeasible-soundness)
+)
+
+;; Propagation rules: failures in 'prove-defeasible-soundness' block downstream tasks
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-failed failed-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-permanently-failed permanently-failed-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-stale-v1 stale-v1-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+(normally r-propagate-prove-defeasible-completeness-from-prove-defeasible-soundness-timeout-v1 timeout-v1-prove-defeasible-soundness upstream-blocked-prove-defeasible-completeness)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-defeasible-soundness))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-defeasible-completeness)
+  (normally r-cl-state-v1-prove-defeasible-completeness claim-v1-prove-defeasible-completeness state-claimed-v1-prove-defeasible-completeness)
+  (normally r-cl-chain-v1-prove-defeasible-completeness state-claimed-v1-prove-defeasible-completeness claimed-prove-defeasible-completeness)
+)
+
+;; Propagation rules: failures in 'prove-defeasible-completeness' block downstream tasks
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-failed failed-prove-defeasible-completeness upstream-blocked-prove-consistency)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-permanently-failed permanently-failed-prove-defeasible-completeness upstream-blocked-prove-consistency)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-stale-v1 stale-v1-prove-defeasible-completeness upstream-blocked-prove-consistency)
+(normally r-propagate-prove-consistency-from-prove-defeasible-completeness-timeout-v1 timeout-v1-prove-defeasible-completeness upstream-blocked-prove-consistency)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-defeasible-completeness))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-consistency)
+  (normally r-cl-state-v1-prove-consistency claim-v1-prove-consistency state-claimed-v1-prove-consistency)
+  (normally r-cl-chain-v1-prove-consistency state-claimed-v1-prove-consistency claimed-prove-consistency)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-consistency))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-termination)
+  (normally r-cl-state-v1-prove-termination claim-v1-prove-termination state-claimed-v1-prove-termination)
+  (normally r-cl-chain-v1-prove-termination state-claimed-v1-prove-termination claimed-prove-termination)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-termination))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-ambiguity-blocking)
+  (normally r-cl-state-v1-ambiguity-blocking claim-v1-ambiguity-blocking state-claimed-v1-ambiguity-blocking)
+  (normally r-cl-chain-v1-ambiguity-blocking state-claimed-v1-ambiguity-blocking claimed-ambiguity-blocking)
+)
+
+;; Propagation rules: failures in 'ambiguity-blocking' block downstream tasks
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-failed failed-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-permanently-failed permanently-failed-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-stale-v1 stale-v1-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-timeout-v1 timeout-v1-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+(normally r-propagate-ambiguity-propagation-from-ambiguity-blocking-blocked upstream-blocked-ambiguity-blocking upstream-blocked-ambiguity-propagation)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-ambiguity-blocking))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-ambiguity-propagation)
+  (normally r-cl-state-v1-ambiguity-propagation claim-v1-ambiguity-propagation state-claimed-v1-ambiguity-propagation)
+  (normally r-cl-chain-v1-ambiguity-propagation state-claimed-v1-ambiguity-propagation claimed-ambiguity-propagation)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-ambiguity-propagation))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-confluence)
+  (normally r-cl-state-v1-prove-confluence claim-v1-prove-confluence state-claimed-v1-prove-confluence)
+  (normally r-cl-chain-v1-prove-confluence state-claimed-v1-prove-confluence claimed-prove-confluence)
+)
+
+;; Propagation rules: failures in 'prove-confluence' block downstream tasks
+(normally r-propagate-prove-equivalence-from-prove-confluence-failed failed-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-permanently-failed permanently-failed-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-stale-v1 stale-v1-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-timeout-v1 timeout-v1-prove-confluence upstream-blocked-prove-equivalence)
+(normally r-propagate-prove-equivalence-from-prove-confluence-blocked upstream-blocked-prove-confluence upstream-blocked-prove-equivalence)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-confluence))
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given claim-v1-prove-equivalence)
+  (normally r-cl-state-v1-prove-equivalence claim-v1-prove-equivalence state-claimed-v1-prove-equivalence)
+  (normally r-cl-chain-v1-prove-equivalence state-claimed-v1-prove-equivalence claimed-prove-equivalence)
+)
+
+(claims agent:claude
+  :at "2026-07-04T11:05:00Z"
+  (given completed-prove-equivalence))

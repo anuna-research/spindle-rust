@@ -4,10 +4,10 @@
 |---|---|
 | Document ID | SPEC-015 |
 | Title | Formal Verification of Spindle Defeasible Logic Core in Lean 4 |
-| Version | 1.0.0 |
-| Status | Draft |
+| Version | 1.1.0 |
+| Status | Implemented |
 | Created | 2026-02-15 |
-| Last Updated | 2026-03-20 |
+| Last Updated | 2026-07-04 |
 | Authors | agent:architect |
 | Reviewers | Core Maintainers |
 | Protocol | [USDD Agent Protocol v1.3.0](../../handbook/engineering/usdd-agent-protocol.md) |

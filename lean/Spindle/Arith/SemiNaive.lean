@@ -215,9 +215,27 @@ section Termination
 BEq on Literal is derived from structural BEq on Term. For all term
 variants, BEq coincides with propositional equality (no opaque Float). -/
 
+private theorem Term.beq_self (t : Term) : (t == t) = true := by
+  cases t with
+  | symbol s => exact beq_self_eq_true s
+  | integer n => exact beq_self_eq_true n
+  | decimal n s =>
+    show (n == n && s == s) = true
+    rw [beq_self_eq_true, beq_self_eq_true]; rfl
+  | «variable» v => exact beq_self_eq_true v
+
+private theorem List.term_beq_self (xs : List Term) : (xs == xs) = true := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    show (x == x && xs == xs) = true
+    rw [Term.beq_self, ih]; rfl
+
 private theorem Literal.beq_self (l : Literal) : (l == l) = true := by
-  unfold BEq.beq instBEqLiteral
-  simp only [Literal.mk.injEq, and_self]
+  cases l with
+  | mk name neg args =>
+    show (name == name && (neg == neg && args == args)) = true
+    rw [beq_self_eq_true, beq_self_eq_true, List.term_beq_self]; rfl
 
 /-- Propositional list membership implies BEq-based `elem`. -/
 private theorem elem_of_mem {l : Literal} {xs : Interpretation}

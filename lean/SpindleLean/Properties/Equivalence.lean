@@ -110,8 +110,10 @@ theorem partialStep_new_satisfies_canProve (t : Theory) (delta lambda current : 
     are the completeness results, which require showing the iteration
     reaches the fixed point within the fuel budget.
 
-    For now we state the forward (soundness) direction, which is fully proven,
-    and the backward (completeness) direction with sorry. -/
+    Both directions are fully proven: soundness below (`reason_plusD_sound`)
+    and completeness as `reason_plusD_complete` at the end of this file.
+    The corresponding +d results are `faithful_plusd_forward` and
+    `faithful_plusd_backward` in `Properties/Faithfulness.lean`. -/
 
 -- Soundness of +D: if reason concludes +D l, then l has a definite derivation
 theorem reason_plusD_sound (t : Theory) (l : Literal)
