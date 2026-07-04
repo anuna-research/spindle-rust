@@ -180,15 +180,26 @@ pub(crate) fn resolve_defeasible(
         &state.definite_proven,
         &state.defeasible_body_remaining,
     );
-    // Families with at least one member in lambda: an atemporal body literal
-    // whose family is alive may yet be satisfied by a temporal member, so
-    // -d events on the exact atemporal literal must not discard its rules.
-    let mut alive_families: FxHashSet<FamilyId> = FxHashSet::default();
+    // Live family support: how many members of each family are still
+    // possibly provable — in the lambda over-approximation AND not yet
+    // disproven. An atemporal body literal is satisfiable (famSat) while
+    // its family has live members, so -d events must not discard its
+    // rules until the LAST live member is dead. Defeat events (a -d for
+    // a lambda-alive member, e.g. a superiority loss) decrement the
+    // count, so a family whose every candidate has been defeated does
+    // discard its dependents — the spec's condition (3) inductive
+    // discard (see the reviewer-reported regression fixed here).
+    let mut family_live: FxHashMap<FamilyId, usize> = FxHashMap::default();
     for &id in indexed.all_literal_ids() {
         if lambda.contains(id) {
-            alive_families.insert(FamilyId::from(&indexed.resolve_literal(id)));
+            *family_live
+                .entry(FamilyId::from(&indexed.resolve_literal(id)))
+                .or_insert(0) += 1;
         }
     }
+    // Idempotence guard: a literal's death is counted at most once even if
+    // multiple -d events are queued for it.
+    let mut counted_dead: FxHashSet<LitId> = FxHashSet::default();
     for &lit_id in &all_ids {
         if state.defeasible_proven.contains(lit_id) || state.defeasible_disproven.contains(lit_id) {
             continue;
@@ -288,35 +299,43 @@ pub(crate) fn resolve_defeasible(
                     *remaining -= 1;
                 }
             } else {
-                // Family-aware discard (SPEC-020; mirrors the Lean family
-                // model's famSat semantics). A -d event for literal L only
-                // discards a rule when it removes the LAST way to satisfy a
-                // body literal:
+                // Family-aware discard (SPEC-020; famSat semantics). A -d
+                // event for literal L only discards a rule when it removes
+                // the LAST way to satisfy a body literal:
                 //  - a TEMPORAL body literal requires exactly L, so an exact
                 //    match discards;
                 //  - an ATEMPORAL body literal is family-satisfiable, so it
-                //    is dead only when its whole family is unfounded (no
-                //    member in the lambda over-approximation). Otherwise a
-                //    yet-unproven family member may still fire the rule, and
-                //    as an attacker the rule keeps blocking (the model's
-                //    lambda-based attackReaches).
-                // Family events (L temporal, body atemporal in L's family)
-                // never discard: one member failing does not kill the family.
+                //    is dead only when its family has no LIVE member left —
+                //    members outside lambda never counted (unfounded), and
+                //    lambda-alive members stop counting when defeated (this
+                //    very event, decremented below). A family with a live
+                //    member may still fire the rule later, and as an
+                //    attacker it keeps blocking meanwhile.
                 let event_lit = indexed.resolve_literal(q_id);
+                // A defeat of a lambda-alive member shrinks its family's
+                // live support (idempotently).
+                if lambda.contains(q_id) && counted_dead.insert(q_id) {
+                    if let Some(c) = family_live.get_mut(&FamilyId::from(&event_lit)) {
+                        *c = c.saturating_sub(1);
+                    }
+                }
                 let rule = theory
                     .get_rule(rule_label)
                     .expect("rule label from body index must exist");
+                let event_family = FamilyId::from(&event_lit);
                 let should_discard = rule.body.iter().any(|bl| match bl.as_logic() {
                     Some(logic) => {
                         let b = logic.to_literal();
-                        if b == event_lit {
-                            if b.temporal.is_empty() {
-                                !alive_families.contains(&FamilyId::from(&b))
-                            } else {
-                                true
-                            }
+                        if b.temporal.is_empty() {
+                            // Atemporal body: dead only when its family has
+                            // no live member. (This event reaches the rule
+                            // via the exact or family index, so b is in the
+                            // event's family.)
+                            FamilyId::from(&b) == event_family
+                                && family_live.get(&FamilyId::from(&b)).copied().unwrap_or(0) == 0
                         } else {
-                            false
+                            // Temporal body: requires exactly this literal.
+                            b == event_lit
                         }
                     }
                     None => false,

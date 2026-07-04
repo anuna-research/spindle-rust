@@ -38,6 +38,29 @@
 > temporal bodies; whole-family-unfounded (no member in lambda) for
 > atemporal bodies. After the fix: 400,730 temporal-family theories at
 > full scope, zero divergences.
+>
+> **Class-3 refinement (2026-07-05, review finding).** The first fix
+> guarded discards by lambda-aliveness alone, which over-protected:
+> a premise that is lambda-alive but ACTUALLY DEFEATED (e.g. loses a
+> superiority battle) kept its dependent attackers alive, blocking valid
+> conclusions — a regression vs the spec's condition (3) inductive
+> discard, with a minimal witness of 5 rules (outside the exhaustive
+> scope; caught in review). Refined to LIVE-member counting: a family's
+> live support = lambda members not yet disproven, decremented on defeat
+> events; atemporal-bodied rules are discarded exactly when their
+> family's live count reaches zero. Regression test:
+> `test_defeated_premise_discards_dependent_attacker`.
+>
+> **Known model over-approximation (documented, not a regression).** The
+> Lean models (exact and family) discard attackers via lambda-based
+> `attackReaches` only — they do not model constructive defeat-discard
+> (the spec's `∃a ∈ body(s), -d a ∈ P` where the -d arises from a lost
+> battle rather than unfoundedness). The engine implements the spec. The
+> smallest theory distinguishing the two requires ≥ 4 rules plus
+> superiority, provably outside the ≤3-rule exhaustive enumeration, so
+> all difftests remain exact within their scope. Closing this gap in the
+> model requires a two-sided (proved/disproved) fixed point — recorded
+> as future work.
 
 # Known Divergences: Rust Engine vs Verified Lean Model (historical)
 

@@ -151,7 +151,11 @@ defeater bodies.
 Difftested exhaustively (`lean_family_exhaustive_difftest.rs`): 400,730
 ground temporal theories at full scope, zero divergences — after fixing
 an order-dependent family-discard bug in the engine that the difftest
-surfaced (see `lean/DIVERGENCES.md`, class 3).
+surfaced, subsequently refined to live-member counting so that defeated
+premises still discard their dependent attackers (see
+`lean/DIVERGENCES.md`, class 3 and its refinement; the models'
+lambda-only attack discard is a documented over-approximation with no
+witness below 4 rules).
 
 #### As-Of Temporal Filter (`Spindle/Arith/AsOfFilter.lean`)
 

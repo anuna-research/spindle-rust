@@ -619,3 +619,45 @@ fn test_why_not_with_ambiguity() {
         );
     }
 }
+
+// ============================================================================
+// Regression: family-aware discard must still discard DEFEATED premises
+// (reviewer-reported regression on the family-aware discard change).
+//
+// a => p, a => ~p with r2 > r1 defeats p. The attacker p => ~q depends on
+// the defeated premise, so it must be discarded (spec condition (3):
+// exists a in body(s) with -d a) and q must be derivable via a => q.
+// The family-aware guard must only protect premises whose family still
+// has LIVE (lambda-alive, not-yet-defeated) members — not premises that
+// genuinely lost a superiority battle.
+// ============================================================================
+
+#[test]
+fn test_defeated_premise_discards_dependent_attacker() {
+    let mut theory = Theory::new();
+    theory.add_fact("a");
+    let r1 = theory.add_defeasible_rule(&["a"], "p");
+    let r2 = theory.add_defeasible_rule(&["a"], "~p");
+    theory.add_superiority(&r2, &r1);
+    // Attacker of q, depending on the defeated premise p.
+    theory.add_defeater(&["p"], "~q");
+    theory.add_defeasible_rule(&["a"], "q");
+
+    let conclusions = reason(&theory).unwrap();
+
+    let plus_d = |name: &str, neg: bool| {
+        conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == name
+                && c.literal.negation == neg
+        })
+    };
+
+    assert!(plus_d("p", true), "~p should win via superiority");
+    assert!(!plus_d("p", false), "p should be defeated (-d)");
+    assert!(
+        plus_d("q", false),
+        "q must be derivable: its only attacker depends on the defeated premise p \
+         and must be discarded (condition (3) inductive discard)"
+    );
+}
