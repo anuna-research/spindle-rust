@@ -58,7 +58,21 @@ def runOracle : IO Unit := do
   let output := DiffTest.runOracle input
   IO.println output
 
+/-- Batch mode: one theory JSON per input line (JSONL), one result JSON per
+    output line, in order. Amortizes process startup over many small cases —
+    used by the exhaustive small-scope difftest on the Rust side. -/
+def runOracleBatch : IO Unit := do
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  let input ← stdin.readToEnd
+  for line in input.splitOn "\n" do
+    let line := line.trim
+    if !line.isEmpty then
+      stdout.putStrLn (DiffTest.runOracle line)
+  stdout.flush
+
 def main (args : List String) : IO Unit := do
   match args with
   | ["--oracle"] => runOracle
+  | ["--oracle-batch"] => runOracleBatch
   | _ => runTweetyTest
