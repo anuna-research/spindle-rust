@@ -23,6 +23,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::{IndexedTheory, LitId};
+use crate::projection::FamilyId;
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
@@ -179,6 +180,15 @@ pub(crate) fn resolve_defeasible(
         &state.definite_proven,
         &state.defeasible_body_remaining,
     );
+    // Families with at least one member in lambda: an atemporal body literal
+    // whose family is alive may yet be satisfied by a temporal member, so
+    // -d events on the exact atemporal literal must not discard its rules.
+    let mut alive_families: FxHashSet<FamilyId> = FxHashSet::default();
+    for &id in indexed.all_literal_ids() {
+        if lambda.contains(id) {
+            alive_families.insert(FamilyId::from(&indexed.resolve_literal(id)));
+        }
+    }
     for &lit_id in &all_ids {
         if state.defeasible_proven.contains(lit_id) || state.defeasible_disproven.contains(lit_id) {
             continue;
@@ -278,7 +288,42 @@ pub(crate) fn resolve_defeasible(
                     *remaining -= 1;
                 }
             } else {
-                *state.rule_discarded.get_mut(rule_label.as_str()).unwrap() = true;
+                // Family-aware discard (SPEC-020; mirrors the Lean family
+                // model's famSat semantics). A -d event for literal L only
+                // discards a rule when it removes the LAST way to satisfy a
+                // body literal:
+                //  - a TEMPORAL body literal requires exactly L, so an exact
+                //    match discards;
+                //  - an ATEMPORAL body literal is family-satisfiable, so it
+                //    is dead only when its whole family is unfounded (no
+                //    member in the lambda over-approximation). Otherwise a
+                //    yet-unproven family member may still fire the rule, and
+                //    as an attacker the rule keeps blocking (the model's
+                //    lambda-based attackReaches).
+                // Family events (L temporal, body atemporal in L's family)
+                // never discard: one member failing does not kill the family.
+                let event_lit = indexed.resolve_literal(q_id);
+                let rule = theory
+                    .get_rule(rule_label)
+                    .expect("rule label from body index must exist");
+                let should_discard = rule.body.iter().any(|bl| match bl.as_logic() {
+                    Some(logic) => {
+                        let b = logic.to_literal();
+                        if b == event_lit {
+                            if b.temporal.is_empty() {
+                                !alive_families.contains(&FamilyId::from(&b))
+                            } else {
+                                true
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    None => false,
+                });
+                if should_discard {
+                    *state.rule_discarded.get_mut(rule_label.as_str()).unwrap() = true;
+                }
             }
         }
 

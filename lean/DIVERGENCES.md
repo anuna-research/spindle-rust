@@ -24,6 +24,20 @@
 >
 > The analysis below is retained as the historical record of what the
 > exhaustive difftest found and why each decision was taken.
+>
+> **Class 3 (2026-07-05, temporal-family difftest — RESOLVED).** The
+> family difftest (`lean_family_exhaustive_difftest.rs`) found an
+> order-dependent discard in the worklist: a `-d` event for an exact
+> atemporal literal discarded rules whose atemporal body was still
+> family-satisfiable by a temporal member (e.g. `~p -> p` with
+> `=> ~p[1,10]`), so outcomes depended on whether the family supporter
+> was seeded before the discard (facts won the race; defeasible
+> supporters lost it). Fixed by family-aware discard in
+> `reason/defeasible.rs`: a `-d` event only discards a rule when it
+> removes the LAST way to satisfy a body literal — exact match for
+> temporal bodies; whole-family-unfounded (no member in lambda) for
+> atemporal bodies. After the fix: 400,730 temporal-family theories at
+> full scope, zero divergences.
 
 # Known Divergences: Rust Engine vs Verified Lean Model (historical)
 

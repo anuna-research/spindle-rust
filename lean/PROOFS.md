@@ -2,7 +2,7 @@
 
 This directory contains a complete formal verification of the Spindle defeasible logic engine in Lean 4.27.0 with Mathlib 4.27.0.
 
-**Status:** 0 sorry, 0 custom axioms, 280+ proven theorems.
+**Status:** 0 sorry, 0 custom axioms, 300+ proven theorems.
 
 **Verification guarantees** (as of 2026-07-04):
 
@@ -131,6 +131,63 @@ The superiority relation remains well-formed under theory construction.
 | `empty_acyclic` | The empty theory has an acyclic superiority relation |
 | `empty_irreflexive` | The empty theory has an irreflexive superiority relation |
 | `addSuperiority_preserves_acyclic` | Adding a non-cyclic, non-self-loop superiority pair preserves acyclicity |
+
+#### Temporal-Family Reasoning (`SpindleLean/Family.lean`)
+
+The SPEC-020 semantics for ground temporal theories, established by
+direct engine probing (`crates/spindle-core/tests/family_probe.rs`):
+exact-identity conflict (the complement keeps its window; disjoint,
+overlapping, and atemporal complements never conflict) and family
+support for atemporal bodies only (temporal bodies need exact windows),
+applied uniformly across the definite phase, defeasible phase, and
+defeater bodies.
+
+| Theorem | Statement |
+|---------|-----------|
+| `FLit.famSat_iff` | Family-support characterization: satisfied iff exactly proven, or atemporal with a proven family member |
+| `FLit.famSat_eq_exactSat_of_atemporal` | On window-free sets, family satisfaction collapses to exact membership |
+| `bodySat_eq_exact_of_atemporal`, `deltaStepWith_parity` | **Non-temporal parity**: the family machinery is invisible on window-free theories (SPEC-020's non-temporal equivalence requirement) |
+
+Difftested exhaustively (`lean_family_exhaustive_difftest.rs`): 400,730
+ground temporal theories at full scope, zero divergences — after fixing
+an order-dependent family-discard bug in the engine that the difftest
+surfaced (see `lean/DIVERGENCES.md`, class 3).
+
+#### As-Of Temporal Filter (`Spindle/Arith/AsOfFilter.lean`)
+
+Formalizes `filter_temporal` (the `PrepareOptions.reference_time`
+pipeline stage).
+
+| Theorem | Statement |
+|---------|-----------|
+| `mem_filterTemporal` | The as-of contract: a rule survives iff active at the reference time (rule window AND head AND body windows) |
+| `filterTemporal_subset`, `filterTemporal_idempotent` | Filtering only removes; same-instant filtering is idempotent |
+| `filterTemporal_atemporal` | Window-free theories pass through unchanged |
+| `filterSup_kept` | A superiority pair survives iff both endpoint rules survive |
+
+#### Requires Operator (`Spindle/Arith/Requires.lean`)
+
+Formalizes the verified `requires` search (IMPL-011): abduce candidates
+verified by injection and re-reasoning.
+
+| Theorem | Statement |
+|---------|-----------|
+| `requiresVerify_facts_mem` | Acceptance contract: a candidate is returned iff injecting it makes the goal provable |
+| `requiresVerify_sound`, `requiresVerify_rejected` | Accepted candidates derive the goal; rejected ones genuinely fail |
+| `requires_whatIf`, `requires_refines_abduce` | Cross-operator consistency with what-if and abduce |
+
+#### SPL Grammar Fragment (`Spindle/Spl/Grammar.lean`)
+
+The propositional-SDL fragment of the SPL input grammar (LangSec: the
+grammar is part of the contract), with canonical printer and parser.
+
+| Theorem | Statement |
+|---------|-----------|
+| `decode_encode_stmt`, `decode_encode_theory` | **Grammar roundtrip**: canonically encoded theories decode losslessly — no fragment statement is ambiguous or unrepresentable |
+
+The string layer is exercised end-to-end by `spl_parser_difftest.rs`:
+1,684 fragment theories, canonical text parsed identically by the Lean
+model and `spindle-parser`.
 
 ---
 

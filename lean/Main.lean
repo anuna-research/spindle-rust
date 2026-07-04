@@ -1,4 +1,5 @@
 import SpindleLean
+import Spindle.Spl.Grammar
 
 /-
   Tweety Triangle: the canonical defeasible logic example.
@@ -71,8 +72,60 @@ def runOracleBatch : IO Unit := do
       stdout.putStrLn (DiffTest.runOracle line)
   stdout.flush
 
+/-- Batch mode for the temporal-family model: one theory JSON per line,
+    one result per line (see SpindleLean/DiffTest/FamilyOracle.lean). -/
+def runFamilyOracleBatch : IO Unit := do
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  let input ← stdin.readToEnd
+  for line in input.splitOn "\n" do
+    let line := line.trim
+    if !line.isEmpty then
+      stdout.putStrLn (Family.Oracle.processLine line)
+  stdout.flush
+
+namespace SplParse
+
+def litJson (l : Spl.SplLit) : String :=
+  s!"\{\"name\":\"{l.name}\",\"negated\":{l.negated}}"
+
+def typeStr : Spl.SplRuleType → String
+  | .strict => "strict"
+  | .defeasible => "defeasible"
+  | .defeater => "defeater"
+
+def stmtJson : Spl.SplStmt → String
+  | .fact l => s!"\{\"kind\":\"fact\",\"head\":{litJson l}}"
+  | .rule t label body head =>
+    let bodyJ := String.intercalate "," (body.map litJson)
+    s!"\{\"kind\":\"rule\",\"type\":\"{typeStr t}\",\"label\":\"{label}\",\"body\":[{bodyJ}],\"head\":{litJson head}}"
+  | .prefer w l => s!"\{\"kind\":\"prefer\",\"winner\":\"{w}\",\"loser\":\"{l}\"}"
+
+def processLine (line : String) : String :=
+  match Spl.parseTheory line with
+  | some t =>
+    s!"\{\"stmts\":[{String.intercalate "," (t.map stmtJson)}]}"
+  | none => "{\"error\":\"parse failed\"}"
+
+end SplParse
+
+/-- Batch mode for the SPL grammar fragment: one theory (whitespace-joined
+    statements) per input line; one normalized-JSON parse result per output
+    line. -/
+def runSplParseBatch : IO Unit := do
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  let input ← stdin.readToEnd
+  for line in input.splitOn "\n" do
+    let line := line.trim
+    if !line.isEmpty then
+      stdout.putStrLn (SplParse.processLine line)
+  stdout.flush
+
 def main (args : List String) : IO Unit := do
   match args with
   | ["--oracle"] => runOracle
   | ["--oracle-batch"] => runOracleBatch
+  | ["--oracle-family-batch"] => runFamilyOracleBatch
+  | ["--parse-spl-batch"] => runSplParseBatch
   | _ => runTweetyTest

@@ -57,8 +57,14 @@ use spindle_core::theory::Theory;
 
 const ATOMS: &[&str] = &["p", "q"];
 
-/// Propositional literal: (atom index, negated).
-type Lit = (u8, bool);
+/// Small-scope literal: (atom index, negated, mode).
+/// Mode: 0 = none, 1 = obligation [O], 2 = permission [P] — mirroring the
+/// deontic modes the Lean oracle parses. Mode-negation (¬[O]) is out of
+/// scope on both sides.
+type Lit = (u8, bool, u8);
+
+const MODE_NAMES_LEAN: &[&str] = &["", "obligation", "permission"];
+const MODE_NAMES_RUST: &[&str] = &["", "O", "P"];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum RType {
@@ -86,14 +92,11 @@ struct Shape {
     body: Vec<Lit>,
 }
 
-/// All rule shapes in scope: facts (empty body) plus strict/defeasible/
-/// defeater rules with bodies of size <= 1. 4 + 3*4*5 = 64 shapes.
-fn all_shapes() -> Vec<Shape> {
-    let lits: Vec<Lit> = (0..ATOMS.len() as u8)
-        .flat_map(|a| [(a, false), (a, true)])
-        .collect();
+/// Rule shapes over a literal universe: facts (empty body) plus
+/// strict/defeasible/defeater rules with bodies of size <= 1.
+fn shapes_for(lits: &[Lit]) -> Vec<Shape> {
     let mut shapes = Vec::new();
-    for &h in &lits {
+    for &h in lits {
         shapes.push(Shape {
             rtype: RType::Fact,
             head: h,
@@ -101,13 +104,13 @@ fn all_shapes() -> Vec<Shape> {
         });
     }
     for rt in [RType::Strict, RType::Defeasible, RType::Defeater] {
-        for &h in &lits {
+        for &h in lits {
             shapes.push(Shape {
                 rtype: rt,
                 head: h,
                 body: vec![],
             });
-            for &b in &lits {
+            for &b in lits {
                 shapes.push(Shape {
                     rtype: rt,
                     head: h,
@@ -127,8 +130,24 @@ struct Case {
     superiority: Vec<(usize, usize)>,
 }
 
+/// Propositional universe: 2 atoms x negation, no modes (4 literals,
+/// 64 shapes).
+fn propositional_lits() -> Vec<Lit> {
+    (0..ATOMS.len() as u8)
+        .flat_map(|a| [(a, false, 0), (a, true, 0)])
+        .collect()
+}
+
+/// Modal universe: 1 atom x negation x {none, [O], [P]} (6 literals,
+/// 132 shapes).
+fn modal_lits() -> Vec<Lit> {
+    (0..3u8)
+        .flat_map(|m| [(0, false, m), (0, true, m)])
+        .collect()
+}
+
 fn enumerate_cases(level: &str) -> Vec<Case> {
-    let shapes = all_shapes();
+    let shapes = shapes_for(&propositional_lits());
     let n = shapes.len();
     let mut cases = Vec::new();
 
@@ -144,6 +163,29 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
     for i in 0..n {
         for j in (i + 1)..n {
             let rules = vec![shapes[i].clone(), shapes[j].clone()];
+            for sup in [vec![], vec![(0, 1)], vec![(1, 0)]] {
+                cases.push(Case {
+                    rules: rules.clone(),
+                    superiority: sup,
+                });
+            }
+        }
+    }
+
+    // Modal tier: singletons and pairs (with all superiority options) over
+    // the 1-atom x 3-mode universe. Modes are identity-bearing: [O]p and
+    // [P]p are distinct atoms; the complement of [O]p is [O]~p.
+    let mshapes = shapes_for(&modal_lits());
+    let mn = mshapes.len();
+    for i in 0..mn {
+        cases.push(Case {
+            rules: vec![mshapes[i].clone()],
+            superiority: vec![],
+        });
+    }
+    for i in 0..mn {
+        for j in (i + 1)..mn {
+            let rules = vec![mshapes[i].clone(), mshapes[j].clone()];
             for sup in [vec![], vec![(0, 1)], vec![(1, 0)]] {
                 cases.push(Case {
                     rules: rules.clone(),
@@ -197,10 +239,17 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
 // ---------------------------------------------------------------------------
 
 fn lit_json(l: Lit) -> String {
-    format!(
-        "{{\"name\":\"{}\",\"negated\":{}}}",
-        ATOMS[l.0 as usize], l.1
-    )
+    if l.2 == 0 {
+        format!(
+            "{{\"name\":\"{}\",\"negated\":{}}}",
+            ATOMS[l.0 as usize], l.1
+        )
+    } else {
+        format!(
+            "{{\"name\":\"{}\",\"negated\":{},\"mode\":\"{}\"}}",
+            ATOMS[l.0 as usize], l.1, MODE_NAMES_LEAN[l.2 as usize]
+        )
+    }
 }
 
 fn case_to_lean_json(case: &Case) -> String {
@@ -235,7 +284,18 @@ fn case_to_lean_json(case: &Case) -> String {
 fn case_pretty(case: &Case) -> String {
     let mut out = String::new();
     for (i, s) in case.rules.iter().enumerate() {
-        let lit_str = |l: &Lit| format!("{}{}", if l.1 { "~" } else { "" }, ATOMS[l.0 as usize]);
+        let lit_str = |l: &Lit| {
+            let mode = if l.2 == 0 {
+                String::new()
+            } else {
+                format!("[{}]", MODE_NAMES_RUST[l.2 as usize])
+            };
+            format!(
+                "{mode}{}{}",
+                if l.1 { "~" } else { "" },
+                ATOMS[l.0 as usize]
+            )
+        };
         let body: Vec<String> = s.body.iter().map(&lit_str).collect();
         let arrow = match s.rtype {
             RType::Fact => ">>",
@@ -260,10 +320,15 @@ fn case_pretty(case: &Case) -> String {
 // ---------------------------------------------------------------------------
 
 fn lit_rust(l: Lit) -> Literal {
+    let mode = match l.2 {
+        1 => Mode::obligation(),
+        2 => Mode::permission(),
+        _ => Mode::empty(),
+    };
     Literal::new(
         ATOMS[l.0 as usize],
         l.1,
-        Mode::empty(),
+        mode,
         Temporal::empty(),
         Vec::<String>::new(),
     )
@@ -289,20 +354,38 @@ fn case_to_rust_theory(case: &Case) -> Theory {
     theory
 }
 
+/// Comparison key: (name, negated, mode) with the mode normalized to the
+/// Lean oracle's spelling ("", "obligation", "permission", "forbidden").
+type Key = (String, bool, String);
+
+fn normalize_rust_mode(mode: &Mode) -> String {
+    match mode.name.as_deref() {
+        Some("O") => "obligation".to_string(),
+        Some("P") => "permission".to_string(),
+        Some("F") => "forbidden".to_string(),
+        Some(other) => other.to_string(),
+        None => String::new(),
+    }
+}
+
 /// Classification of a literal universe into the four conclusion sets.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Classified {
-    plus_d_upper: BTreeSet<(String, bool)>,  // +D
-    minus_d_upper: BTreeSet<(String, bool)>, // -D
-    plus_d_lower: BTreeSet<(String, bool)>,  // +d
-    minus_d_lower: BTreeSet<(String, bool)>, // -d
+    plus_d_upper: BTreeSet<Key>,  // +D
+    minus_d_upper: BTreeSet<Key>, // -D
+    plus_d_lower: BTreeSet<Key>,  // +d
+    minus_d_lower: BTreeSet<Key>, // -d
 }
 
 fn classify_rust(theory: &Theory) -> Result<Classified, String> {
     let conclusions = reason::reason(theory).map_err(|e| e.to_string())?;
     let mut c = Classified::default();
     for conc in conclusions {
-        let key = (conc.literal.name().to_string(), conc.literal.negation);
+        let key = (
+            conc.literal.name().to_string(),
+            conc.literal.negation,
+            normalize_rust_mode(&conc.literal.mode),
+        );
         match conc.conclusion_type {
             ConclusionType::DefinitelyProvable => {
                 c.plus_d_upper.insert(key);
@@ -403,6 +486,7 @@ fn classify_lean(result: &JValue) -> Classified {
         let key = (
             lit["name"].as_str().unwrap_or("").to_string(),
             lit["negated"].as_bool().unwrap_or(false),
+            lit["mode"].as_str().unwrap_or("").to_string(),
         );
         match conc["type"].as_str().unwrap_or("") {
             "+D" => {
@@ -467,7 +551,7 @@ fn exhaustive_sdl_difftest() {
             let lean = classify_lean(lean_result);
 
             // Does the Lean delta contain a complementary pair?
-            let delta_lits: BTreeSet<(String, bool)> = lean_result
+            let delta_lits: BTreeSet<Key> = lean_result
                 .get("delta")
                 .and_then(|v| v.as_array())
                 .map(|arr| {
@@ -476,6 +560,7 @@ fn exhaustive_sdl_difftest() {
                             (
                                 l["name"].as_str().unwrap_or("").to_string(),
                                 l["negated"].as_bool().unwrap_or(false),
+                                l["mode"].as_str().unwrap_or("").to_string(),
                             )
                         })
                         .collect()
@@ -483,7 +568,7 @@ fn exhaustive_sdl_difftest() {
                 .unwrap_or_default();
             let delta_inconsistent = delta_lits
                 .iter()
-                .any(|(n, neg)| delta_lits.contains(&(n.clone(), !neg)));
+                .any(|(n, neg, m)| delta_lits.contains(&(n.clone(), !neg, m.clone())));
 
             let theory = case_to_rust_theory(case);
             let rust = match classify_rust(&theory) {
@@ -501,7 +586,7 @@ fn exhaustive_sdl_difftest() {
             };
 
             // The Lean universe: every literal the oracle classified.
-            let universe: BTreeSet<(String, bool)> = lean
+            let universe: BTreeSet<Key> = lean
                 .plus_d_upper
                 .iter()
                 .chain(lean.minus_d_upper.iter())
@@ -510,11 +595,11 @@ fn exhaustive_sdl_difftest() {
                 .cloned()
                 .collect();
 
-            let restrict = |s: &BTreeSet<(String, bool)>| -> BTreeSet<(String, bool)> {
+            let restrict = |s: &BTreeSet<Key>| -> BTreeSet<Key> {
                 s.intersection(&universe).cloned().collect()
             };
 
-            let diffs: Vec<(&str, BTreeSet<(String, bool)>, BTreeSet<(String, bool)>)> = [
+            let diffs: Vec<(&str, BTreeSet<Key>, BTreeSet<Key>)> = [
                 (
                     "+D",
                     restrict(&rust.plus_d_upper),

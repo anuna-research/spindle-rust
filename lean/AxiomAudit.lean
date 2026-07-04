@@ -32,6 +32,15 @@ import Spindle.Arith.WhyNot
 #print axioms Spindle.Trust.stepDecay_antitone
 #print axioms Spindle.Trust.DecayLaw.effective_mem_unit
 
+-- Query, filter, family, and grammar results
+#print axioms Spindle.Arith.requiresVerify_facts_mem
+#print axioms Spindle.Arith.requiresVerify_rejected
+#print axioms Spindle.Arith.mem_filterTemporal
+#print axioms Spindle.Arith.filterTemporal_atemporal
+#print axioms Family.FLit.famSat_iff
+#print axioms Family.deltaStepWith_parity
+#print axioms Spl.decode_encode_theory
+
 -- Arithmetic / temporal / grounding results
 #print axioms Spindle.Arith.AllenRelation.compose_sound
 #print axioms Spindle.Arith.AllenRelation.holds_unique
