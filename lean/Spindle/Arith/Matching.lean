@@ -14,8 +14,33 @@ namespace Spindle.Arith
 
 /-- BEq true implies propositional equality for Term. -/
 theorem Term.eq_of_beq {a b : Term} (h : (a == b) = true) : a = b := by
-  cases a <;> cases b <;> simp [BEq.beq] at h <;> try (obtain rfl := h; rfl)
-  · obtain ⟨h1, h2⟩ := h; subst h1; subst h2; rfl
+  cases a with
+  | symbol s => cases b with
+    | symbol s' => exact congrArg Term.symbol (LawfulBEq.eq_of_beq h)
+    | integer n => exact Bool.noConfusion h
+    | decimal n sc => exact Bool.noConfusion h
+    | «variable» v => exact Bool.noConfusion h
+  | integer n => cases b with
+    | symbol s => exact Bool.noConfusion h
+    | integer n' => exact congrArg Term.integer (LawfulBEq.eq_of_beq h)
+    | decimal n' sc => exact Bool.noConfusion h
+    | «variable» v => exact Bool.noConfusion h
+  | decimal n sc => cases b with
+    | symbol s => exact Bool.noConfusion h
+    | integer n' => exact Bool.noConfusion h
+    | decimal n' sc' =>
+      have h' : (n == n' && sc == sc') = true := h
+      rw [Bool.and_eq_true] at h'
+      obtain ⟨h1, h2⟩ := h'
+      obtain rfl := LawfulBEq.eq_of_beq h1
+      obtain rfl := LawfulBEq.eq_of_beq h2
+      rfl
+    | «variable» v => exact Bool.noConfusion h
+  | «variable» v => cases b with
+    | symbol s => exact Bool.noConfusion h
+    | integer n => exact Bool.noConfusion h
+    | decimal n' sc => exact Bool.noConfusion h
+    | «variable» v' => exact congrArg Term.variable (LawfulBEq.eq_of_beq h)
 
 /-! ## Term-level matching -/
 
@@ -54,7 +79,8 @@ def matchLiteral (pat target : Literal) : Option Substitution :=
 
 /-! ## Helper: if-then-some-else-none elimination -/
 
-private theorem if_some_eq_some {c : Bool} {a b : α} (h : (if c then some a else none) = some b) :
+private theorem if_some_eq_some {α : Type _} {c : Bool} {a b : α}
+    (h : (if c then some a else none) = some b) :
     c = true ∧ a = b := by
   cases c <;> simp at h
   exact ⟨rfl, h⟩

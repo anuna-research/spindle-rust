@@ -4,6 +4,21 @@ This directory contains a complete formal verification of the Spindle defeasible
 
 **Status:** 0 sorry, 0 custom axioms, 260+ proven theorems.
 
+**Verification guarantees** (as of 2026-07-04):
+
+- The root module `Spindle.lean` imports every `Spindle/Arith/*` module, so
+  `lake build Spindle SpindleLean` type-checks the whole library — no orphaned
+  modules whose proofs silently escape compilation.
+- `AxiomAudit.lean` runs `#print axioms` over the flagship theorems. Every one
+  depends only on Lean's three standard axioms (`propext`, `Classical.choice`,
+  `Quot.sound`) — several on fewer. In particular there is no `sorryAx` (no
+  `sorry` anywhere in a dependency) and no `Lean.ofReduceBool` (no
+  `native_decide`; nothing trusts the compiler). Re-run with:
+
+  ```sh
+  cd lean && lake build Spindle SpindleLean && lake env lean AxiomAudit.lean
+  ```
+
 ## What Is Proven
 
 ### Core Properties of DL(d) Reasoning
