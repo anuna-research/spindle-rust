@@ -23,3 +23,6 @@ import Spindle.Arith.Abduce
 import Spindle.Arith.WhatIf
 import Spindle.Arith.WhyNot
 import Spindle.Arith.QuerySoundness
+import Spindle.Trust.Diminish
+import Spindle.Trust.WeakestLink
+import Spindle.Trust.Decay

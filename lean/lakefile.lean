@@ -34,3 +34,7 @@ lean_exe GroundingOracle where
 lean_exe EndToEndOracle where
   root := `Spindle.DiffTest.EndToEndOracle
   supportInterpreter := true
+
+lean_exe TrustOracle where
+  root := `Spindle.DiffTest.TrustOracle
+  supportInterpreter := true

@@ -19,6 +19,19 @@ import Spindle.Arith.WhyNot
 #print axioms Properties.partial_consistent
 #print axioms Properties.partial_consistent_no_superiority
 
+-- Trust layer results
+#print axioms Spindle.Trust.diminish_eq_mul
+#print axioms Spindle.Trust.diminish_antitone
+#print axioms Spindle.Trust.diminish_pos
+#print axioms Spindle.Trust.diminishAll_eq_prod
+#print axioms Spindle.Trust.diminishAll_le_single
+#print axioms Spindle.Trust.DerivationTree.weakestLink_le_child
+#print axioms Spindle.Trust.DerivationTree.le_weakestLink
+#print axioms Spindle.Trust.DerivationTree.diminishAll_weakestLink_le_child
+#print axioms Spindle.Trust.linearDecay_antitone
+#print axioms Spindle.Trust.stepDecay_antitone
+#print axioms Spindle.Trust.DecayLaw.effective_mem_unit
+
 -- Arithmetic / temporal / grounding results
 #print axioms Spindle.Arith.AllenRelation.compose_sound
 #print axioms Spindle.Arith.AllenRelation.holds_unique

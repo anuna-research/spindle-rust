@@ -2,7 +2,7 @@
 
 This directory contains a complete formal verification of the Spindle defeasible logic engine in Lean 4.27.0 with Mathlib 4.27.0.
 
-**Status:** 0 sorry, 0 custom axioms, 260+ proven theorems.
+**Status:** 0 sorry, 0 custom axioms, 280+ proven theorems.
 
 **Verification guarantees** (as of 2026-07-04):
 
@@ -131,6 +131,55 @@ The superiority relation remains well-formed under theory construction.
 | `empty_acyclic` | The empty theory has an acyclic superiority relation |
 | `empty_irreflexive` | The empty theory has an irreflexive superiority relation |
 | `addSuperiority_preserves_acyclic` | Adding a non-cyclic, non-self-loop superiority pair preserves acyclicity |
+
+---
+
+### Trust Layer (`Spindle/Trust/`)
+
+The trust-weighted reasoning layer (`crates/spindle-core/src/trust.rs`) is
+formalized over exact rationals. The model mirrors the f64 implementation's
+computations exactly (clamped subtraction, running-minimum fold, clamp-based
+decay) and is difftested against it (`lean_trust_oracle_difftest.rs`).
+
+#### Diminishment — graduated defeat (`Trust/Diminish.lean`)
+
+| Theorem | Statement |
+|---------|-----------|
+| `diminish_eq_mul` | The implementation's clamped-subtraction form equals the paper's multiplicative operator τ_c(1−τ_d) on the unit interval |
+| `diminish_le_self` | Pollock constraint 1 / bounded reduction: J(c,d) ≤ c |
+| `diminish_zero` | Pollock constraint 2 / zero-defeat limit: J(c,0) = c |
+| `diminish_one` | Full-defeat limit: J(c,1) = 0 (recovers binary defeat) |
+| `diminish_antitone` | Monotonicity: a more credible defeater reduces more |
+| `diminish_pos` | Relaxed third constraint: any d < 1 leaves a positive residue — full defeat only at d = 1 |
+| `diminish_diminish_comm` | Two diminishers commute |
+| `diminishAll_eq_prod` | n diminishers yield the product form c·∏(1−dᵢ) (order-independence) |
+| `diminishAll_le_single` | Collective diminishment is at least as strong as any individual diminisher |
+
+#### Weakest-link propagation (`Trust/WeakestLink.lean`)
+
+| Theorem | Statement |
+|---------|-----------|
+| `weakestLink_le_trust` | A conclusion is never more trusted than the rule that derived it |
+| `weakestLink_le_child` | A conclusion is never more trusted than any premise it rests on |
+| `le_weakestLink` | Weakest link is the greatest such lower bound |
+| `weakestLink_mem_unit` | Chain degrees stay in [0,1] |
+| `diminishAll_weakestLink_le_child` | Composition: the diminished chain degree is still bounded by every link |
+
+#### Temporal decay (`Trust/Decay.lean`)
+
+| Theorem | Statement |
+|---------|-----------|
+| `linearDecay_antitone`, `stepDecay_antitone` | Trust never recovers with age |
+| `linearDecay_nonneg/le_one`, `stepDecay_nonneg/le_one` | Multipliers stay in [0,1] |
+| `linearDecay_at_zero`, `stepDecay_at_zero` | Fresh testimony has full trust |
+| `effectiveTrust_le_base` | Decay never increases trust |
+| `DecayLaw.effective_mem_unit` | Any decay law keeps effective trust in [0, base] |
+
+`DecayLaw` is the abstract interface (range, freshness, antitonicity);
+linear and step decay are proven instances. Exponential decay
+(0.5^(age/half-life)) is irrational, satisfies the same interface over ℝ,
+and is exercised by the Rust unit tests; it is excluded from the
+rational-exact oracle.
 
 ---
 
