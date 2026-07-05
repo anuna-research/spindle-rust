@@ -33,18 +33,78 @@ pub(crate) mod definite;
 pub(crate) mod facts;
 pub(crate) mod state;
 
+use fixedbitset::FixedBitSet;
 use rustc_hash::FxHashSet;
 
 use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::index::IndexedTheory;
+use crate::literal::Literal;
 use crate::pipeline::{PrepareOptions, prepare};
 use crate::projection::{
-    ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
+    FamilyId, ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
 };
+use crate::rule::Rule;
 use crate::theory::Theory;
 
 use self::state::ReasoningState;
+
+/// Yield the body-slot indices of `rule` that a proven/disproven `event`
+/// literal satisfies, using the same match semantics as
+/// [`IndexedTheory::rules_with_body`](crate::index::IndexedTheory::rules_with_body):
+///
+/// - a **temporal** body slot is satisfied only by the exact literal — same
+///   family *and* same window;
+/// - an **atemporal** body slot is family-satisfiable, so any member of its
+///   family (any window, or none) satisfies it.
+///
+/// Each matching body position is yielded once; non-logic (arithmetic) body
+/// elements never match. This is the per-slot inverse of the body index: it
+/// tells the counter machinery *which* slot an event covers, so that several
+/// family members satisfying one atemporal slot count as a single
+/// satisfaction rather than one decrement each.
+pub(crate) fn matched_body_slots<'r>(
+    rule: &'r Rule,
+    event: &'r Literal,
+) -> impl Iterator<Item = usize> + 'r {
+    let event_family = FamilyId::from(event);
+    rule.body.iter().enumerate().filter_map(move |(i, bl)| {
+        let logic = bl.as_logic()?;
+        let b = logic.to_literal();
+        let matches = if b.is_temporal() {
+            // Exact-window identity: FamilyId excludes the temporal field, so
+            // the window must be compared explicitly (Literal's PartialEq also
+            // ignores it).
+            FamilyId::from(&b) == event_family && b.temporal == event.temporal
+        } else {
+            FamilyId::from(&b) == event_family
+        };
+        matches.then_some(i)
+    })
+}
+
+/// Record that `event` satisfies zero or more body slots of `rule`,
+/// decrementing `remaining` once per slot satisfied for the **first** time.
+///
+/// Idempotent per slot: repeated events matching the same slot — e.g. two
+/// temporal members of one family both satisfying a single atemporal body
+/// literal — decrement `remaining` exactly once, so a rule becomes applicable
+/// only when every distinct body slot has some satisfier.
+pub(crate) fn cover_body_slots(
+    rule: &Rule,
+    event: &Literal,
+    satisfied: &mut FixedBitSet,
+    remaining: &mut usize,
+) {
+    for slot in matched_body_slots(rule, event) {
+        if !satisfied.contains(slot) {
+            satisfied.insert(slot);
+            if *remaining > 0 {
+                *remaining -= 1;
+            }
+        }
+    }
+}
 
 pub(crate) struct ReasoningTrace {
     pub conclusions: Vec<Conclusion>,

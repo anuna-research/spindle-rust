@@ -54,11 +54,20 @@ fn compute_lambda<'t>(
 ) -> LiteralBitSet {
     let mut lambda = definite_proven.clone();
     // Mirror the main worklist's counter mechanics — including family-aware
-    // body matching via rules_with_body_id — with all attack and superiority
-    // checks ignored. Starting from a pristine clone of the body counters
-    // keeps lambda's notion of "body satisfiable" identical to the fixed
-    // point's notion of "body satisfied".
+    // body matching and per-slot idempotent satisfaction — with all attack
+    // and superiority checks ignored. Starting from a pristine clone of the
+    // body counters keeps lambda's notion of "body satisfiable" identical to
+    // the fixed point's notion of "body satisfied".
     let mut remaining = body_remaining_init.clone();
+    let mut satisfied: FxHashMap<&'t str, fixedbitset::FixedBitSet> = theory
+        .rules()
+        .map(|r| {
+            (
+                r.label.as_str(),
+                fixedbitset::FixedBitSet::with_capacity(r.body.len()),
+            )
+        })
+        .collect();
     let mut queue: VecDeque<LitId> = VecDeque::new();
 
     // Seed with all definite literals.
@@ -91,6 +100,7 @@ fn compute_lambda<'t>(
 
     // Propagate to fixpoint.
     while let Some(id) = queue.pop_front() {
+        let event_lit = indexed.resolve_literal(id);
         for rule in indexed.rules_with_body_id(id) {
             if !matches!(
                 rule.rule_type,
@@ -98,13 +108,15 @@ fn compute_lambda<'t>(
             ) {
                 continue;
             }
-            let Some(rem) = remaining.get_mut(rule.label.as_str()) else {
+            let (Some(rem), Some(sat)) = (
+                remaining.get_mut(rule.label.as_str()),
+                satisfied.get_mut(rule.label.as_str()),
+            ) else {
                 continue;
             };
-            if *rem > 0 {
-                *rem -= 1;
-            }
-            if *rem == 0 {
+            let was_unsatisfied = *rem > 0;
+            super::cover_body_slots(rule, &event_lit, sat, rem);
+            if was_unsatisfied && *rem == 0 {
                 for head in &rule.head {
                     if let Some(head_id) = indexed.get_lit_id(head)
                         && !lambda.contains(head_id)
@@ -305,54 +317,67 @@ pub(crate) fn resolve_defeasible(
                     .then_with(|| lhs.cmp(rhs))
             });
 
+            let event_lit = indexed.resolve_literal(q_id);
+            let event_family = FamilyId::from(&event_lit);
+            // A -d event that defeats a lambda-alive member shrinks its
+            // family's live support, once per member (idempotent). Done once
+            // per event rather than per rule so a defeated member with no body
+            // occurrence still decrements its family's live count.
+            if !proved && lambda.contains(q_id) && counted_dead.insert(q_id) {
+                if let Some(c) = family_live.get_mut(&event_family) {
+                    *c = c.saturating_sub(1);
+                }
+            }
+
             for rule_label in &rules_with_q {
+                let rule = theory
+                    .get_rule(rule_label)
+                    .expect("rule label from body index must exist");
                 if proved {
+                    // Mark the body slots this +d literal satisfies. Per-slot
+                    // tracking makes the decrement idempotent, so several
+                    // temporal members of one family satisfying a single
+                    // atemporal body slot count once — a rule becomes
+                    // applicable only when every distinct slot has a satisfier
+                    // (prevents unsound +d — see SPEC-020 regression).
+                    let satisfied = state
+                        .defeasible_slots_satisfied
+                        .get_mut(rule_label.as_str())
+                        .expect("rule slot bitset must exist");
                     let remaining = state
                         .defeasible_body_remaining
                         .get_mut(rule_label.as_str())
-                        .unwrap();
-                    if *remaining > 0 {
-                        *remaining -= 1;
-                    }
+                        .expect("rule body counter must exist");
+                    super::cover_body_slots(rule, &event_lit, satisfied, remaining);
                 } else {
                     // Family-aware discard (SPEC-020; famSat semantics). A -d
                     // event for literal L only discards a rule when it removes
                     // the LAST way to satisfy a body literal:
-                    //  - a TEMPORAL body literal requires exactly L, so an exact
-                    //    match discards;
+                    //  - a TEMPORAL body literal requires exactly L (same
+                    //    family AND same window), so an exact match discards;
                     //  - an ATEMPORAL body literal is family-satisfiable, so it
                     //    is dead only when its family has no LIVE member left —
                     //    members outside lambda never counted (unfounded), and
-                    //    lambda-alive members stop counting when defeated (this
-                    //    very event, decremented below). A family with a live
-                    //    member may still fire the rule later, and as an
-                    //    attacker it keeps blocking meanwhile.
-                    let event_lit = indexed.resolve_literal(q_id);
-                    // A defeat of a lambda-alive member shrinks its family's
-                    // live support (idempotently).
-                    if lambda.contains(q_id) && counted_dead.insert(q_id) {
-                        if let Some(c) = family_live.get_mut(&FamilyId::from(&event_lit)) {
-                            *c = c.saturating_sub(1);
-                        }
-                    }
-                    let rule = theory
-                        .get_rule(rule_label)
-                        .expect("rule label from body index must exist");
-                    let event_family = FamilyId::from(&event_lit);
+                    //    lambda-alive members stop counting when defeated. A
+                    //    family with a live member may still fire the rule
+                    //    later, and as an attacker it keeps blocking meanwhile.
                     let should_discard = rule.body.iter().any(|bl| match bl.as_logic() {
                         Some(logic) => {
                             let b = logic.to_literal();
-                            if b.temporal.is_empty() {
+                            if b.is_temporal() {
+                                // Temporal body: requires exactly this literal.
+                                // FamilyId excludes the window (as does Literal
+                                // PartialEq), so compare the window explicitly
+                                // instead of `b == event_lit`.
+                                FamilyId::from(&b) == event_family
+                                    && b.temporal == event_lit.temporal
+                            } else {
                                 // Atemporal body: dead only when its family has
                                 // no live member. (This event reaches the rule
                                 // via the exact or family index, so b is in the
                                 // event's family.)
                                 FamilyId::from(&b) == event_family
-                                    && family_live.get(&FamilyId::from(&b)).copied().unwrap_or(0)
-                                        == 0
-                            } else {
-                                // Temporal body: requires exactly this literal.
-                                b == event_lit
+                                    && family_live.get(&event_family).copied().unwrap_or(0) == 0
                             }
                         }
                         None => false,
@@ -840,12 +865,13 @@ fn try_disprove_defeasible(
             continue; // attacker not applicable
         }
 
-        // Strict attackers always block
-        if attacker.rule_type == RuleType::Strict {
-            defeasible_disproven.insert(q);
-            worklist.push_back((q, false));
-            return;
-        }
+        // Note: strict attackers are NOT special-cased here. A DEFINITELY
+        // applicable strict attacker already blocks via +D ~q (disjunct (2)
+        // above); a merely defeasibly-applicable strict attacker is subject to
+        // the same superiority check as any other attacker, mirroring
+        // `try_prove_defeasible` and the Lean `canDisprove2` model (see
+        // lean/DIVERGENCES.md). Special-casing it here made +d/-d
+        // order-dependent.
 
         // Attacker s is applicable. Check: ∀t ∈ Rsd[q]: t discarded OR ¬(t > s)
         // But if any t is undecided (not discarded, not applicable), can't conclude

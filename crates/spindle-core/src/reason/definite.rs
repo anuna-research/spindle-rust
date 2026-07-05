@@ -31,26 +31,36 @@ pub(crate) fn forward_chain_strict(
             if rule.rule_type != RuleType::Strict {
                 continue;
             }
-            let remaining = state
-                .definite_body_remaining
-                .get_mut(rule.label.as_str())
-                .unwrap();
-            if *remaining > 0 {
-                *remaining -= 1;
-                if *remaining == 0 {
-                    let head_lit = rule.head_literal().clone();
-                    let head_id = indexed
-                        .get_lit_id(&head_lit)
-                        .expect("Head literal missing from index");
+            // Mark the body slots this literal satisfies. Family matching can
+            // route several temporal members of one family to the same
+            // atemporal body slot; per-slot tracking ensures the slot is
+            // counted once, so a rule fires only when every distinct slot is
+            // satisfied (prevents unsound +D — see SPEC-020 regression).
+            let now_applicable = {
+                let satisfied = state
+                    .definite_slots_satisfied
+                    .get_mut(rule.label.as_str())
+                    .expect("rule slot bitset must exist");
+                let remaining = state
+                    .definite_body_remaining
+                    .get_mut(rule.label.as_str())
+                    .expect("rule body counter must exist");
+                let was_unsatisfied = *remaining > 0;
+                super::cover_body_slots(rule, &lit, satisfied, remaining);
+                was_unsatisfied && *remaining == 0
+            };
+            if now_applicable {
+                let head_lit = rule.head_literal().clone();
+                let head_id = indexed
+                    .get_lit_id(&head_lit)
+                    .expect("Head literal missing from index");
 
-                    if !state.is_definitely_proven(head_id) {
-                        state.definite_proven.insert(head_id);
-                        state.add_conclusion(
-                            Conclusion::definitely_provable(head_lit.clone())
-                                .with_rule(&rule.label),
-                        );
-                        state.try_enqueue(head_id, head_lit);
-                    }
+                if !state.is_definitely_proven(head_id) {
+                    state.definite_proven.insert(head_id);
+                    state.add_conclusion(
+                        Conclusion::definitely_provable(head_lit.clone()).with_rule(&rule.label),
+                    );
+                    state.try_enqueue(head_id, head_lit);
                 }
             }
         }
