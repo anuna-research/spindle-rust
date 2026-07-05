@@ -28,8 +28,7 @@
 //! Scope control via env var `SPINDLE_EXHAUSTIVE`:
 //! - `pairs`   — all 1- and 2-rule theories with all superiority options
 //! - (default) — `pairs` + all 3-rule theories without superiority
-//! - `full`    — default + all 3-rule theories with every single
-//!               superiority pair (6 orientations)
+//! - `full`    — default + all 3-rule theories with every superiority pair (6 orientations)
 //!
 //! The engine and the verified model agree exactly (both historical
 //! divergence classes were resolved — see `lean/DIVERGENCES.md`), so any
@@ -154,9 +153,9 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
     let mut cases = Vec::new();
 
     // Singletons.
-    for i in 0..n {
+    for shape in &shapes {
         cases.push(Case {
-            rules: vec![shapes[i].clone()],
+            rules: vec![shape.clone()],
             superiority: vec![],
         });
     }
@@ -179,9 +178,9 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
     // [P]p are distinct atoms; the complement of [O]p is [O]~p.
     let mshapes = shapes_for(&modal_lits());
     let mn = mshapes.len();
-    for i in 0..mn {
+    for mshape in &mshapes {
         cases.push(Case {
-            rules: vec![mshapes[i].clone()],
+            rules: vec![mshape.clone()],
             superiority: vec![],
         });
     }

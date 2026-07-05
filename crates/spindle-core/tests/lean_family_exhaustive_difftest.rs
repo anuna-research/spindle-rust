@@ -116,9 +116,9 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
     let n = shapes.len();
     let mut cases = Vec::new();
 
-    for i in 0..n {
+    for shape in &shapes {
         cases.push(Case {
-            rules: vec![shapes[i].clone()],
+            rules: vec![shape.clone()],
             superiority: vec![],
         });
     }

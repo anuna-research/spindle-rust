@@ -267,7 +267,7 @@ fn call_oracle(input_json: &str, oracle_path: &std::path::Path) -> Option<JValue
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Oracle stderr: {}", stderr);
+        eprintln!("Oracle stderr: {stderr}");
         return None;
     }
 
@@ -385,7 +385,7 @@ fn smoke_test_lean_arith_oracle() {
 
     match lean_result {
         LeanResult::Ok(LeanValue::Int(n)) => assert_eq!(n, 5),
-        other => panic!("expected Ok(Int(5)), got {:?}", other),
+        other => panic!("expected Ok(Int(5)), got {other:?}"),
     }
 }
 
@@ -415,8 +415,7 @@ fn smoke_test_lean_constraint_oracle() {
     let result = result.expect("oracle should produce output");
     assert!(
         result.get("satisfied").is_some(),
-        "expected satisfied, got: {}",
-        result
+        "expected satisfied, got: {result}"
     );
 }
 
@@ -487,8 +486,7 @@ fn proptest_rust_lean_arith_agreement() {
             agreements += 1;
         } else {
             disagreements.push(format!(
-                "Case {}: expr={}, rust={:?}, lean={:?}",
-                i, expr, rust_result, lean_result
+                "Case {i}: expr={expr}, rust={rust_result:?}, lean={lean_result:?}"
             ));
         }
     }
@@ -503,7 +501,7 @@ fn proptest_rust_lean_arith_agreement() {
 
     if !disagreements.is_empty() {
         for d in &disagreements[..disagreements.len().min(10)] {
-            eprintln!("  DISAGREE: {}", d);
+            eprintln!("  DISAGREE: {d}");
         }
         panic!(
             "{} disagreements found (showing first {})",
@@ -595,6 +593,6 @@ fn proptest_rust_lean_comparison_agreement() {
     }
 
     if disagreements > 0 {
-        panic!("{} comparison disagreements found", disagreements);
+        panic!("{disagreements} comparison disagreements found");
     }
 }

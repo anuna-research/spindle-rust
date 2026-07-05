@@ -62,7 +62,7 @@ fn build_schema_registry() -> HashMap<String, Value> {
     for (name, filename) in schema_files {
         let path = schema_dir.join(filename);
         if !path.exists() {
-            panic!("Schema file not found: {:?}", path);
+            panic!("Schema file not found: {path:?}");
         }
 
         let content = std::fs::read_to_string(&path)
@@ -91,7 +91,7 @@ fn load_inlined_schema(schema_name: &str) -> Value {
     let target = registry
         .get(schema_name)
         .cloned()
-        .unwrap_or_else(|| panic!("Schema not found: {}", schema_name));
+        .unwrap_or_else(|| panic!("Schema not found: {schema_name}"));
 
     // Create a merged $defs collection
     let mut all_defs = serde_json::Map::new();
@@ -154,10 +154,7 @@ pub fn validate_against_schema(json: &Value, schema_name: &str, case_name: &str)
 
     let compiled = match jsonschema::JSONSchema::compile(&schema) {
         Ok(c) => c,
-        Err(e) => panic!(
-            "{}: Failed to compile schema '{}': {}",
-            case_name, schema_name, e
-        ),
+        Err(e) => panic!("{case_name}: Failed to compile schema '{schema_name}': {e}"),
     };
 
     let result = compiled.validate(json);
@@ -181,59 +178,49 @@ pub fn validate_against_schema(json: &Value, schema_name: &str, case_name: &str)
 pub fn validate_error_envelope(json: &Value, case_name: &str) {
     assert!(
         json.get("diagnostics").is_some(),
-        "{}: JSON error envelope missing 'diagnostics' field",
-        case_name
+        "{case_name}: JSON error envelope missing 'diagnostics' field"
     );
     assert!(
         json["diagnostics"].is_array(),
-        "{}: 'diagnostics' must be an array",
-        case_name
+        "{case_name}: 'diagnostics' must be an array"
     );
 
     assert!(
         json.get("error").is_some(),
-        "{}: JSON error envelope missing 'error' field",
-        case_name
+        "{case_name}: JSON error envelope missing 'error' field"
     );
     assert!(
         json["error"].is_object(),
-        "{}: 'error' must be an object",
-        case_name
+        "{case_name}: 'error' must be an object"
     );
 
     let error = &json["error"];
 
     assert!(
         error.get("code").is_some(),
-        "{}: error object missing 'code' field",
-        case_name
+        "{case_name}: error object missing 'code' field"
     );
     assert!(
         error["code"].is_string(),
-        "{}: error.code must be a string",
-        case_name
+        "{case_name}: error.code must be a string"
     );
 
     assert!(
         error.get("message").is_some(),
-        "{}: error object missing 'message' field",
-        case_name
+        "{case_name}: error object missing 'message' field"
     );
     assert!(
         error["message"].is_string(),
-        "{}: error.message must be a string",
-        case_name
+        "{case_name}: error.message must be a string"
     );
 
     assert!(
         error.get("details").is_some(),
-        "{}: error object missing 'details' field",
-        case_name
+        "{case_name}: error object missing 'details' field"
     );
     assert!(
         error["details"].is_object(),
-        "{}: error.details must be an object (even if empty)",
-        case_name
+        "{case_name}: error.details must be an object (even if empty)"
     );
 }
 

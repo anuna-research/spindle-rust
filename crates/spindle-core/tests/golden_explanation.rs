@@ -35,7 +35,7 @@ fn explain_literal(
     };
     explain(theory, &lit)
         .expect("explain() should not error")
-        .unwrap_or_else(|| panic!("expected an explanation for {}", lit))
+        .unwrap_or_else(|| panic!("expected an explanation for {lit}"))
 }
 
 // ===========================================================================
@@ -429,8 +429,7 @@ fn facts_only_all_formatters() {
         let nl = NaturalLanguageFormatter::new().format(&expl);
         assert!(
             nl.contains(fact_name),
-            "NL output for '{}' should mention the literal",
-            fact_name
+            "NL output for '{fact_name}' should mention the literal"
         );
         assert!(
             nl.contains("+D"),

@@ -21,7 +21,7 @@ fn token_labels(tokens: &[ProjectionToken]) -> BTreeSet<String> {
         .collect()
 }
 
-fn grounded_q_rule_label<'a>(conclusions: &'a [spindle_core::conclusion::Conclusion]) -> &'a str {
+fn grounded_q_rule_label(conclusions: &[spindle_core::conclusion::Conclusion]) -> &str {
     conclusions
         .iter()
         .find(|c| {

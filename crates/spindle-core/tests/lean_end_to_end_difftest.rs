@@ -156,7 +156,7 @@ fn call_oracle(input_json: &str, oracle_path: &std::path::Path) -> Option<JValue
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Oracle stderr: {}", stderr);
+        eprintln!("Oracle stderr: {stderr}");
         return None;
     }
 
@@ -225,13 +225,14 @@ fn args_to_json(args: &[String]) -> Vec<JValue> {
         .collect()
 }
 
+/// A fact specification: `(name, args)`.
+type FactSpec = (String, Vec<String>);
+/// A rule specification: `(head_name, head_args, body[(name, args)])`.
+type RuleSpec = (String, Vec<String>, Vec<(String, Vec<String>)>);
+
 /// Build a test theory with facts (as empty-body rules) and strict rules
 /// with variables. Returns both the Rust Theory and the Lean JSON input.
-fn build_theory(
-    facts: &[(String, Vec<String>)], // (name, args)
-    rules: &[(String, Vec<String>, Vec<(String, Vec<String>)>)], // (head_name, head_args, body[(name, args)])
-    domain: &[String],
-) -> TestTheory {
+fn build_theory(facts: &[FactSpec], rules: &[RuleSpec], domain: &[String]) -> TestTheory {
     let mut theory = Theory::new();
     let mut lean_rules: Vec<JValue> = Vec::new();
     let mut label_counter = 0usize;
@@ -372,8 +373,7 @@ fn smoke_test_end_to_end() {
 
     assert_eq!(
         rust_facts, lean_facts,
-        "End-to-end mismatch!\n  Rust: {:?}\n  Lean: {:?}",
-        rust_facts, lean_facts
+        "End-to-end mismatch!\n  Rust: {rust_facts:?}\n  Lean: {lean_facts:?}"
     );
 
     // Verify expected facts
@@ -446,8 +446,7 @@ fn test_transitive_chain() {
 
     assert_eq!(
         rust_facts, lean_facts,
-        "Transitive chain mismatch!\n  Rust: {:?}\n  Lean: {:?}",
-        rust_facts, lean_facts
+        "Transitive chain mismatch!\n  Rust: {rust_facts:?}\n  Lean: {lean_facts:?}"
     );
 
     // Must derive ancestor(alice, carol) via transitive closure
@@ -542,8 +541,7 @@ fn test_ground_strict_chain() {
 
     assert_eq!(
         rust_facts, lean_facts,
-        "Ground strict chain mismatch!\n  Rust: {:?}\n  Lean: {:?}",
-        rust_facts, lean_facts
+        "Ground strict chain mismatch!\n  Rust: {rust_facts:?}\n  Lean: {lean_facts:?}"
     );
 
     // c(alice) should be derived through the chain
@@ -608,8 +606,7 @@ fn test_join_rule() {
 
     assert_eq!(
         rust_facts, lean_facts,
-        "Join rule mismatch!\n  Rust: {:?}\n  Lean: {:?}",
-        rust_facts, lean_facts
+        "Join rule mismatch!\n  Rust: {rust_facts:?}\n  Lean: {lean_facts:?}"
     );
 
     // scholar(alice) should be derived (human + wise), not scholar(bob) (no wise(bob))
@@ -646,13 +643,7 @@ fn arb_domain() -> impl Strategy<Value = Vec<String>> {
 
 /// Generate a random end-to-end test case: facts + one rule with variables.
 /// Ensures rule safety: all head variables must also appear in the body.
-fn arb_e2e_case() -> impl Strategy<
-    Value = (
-        Vec<(String, Vec<String>)>,                             // facts
-        Vec<(String, Vec<String>, Vec<(String, Vec<String>)>)>, // rules
-        Vec<String>,                                            // domain
-    ),
-> {
+fn arb_e2e_case() -> impl Strategy<Value = (Vec<FactSpec>, Vec<RuleSpec>, Vec<String>)> {
     (
         // Facts: 1-3 facts with 1 constant arg
         proptest::collection::vec(

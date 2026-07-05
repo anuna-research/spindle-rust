@@ -253,7 +253,7 @@ proptest! {
 
         let mut theory = Theory::new();
         for (i, lit) in literals.iter().enumerate() {
-            theory.add_rule(Rule::fact(&format!("f{i}"), lit.clone()));
+            theory.add_rule(Rule::fact(format!("f{i}"), lit.clone()));
         }
 
         let idx = IndexedTheory::build(&theory);

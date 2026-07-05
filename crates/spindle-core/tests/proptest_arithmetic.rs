@@ -83,7 +83,7 @@ fn arb_substitution() -> impl Strategy<Value = Substitution> {
     proptest::collection::vec((0..5u32, arb_numeric_value()), 0..=5).prop_map(|bindings| {
         let mut subst = Substitution::default();
         for (idx, val) in bindings {
-            let var_name = format!("?v{}", idx);
+            let var_name = format!("?v{idx}");
             let term = match val {
                 NumericValue::Integer(n) => Term::Integer(n),
                 NumericValue::Decimal(d) => Term::Decimal(d),
@@ -267,18 +267,9 @@ proptest! {
         expr in arb_arith_expr(3),
         subst in arb_substitution(),
     ) {
-        if let Ok(val) = expr.eval(&subst) {
-            if let NumericValue::Float(f) = val {
-                prop_assert!(
-                    f.is_finite(),
-                    "Float result must be finite, got {}",
-                    f
-                );
-                prop_assert!(
-                    !f.is_nan(),
-                    "Float result must not be NaN"
-                );
-            }
+        if let Ok(NumericValue::Float(f)) = expr.eval(&subst) {
+            prop_assert!(f.is_finite(), "Float result must be finite, got {f}");
+            prop_assert!(!f.is_nan(), "Float result must not be NaN");
         }
     }
 
@@ -297,10 +288,9 @@ proptest! {
             r#"
             (given trigger)
             (normally r1
-              (and (trigger) (bind ?x (+ {} 0)) (> ?x {}))
+              (and (trigger) (bind ?x (+ {val} 0)) (> ?x {threshold}))
               (pass))
-        "#,
-            val, threshold
+        "#
         );
         if let Ok(theory) = spindle_parser::parse_spl(&spl_ok) {
             if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
@@ -323,10 +313,9 @@ proptest! {
             r#"
             (given trigger)
             (normally r1
-              (and (trigger) (> ?x {}) (bind ?x (+ {} 0)))
+              (and (trigger) (> ?x {threshold}) (bind ?x (+ {val} 0)))
               (pass-bad))
-        "#,
-            threshold, val
+        "#
         );
         if let Ok(theory) = spindle_parser::parse_spl(&spl_bad) {
             if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
@@ -356,13 +345,12 @@ proptest! {
         let sum = a + b;
         let spl = format!(
             r#"
-            (given (pair {} {}))
-            (given (target {}))
+            (given (pair {a} {b}))
+            (given (target {sum}))
             (normally r1
               (and (pair ?a ?b) (target (+ ?a ?b)))
               (match))
-        "#,
-            a, b, sum
+        "#
         );
         if let Ok(theory) = spindle_parser::parse_spl(&spl) {
             if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
@@ -393,12 +381,11 @@ proptest! {
         let op = ops[op_idx];
         let spl = format!(
             r#"
-            (given (x {}))
+            (given (x {a}))
             (normally r1
-              (and (x ?v) (bind ?r ({} ?v {})))
+              (and (x ?v) (bind ?r ({op} ?v {b})))
               (result ?r))
-        "#,
-            a, op, b
+        "#
         );
 
         let t1 = spindle_parser::parse_spl(&spl);

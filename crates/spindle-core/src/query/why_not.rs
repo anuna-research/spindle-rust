@@ -692,13 +692,11 @@ mod tests {
         let types: Vec<_> = result.blocked_by.iter().map(|b| b.blocking_type).collect();
         assert!(
             types.contains(&BlockingType::Defeated),
-            "Should have Defeated blocker from defeater, got: {:?}",
-            types
+            "Should have Defeated blocker from defeater, got: {types:?}"
         );
         assert!(
             types.contains(&BlockingType::Contradicted),
-            "Should have Contradicted blocker from defeasible attacker, got: {:?}",
-            types
+            "Should have Contradicted blocker from defeasible attacker, got: {types:?}"
         );
     }
 

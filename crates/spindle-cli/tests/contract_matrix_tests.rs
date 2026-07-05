@@ -304,11 +304,10 @@ fn get_matrix_cases() -> Vec<MatrixCase> {
                         "defeaters",
                         "superiorities",
                     ] {
-                        assert!(stats.contains_key(key), "stats missing key '{}'", key);
+                        assert!(stats.contains_key(key), "stats missing key '{key}'");
                         assert!(
                             stats[key].is_number(),
-                            "stats key '{}' should have numeric value",
-                            key
+                            "stats key '{key}' should have numeric value"
                         );
                     }
                 }),

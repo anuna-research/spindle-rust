@@ -354,7 +354,7 @@ fn call_oracle(input_json: &str, oracle_path: &std::path::Path) -> Option<JValue
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Oracle stderr: {}", stderr);
+        eprintln!("Oracle stderr: {stderr}");
         return None;
     }
 
@@ -694,8 +694,7 @@ fn proptest_rust_lean_grounding_agreement() {
             Some(arr) => arr.iter().map(normalize_rule_json).collect(),
             None => {
                 disagreements.push(format!(
-                    "Case {}: Lean returned no ground_instances. Response: {}",
-                    i, lean_json
+                    "Case {i}: Lean returned no ground_instances. Response: {lean_json}"
                 ));
                 continue;
             }
@@ -728,7 +727,7 @@ fn proptest_rust_lean_grounding_agreement() {
 
     if !disagreements.is_empty() {
         for d in &disagreements[..disagreements.len().min(10)] {
-            eprintln!("  DISAGREE: {}", d);
+            eprintln!("  DISAGREE: {d}");
         }
         panic!(
             "{} disagreements found (showing first {})",
@@ -860,7 +859,7 @@ fn proptest_join_rule_grounding() {
     }
 
     if disagreements > 0 {
-        panic!("{} join grounding disagreements found", disagreements);
+        panic!("{disagreements} join grounding disagreements found");
     }
 }
 
