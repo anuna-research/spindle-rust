@@ -26,6 +26,12 @@ pub struct RequiresOptions {
     /// Maximum number of verified solutions to return.
     pub max_solutions: usize,
     /// Maximum number of raw candidates to examine.
+    ///
+    /// Candidates are **deduplicated before** they count against this budget:
+    /// several rules yielding the identical hypothesis fact-set consume a
+    /// single slot, not one each. A theory with duplicate-heavy candidates can
+    /// therefore complete within budget where per-occurrence counting would
+    /// have reported [`RequiresSearchStatus::BudgetExhausted`].
     pub max_raw_candidates: usize,
 }
 
@@ -45,7 +51,9 @@ pub enum RequiresSearchStatus {
     /// all available candidates were exhausted or `max_solutions` was reached.
     BoundedComplete,
     /// Search terminated because the raw-candidate budget was reached while
-    /// more raw candidates exist.
+    /// more raw candidates exist. Budget accounting is over **distinct**
+    /// hypothesis fact-sets (see [`RequiresOptions::max_raw_candidates`]), so
+    /// duplicate candidates do not, on their own, trigger this status.
     BudgetExhausted,
 }
 

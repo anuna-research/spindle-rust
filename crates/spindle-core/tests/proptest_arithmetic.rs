@@ -50,18 +50,6 @@ fn arb_bin_op() -> impl Strategy<Value = BinArithOp> {
     ]
 }
 
-#[allow(dead_code)]
-fn arb_cmp_op() -> impl Strategy<Value = CmpOp> {
-    prop_oneof![
-        Just(CmpOp::Eq),
-        Just(CmpOp::Ne),
-        Just(CmpOp::Lt),
-        Just(CmpOp::Gt),
-        Just(CmpOp::Le),
-        Just(CmpOp::Ge),
-    ]
-}
-
 /// Generate an ArithExpr of bounded depth.
 fn arb_arith_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> {
     let leaf = arb_numeric_value().prop_map(ArithExpr::Lit);
