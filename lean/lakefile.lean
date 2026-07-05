@@ -19,9 +19,21 @@ lean_lib SpindleLean where
 lean_exe spindlelean where
   root := `Main
 
--- IMPL-016: Grounding, arithmetic, temporal, queries
+-- IMPL-016: Grounding, arithmetic, temporal, queries.
+-- A default target so a bare `lake build` (CI, lean-action, local) elaborates
+-- the Spindle lib too — including Spindle/Trust/{Diminish,WeakestLink,Decay}.
+-- Without this, the trust proofs were type-checked by no CI job and a
+-- reintroduced `sorry` there would land green.
+@[default_target]
 lean_lib Spindle where
   roots := #[`Spindle]
+
+-- Axiom audit: `#print axioms` over the flagship theorems. A default target so
+-- `lake build` re-elaborates it, catching removed/renamed theorems and
+-- surfacing any `sorryAx`/nonstandard axiom the audited proofs pick up.
+@[default_target]
+lean_lib AxiomAudit where
+  roots := #[`AxiomAudit]
 
 lean_exe ArithOracle where
   root := `Spindle.DiffTest.ArithOracle

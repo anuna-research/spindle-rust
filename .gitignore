@@ -26,3 +26,6 @@ bench/compiled/
 
 .env
 .aider*
+
+# Paper build artifacts
+/docs/paper/

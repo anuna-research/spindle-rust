@@ -48,12 +48,25 @@ steps:
       - apt-get update && apt-get install -y --no-install-recommends git clang lld libc6-dev libgmp-dev
       - curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
       - export PATH="$HOME/.elan/bin:$PATH"
-      - cd lean && lake build
+      # Elaborate all verification libraries (default targets) AND build the
+      # oracle executables the conformance difftests spawn. Building the exes
+      # explicitly is required: the sdl/family/parser/trust difftests skip
+      # (and pass green) when their binary is missing, so a bare `lake build`
+      # would leave them silently unverified.
+      - cd lean && lake build && lake build spindlelean TrustOracle ArithOracle GroundingOracle EndToEndOracle
+      # Full conformance suite: every difftest that pins the Rust engine to the
+      # verified Lean model, not just the arith/grounding/end-to-end subset.
       - cd .. && cargo test --package spindle-core --test lean_end_to_end_difftest -- --ignored
       - cargo test --package spindle-core --test lean_arith_oracle_difftest -- --ignored
       - cargo test --package spindle-core --test lean_grounding_oracle_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_sdl_exhaustive_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_family_exhaustive_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_trust_oracle_difftest -- --ignored
+      - cargo test --package spindle-core --test spl_parser_difftest -- --ignored
+    # Conformance compares the RUST engine against the Lean model, so it must
+    # run when EITHER side changes — not just on lean/** edits.
     when:
-      - path: "lean/**"
+      - path: ["lean/**", "crates/spindle-core/**"]
 
   - name: deploy-docs
     image: node:22-bookworm
