@@ -162,9 +162,24 @@ spec's condition (3) (`∃a ∈ body(s), -d a ∈ P`), family-aware, as a
 monotone two-sided fixed point. This is the model behind the family
 oracle; its 4-rule difftest tier found and fixed the engine's
 event-driven incompleteness (DIVERGENCES.md, class 4: undecided battles
-in fact-free theories). Structural lemmas: both step components are
-extensive, and the proven set stays within lambda
-(`twoSidedStep_P_subset_lambda`).
+in fact-free theories).
+
+| Theorem | Statement |
+|---------|-----------|
+| `canProve2_mono` (+ famSat/bodyDead/discard/teamDefeats monotonicity) | The +d condition is monotone in the proven and disproven sets |
+| `twoSidedClose_P_extends`, `_N_extends`, `_P_subset_lambda` | Both sides only grow; the proven set stays within lambda |
+| `twoSidedStep_disjoint`, `twoSidedClose_disjoint` | The proven and disproven sets never intersect |
+| `twoSidedClose_P_sound` | Every finally-proven literal satisfies the +d condition at the final state (seeds by the gate, additions by monotone transport) |
+| `not_bodyDead_of_famSat` | A family-satisfied body literal is never dead — supporters cannot be discarded |
+| **`twoSided_consistent`** | For well-formed theories with well-founded superiority, the two-sided proven set never contains a complementary pair — the consistency guarantee, now for the operational reference model |
+
+`twoSided_consistent` extends `partial_consistent` from the three-phase
+approximation to the model the engine is exhaustively difftested
+against: the same well-founded-induction argument goes through with
+defeat-discard in play, because a supporter's satisfied body is provably
+alive (in lambda, not disproven — the P-invariants), so an attacking
+supporter can only be answered by team defeat, ascending the superiority
+relation forever.
 
 #### As-Of Temporal Filter (`Spindle/Arith/AsOfFilter.lean`)
 

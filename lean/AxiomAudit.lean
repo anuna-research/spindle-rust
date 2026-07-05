@@ -40,6 +40,10 @@ import Spindle.Arith.WhyNot
 #print axioms Family.FLit.famSat_iff
 #print axioms Family.deltaStepWith_parity
 #print axioms Family.twoSidedStep_P_subset_lambda
+#print axioms Family.canProve2_mono
+#print axioms Family.twoSidedClose_P_sound
+#print axioms Family.twoSidedClose_disjoint
+#print axioms Family.twoSided_consistent
 #print axioms Spl.decode_encode_theory
 
 -- Arithmetic / temporal / grounding results
