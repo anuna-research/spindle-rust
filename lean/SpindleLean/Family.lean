@@ -40,11 +40,14 @@ structure Window where
   stop : Int
   deriving DecidableEq, Repr, BEq
 
-/-- A family literal: exact identity is (name, negation, window).
-    `window = none` is the atemporal base literal. -/
+/-- A family literal: exact identity is (name, negation, mode, window).
+    `window = none` is the atemporal base literal; `mode = none` is
+    non-modal. Modes are identity-bearing (they are part of the engine's
+    `FamilyId`). -/
 structure FLit where
   name : String
   negated : Bool
+  mode : Option String
   window : Option Window
   deriving DecidableEq, Repr, BEq
 
@@ -66,18 +69,20 @@ instance : LawfulBEq Window where
 instance : LawfulBEq FLit where
   eq_of_beq {a b} h := by
     cases a; cases b
-    have h' : (_ == _ && (_ == _ && _ == _)) = true := h
-    rw [Bool.and_eq_true, Bool.and_eq_true] at h'
-    obtain ⟨h1, h2, h3⟩ := h'
+    have h' : (_ == _ && (_ == _ && (_ == _ && _ == _))) = true := h
+    rw [Bool.and_eq_true, Bool.and_eq_true, Bool.and_eq_true] at h'
+    obtain ⟨h1, h2, h3, h4⟩ := h'
     obtain rfl := LawfulBEq.eq_of_beq h1
     obtain rfl := LawfulBEq.eq_of_beq h2
     obtain rfl := LawfulBEq.eq_of_beq h3
+    obtain rfl := LawfulBEq.eq_of_beq h4
     rfl
   rfl {a} := by
     cases a
-    show (_ == _ && (_ == _ && _ == _)) = true
-    rw [Bool.and_eq_true, Bool.and_eq_true]
-    exact ⟨beq_self_eq_true _, beq_self_eq_true _, beq_self_eq_true _⟩
+    show (_ == _ && (_ == _ && (_ == _ && _ == _))) = true
+    rw [Bool.and_eq_true, Bool.and_eq_true, Bool.and_eq_true]
+    exact ⟨beq_self_eq_true _, beq_self_eq_true _, beq_self_eq_true _,
+      beq_self_eq_true _⟩
 
 namespace FLit
 
@@ -88,9 +93,10 @@ def complement (l : FLit) : FLit := { l with negated := !l.negated }
 theorem complement_involutive (l : FLit) : l.complement.complement = l := by
   simp [complement, Bool.not_not]
 
-/-- Same family: same name and negation, any window. -/
+/-- Same family: same name, negation, and mode — any window (mirrors the
+    engine's `FamilyId`, which includes the mode). -/
 def sameFamily (a b : FLit) : Bool :=
-  a.name == b.name && a.negated == b.negated
+  a.name == b.name && a.negated == b.negated && a.mode == b.mode
 
 /-- Family-aware satisfaction of one body literal by a proven set:
     exact membership always suffices; an atemporal body literal is also

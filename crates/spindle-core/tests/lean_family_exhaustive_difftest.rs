@@ -31,11 +31,11 @@ use spindle_core::rule::Rule;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::theory::Theory;
 
-const ATOM: &str = "p";
+const ATOMS: &[&str] = &["p", "q"];
 const WINDOWS: &[Option<(i64, i64)>] = &[None, Some((1, 10)), Some((20, 30))];
 
-/// (negated, window index into WINDOWS)
-type Lit = (bool, u8);
+/// (atom index, negated, window index into WINDOWS)
+type Lit = (u8, bool, u8);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum RType {
@@ -63,12 +63,9 @@ struct Shape {
     body: Vec<Lit>,
 }
 
-fn all_shapes() -> Vec<Shape> {
-    let lits: Vec<Lit> = (0..WINDOWS.len() as u8)
-        .flat_map(|w| [(false, w), (true, w)])
-        .collect();
+fn shapes_for(lits: &[Lit]) -> Vec<Shape> {
     let mut shapes = Vec::new();
-    for &h in &lits {
+    for &h in lits {
         shapes.push(Shape {
             rtype: RType::Fact,
             head: h,
@@ -76,13 +73,13 @@ fn all_shapes() -> Vec<Shape> {
         });
     }
     for rt in [RType::Strict, RType::Defeasible, RType::Defeater] {
-        for &h in &lits {
+        for &h in lits {
             shapes.push(Shape {
                 rtype: rt,
                 head: h,
                 body: vec![],
             });
-            for &b in &lits {
+            for &b in lits {
                 shapes.push(Shape {
                     rtype: rt,
                     head: h,
@@ -94,6 +91,20 @@ fn all_shapes() -> Vec<Shape> {
     shapes
 }
 
+/// Temporal universe: 1 atom x negation x 3 windows.
+fn temporal_lits() -> Vec<Lit> {
+    (0..WINDOWS.len() as u8)
+        .flat_map(|w| [(0, false, w), (0, true, w)])
+        .collect()
+}
+
+/// Propositional universe: 2 atoms x negation, windowless.
+fn prop_lits() -> Vec<Lit> {
+    (0..ATOMS.len() as u8)
+        .flat_map(|a| [(a, false, 0), (a, true, 0)])
+        .collect()
+}
+
 #[derive(Clone, Debug)]
 struct Case {
     rules: Vec<Shape>,
@@ -101,7 +112,7 @@ struct Case {
 }
 
 fn enumerate_cases(level: &str) -> Vec<Case> {
-    let shapes = all_shapes();
+    let shapes = shapes_for(&temporal_lits());
     let n = shapes.len();
     let mut cases = Vec::new();
 
@@ -119,6 +130,39 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
                     rules: rules.clone(),
                     superiority: sup,
                 });
+            }
+        }
+    }
+
+    // 4-rule propositional tier: covers the constructive defeat-discard
+    // class (minimal witness: => p, => ~p, p ~> ~q, => q), which has no
+    // witness below 4 rules. Default uses a curated shape set (facts +
+    // defeasible/defeater with bodies <= 1); full uses all 64 shapes.
+    let prop_shapes_all = shapes_for(&prop_lits());
+    let prop_shapes: Vec<Shape> = if level == "full" {
+        prop_shapes_all.clone()
+    } else {
+        prop_shapes_all
+            .iter()
+            .filter(|s| matches!(s.rtype, RType::Fact | RType::Defeasible | RType::Defeater))
+            .cloned()
+            .collect()
+    };
+    let pn = prop_shapes.len();
+    for i in 0..pn {
+        for j in (i + 1)..pn {
+            for k in (j + 1)..pn {
+                for m in (k + 1)..pn {
+                    cases.push(Case {
+                        rules: vec![
+                            prop_shapes[i].clone(),
+                            prop_shapes[j].clone(),
+                            prop_shapes[k].clone(),
+                            prop_shapes[m].clone(),
+                        ],
+                        superiority: vec![],
+                    });
+                }
             }
         }
     }
@@ -145,11 +189,12 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
 // ---------------------------------------------------------------------------
 
 fn lit_json(l: Lit) -> String {
-    match WINDOWS[l.1 as usize] {
-        None => format!("{{\"name\":\"{ATOM}\",\"negated\":{}}}", l.0),
+    let name = ATOMS[l.0 as usize];
+    match WINDOWS[l.2 as usize] {
+        None => format!("{{\"name\":\"{name}\",\"negated\":{}}}", l.1),
         Some((s, e)) => format!(
-            "{{\"name\":\"{ATOM}\",\"negated\":{},\"window\":[{s},{e}]}}",
-            l.0
+            "{{\"name\":\"{name}\",\"negated\":{},\"window\":[{s},{e}]}}",
+            l.1
         ),
     }
 }
@@ -185,11 +230,11 @@ fn case_to_lean_json(case: &Case) -> String {
 fn case_pretty(case: &Case) -> String {
     let mut out = String::new();
     let lit_str = |l: &Lit| {
-        let w = match WINDOWS[l.1 as usize] {
+        let w = match WINDOWS[l.2 as usize] {
             None => String::new(),
             Some((s, e)) => format!("[{s},{e}]"),
         };
-        format!("{}{ATOM}{w}", if l.0 { "~" } else { "" })
+        format!("{}{}{w}", if l.1 { "~" } else { "" }, ATOMS[l.0 as usize])
     };
     for (i, s) in case.rules.iter().enumerate() {
         let body: Vec<String> = s.body.iter().map(&lit_str).collect();
@@ -216,11 +261,17 @@ fn case_pretty(case: &Case) -> String {
 // ---------------------------------------------------------------------------
 
 fn lit_rust(l: Lit) -> Literal {
-    let temporal = match WINDOWS[l.1 as usize] {
+    let temporal = match WINDOWS[l.2 as usize] {
         Some((s, e)) => Temporal::from_bounds(s, e),
         None => Temporal::empty(),
     };
-    Literal::new(ATOM, l.0, Mode::empty(), temporal, Vec::<String>::new())
+    Literal::new(
+        ATOMS[l.0 as usize],
+        l.1,
+        Mode::empty(),
+        temporal,
+        Vec::<String>::new(),
+    )
 }
 
 fn case_to_rust_theory(case: &Case) -> Theory {
@@ -243,8 +294,8 @@ fn case_to_rust_theory(case: &Case) -> Theory {
     theory
 }
 
-/// Comparison key: (negated, window as "s:e" or "").
-type Key = (bool, String);
+/// Comparison key: (name, negated, window as "s:e" or "").
+type Key = (String, bool, String);
 
 fn window_key_rust(lit: &Literal) -> String {
     let t = &lit.temporal;
@@ -270,10 +321,11 @@ fn classify_rust(theory: &Theory) -> Result<Classified, String> {
     let conclusions = reason::reason(theory).map_err(|e| e.to_string())?;
     let mut c = Classified::default();
     for conc in conclusions {
-        if conc.literal.name() != ATOM {
-            continue;
-        }
-        let key = (conc.literal.negation, window_key_rust(&conc.literal));
+        let key = (
+            conc.literal.name().to_string(),
+            conc.literal.negation,
+            window_key_rust(&conc.literal),
+        );
         match conc.conclusion_type {
             ConclusionType::DefinitelyProvable => {
                 c.plus_d_upper.insert(key);
@@ -310,7 +362,11 @@ fn classify_lean(result: &JValue) -> Classified {
             }
             _ => String::new(),
         };
-        let key = (lit["negated"].as_bool().unwrap_or(false), window);
+        let key = (
+            lit["name"].as_str().unwrap_or("").to_string(),
+            lit["negated"].as_bool().unwrap_or(false),
+            window,
+        );
         match conc["type"].as_str().unwrap_or("") {
             "+D" => {
                 c.plus_d_upper.insert(key);

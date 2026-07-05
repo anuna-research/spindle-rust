@@ -152,10 +152,19 @@ Difftested exhaustively (`lean_family_exhaustive_difftest.rs`): 400,730
 ground temporal theories at full scope, zero divergences — after fixing
 an order-dependent family-discard bug in the engine that the difftest
 surfaced, subsequently refined to live-member counting so that defeated
-premises still discard their dependent attackers (see
-`lean/DIVERGENCES.md`, class 3 and its refinement; the models'
-lambda-only attack discard is a documented over-approximation with no
-witness below 4 rules).
+premises still discard their dependent attackers (DIVERGENCES.md,
+class 3 and refinement).
+
+#### Two-Sided Fixed Point (`SpindleLean/FamilyTwoSided.lean`)
+
+The constructive (+d, -d) joint derivation: defeat-discard per the
+spec's condition (3) (`∃a ∈ body(s), -d a ∈ P`), family-aware, as a
+monotone two-sided fixed point. This is the model behind the family
+oracle; its 4-rule difftest tier found and fixed the engine's
+event-driven incompleteness (DIVERGENCES.md, class 4: undecided battles
+in fact-free theories). Structural lemmas: both step components are
+extensive, and the proven set stays within lambda
+(`twoSidedStep_P_subset_lambda`).
 
 #### As-Of Temporal Filter (`Spindle/Arith/AsOfFilter.lean`)
 

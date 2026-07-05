@@ -39,6 +39,7 @@ import Spindle.Arith.WhyNot
 #print axioms Spindle.Arith.filterTemporal_atemporal
 #print axioms Family.FLit.famSat_iff
 #print axioms Family.deltaStepWith_parity
+#print axioms Family.twoSidedStep_P_subset_lambda
 #print axioms Spl.decode_encode_theory
 
 -- Arithmetic / temporal / grounding results

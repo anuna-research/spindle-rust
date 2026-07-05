@@ -51,16 +51,37 @@
 > family's live count reaches zero. Regression test:
 > `test_defeated_premise_discards_dependent_attacker`.
 >
-> **Known model over-approximation (documented, not a regression).** The
-> Lean models (exact and family) discard attackers via lambda-based
-> `attackReaches` only — they do not model constructive defeat-discard
-> (the spec's `∃a ∈ body(s), -d a ∈ P` where the -d arises from a lost
-> battle rather than unfoundedness). The engine implements the spec. The
-> smallest theory distinguishing the two requires ≥ 4 rules plus
-> superiority, provably outside the ≤3-rule exhaustive enumeration, so
-> all difftests remain exact within their scope. Closing this gap in the
-> model requires a two-sided (proved/disproved) fixed point — recorded
-> as future work.
+> **Two-sided fixed point (2026-07-05) — the model gap CLOSED, and a
+> fourth engine bug found.** `SpindleLean/FamilyTwoSided.lean` models the
+> joint (+d, -d) derivation as a monotone two-sided fixed point with
+> constructive defeat-discard (the spec's `∃a ∈ body(s), -d a ∈ P`,
+> family-aware), replacing the lambda-only `attackReaches`
+> over-approximation. The family oracle now runs this model, and the
+> family difftest gained a 4-rule propositional tier covering the
+> defeat-discard class (minimal witness: `=> p`, `=> ~p`, `p ~> ~q`,
+> `=> q` — no superiority needed; ambiguity defeats p).
+>
+> The new tier immediately found **class 4**: the engine's Phase-2
+> worklist was purely event-driven, so battles among rules that never
+> received a triggering event (competing empty-body rules in a fact-free
+> theory) stayed undecided — the spec-derivable `-d p` (disjunct (3):
+> applicable unbeaten attacker) was never derived constructively, its
+> dependent discard never applied, and `+d q` was wrongly withheld. This
+> affected main too (it was not introduced by the class-3 work). Fixed
+> with battle-resolution sweeps: after the event queue drains, every
+> undecided literal is re-tried against the +d/-d conditions until no
+> new decision appears. The sweep fix also surfaced 36 three-rule
+> superiority battles (e.g. `p -> p`, `~p -> p`, `=> ~p`, `r2 > r1`)
+> where the spec derives `-d p` immediately (no support beats the
+> attacker) and hence `+d ~p` — the engine now derives them and the
+> lambda-only three-phase model does not. The exhaustive difftests
+> therefore compare the engine against the TWO-SIDED model as the
+> operational reference; the three-phase model remains the carrier of
+> the property proofs, documented as a lambda-only approximation that
+> under-derives on fact-free battles. After the fixes: 1,359,936
+> theories at full scope across both suites (SDL 323,830 + family
+> 1,036,106, the latter including 635,376 four-rule propositional
+> cases), zero divergences.
 
 # Known Divergences: Rust Engine vs Verified Lean Model (historical)
 

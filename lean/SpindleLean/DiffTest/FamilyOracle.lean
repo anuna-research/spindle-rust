@@ -17,7 +17,7 @@
                      "type":"+D"}, ...]}
 -/
 import Lean.Data.Json
-import SpindleLean.Family
+import SpindleLean.FamilyTwoSided
 
 namespace Family.Oracle
 
@@ -36,11 +36,20 @@ def parseWindow (j : Json) : Except String (Option Window) :=
     else
       throw "window must be [start, stop]"
 
+def parseMode (j : Json) : Except String (Option String) :=
+  match j.getObjVal? "mode" with
+  | .error _ => pure none
+  | .ok .null => pure none
+  | .ok v => do
+    let s ← v.getStr?
+    pure (some s)
+
 def parseFLit (j : Json) : Except String FLit := do
   let name ← j.getObjVal? "name" >>= Json.getStr?
   let negated ← j.getObjVal? "negated" >>= Json.getBool?
+  let mode ← parseMode j
   let window ← parseWindow j
-  pure ⟨name, negated, window⟩
+  pure ⟨name, negated, mode, window⟩
 
 def parseRuleType : String → Except String FRuleType
   | "fact" => pure .fact
@@ -76,15 +85,20 @@ def flitJson (l : FLit) : String :=
   let w := match l.window with
     | none => "null"
     | some iv => s!"[{iv.start},{iv.stop}]"
-  s!"\{\"name\":\"{l.name}\",\"negated\":{l.negated},\"window\":{w}}"
+  let m := match l.mode with
+    | none => "null"
+    | some md => s!"\"{md}\""
+  s!"\{\"name\":\"{l.name}\",\"negated\":{l.negated},\"mode\":{m},\"window\":{w}}"
 
 def conclusionJson (l : FLit) (tag : String) : String :=
   s!"\{\"literal\":{flitJson l},\"type\":\"{tag}\"}"
 
-/-- Run the family model and produce all four conclusion tags over the
-    theory's exact-literal universe (mirrors `reason` in Reason.lean). -/
+/-- Run the two-sided family model (constructive defeat discard;
+    FamilyTwoSided.lean) and produce all four conclusion tags over the
+    theory's exact-literal universe. Final -d = universe \ proven,
+    mirroring the engine's Phase-3 sweep. -/
 def runTheory (t : FTheory) : String :=
-  let (delta, _, partial_) := famReason t
+  let (delta, partial_) := famReason2 t
   let entries := t.allLiterals.flatMap fun lit =>
     [conclusionJson lit (if delta.contains lit then "+D" else "-D"),
      conclusionJson lit (if partial_.contains lit then "+d" else "-d")]

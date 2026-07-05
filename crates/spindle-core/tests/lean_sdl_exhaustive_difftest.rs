@@ -3,11 +3,13 @@
 //!
 //! Enumerates *every* propositional theory over a small scope — 2 atoms,
 //! rule bodies of at most 1 literal, up to 3 rules, superiority pairs — and
-//! checks that the Rust engine (`spindle_core::reason::reason`) and the Lean
-//! oracle (`spindlelean --oracle-batch`, whose algorithm carries the
-//! faithfulness/soundness/completeness proofs in
-//! `lean/SpindleLean/Properties/`) classify every literal identically:
-//! +D / -D / +d / -d.
+//! checks that the Rust engine (`spindle_core::reason::reason`) and the
+//! Lean two-sided model (`spindlelean --oracle-family-batch`,
+//! `lean/SpindleLean/FamilyTwoSided.lean` — the constructive (+d, -d)
+//! fixed point with defeat discard) classify every literal identically:
+//! +D / -D / +d / -d. The three-phase model in `SpindleLean/Closure/`
+//! carries the property proofs and is a documented lambda-only
+//! approximation of this reference (see lean/DIVERGENCES.md).
 //!
 //! Rationale (small-scope hypothesis): disagreements between two defeasible
 //! logic implementations almost always have a witness with very few atoms
@@ -435,7 +437,7 @@ fn find_sdl_oracle() -> Option<std::path::PathBuf> {
 /// JSON value per input line, in order.
 fn oracle_batch(oracle: &std::path::Path, lines: &[String]) -> Vec<JValue> {
     let mut child = Command::new(oracle)
-        .arg("--oracle-batch")
+        .arg("--oracle-family-batch")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -550,25 +552,11 @@ fn exhaustive_sdl_difftest() {
             checked += 1;
             let lean = classify_lean(lean_result);
 
-            // Does the Lean delta contain a complementary pair?
-            let delta_lits: BTreeSet<Key> = lean_result
-                .get("delta")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .map(|l| {
-                            (
-                                l["name"].as_str().unwrap_or("").to_string(),
-                                l["negated"].as_bool().unwrap_or(false),
-                                l["mode"].as_str().unwrap_or("").to_string(),
-                            )
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            let delta_inconsistent = delta_lits
+            // Does the Lean delta (the +D set) contain a complementary pair?
+            let delta_inconsistent = lean
+                .plus_d_upper
                 .iter()
-                .any(|(n, neg, m)| delta_lits.contains(&(n.clone(), !neg, m.clone())));
+                .any(|(n, neg, m)| lean.plus_d_upper.contains(&(n.clone(), !neg, m.clone())));
 
             let theory = case_to_rust_theory(case);
             let rust = match classify_rust(&theory) {
