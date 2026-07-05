@@ -82,6 +82,69 @@
 > theories at full scope across both suites (SDL 323,830 + family
 > 1,036,106, the latter including 635,376 four-rule propositional
 > cases), zero divergences.
+>
+> **Class 5 (2026-07-05, branch review) — per-body-slot satisfaction.**
+> A fresh-context review of the branch found four engine unsoundnesses
+> that the exhaustive difftest scope had not exercised (all require
+> literal-level temporal windows on facts, which the SPL surface does not
+> emit — it attaches windows at the rule level — so they were reachable
+> only through the core API). The Lean `famSat` model is set-based and was
+> already correct; the engine diverged from it:
+>
+> 1. **+d double-satisfaction** (`reason/defeasible.rs`). The Phase-2 body
+>    counter decremented once per matching *event*, but an atemporal body
+>    literal `p` is family-satisfied by every temporal member (`p[0,10]`,
+>    `p[20,30]`, …). Two members of one family thus decremented the same
+>    slot twice, consuming the budget of an unrelated unproven premise and
+>    firing the rule unsoundly (`p, x => y` gave `+d y` with `x` unprovable).
+> 2. **+D double-satisfaction** (`reason/definite.rs`
+>    `forward_chain_strict`, via the family-aware `index.rs::rules_with_body`).
+>    The same defect in the strict Phase-1 chain, corrupting the sound `+D`
+>    core.
+> 3. **Window-insensitive discard** (`reason/defeasible.rs`). The `-d`
+>    discard check compared a temporal body literal with `Literal`'s
+>    `PartialEq`, which deliberately ignores the window, so an atemporal
+>    `-d` event "exactly matched" a windowed slot in a different window and
+>    discarded a satisfiable rule.
+> 4. **Asymmetric strict-attacker superiority** (`reason/defeasible.rs`).
+>    `try_prove_defeasible` let a superior supporter beat a
+>    defeasibly-applicable strict attacker, but `try_disprove_defeasible`
+>    short-circuited ("strict attackers always block") before the
+>    superiority check — making `+d`/`-d` depend on event (name) order.
+>
+> Fixed by tracking **which body slots** are satisfied (a per-rule bitset,
+> `reason/mod.rs::{matched_body_slots, cover_body_slots}`) so several family
+> members satisfying one slot count once; by comparing temporal windows
+> explicitly in the discard check; and by removing the `try_disprove`
+> short-circuit so superiority is checked uniformly (mirroring `canProve2`
+> / `canDisprove2`). Regression tests in
+> `tests/regression_known_bugs.rs` (bugs 7–9).
+>
+> **Class 6 (2026-07-05, model-side, found while validating Class 5) —
+> premature same-round disproof in the two-sided model.** Re-running the
+> SDL exhaustive difftest at **full** scope (which had not been run since the
+> oracle switched from `--oracle-batch` to `--oracle-family-batch`) surfaced
+> 32 divergences — present on `main`, independent of the Class 5 engine
+> fixes. All were superiority battles where a strict rule with a
+> *defeasibly*-provable body defends a literal, e.g. `q -> p`, `=> ~p`,
+> `=> q`, `r0 > r1`: standard DL(d) (and the engine) derive `+d p` (the
+> superior strict supporter `r0` beats the attacker once `q` is `+d`), but
+> `FamilyTwoSided.twoSidedStepN` evaluated `canDisprove2` against the round's
+> *input* `P`, so `p` was disproved in the same round that `q` became
+> provable — and since `N` only grows, the premature `-d p` was permanent.
+> Fixed by evaluating `canDisprove2` against `P'` (this round's
+> `twoSidedStepP`), mirroring the engine's incremental worklist. All
+> `twoSided_consistent` / monotonicity / closure-invariant proofs still hold
+> (`lake build spindlelean`: 0 sorry).
+>
+> **Validated (2026-07-05).** After the Class 5 engine fixes and the Class 6
+> model fix, the full exhaustive suite is back to **1,359,936 theories at
+> full scope, zero divergences** (SDL 323,830 + family 1,036,106), plus
+> trust (959 cases within 1e-9) and SPL parser (1,684 theories) at zero
+> divergences. Reproduce with `lake build spindlelean TrustOracle` then
+> `SPINDLE_EXHAUSTIVE=full cargo test -p spindle-core --test
+> lean_sdl_exhaustive_difftest --test lean_family_exhaustive_difftest
+> --test lean_trust_oracle_difftest --test spl_parser_difftest -- --ignored`.
 
 # Known Divergences: Rust Engine vs Verified Lean Model (historical)
 

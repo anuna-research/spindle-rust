@@ -109,12 +109,22 @@ def twoSidedStepP (t : FTheory) (univ delta lambda : List FLit)
       && canProve2 t univ delta lambda P N l).dedup
 
 /-- The disproven-side step: extend N with newly disprovable universe
-    literals not claimed by the proven side this round. -/
+    literals not claimed by the proven side this round.
+
+    `canDisprove2` is evaluated against the NEW proven set `P'`
+    (`twoSidedStepP` this round), not the round's input `P`. This mirrors the
+    engine's incremental worklist: a literal must not be disproven while a
+    (possibly strict, possibly superior) defender's body becomes provable in
+    the same round — e.g. `q -> p`, `=> ~p`, `=> q`, `r0 > r1`, where `q`
+    enters P and defends `p` in one round. Because N only grows, evaluating
+    against the stale `P` would disprove `p` permanently before its defense
+    materialized. -/
 def twoSidedStepN (t : FTheory) (univ delta lambda : List FLit)
     (P N : List FLit) : List FLit :=
+  let P' := twoSidedStepP t univ delta lambda P N
   (N ++ univ.filter fun l =>
-    !N.contains l && !(twoSidedStepP t univ delta lambda P N).contains l
-      && canDisprove2 t univ delta lambda P N l).dedup
+    !N.contains l && !P'.contains l
+      && canDisprove2 t univ delta lambda P' N l).dedup
 
 /-- One joint step. Both components only grow. -/
 def twoSidedStep (t : FTheory) (univ delta lambda : List FLit)
