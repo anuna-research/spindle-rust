@@ -263,10 +263,15 @@ pub fn why_not_with_conclusions(
             } else {
                 // Body is fully satisfied but conclusion not proven. Match
                 // candidate attackers the same way the standard reasoner does:
-                // exact head identity against the complement literal.
+                // exact head identity against the complement of the CANDIDATE
+                // HEAD, not the bare query literal. For an atemporal query that
+                // family-matches a temporal rule (e.g. why_not(p) against
+                // `a => p[1,10]`), the blocker is `~p[1,10]`, so comparing
+                // against `~p` would miss a temporal complement fact/attacker.
+                let head_complement = rule.head_literal().complement();
                 let mut blocked = false;
                 for attacker in theory.rules() {
-                    if exact_literal_match(&complement, attacker.head_literal()) {
+                    if exact_literal_match(&head_complement, attacker.head_literal()) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
@@ -312,10 +317,10 @@ pub fn why_not_with_conclusions(
                 }
                 if !blocked {
                     debug_assert!(
-                        !has_positive_match(&complement, conclusions),
+                        !has_positive_match(&head_complement, conclusions),
                         "why_not fell back to an undetermined blocker for rule {} even though {} is already positively supported",
                         rule.label,
-                        complement
+                        head_complement
                     );
                     result.blocked_by.push(BlockingCondition::undetermined(
                         &rule.label,
@@ -344,6 +349,7 @@ pub fn why_not_with_conclusions(
 mod tests {
     use super::*;
     use crate::literal::Literal;
+    use crate::rule::Rule;
     use crate::temporal::{Temporal, TimePoint};
     use crate::theory::Theory;
 
@@ -359,6 +365,45 @@ mod tests {
             Temporal::new(TimePoint::Moment(start), TimePoint::Moment(end)),
             vec![],
         )
+    }
+
+    #[test]
+    fn test_why_not_family_match_detects_temporal_blocker() {
+        // Atemporal why_not(p) family-matches the temporal rule `a => p[1,10]`.
+        // A temporal complement fact `~p[1,10]` blocks it. The blocker must be
+        // reported against the candidate head's complement (`~p[1,10]`), not the
+        // bare query complement (`~p`) — otherwise the exact-match attacker scan
+        // misses it, the result reports an Undetermined blocker, and the
+        // fallback `debug_assert!` panics in debug builds because `~p` (family)
+        // is positively supported by `~p[1,10]`.
+        let mut th = Theory::new();
+        th.add_fact("a");
+        th.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("a")],
+            temporal_lit("p", false, 1, 10),
+        ));
+        th.add_rule(Rule::fact("blocker", temporal_lit("p", true, 1, 10)));
+
+        // Must not panic (the debug_assert regression).
+        let result = why_not(&th, &Literal::simple("p")).unwrap();
+
+        assert!(!result.is_provable());
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_type == BlockingType::Contradicted),
+            "expected a Contradicted blocker from ~p[1,10], got: {:?}",
+            result.blocked_by
+        );
+        assert!(
+            !result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_type == BlockingType::Undetermined),
+            "temporal blocker must not fall back to Undetermined"
+        );
     }
 
     #[test]

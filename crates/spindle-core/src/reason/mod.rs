@@ -111,7 +111,11 @@ pub(crate) struct ReasoningTrace {
     pub projection_labels: FxHashSet<String>,
 }
 
-fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
+fn collect_projection_labels(state: &ReasoningState<'_>, theory: &Theory) -> FxHashSet<String> {
+    // Gather candidate labels from all three sources: rules on a positive
+    // conclusion, rules whose defeasible body is fully covered, and labels the
+    // fixed-point loop recorded for the explanation surface (attackers plus
+    // supporters of blocked literals).
     let mut labels = state
         .conclusions
         .iter()
@@ -129,6 +133,28 @@ fn collect_projection_labels(state: &ReasoningState<'_>) -> FxHashSet<String> {
             .map(|(label, _)| (*label).to_string()),
     );
     labels.extend(state.projection_labels.iter().cloned());
+
+    // Drop rules that are *decisively defeated*: applicable (body covered, not
+    // `rule_discarded`) yet their head lost the conclusion to a positively-proven
+    // complement — e.g. `bird => flies` when `~flies` is superior, giving `-d
+    // flies` and `+d ~flies`. Such a loser is also recorded as an "applicable
+    // supporter of a blocked literal" by the fixed-point loop, so projecting it
+    // would emit phantom FamilySupport for support it never provided.
+    //
+    // A rule survives if any head is *not* decisively defeated, i.e. the head is
+    // itself positively proven, OR its complement is not proven. The latter keeps
+    // genuine ambiguity blockers (Nixon diamond: `=> pacifist` vs `=> ~pacifist`,
+    // neither proven) — they actively block and belong on the explanation surface.
+    // Defeaters are exempt entirely: they project *attacks*, not support, and
+    // never assert their head positively.
+    labels.retain(|label| match theory.get_rule(label) {
+        None => true,
+        Some(rule) if rule.rule_type.is_defeater() => true,
+        Some(rule) => rule.head.iter().any(|h| {
+            crate::query::has_positive_match(h, &state.conclusions)
+                || !crate::query::has_positive_match(&h.complement(), &state.conclusions)
+        }),
+    });
     labels
 }
 
@@ -371,7 +397,7 @@ pub(crate) fn reason_indexed_trace(indexed: &mut IndexedTheory<'_>) -> Result<Re
     // Phase 2: Defeasible fixed-point loop + Phase 3: Negative conclusions
     defeasible::resolve_defeasible(theory, indexed, &mut state);
 
-    let projection_labels = collect_projection_labels(&state);
+    let projection_labels = collect_projection_labels(&state, theory);
 
     Ok(ReasoningTrace {
         conclusions: state.conclusions,
@@ -1612,6 +1638,66 @@ mod tests {
             token,
             ProjectionToken::Exact(exact) if exact.rule_label == "d1"
         )));
+    }
+
+    #[test]
+    fn test_reason_full_does_not_project_defeated_rule_as_support() {
+        // `bird => flies` and `penguin => ~flies` with `~flies` superior. `flies`
+        // is defeated (`-d flies`), so the applicable-but-beaten flies rule must
+        // NOT emit a support token, while the winning `~flies` rule must. The
+        // loser's body is fully satisfied and it is not `rule_discarded`, so this
+        // is exactly the case the naive body-remaining projection got wrong.
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+        theory.add_rule(Rule::defeasible(
+            "r_fly",
+            vec![Literal::simple("bird")],
+            Literal::simple("flies"),
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_nofly",
+            vec![Literal::simple("penguin")],
+            Literal::simple("flies").complement(),
+        ));
+        theory.add_superiority("r_nofly", "r_fly");
+
+        let result = reason_full(&theory).unwrap();
+
+        // The loser's head is defeasibly disproven.
+        assert!(
+            result.conclusions.iter().any(|c| {
+                c.literal.name() == "flies"
+                    && !c.literal.negation
+                    && c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+            }),
+            "expected -d flies"
+        );
+
+        // The defeated rule must not appear in any projection token.
+        assert!(
+            !result.projection_tokens.iter().any(|t| matches!(
+                t,
+                ProjectionToken::Family(s) if s.rule_label == "r_fly"
+            )),
+            "defeated rule r_fly must not emit FamilySupport"
+        );
+        assert!(
+            !result.projection_tokens.iter().any(|t| matches!(
+                t,
+                ProjectionToken::Exact(s) if s.rule_label == "r_fly"
+            )),
+            "defeated rule r_fly must not emit ExactSupport"
+        );
+
+        // The winning rule still projects support for ~flies.
+        assert!(
+            result.projection_tokens.iter().any(|t| matches!(
+                t,
+                ProjectionToken::Family(s) if s.rule_label == "r_nofly"
+            )),
+            "winning rule r_nofly must emit FamilySupport"
+        );
     }
 
     #[test]
