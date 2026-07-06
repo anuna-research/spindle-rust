@@ -90,19 +90,27 @@ fn conclusion_strength(ct: ConclusionType) -> u8 {
     }
 }
 
+/// Group conclusions by their exact-temporal [`Literal::to_spl`] key, keeping the
+/// strongest status for each.
+///
+/// Keying on `to_spl()` rather than the `Literal` itself is essential: `Literal`
+/// equality/hashing ignore temporal bounds, so distinct windows of the same
+/// family (e.g. `p[1,10]` and `p[20,30]`) would otherwise collapse into a single
+/// entry and merge their statuses. The retained `Literal` is carried alongside
+/// the status so callers can report the exact conclusion.
 fn strongest_conclusions_by_literal(
     conclusions: &[crate::conclusion::Conclusion],
-) -> HashMap<Literal, ConclusionType> {
-    let mut by_lit = HashMap::new();
+) -> HashMap<String, (Literal, ConclusionType)> {
+    let mut by_lit: HashMap<String, (Literal, ConclusionType)> = HashMap::new();
     for conc in conclusions {
         by_lit
-            .entry(conc.literal.clone())
-            .and_modify(|old| {
+            .entry(conc.literal.to_spl())
+            .and_modify(|(_, old)| {
                 if conclusion_strength(conc.conclusion_type) > conclusion_strength(*old) {
                     *old = conc.conclusion_type;
                 }
             })
-            .or_insert(conc.conclusion_type);
+            .or_insert_with(|| (conc.literal.clone(), conc.conclusion_type));
     }
     by_lit
 }
@@ -138,10 +146,13 @@ pub fn what_if(
 ) -> Result<WhatIfResult> {
     // Get baseline conclusions
     let baseline = reason(theory)?;
-    let baseline_provable: HashSet<_> = baseline
+    // Key on the exact-temporal `to_spl()` form: `Literal` equality ignores
+    // temporal bounds, so a set of `Literal`s would treat p[20,30] as already
+    // present when only p[1,10] was, hiding genuinely new windows below.
+    let baseline_provable: HashSet<String> = baseline
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
+        .map(|c| c.literal.to_spl())
         .collect();
 
     // Create modified theory with hypotheticals using unique labels
@@ -181,7 +192,9 @@ pub fn what_if(
     // Find new conclusions
     let new_conclusions: Vec<Literal> = modified_conclusions
         .iter()
-        .filter(|c| c.conclusion_type.is_positive() && !baseline_provable.contains(&c.literal))
+        .filter(|c| {
+            c.conclusion_type.is_positive() && !baseline_provable.contains(&c.literal.to_spl())
+        })
         .map(|c| c.literal.clone())
         .collect();
 
@@ -192,14 +205,17 @@ pub fn what_if(
     let baseline_by_lit = strongest_conclusions_by_literal(&baseline);
     let modified_by_lit = strongest_conclusions_by_literal(&modified_conclusions);
 
-    let mut all_literals: HashSet<Literal> = baseline_by_lit.keys().cloned().collect();
-    all_literals.extend(modified_by_lit.keys().cloned());
-    for lit in all_literals {
-        if let (Some(&old_type), Some(&new_type)) =
-            (baseline_by_lit.get(&lit), modified_by_lit.get(&lit))
+    // Union the exact-temporal keys; sort for deterministic output order.
+    let mut all_keys: Vec<String> = baseline_by_lit.keys().cloned().collect();
+    all_keys.extend(modified_by_lit.keys().cloned());
+    all_keys.sort();
+    all_keys.dedup();
+    for key in &all_keys {
+        if let (Some((_, old_type)), Some((lit, new_type))) =
+            (baseline_by_lit.get(key), modified_by_lit.get(key))
             && old_type != new_type
         {
-            changed_conclusions.push((lit, old_type, new_type));
+            changed_conclusions.push((lit.clone(), *old_type, *new_type));
         }
     }
 
@@ -218,4 +234,54 @@ pub fn what_if_provable(
     goal: &Literal,
 ) -> Result<bool> {
     Ok(what_if(theory, hypotheticals, goal)?.is_provable())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::temporal::{Temporal, TimePoint};
+
+    fn temporal_lit(name: &str, start: i64, end: i64) -> Literal {
+        Literal::new(
+            name,
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(start), TimePoint::Moment(end)),
+            vec![],
+        )
+    }
+
+    #[test]
+    fn what_if_reports_new_temporal_window_as_new_conclusion() {
+        // Baseline derives p[1,10]. A hypothetical p[20,30] is a genuinely new
+        // temporal window of the same family. Because `Literal` equality ignores
+        // temporal bounds, comparing on `Literal` alone would treat p[20,30] as
+        // already present and omit it; the exact `to_spl()` key keeps it.
+        let mut th = Theory::new();
+        th.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let hyp = temporal_lit("p", 20, 30);
+        let result = what_if(
+            &th,
+            vec![HypotheticalClaim::new(hyp.clone())],
+            &temporal_lit("p", 20, 30),
+        )
+        .unwrap();
+
+        assert!(
+            result
+                .new_conclusions
+                .iter()
+                .any(|l| l.to_spl() == hyp.to_spl()),
+            "New temporal window p[20,30] must be reported as a new conclusion"
+        );
+        // The pre-existing window must not be reported as new.
+        assert!(
+            !result
+                .new_conclusions
+                .iter()
+                .any(|l| l.to_spl() == temporal_lit("p", 1, 10).to_spl()),
+            "Baseline window p[1,10] must not appear among new conclusions"
+        );
+    }
 }

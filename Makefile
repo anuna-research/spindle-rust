@@ -1,7 +1,9 @@
 .PHONY: all build test test-quick test-full clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory release-tag
 
-TEST_RUNNER = if cargo nextest --version >/dev/null 2>&1; then cargo nextest run --all; else cargo test --all; fi
-TEST_RUNNER_QUICK = if cargo nextest --version >/dev/null 2>&1; then PROPTEST_CASES=20 cargo nextest run --all; else PROPTEST_CASES=20 cargo test --all; fi
+# nextest does not execute rustdoc tests, so when it is used we run the
+# doctests separately with `cargo test --doc` to keep public doctests covered.
+TEST_RUNNER = if cargo nextest --version >/dev/null 2>&1; then cargo nextest run --all && cargo test --doc --all; else cargo test --all; fi
+TEST_RUNNER_QUICK = if cargo nextest --version >/dev/null 2>&1; then PROPTEST_CASES=20 cargo nextest run --all && PROPTEST_CASES=20 cargo test --doc --all; else PROPTEST_CASES=20 cargo test --all; fi
 
 # Default target
 all: check build test

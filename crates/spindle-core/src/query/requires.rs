@@ -219,6 +219,6 @@ pub fn requires(theory: &Theory, goal: &Literal) -> Result<Vec<Literal>> {
     Ok(result
         .solutions
         .first()
-        .map(|s| s.facts.iter().cloned().collect())
+        .map(|s| s.facts.clone())
         .unwrap_or_default())
 }

@@ -64,9 +64,16 @@ steps:
       - cargo test --package spindle-core --test lean_trust_oracle_difftest -- --ignored
       - cargo test --package spindle-core --test spl_parser_difftest -- --ignored
     # Conformance compares the RUST engine against the Lean model, so it must
-    # run when EITHER side changes — not just on lean/** edits.
+    # run when EITHER side changes — not just on lean/** edits. The parser
+    # crate is included because spl_parser_difftest pins the Rust parser to the
+    # Lean parser oracle; a PR touching only spindle-parser must not skip it.
     when:
-      - path: ["lean/**", "crates/spindle-core/**"]
+      - path:
+          [
+            "lean/**",
+            "crates/spindle-core/**",
+            "crates/spindle-parser/**",
+          ]
 
   - name: deploy-docs
     image: node:22-bookworm

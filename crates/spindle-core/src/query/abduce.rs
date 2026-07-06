@@ -32,8 +32,15 @@ use super::{has_positive_match, semantic_literal_matches};
 /// A solution to an abduction problem
 #[derive(Debug, Clone)]
 pub struct AbductionSolution {
-    /// Facts that need to be assumed
-    pub facts: FxHashSet<Literal>,
+    /// Facts that need to be assumed.
+    ///
+    /// Stored as an ordered `Vec` rather than a `HashSet` because `Literal`
+    /// equality and hashing deliberately ignore temporal bounds (see
+    /// `impl PartialEq for Literal`). A set keyed on `Literal` would silently
+    /// collapse distinct temporal variants of the same family — e.g. `p[1,10]`
+    /// and `p[20,30]` — dropping a required premise. Callers dedup on the exact
+    /// [`Literal::to_spl`] key before inserting, so this holds no duplicates.
+    pub facts: Vec<Literal>,
     /// Rules that would be used in the derivation
     pub rules_used: FxHashSet<String>,
     /// Confidence score (if trust-weighted)
@@ -42,7 +49,7 @@ pub struct AbductionSolution {
 
 impl AbductionSolution {
     /// Create a new abduction solution
-    pub fn new(facts: FxHashSet<Literal>) -> Self {
+    pub fn new(facts: Vec<Literal>) -> Self {
         Self {
             facts,
             rules_used: FxHashSet::default(),
@@ -127,6 +134,17 @@ fn is_goal_provable(goal: &Literal, conclusions: &[Conclusion]) -> bool {
     has_positive_match(goal, conclusions)
 }
 
+/// Order-independent, exact-temporal signature for a hypothesis fact-set.
+///
+/// Uses [`Literal::to_spl`] (which renders temporal bounds) rather than
+/// `Literal` equality so that candidates differing only in temporal window are
+/// treated as distinct.
+fn fact_set_key(facts: &[Literal]) -> String {
+    let mut keys: Vec<String> = facts.iter().map(Literal::to_spl).collect();
+    keys.sort();
+    keys.join("\x1f")
+}
+
 /// Check whether `lit` is satisfied according to the literal's own match
 /// semantics. Atemporal premises match by family; bounded premises stay exact.
 fn is_body_satisfied(lit: &Literal, conclusions: &[Conclusion]) -> bool {
@@ -158,30 +176,36 @@ pub fn abduce_with_conclusions(
     let mut result = AbductionResult::new(goal.clone());
 
     if is_goal_provable(goal, conclusions) {
-        result
-            .solutions
-            .push(AbductionSolution::new(FxHashSet::default()));
+        result.solutions.push(AbductionSolution::new(Vec::new()));
         return Ok(result);
     }
 
     // Find rules that could derive the goal according to the goal's own match
     // semantics: exact when bounded, family-aware when atemporal.
-    let mut candidates: Vec<(FxHashSet<Literal>, FxHashSet<String>)> = Vec::new();
+    //
+    // Each candidate is keyed by its exact-temporal signature (see
+    // [`fact_set_key`]) so that hypothesis sets are deduplicated by precise
+    // temporal content, not by `Literal` equality (which ignores temporal).
+    let mut candidates: Vec<(String, Vec<Literal>, FxHashSet<String>)> = Vec::new();
 
     for rule in theory.rules() {
         if semantic_literal_matches(goal, rule.head_literal())
             && rule.rule_type != RuleType::Defeater
         {
-            // Find missing body literals using each premise's own match semantics.
-            let body_lits: Vec<Literal> = rule
-                .body
-                .iter()
-                .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
-                .collect();
-            let missing: FxHashSet<_> = body_lits
-                .into_iter()
-                .filter(|b| !is_body_satisfied(b, conclusions))
-                .collect();
+            // Find missing body literals using each premise's own match
+            // semantics. Deduplicate on the exact `to_spl()` key so that
+            // distinct temporal variants of the same family (e.g. p[1,10] and
+            // p[20,30]) are both retained as separate required premises.
+            let mut missing: Vec<Literal> = Vec::new();
+            let mut missing_keys: FxHashSet<String> = FxHashSet::default();
+            for bl in &rule.body {
+                let Some(lit) = bl.as_logic().map(|l| l.to_literal()) else {
+                    continue;
+                };
+                if !is_body_satisfied(&lit, conclusions) && missing_keys.insert(lit.to_spl()) {
+                    missing.push(lit);
+                }
+            }
 
             if missing.is_empty() {
                 // All body satisfied but goal not provable — blocked by
@@ -189,29 +213,31 @@ pub fn abduce_with_conclusions(
                 continue;
             }
 
-            if let Some((_, rules_used)) =
-                candidates.iter_mut().find(|(facts, _)| *facts == missing)
+            let missing_key = fact_set_key(&missing);
+            if let Some((_, _, rules_used)) = candidates
+                .iter_mut()
+                .find(|(key, _, _)| *key == missing_key)
             {
                 rules_used.insert(rule.label.clone());
             } else {
                 let mut rules_used: FxHashSet<String> = FxHashSet::default();
                 rules_used.insert(rule.label.clone());
-                candidates.push((missing, rules_used));
+                candidates.push((missing_key, missing, rules_used));
             }
         }
     }
 
     // If no direct rules, try the trivial solution (add goal itself)
     if candidates.is_empty() {
-        let mut trivial: FxHashSet<Literal> = FxHashSet::default();
-        trivial.insert(goal.clone());
-        candidates.push((trivial, FxHashSet::default()));
+        let trivial = vec![goal.clone()];
+        candidates.push((fact_set_key(&trivial), trivial, FxHashSet::default()));
     }
 
-    // Sort by size (smallest first)
-    candidates.sort_by_key(|(facts, _): &(FxHashSet<Literal>, FxHashSet<String>)| facts.len());
+    // Sort by size (smallest first), then by exact-temporal key for
+    // determinism regardless of rule iteration order.
+    candidates.sort_by(|(ka, fa, _), (kb, fb, _)| fa.len().cmp(&fb.len()).then_with(|| ka.cmp(kb)));
 
-    for (facts, rules_used) in candidates.into_iter().take(max_solutions) {
+    for (_, facts, rules_used) in candidates.into_iter().take(max_solutions) {
         let mut sol = AbductionSolution::new(facts);
         sol.rules_used = rules_used;
         result.solutions.push(sol);
@@ -595,7 +621,7 @@ mod tests {
             result
                 .solutions
                 .iter()
-                .any(|sol| sol.facts == FxHashSet::from_iter([Literal::simple("bird")]))
+                .any(|sol| sol.facts == vec![Literal::simple("bird")])
         );
     }
 
@@ -642,7 +668,7 @@ mod tests {
             "A different temporal window must not satisfy a bounded goal"
         );
         let sol = result.smallest_solution().unwrap();
-        let fact = sol.facts.iter().next().unwrap();
+        let fact = sol.facts.first().unwrap();
         assert_eq!(fact.to_spl(), goal.to_spl());
     }
 
@@ -660,12 +686,39 @@ mod tests {
 
         let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
         let sol = result.smallest_solution().unwrap();
-        let fact = sol.facts.iter().next().unwrap();
+        let fact = sol.facts.first().unwrap();
 
         assert_eq!(
             fact.to_spl(),
             temporal_lit("p", 1, 10).to_spl(),
             "A temporal premise should stay exact during body satisfaction"
         );
+    }
+
+    #[test]
+    fn test_abduce_preserves_all_temporal_variants_in_body() {
+        // Rule body requires BOTH p[1,10] and p[20,30] — distinct temporal
+        // windows of the same family. Neither is provable, so both must appear
+        // as separate hypotheses. `Literal` equality/hashing ignore temporal,
+        // so a set-keyed collection would drop one and understate the premises.
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r1",
+            vec![temporal_lit("p", 1, 10), temporal_lit("p", 20, 30)],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(
+            sol.facts.len(),
+            2,
+            "Both temporal variants must be retained as distinct premises"
+        );
+        let keys: std::collections::BTreeSet<String> =
+            sol.facts.iter().map(Literal::to_spl).collect();
+        assert!(keys.contains(&temporal_lit("p", 1, 10).to_spl()));
+        assert!(keys.contains(&temporal_lit("p", 20, 30).to_spl()));
     }
 }

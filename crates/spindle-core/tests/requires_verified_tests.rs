@@ -251,6 +251,6 @@ fn test_requires_bounded_goal_does_not_treat_other_window_as_provable() {
 
     assert!(!result.already_provable);
     let solution = result.solutions.first().unwrap();
-    let fact = solution.facts.iter().next().unwrap();
+    let fact = solution.facts.first().unwrap();
     assert_eq!(fact.to_spl(), temporal_lit("p", 1, 10).to_spl());
 }
