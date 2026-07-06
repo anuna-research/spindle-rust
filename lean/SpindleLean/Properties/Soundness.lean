@@ -42,6 +42,15 @@ theorem deltaStep_new_has_rule (t : Theory) (current : List Literal) (l : Litera
     · -- isFalse: guard false, result is none (absurd)
       simp at hcond
 
+/-- Bridge to the semantic spec: a literal newly added by `deltaStep` is
+    `deltaDerivable` from the pre-step set. Phrases `deltaStep_new_has_rule`
+    through the named DL(d) definite operator so the definition is faithfully
+    referenced rather than left as dead specification. -/
+theorem deltaStep_new_deltaDerivable (t : Theory) (current : List Literal) (l : Literal)
+    (hnew : l ∈ Closure.deltaStep t current) (hold : l ∉ current) :
+    deltaDerivable t current l :=
+  deltaStep_new_has_rule t current l hnew hold
+
 /-- Seed soundness: every literal in the initial seed comes from a fact rule -/
 theorem seed_has_fact (t : Theory) (l : Literal)
     (h : l ∈ (t.facts.map (·.head)).dedup) :
@@ -102,10 +111,6 @@ theorem delta_sound (t : Theory) (l : Literal) :
 -- ═══════════════════════════════════════════════════════════════
 -- Ambiguity blocking (prove-ambiguity task)
 -- ═══════════════════════════════════════════════════════════════
-
-/-- Two rules conflict if one has head p and the other has head ~p -/
-def rulesConflict (r₁ r₂ : Rule) : Prop :=
-  r₁.head = r₂.head.complement
 
 /-- Ambiguity blocking at the canProve level: if there exists an undefeated
     attacker (a rule for ~lit whose body reaches through lambda and no

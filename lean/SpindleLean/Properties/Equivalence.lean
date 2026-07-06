@@ -12,7 +12,9 @@
   operator.
 
   Strategy:
-  1. Define the DL(d) consequence operator semantically
+  1. Define the definite DL(d) consequence operator semantically
+     (`isDefinitelyDerivable`); the defeasible operator is
+     `PaperDefeasibleProvable` in `Properties/Faithfulness.lean`.
   2. Show delta computes exactly the definite consequences
   3. Show lambda over-approximates the defeasible consequences
   4. Show partial computes exactly the defeasible consequences
@@ -37,17 +39,10 @@ namespace Properties
 def isDefinitelyDerivable (t : Theory) (definiteSet : List Literal) (l : Literal) : Prop :=
   ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l ∧ r.bodySatisfied definiteSet = true
 
-/-- A literal is defeasibly derivable if:
-    (a) it's already definite, OR
-    (b) its complement is NOT definite, AND
-        there exists a productive rule for it with body in the defeasible set, AND
-        all attacks are defeated -/
-def isDefeasiblyDerivable (t : Theory) (delta lambda defeasibleSet : List Literal)
-    (l : Literal) : Prop :=
-  l ∈ delta
-  ∨ (l.complement ∉ delta
-     ∧ ∃ r ∈ t.rules, r.isProductive = true ∧ r.head = l ∧ r.bodySatisfied defeasibleSet = true
-     ∧ Closure.allAttacksDefeated t l lambda defeasibleSet = true)
+-- The defeasible (`+d`) consequence operator is `PaperDefeasibleProvable`
+-- (see `Properties/Faithfulness.lean`), which the `faithful_plusd_forward`
+-- and `faithful_plusd_backward` theorems tie to `partialClose`. It is the
+-- live semantic anchor for +d, so no separate operator is defined here.
 
 -- ═══════════════════════════════════════════════════════════════
 -- Delta computes definite consequences
@@ -120,18 +115,6 @@ theorem reason_plusD_sound (t : Theory) (l : Literal)
     (h : l ∈ (reason t).delta) :
     ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l :=
   delta_sound t l h
-
-/-- deltaClose.go result is Nodup. -/
-private theorem deltaClose_go_nodup' (t : Theory) (current : List Literal) (fuel : Nat)
-    (hnodup : current.Nodup) :
-    (Closure.deltaClose.go t current fuel).Nodup := by
-  induction fuel generalizing current with
-  | zero => simp only [Closure.deltaClose.go]; exact hnodup
-  | succ n ih =>
-    simp only [Closure.deltaClose.go]
-    split
-    · exact hnodup
-    · apply ih; simp only [Closure.deltaStep]; exact List.nodup_dedup _
 
 /-- deltaStep preserves subset of allLiterals -/
 theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
@@ -329,6 +312,17 @@ theorem reason_plusD_complete (t : Theory) (l : Literal)
   -- Fuel bound: allLiterals.length - init.length ≤ 1000
   -- Since init.length ≥ 0 and allLiterals.length ≤ 1000
   omega
+
+/-- Bridge to the semantic spec (strategy step 1): if `l` is *definitely
+    derivable* (`isDefinitelyDerivable`) from the computed definite set, then it
+    is in `deltaClose`. This is `reason_plusD_complete` phrased through the named
+    DL(d) operator, so the operator is faithfully connected to the algorithm
+    rather than left as an unreferenced specification. -/
+theorem deltaClose_of_isDefinitelyDerivable (t : Theory) (l : Literal)
+    (hsmall : t.allLiterals.length ≤ 1000)
+    (hderiv : isDefinitelyDerivable t (Closure.deltaClose t) l) :
+    l ∈ Closure.deltaClose t :=
+  reason_plusD_complete t l hsmall hderiv
 
 /-- The three-phase decomposition preserves the subset chain:
     (delta-consistent part of) delta ⊆ partial ⊆ lambda.

@@ -12,7 +12,6 @@
   Value format:
     { "int": N }
     { "decimal": { "n": N, "scale": S } }
-    { "float": F }
 
   ArithExpr format:
     { "lit": <Value> }
@@ -188,10 +187,14 @@ private def evalConstraintCase (j : Json) : Except String Json := do
   let env := buildEnv bindings
   match constraint.eval env with
   | .satisfied env' =>
-    -- Collect all known variable IDs and their values in the new environment
-    let maxId := bindings.foldl (fun acc (id, _) => Nat.max acc id) 0
-    -- Check binding IDs up to maxId + some extra for newly bound vars
-    let ids := List.range (maxId + 10)
+    -- Collect all variable IDs relevant to this case and read their values
+    -- from the resulting environment. The scan bound must cover every id the
+    -- input binds AND every id the constraint mentions — `constraint.varIds`
+    -- includes a `bind`'s freshly-introduced variable, so a `bind` to a high
+    -- id can no longer be dropped from the output (the old `maxId + 10`
+    -- heuristic silently missed those).
+    let maxId := (bindings.map (·.1) ++ constraint.varIds).foldl Nat.max 0
+    let ids := List.range (maxId + 1)
     let newBindings := ids.filterMap fun id =>
       match env' id with
       | some v => some (id, v)

@@ -327,12 +327,9 @@ theorem theoryHerbrandBase_positive (rules : List Rule) :
     ∀ l, l ∈ theoryHerbrandBase rules → l.negation = false :=
   herbrandBase_positive _ _
 
-/-- The theory's Herbrand base is finite (it's a list, hence enumerable). -/
-theorem theoryHerbrandBase_finite (rules : List Rule) :
-    ∃ n : Nat, (theoryHerbrandBase rules).length = n :=
-  ⟨_, rfl⟩
-
-/-- Precise count: the theory's Herbrand base size equals the sum of d^aᵢ. -/
+/-- Precise count: the theory's Herbrand base size equals the sum of d^aᵢ.
+    (This subsumes any bare "finiteness" claim: the base is a list of exactly
+    this many elements, so finiteness is both definitional and quantified here.) -/
 theorem theoryHerbrandBase_count (rules : List Rule) :
     (theoryHerbrandBase rules).length =
       ((extractSignatures rules).map fun sig =>

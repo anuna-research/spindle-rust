@@ -308,13 +308,6 @@ private theorem mem_cl {x z : Interval} {l : List AllenRelation}
     {r : AllenRelation} (hcl : classify x z = r) (hmem : r ∈ l) : classify x z ∈ l :=
   hcl ▸ hmem
 
--- Shorthand to prove classify x z ∈ compose r1 r2 in a single cell
--- Usage: by_cl (cl_before hss hse) (List.mem_cons_self _ _)
---   i.e. by_cl <classify-proof> <membership-proof>
-private theorem by_cl_thm {x z : Interval} {r1 r2 : AllenRelation} {r : AllenRelation}
-    (hcl : classify x z = r) (hmem : r ∈ compose r1 r2) : classify x z ∈ compose r1 r2 :=
-  hcl ▸ hmem
-
 set_option maxHeartbeats 800000 in
 theorem AllenRelation.compose_sound
     (x y z : Interval) (hx : x.proper) (hy : y.proper) (hz : z.proper)
