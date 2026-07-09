@@ -28,6 +28,7 @@
   (diminish_diminish_comm, diminishAll_eq_prod): the result is the
   product form c · ∏(1 − dᵢ).
 -/
+import Batteries.Tactic.Lint.Basic
 import Mathlib.Algebra.Order.Field.Rat
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Ring
@@ -48,7 +49,15 @@ def diminish (c d : TrustValue) : TrustValue := max (c - diminishment c d) 0
 
 /-- **Faithfulness**: on the unit interval, the implementation's
     clamped-subtraction form equals the paper's multiplicative operator
-    τ_c(1 − τ_d). -/
+    τ_c(1 − τ_d).
+
+    `_hd` is not consumed by the proof (`0 ≤ c` and `d ≤ 1` suffice). It is
+    retained deliberately: the faithfulness claim is scoped to the unit
+    interval, and every sibling property below reads `d` as a trust value in
+    [0, 1]. Dropping it would let `d < 0`, where `diminish c d = c(1 - d) > c`
+    — a "defeater" that *increases* trust. `diminish_le_self` documents the
+    same requirement, where it is genuinely load-bearing. Hence the `nolint`. -/
+@[nolint unusedArguments]
 theorem diminish_eq_mul (c d : TrustValue) (hc : 0 ≤ c) (_hd : 0 ≤ d) (hd1 : d ≤ 1) :
     diminish c d = c * (1 - d) := by
   unfold diminish diminishment

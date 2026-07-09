@@ -124,7 +124,14 @@ theorem stepDecay_antitone (cutoff a₁ a₂ : ℚ) (h : a₁ ≤ a₂) :
 
 /-! ## Effective trust -/
 
-/-- Decay never increases trust: effective trust is bounded by base trust. -/
+/-- Decay never increases trust: effective trust is bounded by base trust.
+
+    `_hm0` is not consumed by the proof (`mult ≤ 1` and `0 ≤ base` suffice).
+    It is retained deliberately: it pins `mult` to the decay-multiplier domain
+    [0, 1] that `DecayLaw` guarantees and `trust.rs` assumes. Dropping it would
+    strengthen the theorem into a claim about negative multipliers, which are
+    not decay. Hence the `nolint`. -/
+@[nolint unusedArguments]
 theorem effectiveTrust_le_base (base mult : TrustValue)
     (hb : 0 ≤ base) (hm : mult ≤ 1) (_hm0 : 0 ≤ mult) :
     effectiveTrust base mult ≤ base := by
@@ -178,12 +185,15 @@ def DecayLaw.step (cutoff : ℚ) : DecayLaw where
   antitone := fun a₁ a₂ h => stepDecay_antitone cutoff a₁ a₂ h
 
 /-- For any decay law, effective trust at any age is bounded by base
-    trust and stays in the unit interval. -/
+    trust and stays in the unit interval. The `≤ 1` conjunct is what the
+    name claims; deriving it is the only use of `hb1`. -/
 theorem DecayLaw.effective_mem_unit (law : DecayLaw) (base : TrustValue)
-    (hb : 0 ≤ base) (_hb1 : base ≤ 1) (age : ℚ) :
+    (hb : 0 ≤ base) (hb1 : base ≤ 1) (age : ℚ) :
     0 ≤ effectiveTrust base (law.mult age)
-    ∧ effectiveTrust base (law.mult age) ≤ base := by
-  refine ⟨mul_nonneg hb (law.nonneg age), ?_⟩
-  exact effectiveTrust_le_base base _ hb (law.le_one age) (law.nonneg age)
+    ∧ effectiveTrust base (law.mult age) ≤ base
+    ∧ effectiveTrust base (law.mult age) ≤ 1 := by
+  have hle : effectiveTrust base (law.mult age) ≤ base :=
+    effectiveTrust_le_base base _ hb (law.le_one age) (law.nonneg age)
+  exact ⟨mul_nonneg hb (law.nonneg age), hle, le_trans hle hb1⟩
 
 end Spindle.Trust

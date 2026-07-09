@@ -109,6 +109,38 @@ if [ -n "$local_axioms" ]; then
   exit 1
 fi
 
+echo "==> Scanning for vacuous theorem statements"
+# `VacuityLint.lean` is not a lake target (its `#lint` output is intentionally
+# an elaboration error), so nothing else builds its `Batteries.Tactic.Lint`
+# import. `lake env lean` only sets LEAN_PATH — it does not build. Build the
+# module explicitly or the import fails wherever the mathlib cache is cold.
+lake build Batteries.Tactic.Lint
+
+# `lake env lean` exits non-zero when the linter reports findings, so capture
+# its output rather than let `set -e` abort here.
+lint_output="$(lake env lean VacuityLint.lean 2>&1 || true)"
+
+# Guard the "#lint silently lints nothing" trap: a bare `#lint` sees only the
+# current file (zero declarations) and passes vacuously. Assert that both
+# packages were actually scanned before trusting a clean result.
+for pkg in Spindle SpindleLean; do
+  if ! printf '%s\n' "$lint_output" | grep -q "in $pkg with 2 linters"; then
+    printf '%s\n' "$lint_output" >&2
+    echo "error: vacuity linter did not run over $pkg" >&2
+    exit 1
+  fi
+done
+
+# Derived `Repr` instances always report an unused precedence argument.
+lint_hits="$(printf '%s\n' "$lint_output" | grep '^#check' | grep -v 'instRepr' || true)"
+
+if [ -n "$lint_hits" ]; then
+  printf '%s\n' "$lint_hits" >&2
+  echo "error: Lean declaration has a tautological statement or an unused hypothesis" >&2
+  echo "hint: fix the statement, or tag it @[nolint unusedArguments] with a reason" >&2
+  exit 1
+fi
+
 echo "==> Running Lean axiom audit"
 audit_output="$(mktemp)"
 trap 'rm -f "$build_output" "$audit_output"' EXIT

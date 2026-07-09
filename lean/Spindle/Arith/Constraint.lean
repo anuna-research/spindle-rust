@@ -2,9 +2,8 @@
   Spindle Arithmetic Constraint Evaluation
 
   Defines body arguments (literal, constant, variable, arithmetic expression),
-  constraint satisfaction under substitutions, and proves that constraint
-  evaluation is deterministic when all variables are bound to ground terms
-  (SPEC-017).
+  constraint satisfaction under substitutions, and proves that groundness
+  guarantees evaluation success (SPEC-017).
 -/
 import Spindle.Arith.Eval
 import Spindle.Arith.GroundLiteral
@@ -110,29 +109,6 @@ def ValueEnv.groundForConstraint (env : ValueEnv) (c : ArithConstraint) : Prop :
   | .bind _ expr => env.groundFor expr
   | .compare _ lhs rhs => env.groundFor lhs ∧ env.groundFor rhs
 
-/-! ## Determinism of expression evaluation -/
-
-/-- Expression evaluation is a (partial) function: given the same environment,
-    it always produces the same result. This is trivially true since `eval`
-    is defined as a pure function — but we state it explicitly as a theorem
-    to serve as the specification anchor for constraint satisfaction. -/
-theorem ArithExpr.eval_deterministic (env : ValueEnv) (e : ArithExpr) :
-    ∀ v₁ v₂, e.eval env = some v₁ → e.eval env = some v₂ → v₁ = v₂ := by
-  intro v₁ v₂ h₁ h₂
-  rw [h₁] at h₂
-  exact Option.some.inj h₂
-
-/-- Constraint evaluation is deterministic: two satisfying evaluations of the
-    same constraint in the same environment yield the same resulting
-    environment. Stated in payload-extracting form (mirroring
-    `ArithExpr.eval_deterministic`) so it is a citable determinism fact rather
-    than a vacuous tautology over the whole `ConstraintResult`. -/
-theorem ArithConstraint.eval_deterministic (env : ValueEnv) (c : ArithConstraint) :
-    ∀ e₁ e₂, c.eval env = .satisfied e₁ → c.eval env = .satisfied e₂ → e₁ = e₂ := by
-  intro e₁ e₂ h₁ h₂
-  rw [h₁] at h₂
-  exact ConstraintResult.satisfied.inj h₂
-
 /-! ## Groundness guarantees evaluation success -/
 
 /-- Helper: if a variable is bound in the environment, `eval` of `.var id` succeeds. -/
@@ -199,15 +175,5 @@ theorem evalConstraints_singleton (env : ValueEnv) (c : ArithConstraint) :
       | .unsatisfied => .unsatisfied
       | .error e => .error e := by
   simp [evalConstraints]
-
-/-- Sequential evaluation is deterministic: two satisfying evaluations of the
-    same constraint list in the same starting environment yield the same final
-    environment. Payload-extracting form, as in `ArithConstraint.eval_deterministic`. -/
-theorem evalConstraints_deterministic (env : ValueEnv) (cs : List ArithConstraint) :
-    ∀ e₁ e₂, evalConstraints env cs = .satisfied e₁ → evalConstraints env cs = .satisfied e₂ →
-      e₁ = e₂ := by
-  intro e₁ e₂ h₁ h₂
-  rw [h₁] at h₂
-  exact ConstraintResult.satisfied.inj h₂
 
 end Spindle.Arith

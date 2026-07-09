@@ -7,10 +7,10 @@
   and the relation must hold.
 
   Proves:
-  1. evaluateConstraint is deterministic: same bindings → same result.
-  2. A satisfied result is witnessed by the relation classification matching.
-  3. For proper intervals, satisfaction implies AllenRelation.holds.
-  4. Constraint list evaluation is deterministic and all-satisfied-implies-each.
+  1. A satisfied result is witnessed by the relation classification matching.
+  2. For proper intervals, satisfaction implies AllenRelation.holds.
+  3. If a constraint list is satisfied, every individual constraint is satisfied.
+  4. Binding a variable absent from a constraint preserves its evaluation.
 -/
 import Spindle.Arith.AllenRelation
 import Spindle.Arith.Substitution
@@ -124,18 +124,6 @@ def evaluateConstraint (env : IntervalEnv) (c : AllenConstraint) : AllenResult :
     if c.rel.check lhs rhs then .satisfied else .unsatisfied
   | _, _ => .unbound
 
-/-! ## Core determinism theorem -/
-
-/-- **Determinism**: evaluating the same constraint against the same environment
-    always produces the same result. -/
-theorem evaluateConstraint_deterministic
-    (env : IntervalEnv) (c : AllenConstraint) :
-    ∀ r₁ r₂,
-      evaluateConstraint env c = r₁ →
-      evaluateConstraint env c = r₂ →
-      r₁ = r₂ := by
-  intro r₁ r₂ h₁ h₂; rw [← h₁, ← h₂]
-
 /-! ## Witness theorems -/
 
 /-- **Satisfaction witness**: `satisfied` implies both variables are bound and
@@ -238,15 +226,6 @@ def GroundingState.bindInterval (gs : GroundingState) (v : String) (i : Interval
 def GroundingState.checkConstraint (gs : GroundingState) (c : AllenConstraint) : AllenResult :=
   evaluateConstraint gs.intervals c
 
-/-- Grounding state constraint check is deterministic. -/
-theorem GroundingState.checkConstraint_deterministic
-    (gs : GroundingState) (c : AllenConstraint) :
-    ∀ r₁ r₂,
-      gs.checkConstraint c = r₁ →
-      gs.checkConstraint c = r₂ →
-      r₁ = r₂ :=
-  evaluateConstraint_deterministic gs.intervals c
-
 /-- Binding an interval variable that doesn't appear in a constraint
     preserves the constraint's evaluation result. -/
 theorem GroundingState.checkConstraint_preserved_by_bind
@@ -274,15 +253,6 @@ def evaluateConstraints (env : IntervalEnv) : List AllenConstraint → AllenResu
 /-- Empty constraint list is always satisfied. -/
 theorem evaluateConstraints_nil (env : IntervalEnv) :
     evaluateConstraints env [] = .satisfied := rfl
-
-/-- Constraint list evaluation is deterministic. -/
-theorem evaluateConstraints_deterministic
-    (env : IntervalEnv) (cs : List AllenConstraint) :
-    ∀ r₁ r₂,
-      evaluateConstraints env cs = r₁ →
-      evaluateConstraints env cs = r₂ →
-      r₁ = r₂ := by
-  intro r₁ r₂ h₁ h₂; rw [← h₁, ← h₂]
 
 /-- If a constraint list evaluates to `satisfied`, every individual constraint
     is satisfied. -/

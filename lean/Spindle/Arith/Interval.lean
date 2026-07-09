@@ -182,7 +182,7 @@ theorem Interval.intersect_isSome_of_overlaps {a b : Interval} (h : a.overlaps b
   simp [hle]
 
 /-- The intersection of overlapping intervals is a subset of the first interval. -/
-theorem Interval.intersect_subset_left {a b : Interval} (_h : a.overlaps b)
+theorem Interval.intersect_subset_left {a b : Interval}
     (hi : Interval) (heq : a.intersect b = some hi) : hi.subset a := by
   simp only [Interval.intersect] at heq
   split at heq
@@ -192,7 +192,7 @@ theorem Interval.intersect_subset_left {a b : Interval} (_h : a.overlaps b)
   · exact absurd heq (by simp)
 
 /-- The intersection of overlapping intervals is a subset of the second interval. -/
-theorem Interval.intersect_subset_right {a b : Interval} (_h : a.overlaps b)
+theorem Interval.intersect_subset_right {a b : Interval}
     (hi : Interval) (heq : a.intersect b = some hi) : hi.subset b := by
   simp only [Interval.intersect] at heq
   split at heq

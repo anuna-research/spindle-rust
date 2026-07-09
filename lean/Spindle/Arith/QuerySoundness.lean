@@ -76,15 +76,19 @@ theorem abduce_whatIf_soundness_strong (R : ReasoningOp) (T : Theory) (q : Liter
     R.conclusions (T ++ s.facts.map Literal.toFact) q :=
   ⟨abduce_implies_whatIf R T q s hnotq, s.valid⟩
 
-/-- Converse direction: if what_if shows q is a new conclusion under F,
-    then F is a valid abduction solution, and the result is a genuine
-    what_if conclusion. This shows the two operators are perfectly aligned. -/
+/-- Converse direction: if what_if shows q is a new conclusion under F, then
+    reading F back out of the abduction solution recovers F exactly. This is
+    the round-trip content — `whatIf_implies_abduce` transports the hypothetical
+    fact set unchanged.
+
+    Note `¬ R.conclusions T q` is not a hypothesis: it is already the second
+    component of `whatIfConclusion R T F q`. Stating the conclusion as
+    `whatIfConclusion R T s.facts q` instead would make this theorem the
+    identity function on `hwi`, since `s.facts` reduces to `F`. -/
 theorem whatIf_abduce_roundtrip (R : ReasoningOp) (T : Theory) (q : Literal)
-    (F : List Literal) (_hnotq : ¬ R.conclusions T q)
-    (hwi : whatIfConclusion R T F q) :
-    let s := whatIf_implies_abduce R T q F hwi
-    whatIfConclusion R T s.facts q :=
-  hwi
+    (F : List Literal) (hwi : whatIfConclusion R T F q) :
+    (whatIf_implies_abduce R T q F hwi).facts = F :=
+  rfl
 
 /-! ## Property 2: WhyNot Validity -/
 
@@ -130,17 +134,28 @@ theorem whyNot_valid (R : ReasoningOp) (W : WhyNotOracle R)
 /-- **WhyNot→WhatIf bridge**: if why_not says q is blocked by a missing
     premise l, then adding l as a hypothetical is a meaningful step toward
     making q derivable. Combined with abduce, this creates a complete
-    diagnostic-to-repair pipeline. -/
+    diagnostic-to-repair pipeline.
+
+    The first two conjuncts are what tie this to the *oracle*: they are
+    discharged from `W`'s own MissingPremise soundness contract, so `hreason`
+    is load-bearing. Without them the statement would hold for an arbitrary
+    `l` and say nothing about what why_not reported. -/
 theorem whyNot_whatIf_bridge (R : ReasoningOp) (W : WhyNotOracle R)
     (T : Theory) (q : Literal) (hnotq : ¬ R.conclusions T q)
     (l : Literal)
-    (_hreason : (W.explain T q hnotq).reason = .missingPremise l)
+    (hreason : (W.explain T q hnotq).reason = .missingPremise l)
     -- If adding l as a fact actually makes q derivable:
     (hderiv : R.conclusions (T ++ [l].map Literal.toFact) q) :
-    -- Then q is a what-if conclusion AND [l] is an abduction solution
+    -- The reported premise is genuinely missing, and genuinely a premise:
+    ¬ R.conclusions T l ∧
+    l ∈ (W.explain T q hnotq).supportingRule.body ∧
+    -- and q is a what-if conclusion under it, with [l] the abduction solution:
     whatIfConclusion R T [l] q ∧
     (abduce_from_whyNot R T q l hderiv).facts = [l] :=
-  ⟨⟨hderiv, hnotq⟩, rfl⟩
+  ⟨W.explain_missing_not_derived T q hnotq l hreason,
+   W.explain_missing_in_body T q hnotq l hreason,
+   ⟨hderiv, hnotq⟩,
+   rfl⟩
 
 /-! ## Property 3: WhatIf Consistency -/
 

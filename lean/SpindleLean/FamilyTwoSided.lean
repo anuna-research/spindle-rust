@@ -554,7 +554,7 @@ theorem famDelta_subset_lambda (t : FTheory) (delta : List FLit) :
 
 /-- A body literal satisfied in the proven set is never dead, provided the
     proven set lives inside lambda, avoids N, and lies in the universe. -/
-theorem not_bodyDead_of_famSat (_t : FTheory) (univ lambda N P : List FLit)
+theorem not_bodyDead_of_famSat (univ lambda N P : List FLit)
     (hPl : ∀ x ∈ P, x ∈ lambda) (hPu : ∀ x ∈ P, x ∈ univ)
     (hPN : ∀ x ∈ P, x ∉ N) (b : FLit)
     (hsat : FLit.famSat P b = true) :
@@ -620,17 +620,20 @@ theorem gatedDeltaF_subset (delta : List FLit) :
     ∀ l ∈ gatedDeltaF delta, l ∈ delta :=
   fun _l hl => (List.mem_filter.mp hl).1
 
-/-- **Two-sided consistency (core)**: for any well-formed theory with
-    well-founded superiority, and any delta/lambda/universe satisfying the
+/-- **Two-sided consistency (core)**: for any theory with well-founded
+    superiority, and any delta/lambda/universe satisfying the
     pipeline containments, the two-sided proven set never contains a
     complementary pair. Proof: both gates kill the subsumption branches,
     so both literals hold via supporters; each supporter attacks the other
     literal and must be fact-exempt (contradicts a gate), discarded
     (contradicts its own satisfied body, which is alive by the P-invariants),
     or team-defeated — yielding an infinite ascending superiority chain,
-    impossible under well-foundedness. -/
+    impossible under well-foundedness.
+
+    Fact-rule well-formedness (`fact → body = []`) is NOT required: the only
+    fact-related premise the proof consumes is `hfactd`, which places every
+    fact head in `delta`. -/
 theorem twoSidedClose_consistent (t : FTheory)
-    (_hwform : ∀ r ∈ t.rules, r.ruleType = FRuleType.fact → r.body = [])
     (hwf : WellFounded (FSupRel t))
     (delta lambda univ : List FLit)
     (hdl : ∀ x ∈ delta, x ∈ lambda)
@@ -719,7 +722,7 @@ theorem twoSidedClose_consistent (t : FTheory)
             have hall := hbody
             simp only [FRule.bodySat, List.all_eq_true] at hall
             exact hall b hb
-          rw [not_bodyDead_of_famSat t univ lambda _ _ hPl hPu hPN b hbsat]
+          rw [not_bodyDead_of_famSat univ lambda _ _ hPl hPu hPN b hbsat]
             at hbd
           exact Bool.noConfusion hbd
         · simp only [teamDefeats2, List.any_eq_true] at hteam
@@ -749,7 +752,7 @@ theorem twoSidedClose_consistent (t : FTheory)
             have hall := hbody
             simp only [FRule.bodySat, List.all_eq_true] at hall
             exact hall b hb
-          rw [not_bodyDead_of_famSat t univ lambda _ _ hPl hPu hPN b hbsat]
+          rw [not_bodyDead_of_famSat univ lambda _ _ hPl hPu hPN b hbsat]
             at hbd
           exact Bool.noConfusion hbd
         · simp only [teamDefeats2, List.any_eq_true] at hteam
@@ -767,16 +770,17 @@ theorem twoSidedClose_consistent (t : FTheory)
   exact key rl hrl.1 hrlcond.1 (Or.inl hrl.2) hrlcond.2
 
 /-- **Two-sided consistency**: the proven set of `famReason2` never
-    contains a complementary pair — for every well-formed theory whose
-    superiority relation is well-founded, under arbitrarily contradictory
-    input. Extends `partial_consistent` from the three-phase model to the
-    operational two-sided reference. -/
+    contains a complementary pair — for every theory whose superiority
+    relation is well-founded, under arbitrarily contradictory input.
+    Extends `partial_consistent` from the three-phase model to the
+    operational two-sided reference.
+
+    Well-formedness of fact rules is not needed; see `twoSidedClose_consistent`. -/
 theorem twoSided_consistent (t : FTheory)
-    (hwform : ∀ r ∈ t.rules, r.ruleType = FRuleType.fact → r.body = [])
     (hwf : WellFounded (FSupRel t)) (l : FLit)
     (hl : l ∈ (famReason2 t).2)
     (hcl : l.complement ∈ (famReason2 t).2) : False := by
-  refine twoSidedClose_consistent t hwform hwf
+  refine twoSidedClose_consistent t hwf
     (deltaCloseWith FRule.bodySat t)
     (lambdaCloseWith FRule.bodySat t (deltaCloseWith FRule.bodySat t))
     t.allLiterals

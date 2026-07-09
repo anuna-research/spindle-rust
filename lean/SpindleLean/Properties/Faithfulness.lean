@@ -330,7 +330,7 @@ private theorem delta_go_fixpoint (t : Theory) (current : List Literal)
     · rw [delta_go_step_eq t current n hlen] at hbody ⊢
       have h_step_nodup : (Closure.deltaStep t current).Nodup := by
         simp only [Closure.deltaStep]; exact List.nodup_dedup _
-      have h_step_sub := deltaStep_sub_allLiterals t current hnodup hsub
+      have h_step_sub := deltaStep_sub_allLiterals t current hsub
       have h_strict : current.length < (Closure.deltaStep t current).length := by
         simp only [beq_iff_eq] at hlen
         have h_le : current.toFinset.card ≤ (Closure.deltaStep t current).toFinset.card :=
@@ -617,7 +617,7 @@ private theorem deltaClose_go_sub_allLiterals (t : Theory) (current : List Liter
     split
     · exact hsub
     · exact ih _ (by simp only [Closure.deltaStep]; exact List.nodup_dedup _)
-        (deltaStep_sub_allLiterals t current hnodup hsub)
+        (deltaStep_sub_allLiterals t current hsub)
 
 private theorem deltaClose_sub_allLiterals (t : Theory) :
     ∀ x ∈ Closure.deltaClose t, x ∈ t.allLiterals := by

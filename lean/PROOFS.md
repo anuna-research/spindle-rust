@@ -171,7 +171,7 @@ in fact-free theories).
 | `twoSidedStep_disjoint`, `twoSidedClose_disjoint` | The proven and disproven sets never intersect |
 | `twoSidedClose_P_sound` | Every finally-proven literal satisfies the +d condition at the final state (seeds by the gate, additions by monotone transport) |
 | `not_bodyDead_of_famSat` | A family-satisfied body literal is never dead — supporters cannot be discarded |
-| **`twoSided_consistent`** | For well-formed theories with well-founded superiority, the two-sided proven set never contains a complementary pair — the consistency guarantee, now for the operational reference model |
+| **`twoSided_consistent`** | For theories with well-founded superiority, the two-sided proven set never contains a complementary pair — the consistency guarantee, now for the operational reference model. Fact-rule well-formedness is not required |
 
 `twoSided_consistent` extends `partial_consistent` from the three-phase
 approximation to the model the engine is exhaustively difftested
@@ -201,8 +201,8 @@ verified by injection and re-reasoning.
 | Theorem | Statement |
 |---------|-----------|
 | `requiresVerify_facts_mem` | Acceptance contract: a candidate is returned iff injecting it makes the goal provable |
-| `requiresVerify_sound`, `requiresVerify_rejected` | Accepted candidates derive the goal; rejected ones genuinely fail |
-| `requires_whatIf`, `requires_refines_abduce` | Cross-operator consistency with what-if and abduce |
+| `requiresVerify_sound`, `requiresVerify_rejected` | Accepted candidates come from the raw pool and derive the goal; rejected ones genuinely fail |
+| `requires_whatIf` | Cross-operator consistency with what-if: a verified solution is a raw candidate and a what-if scenario |
 
 #### SPL Grammar Fragment (`Spindle/Spl/Grammar.lean`)
 
@@ -258,7 +258,7 @@ decay) and is difftested against it (`lean_trust_oracle_difftest.rs`).
 | `linearDecay_nonneg/le_one`, `stepDecay_nonneg/le_one` | Multipliers stay in [0,1] |
 | `linearDecay_at_zero`, `stepDecay_at_zero` | Fresh testimony has full trust |
 | `effectiveTrust_le_base` | Decay never increases trust |
-| `DecayLaw.effective_mem_unit` | Any decay law keeps effective trust in [0, base] |
+| `DecayLaw.effective_mem_unit` | Any decay law keeps effective trust in [0, base] and within [0, 1] |
 
 `DecayLaw` is the abstract interface (range, freshness, antitonicity);
 linear and step decay are proven instances. Exponential decay
@@ -290,8 +290,6 @@ Arithmetic expressions and constraints evaluate deterministically.
 
 | Theorem | Statement |
 |---------|-----------|
-| `ArithExpr.eval_deterministic` | Expression evaluation is a function (same inputs → same output) |
-| `ArithConstraint.eval_deterministic` | Constraint evaluation is deterministic |
 | `ArithExpr.eval_var_of_bound` | Variables evaluate when bound in the environment |
 | `evalConstraints_nil` | Empty constraint list always succeeds |
 
@@ -367,7 +365,6 @@ Proofs about Allen's interval algebra and temporal constraint evaluation.
 
 | Theorem | Statement |
 |---------|-----------|
-| `evaluateConstraint_deterministic` | Temporal constraint evaluation is deterministic |
 | `evaluateConstraint_holds_of_satisfied` | Satisfied constraints imply the Allen relation holds |
 | `evaluateConstraint_satisfied_witness` | Satisfied constraints have witnessing intervals |
 
@@ -409,8 +406,8 @@ Proofs about the three query operators: what-if, why-not, and abduction.
 | Theorem | Statement |
 |---------|-----------|
 | `abduce_whatIf_soundness` | Abduction and what-if are consistent |
-| `whatIf_abduce_roundtrip` | Round-trip: abduce then what-if recovers the goal |
-| `whyNot_whatIf_bridge` | Why-not missing premises are what-if candidates |
+| `whatIf_abduce_roundtrip` | Round-trip: `whatIf_implies_abduce` transports the hypothetical fact set unchanged |
+| `whyNot_whatIf_bridge` | A why-not missing premise is genuinely underived and genuinely a premise, and is a what-if candidate |
 | `pipeline_soundness` | The full query pipeline satisfies all soundness properties |
 
 ---

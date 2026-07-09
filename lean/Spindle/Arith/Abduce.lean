@@ -189,14 +189,17 @@ structure AbductionOracle (R : ReasoningOp) where
     ((abduce T q).solutions.get ⟨i, hi⟩).size ≤
     ((abduce T q).solutions.get ⟨j, hj⟩).size
 
-/-! ## Oracle soundness -/
+/-! ## Oracle soundness
 
-/-- Every solution from a sound abduction oracle is valid. -/
-theorem abductionOracle_sound (R : ReasoningOp) (A : AbductionOracle R)
-    (T : Theory) (q : Literal)
-    (s : AbductionSolution R T q) (_hs : s ∈ (A.abduce T q).solutions) :
-    R.conclusions (T ++ s.facts.map Literal.toFact) q :=
-  s.valid
+Oracle soundness needs no theorem of its own. `AbductionSolution` carries
+`valid` as a *field*, so an oracle cannot return an unsound solution — it could
+not construct one. `abduce_solution_valid` states exactly that, for every
+solution, oracle or not.
+
+A theorem of the shape `s ∈ (A.abduce T q).solutions → R.conclusions …` would
+prove the goal by projecting `s.valid` and never consume the membership
+hypothesis, so it would hold for any `A` whatsoever — including one that
+returns garbage. Soundness here is enforced by the type, not by a proof. -/
 
 /-- A sound oracle with solutions implies the goal is abducibly reachable. -/
 theorem abductionOracle_reachable (R : ReasoningOp) (A : AbductionOracle R)

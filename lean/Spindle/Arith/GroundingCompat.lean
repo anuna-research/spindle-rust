@@ -222,19 +222,7 @@ theorem ArithRule.applySubst_ground (σ : Substitution) (ar : ArithRule)
   simp [ArithRule.isGround, ArithRule.applySubst]
   exact Rule.applySubst_ground σ ar.rule hcomplete
 
-/-- **Theorem 2**: Constraint evaluation is deterministic under the induced env.
-    If the same substitution and name table are used, the same constraint result
-    is always produced. -/
-theorem ArithRule.constraints_deterministic (σ : Substitution) (names : VarNameTable)
-    (cs : List ArithConstraint) :
-    ∀ r₁ r₂,
-      evalConstraints (σ.toValueEnv names) cs = r₁ →
-      evalConstraints (σ.toValueEnv names) cs = r₂ →
-      r₁ = r₂ := by
-  intro r₁ r₂ h₁ h₂
-  rw [← h₁, ← h₂]
-
-/-- **Theorem 3**: Grounding preserves constraint satisfaction.
+/-- **Theorem 2**: Grounding preserves constraint satisfaction.
     If constraints are satisfied under the substitution-induced ValueEnv,
     then the ground ArithRule's constraints are also satisfied (trivially,
     since grounding does not modify constraints — it only grounds literals). -/
@@ -245,7 +233,7 @@ theorem ArithRule.ground_preserves_constraints (σ : Substitution) (ar : ArithRu
   simp [ArithRule.applySubst]
   exact hsat
 
-/-- **Theorem 4 (Main)**: A complete substitution that satisfies all constraints
+/-- **Theorem 3 (Main)**: A complete substitution that satisfies all constraints
     successfully grounds an ArithRule.
     This is the core compatibility result: a single substitution can consistently
     ground both the literal body and satisfy the arithmetic constraints. -/
@@ -258,7 +246,7 @@ theorem ArithRule.groundWith_success (ar : ArithRule) (σ : Substitution)
   have hgnd := Rule.applySubst_ground σ ar.rule hcomplete
   simp [hgnd, hsat]
 
-/-- **Theorem 5**: If groundWith succeeds, the resulting rule is ground. -/
+/-- **Theorem 4**: If groundWith succeeds, the resulting rule is ground. -/
 theorem ArithRule.groundWith_isGround (ar : ArithRule) (σ : Substitution)
     (names : VarNameTable) (result : ArithGroundingResult)
     (hsuccess : ar.groundWith σ names = some result) :
@@ -277,7 +265,7 @@ theorem ArithRule.groundWith_isGround (ar : ArithRule) (σ : Substitution)
     | .error e => rw [heval] at hsuccess; simp at hsuccess
   · simp [hgnd] at hsuccess
 
-/-- **Theorem 6**: If groundWith succeeds, the constraints were satisfied. -/
+/-- **Theorem 5**: If groundWith succeeds, the constraints were satisfied. -/
 theorem ArithRule.groundWith_constraints_satisfied (ar : ArithRule) (σ : Substitution)
     (names : VarNameTable) (result : ArithGroundingResult)
     (hsuccess : ar.groundWith σ names = some result) :

@@ -118,7 +118,6 @@ theorem reason_plusD_sound (t : Theory) (l : Literal)
 
 /-- deltaStep preserves subset of allLiterals -/
 theorem deltaStep_sub_allLiterals (t : Theory) (current : List Literal)
-    (_hnodup : current.Nodup)
     (hsub : ∀ x ∈ current, x ∈ t.allLiterals) :
     ∀ x ∈ Closure.deltaStep t current, x ∈ t.allLiterals := by
   intro x hx
@@ -261,7 +260,7 @@ private theorem deltaClose_go_fixpoint' (t : Theory) (current : List Literal)
       · -- Need to provide: deltaStep sub allLiterals and fuel bound
         have h_step_nodup : (Closure.deltaStep t current).Nodup := by
           simp only [Closure.deltaStep]; exact List.nodup_dedup _
-        have h_step_sub := deltaStep_sub_allLiterals t current hnodup hsub
+        have h_step_sub := deltaStep_sub_allLiterals t current hsub
         -- deltaStep strictly increases length when not fixpoint
         have h_strict : current.length < (Closure.deltaStep t current).length := by
           simp only [beq_iff_eq] at hlen
