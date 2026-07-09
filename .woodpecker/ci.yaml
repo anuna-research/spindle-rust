@@ -53,10 +53,12 @@ steps:
       # explicitly is required: the sdl/family/parser/trust difftests skip
       # (and pass green) when their binary is missing, so a bare `lake build`
       # would leave them silently unverified.
-      - cd lean && lake build && lake build spindlelean TrustOracle ArithOracle GroundingOracle EndToEndOracle
+      # The verifier also fails admitted proofs (`sorry`/`admit`) and any
+      # AxiomAudit dependency outside Lean's standard axiom whitelist.
+      - scripts/check-lean-verification.sh
       # Full conformance suite: every difftest that pins the Rust engine to the
       # verified Lean model, not just the arith/grounding/end-to-end subset.
-      - cd .. && cargo test --package spindle-core --test lean_end_to_end_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_end_to_end_difftest -- --ignored
       - cargo test --package spindle-core --test lean_arith_oracle_difftest -- --ignored
       - cargo test --package spindle-core --test lean_grounding_oracle_difftest -- --ignored
       - cargo test --package spindle-core --test lean_sdl_exhaustive_difftest -- --ignored
