@@ -126,7 +126,7 @@ theorem stepDecay_antitone (cutoff a₁ a₂ : ℚ) (h : a₁ ≤ a₂) :
 
 /-- Decay never increases trust: effective trust is bounded by base trust. -/
 theorem effectiveTrust_le_base (base mult : TrustValue)
-    (hb : 0 ≤ base) (hm : mult ≤ 1) (hm0 : 0 ≤ mult) :
+    (hb : 0 ≤ base) (hm : mult ≤ 1) (_hm0 : 0 ≤ mult) :
     effectiveTrust base mult ≤ base := by
   unfold effectiveTrust
   calc base * mult ≤ base * 1 := mul_le_mul_of_nonneg_left hm hb
@@ -180,7 +180,7 @@ def DecayLaw.step (cutoff : ℚ) : DecayLaw where
 /-- For any decay law, effective trust at any age is bounded by base
     trust and stays in the unit interval. -/
 theorem DecayLaw.effective_mem_unit (law : DecayLaw) (base : TrustValue)
-    (hb : 0 ≤ base) (hb1 : base ≤ 1) (age : ℚ) :
+    (hb : 0 ≤ base) (_hb1 : base ≤ 1) (age : ℚ) :
     0 ≤ effectiveTrust base (law.mult age)
     ∧ effectiveTrust base (law.mult age) ≤ base := by
   refine ⟨mul_nonneg hb (law.nonneg age), ?_⟩

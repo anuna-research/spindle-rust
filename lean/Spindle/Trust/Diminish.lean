@@ -49,7 +49,7 @@ def diminish (c d : TrustValue) : TrustValue := max (c - diminishment c d) 0
 /-- **Faithfulness**: on the unit interval, the implementation's
     clamped-subtraction form equals the paper's multiplicative operator
     τ_c(1 − τ_d). -/
-theorem diminish_eq_mul (c d : TrustValue) (hc : 0 ≤ c) (hd : 0 ≤ d) (hd1 : d ≤ 1) :
+theorem diminish_eq_mul (c d : TrustValue) (hc : 0 ≤ c) (_hd : 0 ≤ d) (hd1 : d ≤ 1) :
     diminish c d = c * (1 - d) := by
   unfold diminish diminishment
   have h1 : d * c ≤ c := by

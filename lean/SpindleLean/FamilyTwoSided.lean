@@ -554,7 +554,7 @@ theorem famDelta_subset_lambda (t : FTheory) (delta : List FLit) :
 
 /-- A body literal satisfied in the proven set is never dead, provided the
     proven set lives inside lambda, avoids N, and lies in the universe. -/
-theorem not_bodyDead_of_famSat (t : FTheory) (univ lambda N P : List FLit)
+theorem not_bodyDead_of_famSat (_t : FTheory) (univ lambda N P : List FLit)
     (hPl : ∀ x ∈ P, x ∈ lambda) (hPu : ∀ x ∈ P, x ∈ univ)
     (hPN : ∀ x ∈ P, x ∉ N) (b : FLit)
     (hsat : FLit.famSat P b = true) :
@@ -618,7 +618,7 @@ theorem fSupRel_wellFounded_of_no_superiority (t : FTheory)
 
 theorem gatedDeltaF_subset (delta : List FLit) :
     ∀ l ∈ gatedDeltaF delta, l ∈ delta :=
-  fun l hl => (List.mem_filter.mp hl).1
+  fun _l hl => (List.mem_filter.mp hl).1
 
 /-- **Two-sided consistency (core)**: for any well-formed theory with
     well-founded superiority, and any delta/lambda/universe satisfying the
@@ -630,7 +630,7 @@ theorem gatedDeltaF_subset (delta : List FLit) :
     or team-defeated — yielding an infinite ascending superiority chain,
     impossible under well-foundedness. -/
 theorem twoSidedClose_consistent (t : FTheory)
-    (hwform : ∀ r ∈ t.rules, r.ruleType = FRuleType.fact → r.body = [])
+    (_hwform : ∀ r ∈ t.rules, r.ruleType = FRuleType.fact → r.body = [])
     (hwf : WellFounded (FSupRel t))
     (delta lambda univ : List FLit)
     (hdl : ∀ x ∈ delta, x ∈ lambda)

@@ -124,7 +124,7 @@ theorem requires_whatIf (R : ReasoningOp) (V : Verifier R) (T : Theory)
     contract. Definitional, since both carry the same validity proof. -/
 theorem requires_refines_abduce (R : ReasoningOp) (V : Verifier R)
     (T : Theory) (q : Literal) (raw : List (List Literal))
-    (s : AbductionSolution R T q) (hs : s ∈ requiresVerify R V T q raw) :
+    (s : AbductionSolution R T q) (_hs : s ∈ requiresVerify R V T q raw) :
     R.conclusions (T ++ s.facts.map Literal.toFact) q :=
   abduce_solution_valid R T q s
 

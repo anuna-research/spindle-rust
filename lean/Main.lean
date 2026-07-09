@@ -67,7 +67,7 @@ def runOracleBatch : IO Unit := do
   let stdout ← IO.getStdout
   let input ← stdin.readToEnd
   for line in input.splitOn "\n" do
-    let line := line.trim
+    let line := line.trimAscii.toString
     if !line.isEmpty then
       stdout.putStrLn (DiffTest.runOracle line)
   stdout.flush
@@ -79,7 +79,7 @@ def runFamilyOracleBatch : IO Unit := do
   let stdout ← IO.getStdout
   let input ← stdin.readToEnd
   for line in input.splitOn "\n" do
-    let line := line.trim
+    let line := line.trimAscii.toString
     if !line.isEmpty then
       stdout.putStrLn (Family.Oracle.processLine line)
   stdout.flush
@@ -117,7 +117,7 @@ def runSplParseBatch : IO Unit := do
   let stdout ← IO.getStdout
   let input ← stdin.readToEnd
   for line in input.splitOn "\n" do
-    let line := line.trim
+    let line := line.trimAscii.toString
     if !line.isEmpty then
       stdout.putStrLn (SplParse.processLine line)
   stdout.flush

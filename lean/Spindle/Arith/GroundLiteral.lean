@@ -139,10 +139,7 @@ private theorem ground_term_of_ground_subst_mem (pairs : List (String × Term))
     simp only [List.all_cons, Bool.and_eq_true] at hall
     cases List.mem_cons.mp hmem with
     | inl heq =>
-      have heqSnd := congrArg Prod.snd heq
-      simp only [Prod.snd] at heqSnd
-      rw [heqSnd]
-      exact hall.1
+      simpa [← heq] using hall.1
     | inr hmem => exact ih hall.2 hmem
 
 /-- If `lookup` succeeds, the pair is in the association list. -/
@@ -158,7 +155,7 @@ private theorem lookup_some_mem {pairs : List (String × Term)} {v : String} {t 
       have ht : t = p.2 := by injection h with ht; exact ht.symm
       refine List.mem_cons.mpr (Or.inl ?_)
       cases p with
-      | mk k w => simp only [Prod.fst, Prod.snd] at hv ht; rw [hv, ht]
+      | mk k w => rw [hv, ht]
     · exact List.mem_cons.mpr (Or.inr (ih h))
 
 /-! ## Helper for the corollary -/
@@ -179,7 +176,7 @@ private theorem groundsTerm_all_of_covering (σ : Substitution) (ts : List Term)
         simp only [Substitution.groundsTerm, Substitution.applyTerm]
         have hdom : σ.inDomain v = true := by
           apply hcov
-          simp only [List.filterMap, List.filterMap_cons]
+          simp only [List.filterMap]
           exact List.mem_cons.mpr (Or.inl rfl)
         simp only [Substitution.inDomain] at hdom
         split
@@ -197,7 +194,6 @@ private theorem groundsTerm_all_of_covering (σ : Substitution) (ts : List Term)
       simp only [List.filterMap_cons]
       match t with
       | .variable w =>
-        simp only [List.filterMap_cons]
         exact List.mem_cons.mpr (Or.inr hv)
       | .symbol _ => exact hv
       | .integer _ => exact hv

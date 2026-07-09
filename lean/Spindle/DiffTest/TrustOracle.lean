@@ -123,7 +123,7 @@ def main (_ : List String) : IO Unit := do
   let stdout ← IO.getStdout
   let input ← stdin.readToEnd
   for line in input.splitOn "\n" do
-    let line := line.trim
+    let line := line.trimAscii.toString
     if !line.isEmpty then
       stdout.putStrLn (Spindle.Trust.Oracle.processLine line)
   stdout.flush
