@@ -447,8 +447,21 @@ impl ProjectionEngine {
     /// The snapshot contains tokens sorted by a stable key so that
     /// non-deterministic iteration order does not cause spurious test
     /// failures. Labels are sorted alphabetically within each category.
-    pub fn snapshot(&self) -> ProjectionSnapshot {
+    ///
+    /// Exact literals are rendered through `index.exact_lit_display` —
+    /// their SEMANTIC identity — never through `ExactLitId`'s slot-number
+    /// display: slot numbers follow interning order, which follows rule
+    /// iteration over the theory's randomized `HashMap`, so `exact0` /
+    /// `exact1` can name different literals in otherwise identical runs.
+    /// `index` must be the same index the tokens were projected against;
+    /// an ID unknown to it falls back to the raw slot display.
+    pub fn snapshot(&self, index: &IndexedTheory<'_>) -> ProjectionSnapshot {
         debug_assert_counts(self);
+        let exact_display = |id: ExactLitId| {
+            index
+                .exact_lit_display(id)
+                .unwrap_or_else(|| id.to_string())
+        };
         let mut exact: Vec<(String, String)> = Vec::with_capacity(self.exact_supports);
         let mut family: Vec<(String, String, String)> = Vec::with_capacity(self.family_supports);
         let mut attack: Vec<(String, String, String)> = Vec::with_capacity(self.family_attacks);
@@ -456,20 +469,20 @@ impl ProjectionEngine {
         for token in &self.tokens {
             match token {
                 ProjectionToken::Exact(s) => {
-                    exact.push((s.rule_label.clone(), s.exact_lit.to_string()));
+                    exact.push((s.rule_label.clone(), exact_display(s.exact_lit)));
                 }
                 ProjectionToken::Family(s) => {
                     family.push((
                         s.rule_label.clone(),
                         format!("{}", s.family_id),
-                        s.source_exact_lit.to_string(),
+                        exact_display(s.source_exact_lit),
                     ));
                 }
                 ProjectionToken::Attack(a) => {
                     attack.push((
                         a.rule_label.clone(),
                         format!("{}", a.family_id),
-                        a.source_exact_lit.to_string(),
+                        exact_display(a.source_exact_lit),
                     ));
                 }
             }
@@ -566,17 +579,21 @@ impl std::fmt::Display for ProjectionDiagnostics {
 /// A deterministic debug snapshot of projection state (OBS-002).
 ///
 /// All entries are sorted by a stable key so that non-deterministic iteration
-/// order does not cause test regressions. Useful for golden-file or snapshot
-/// testing of projected evidence ordering and tie-break label selection.
+/// order does not cause test regressions, and exact literals are rendered by
+/// their semantic identity (e.g. `~p[1,10]`), not by their projection-local
+/// slot number, so snapshots of the same theory agree across processes.
+/// Useful for golden-file or snapshot testing of projected evidence ordering
+/// and tie-break label selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectionSnapshot {
-    /// Sorted `(rule_label, exact_lit_display)` pairs for exact support tokens.
+    /// Sorted `(rule_label, exact_lit_semantic_display)` pairs for exact
+    /// support tokens.
     pub exact: Vec<(String, String)>,
-    /// Sorted `(rule_label, family_display, source_exact_display)` triples for
-    /// family support tokens.
+    /// Sorted `(rule_label, family_display, source_exact_semantic_display)`
+    /// triples for family support tokens.
     pub family: Vec<(String, String, String)>,
-    /// Sorted `(rule_label, family_display, source_exact_display)` triples for
-    /// family attack tokens.
+    /// Sorted `(rule_label, family_display, source_exact_semantic_display)`
+    /// triples for family attack tokens.
     pub attack: Vec<(String, String, String)>,
 }
 
@@ -1047,22 +1064,54 @@ mod tests {
         engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
         engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
 
-        let snap = engine.snapshot();
+        let snap = engine.snapshot(&idx);
         // Exact entries should be sorted by label.
         assert_eq!(snap.exact[0].0, "f1");
         assert_eq!(snap.exact[1].0, "f2");
+        // Exact literals are rendered semantically, not by interning slot.
+        assert_eq!(snap.exact[0].1, "a");
+        assert_eq!(snap.exact[1].1, "b");
         // Family entries should be sorted by label.
         assert_eq!(snap.family[0].0, "f1");
         assert_eq!(snap.family[1].0, "f2");
 
         // Two calls produce identical snapshots.
-        assert_eq!(snap, engine.snapshot());
+        assert_eq!(snap, engine.snapshot(&idx));
+    }
+
+    #[test]
+    fn snapshot_uses_semantic_identity_not_interning_order() {
+        // The same two rules, indexed in opposite interning order, must
+        // produce IDENTICAL snapshots: exact-literal slot numbers depend on
+        // rule iteration over the theory HashMap and differ across processes.
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
+        theory.add_rule(Rule::fact("f2", Literal::simple("b")));
+
+        let snap_ab = {
+            let mut idx = make_index(&theory);
+            let mut engine = ProjectionEngine::new();
+            engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+            engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
+            engine.snapshot(&idx)
+        };
+        let snap_ba = {
+            let mut idx = make_index(&theory);
+            let mut engine = ProjectionEngine::new();
+            // Reverse interning order: "b" gets the lower ExactLitId here.
+            engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
+            engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
+            engine.snapshot(&idx)
+        };
+        assert_eq!(snap_ab, snap_ba);
     }
 
     #[test]
     fn snapshot_empty_engine() {
+        let theory = Theory::new();
+        let idx = make_index(&theory);
         let engine = ProjectionEngine::new();
-        let snap = engine.snapshot();
+        let snap = engine.snapshot(&idx);
         assert!(snap.exact.is_empty());
         assert!(snap.family.is_empty());
         assert!(snap.attack.is_empty());

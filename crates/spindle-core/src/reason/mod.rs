@@ -352,7 +352,7 @@ pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResu
     }
 
     let diagnostics = engine.diagnostics();
-    let snapshot = engine.snapshot();
+    let snapshot = engine.snapshot(indexed);
 
     Ok(ReasonResult {
         conclusions,

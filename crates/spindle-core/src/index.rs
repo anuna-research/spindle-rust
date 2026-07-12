@@ -456,6 +456,23 @@ impl<'a> IndexedTheory<'a> {
     pub fn family_for_exact(&self, exact: ExactLitId) -> Option<&FamilyId> {
         self.exact_to_family.get(&exact)
     }
+
+    /// Render the process-independent SEMANTIC identity of an interned exact
+    /// literal: the family display plus the temporal window (e.g. `~p[1,10]`).
+    ///
+    /// [`ExactLitId`]'s own `Display` shows the projection-local slot number,
+    /// which depends on interning order — and interning follows rule iteration
+    /// over the theory's randomized `HashMap`, so slot numbers are NOT stable
+    /// across processes. Anything serialized for deterministic comparison
+    /// (e.g. [`ProjectionSnapshot`](crate::projection::ProjectionSnapshot))
+    /// must use this form instead.
+    ///
+    /// Returns `None` if the `ExactLitId` was not interned by this index.
+    pub fn exact_lit_display(&self, exact: ExactLitId) -> Option<String> {
+        let key = self.exact_atoms.get(exact.atom_index() as usize)?;
+        let family = self.exact_to_family.get(&exact)?;
+        Some(format!("{}{}", family, key.temporal))
+    }
 }
 
 #[cfg(test)]

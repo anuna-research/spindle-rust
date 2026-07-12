@@ -909,13 +909,17 @@ fn snapshot_deterministic_across_insertion_order() {
     engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
     engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
 
-    let snap = engine.snapshot();
+    let snap = engine.snapshot(&idx);
     // Entries should be sorted by label despite reverse insertion.
     assert_eq!(snap.exact[0].0, "f1");
     assert_eq!(snap.exact[1].0, "f2");
+    // Exact literals are rendered semantically (process-independent), not
+    // by interning slot number.
+    assert_eq!(snap.exact[0].1, "a");
+    assert_eq!(snap.exact[1].1, "b");
 
     // Repeated calls produce identical results.
-    assert_eq!(snap, engine.snapshot());
+    assert_eq!(snap, engine.snapshot(&idx));
 }
 
 // ===========================================================================

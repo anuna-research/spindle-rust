@@ -213,6 +213,14 @@ pub fn abduce_with_conclusions(
                 continue;
             }
 
+            // Canonicalize the retained fact order by exact key: two rules
+            // can derive the goal from the SAME fact-set listed in different
+            // body orders, and rule iteration follows the theory's randomized
+            // HashMap — whichever rule is seen first would otherwise decide
+            // the order of `AbductionSolution::facts` (and of `requires` /
+            // rendered output) nondeterministically.
+            missing.sort_by_cached_key(Literal::to_spl);
+
             let missing_key = fact_set_key(&missing);
             if let Some((_, _, rules_used)) = candidates
                 .iter_mut()
@@ -314,6 +322,28 @@ mod tests {
         let sol = result.smallest_solution().unwrap();
         assert!(sol.is_already_provable());
         assert_eq!(sol.size(), 0);
+    }
+
+    #[test]
+    fn dedup_canonicalizes_fact_order_across_rules() {
+        // Two rules derive the same goal from the SAME missing facts with
+        // bodies listed in opposite orders. Rule iteration follows the
+        // theory's randomized HashMap, so whichever rule is seen first would
+        // otherwise decide the order of the deduplicated candidate's facts.
+        // The retained facts must be in canonical (exact-key-sorted) order
+        // regardless of the winner, and both rules must be credited.
+        let mut th = Theory::new();
+        th.add_defeasible_rule(&["alpha", "beta"], "goal");
+        th.add_defeasible_rule(&["beta", "alpha"], "goal");
+
+        let result = abduce(&th, &Literal::simple("goal"), 10).unwrap();
+        assert_eq!(result.solutions.len(), 1, "same fact-set must deduplicate");
+        let sol = &result.solutions[0];
+        let keys: Vec<String> = sol.facts.iter().map(Literal::to_spl).collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(keys, sorted, "facts must be in canonical sorted order");
+        assert_eq!(sol.rules_used.len(), 2, "both rules contribute");
     }
 
     // ==========================================================================
