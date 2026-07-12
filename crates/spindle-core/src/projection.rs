@@ -228,6 +228,25 @@ pub(crate) fn push_canonical_timepoint(out: &mut String, tp: &TimePoint) {
     }
 }
 
+/// Canonical, process-independent, INJECTIVE key for a literal's exact
+/// identity: the family's canonical key plus the temporal window.
+///
+/// `Literal::to_spl` is a human/round-trip rendering and is NOT injective
+/// over typed terms — the symbol `1`, the integer `1`, and the float `1.0`
+/// can all render as `(p 1)`. Anything that deduplicates or diffs literals
+/// by string identity (abduction fact-sets, what-if baselines) must use
+/// this key instead.
+pub(crate) fn canonical_literal_key(lit: &Literal) -> String {
+    let mut out = String::new();
+    FamilyId::from(lit).push_canonical_key(&mut out);
+    out.push('[');
+    push_canonical_timepoint(&mut out, &lit.temporal.start);
+    out.push(',');
+    push_canonical_timepoint(&mut out, &lit.temporal.end);
+    out.push(']');
+    out
+}
+
 impl FamilyId {
     /// Canonical, process-independent, INJECTIVE key for this family.
     ///

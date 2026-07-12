@@ -190,6 +190,15 @@ pub(crate) fn has_positive_match(literal: &Literal, conclusions: &[Conclusion]) 
     find_positive_match(literal, conclusions).is_some()
 }
 
+/// Like [`has_positive_match`] but always uses EXACT literal identity, never
+/// family matching — an atemporal literal only matches an atemporal
+/// conclusion, not an arbitrary temporal window of the same family.
+pub(crate) fn has_exact_positive_match(literal: &Literal, conclusions: &[Conclusion]) -> bool {
+    conclusions
+        .iter()
+        .any(|c| c.conclusion_type.is_positive() && exact_literal_match(literal, &c.literal))
+}
+
 impl fmt::Display for QueryMatchMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

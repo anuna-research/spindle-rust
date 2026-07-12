@@ -19,6 +19,7 @@ use rustc_hash::FxHashSet;
 use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::projection::canonical_literal_key;
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
@@ -38,8 +39,9 @@ pub struct AbductionSolution {
     /// equality and hashing deliberately ignore temporal bounds (see
     /// `impl PartialEq for Literal`). A set keyed on `Literal` would silently
     /// collapse distinct temporal variants of the same family — e.g. `p[1,10]`
-    /// and `p[20,30]` — dropping a required premise. Callers dedup on the exact
-    /// [`Literal::to_spl`] key before inserting, so this holds no duplicates.
+    /// and `p[20,30]` — dropping a required premise. Callers dedup on the
+    /// injective canonical literal key before inserting, so this holds no
+    /// duplicates.
     pub facts: Vec<Literal>,
     /// Rules that would be used in the derivation
     pub rules_used: FxHashSet<String>,
@@ -136,11 +138,13 @@ fn is_goal_provable(goal: &Literal, conclusions: &[Conclusion]) -> bool {
 
 /// Order-independent, exact-temporal signature for a hypothesis fact-set.
 ///
-/// Uses [`Literal::to_spl`] (which renders temporal bounds) rather than
-/// `Literal` equality so that candidates differing only in temporal window are
+/// Uses [`canonical_literal_key`] rather than `Literal` equality (which
+/// ignores temporal bounds) or `Literal::to_spl` (which is not injective over
+/// typed terms — symbolic `1`, integer `1`, and float `1.0` all render as
+/// `(p 1)`), so candidates differing only in temporal window or term type are
 /// treated as distinct.
 fn fact_set_key(facts: &[Literal]) -> String {
-    let mut keys: Vec<String> = facts.iter().map(Literal::to_spl).collect();
+    let mut keys: Vec<String> = facts.iter().map(canonical_literal_key).collect();
     keys.sort();
     keys.join("\x1f")
 }
@@ -193,16 +197,20 @@ pub fn abduce_with_conclusions(
             && rule.rule_type != RuleType::Defeater
         {
             // Find missing body literals using each premise's own match
-            // semantics. Deduplicate on the exact `to_spl()` key so that
+            // semantics. Deduplicate on the injective canonical key so that
             // distinct temporal variants of the same family (e.g. p[1,10] and
-            // p[20,30]) are both retained as separate required premises.
+            // p[20,30]) and distinct typed terms rendering identically (e.g.
+            // p(1) as symbol vs integer) are all retained as separate
+            // required premises.
             let mut missing: Vec<Literal> = Vec::new();
             let mut missing_keys: FxHashSet<String> = FxHashSet::default();
             for bl in &rule.body {
                 let Some(lit) = bl.as_logic().map(|l| l.to_literal()) else {
                     continue;
                 };
-                if !is_body_satisfied(&lit, conclusions) && missing_keys.insert(lit.to_spl()) {
+                if !is_body_satisfied(&lit, conclusions)
+                    && missing_keys.insert(canonical_literal_key(&lit))
+                {
                     missing.push(lit);
                 }
             }
@@ -219,7 +227,7 @@ pub fn abduce_with_conclusions(
             // HashMap — whichever rule is seen first would otherwise decide
             // the order of `AbductionSolution::facts` (and of `requires` /
             // rendered output) nondeterministically.
-            missing.sort_by_cached_key(Literal::to_spl);
+            missing.sort_by_cached_key(canonical_literal_key);
 
             let missing_key = fact_set_key(&missing);
             if let Some((_, _, rules_used)) = candidates
@@ -289,9 +297,73 @@ mod tests {
         )
     }
 
+    /// `p` applied to a single typed term — symbol `"1"` and integer `1`
+    /// both render as `(p 1)` in SPL but are distinct literals.
+    fn typed_p(term: crate::term::Term) -> Literal {
+        Literal::from_ids(
+            crate::intern::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::empty(),
+            vec![term],
+        )
+    }
+
     // ==========================================================================
     // ABDUCTION OPERATOR TESTS - Basic Functionality
     // ==========================================================================
+
+    #[test]
+    fn abduce_retains_distinct_typed_premises() {
+        use crate::term::Term;
+
+        // Both premises render as (p 1) in SPL; a to_spl()-keyed dedup would
+        // drop one and report a single-fact solution that cannot fire the rule.
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r",
+            vec![
+                typed_p(Term::Symbol(crate::intern::intern("1"))),
+                typed_p(Term::Integer(1)),
+            ],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        assert_eq!(result.solutions.len(), 1);
+        assert_eq!(
+            result.solutions[0].facts.len(),
+            2,
+            "symbolic 1 and integer 1 are distinct premises and must both be required"
+        );
+    }
+
+    #[test]
+    fn abduce_distinguishes_typed_fact_sets_across_rules() {
+        use crate::term::Term;
+
+        // Two alternative rules whose required fact-sets differ only in term
+        // type; a rendered-SPL fact_set_key would collide them into one
+        // candidate and lose an abduction solution.
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r_sym",
+            vec![typed_p(Term::Symbol(crate::intern::intern("1")))],
+            Literal::simple("q"),
+        ));
+        th.add_rule(Rule::defeasible(
+            "r_int",
+            vec![typed_p(Term::Integer(1))],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        assert_eq!(
+            result.solutions.len(),
+            2,
+            "typed variants must stay separate abduction solutions"
+        );
+    }
 
     #[test]
     fn test_abduce_returns_result() {

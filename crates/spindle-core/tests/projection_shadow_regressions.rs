@@ -124,6 +124,63 @@ fn reason_full_projects_defeater_attack_tokens_when_defeater_only_blocks() {
 }
 
 #[test]
+fn reason_full_drops_defeated_rule_despite_positive_family_window() {
+    // `loser: a => p` (atemporal) is decisively defeated by the superior
+    // `winner: => ~p`, while an INDEPENDENT p[1,10] fact is positive. Family
+    // matching would let the temporal window vouch for the defeated atemporal
+    // head and re-admit `loser` to the projection surface, emitting phantom
+    // support tokens; head status must use exact literal identity instead.
+    let mut theory = Theory::new();
+    theory.add_rule(Rule::fact("fa", Literal::simple("a")));
+    theory.add_rule(Rule::defeasible(
+        "loser",
+        vec![Literal::simple("a")],
+        Literal::simple("p"),
+    ));
+    theory.add_rule(Rule::defeasible("winner", vec![], Literal::negated("p")));
+    theory.add_superiority("winner", "loser");
+    theory.add_rule(Rule::fact(
+        "fp",
+        Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        ),
+    ));
+
+    let result = reason_full(&theory).unwrap();
+
+    // Sanity: the exact atemporal head lost (~p defeasibly provable), while
+    // the independent temporal window stays positive.
+    assert!(
+        result.conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "p"
+                && c.literal.negation
+                && !c.literal.is_temporal()
+        }),
+        "the superior winner rule should prove +d ~p"
+    );
+    assert!(
+        !result.conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == "p"
+                && !c.literal.negation
+                && !c.literal.is_temporal()
+        }),
+        "the defeated atemporal p must not be defeasibly provable"
+    );
+
+    let projection_labels = token_labels(&result.projection_tokens);
+    assert!(
+        !projection_labels.contains("loser"),
+        "the decisively defeated rule must not emit projection support tokens"
+    );
+}
+
+#[test]
 fn reason_full_keeps_grounded_projection_labels_aligned_with_conclusions() {
     let mut theory = Theory::new();
     theory.add_rule(Rule::fact("f1", temporal_literal("p", false, vec!["a"])));

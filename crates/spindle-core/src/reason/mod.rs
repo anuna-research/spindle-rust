@@ -145,14 +145,18 @@ fn collect_projection_labels(state: &ReasoningState<'_>, theory: &Theory) -> FxH
     // itself positively proven, OR its complement is not proven. The latter keeps
     // genuine ambiguity blockers (Nixon diamond: `=> pacifist` vs `=> ~pacifist`,
     // neither proven) — they actively block and belong on the explanation surface.
+    // Both checks use EXACT literal identity, never family matching: an
+    // independent positive window like `p[1,10]` must not vouch for a defeated
+    // atemporal `=> p` whose exact head lost to `+d ~p`, or the loser would be
+    // retained and project phantom support it never provided.
     // Defeaters are exempt entirely: they project *attacks*, not support, and
     // never assert their head positively.
     labels.retain(|label| match theory.get_rule(label) {
         None => true,
         Some(rule) if rule.rule_type.is_defeater() => true,
         Some(rule) => rule.head.iter().any(|h| {
-            crate::query::has_positive_match(h, &state.conclusions)
-                || !crate::query::has_positive_match(&h.complement(), &state.conclusions)
+            crate::query::has_exact_positive_match(h, &state.conclusions)
+                || !crate::query::has_exact_positive_match(&h.complement(), &state.conclusions)
         }),
     });
     labels

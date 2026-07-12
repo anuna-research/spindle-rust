@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::conclusion::ConclusionType;
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::projection::canonical_literal_key;
 use crate::reason::reason;
 use crate::rule::Rule;
 use crate::theory::Theory;
@@ -90,21 +91,23 @@ fn conclusion_strength(ct: ConclusionType) -> u8 {
     }
 }
 
-/// Group conclusions by their exact-temporal [`Literal::to_spl`] key, keeping the
+/// Group conclusions by their injective [`canonical_literal_key`], keeping the
 /// strongest status for each.
 ///
-/// Keying on `to_spl()` rather than the `Literal` itself is essential: `Literal`
-/// equality/hashing ignore temporal bounds, so distinct windows of the same
-/// family (e.g. `p[1,10]` and `p[20,30]`) would otherwise collapse into a single
-/// entry and merge their statuses. The retained `Literal` is carried alongside
-/// the status so callers can report the exact conclusion.
+/// Keying on the canonical key rather than the `Literal` itself is essential:
+/// `Literal` equality/hashing ignore temporal bounds, so distinct windows of the
+/// same family (e.g. `p[1,10]` and `p[20,30]`) would otherwise collapse into a
+/// single entry and merge their statuses. The rendered `to_spl()` form is not
+/// usable either: it is not injective over typed terms, so `p(Symbol("1"))` and
+/// `p(Integer(1))` would merge. The retained `Literal` is carried alongside the
+/// status so callers can report the exact conclusion.
 fn strongest_conclusions_by_literal(
     conclusions: &[crate::conclusion::Conclusion],
 ) -> HashMap<String, (Literal, ConclusionType)> {
     let mut by_lit: HashMap<String, (Literal, ConclusionType)> = HashMap::new();
     for conc in conclusions {
         by_lit
-            .entry(conc.literal.to_spl())
+            .entry(canonical_literal_key(&conc.literal))
             .and_modify(|(_, old)| {
                 if conclusion_strength(conc.conclusion_type) > conclusion_strength(*old) {
                     *old = conc.conclusion_type;
@@ -146,13 +149,15 @@ pub fn what_if(
 ) -> Result<WhatIfResult> {
     // Get baseline conclusions
     let baseline = reason(theory)?;
-    // Key on the exact-temporal `to_spl()` form: `Literal` equality ignores
-    // temporal bounds, so a set of `Literal`s would treat p[20,30] as already
-    // present when only p[1,10] was, hiding genuinely new windows below.
+    // Key on the injective canonical key: `Literal` equality ignores temporal
+    // bounds, so a set of `Literal`s would treat p[20,30] as already present
+    // when only p[1,10] was, hiding genuinely new windows below. The rendered
+    // `to_spl()` form is not injective over typed terms either — it would hide
+    // a genuinely new p(Integer(1)) behind a baseline p(Symbol("1")).
     let baseline_provable: HashSet<String> = baseline
         .iter()
         .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.to_spl())
+        .map(|c| canonical_literal_key(&c.literal))
         .collect();
 
     // Create modified theory with hypotheticals using unique labels
@@ -193,7 +198,8 @@ pub fn what_if(
     let new_conclusions: Vec<Literal> = modified_conclusions
         .iter()
         .filter(|c| {
-            c.conclusion_type.is_positive() && !baseline_provable.contains(&c.literal.to_spl())
+            c.conclusion_type.is_positive()
+                && !baseline_provable.contains(&canonical_literal_key(&c.literal))
         })
         .map(|c| c.literal.clone())
         .collect();
@@ -256,7 +262,7 @@ mod tests {
         // Baseline derives p[1,10]. A hypothetical p[20,30] is a genuinely new
         // temporal window of the same family. Because `Literal` equality ignores
         // temporal bounds, comparing on `Literal` alone would treat p[20,30] as
-        // already present and omit it; the exact `to_spl()` key keeps it.
+        // already present and omit it; the canonical exact-temporal key keeps it.
         let mut th = Theory::new();
         th.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
 
@@ -282,6 +288,40 @@ mod tests {
                 .iter()
                 .any(|l| l.to_spl() == temporal_lit("p", 1, 10).to_spl()),
             "Baseline window p[1,10] must not appear among new conclusions"
+        );
+    }
+
+    #[test]
+    fn what_if_reports_new_typed_literal_as_new_conclusion() {
+        use crate::term::Term;
+
+        // Baseline proves p(Symbol("1")); the hypothetical adds p(Integer(1)).
+        // Both render as (p 1) in SPL, so a to_spl()-keyed baseline would hide
+        // the genuinely new typed literal from new_conclusions.
+        let typed_p = |term: Term| {
+            Literal::from_ids(
+                crate::intern::intern("p"),
+                false,
+                crate::mode::Mode::empty(),
+                Temporal::empty(),
+                vec![term],
+            )
+        };
+        let p_sym = typed_p(Term::Symbol(crate::intern::intern("1")));
+        let p_int = typed_p(Term::Integer(1));
+
+        let mut th = Theory::new();
+        th.add_rule(Rule::fact("f1", p_sym));
+
+        let result = what_if(&th, vec![HypotheticalClaim::new(p_int.clone())], &p_int).unwrap();
+
+        assert!(result.is_provable());
+        assert!(
+            result
+                .new_conclusions
+                .iter()
+                .any(|l| l.predicate_args() == p_int.predicate_args()),
+            "p(Integer(1)) is new under the hypothetical and must be reported"
         );
     }
 }
