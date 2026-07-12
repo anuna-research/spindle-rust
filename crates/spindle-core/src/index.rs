@@ -457,21 +457,36 @@ impl<'a> IndexedTheory<'a> {
         self.exact_to_family.get(&exact)
     }
 
-    /// Render the process-independent SEMANTIC identity of an interned exact
-    /// literal: the family display plus the temporal window (e.g. `~p[1,10]`).
+    /// Render the process-independent CANONICAL semantic key of an interned
+    /// exact literal: the family's canonical key plus the temporal window
+    /// (see [`FamilyId::canonical_key`]).
     ///
     /// [`ExactLitId`]'s own `Display` shows the projection-local slot number,
     /// which depends on interning order — and interning follows rule iteration
     /// over the theory's randomized `HashMap`, so slot numbers are NOT stable
-    /// across processes. Anything serialized for deterministic comparison
-    /// (e.g. [`ProjectionSnapshot`](crate::projection::ProjectionSnapshot))
-    /// must use this form instead.
+    /// across processes. Human-readable `Display` forms are not usable either:
+    /// they are non-canonical (`p(1.0)` vs `p(1.00)` — equal decimals intern
+    /// to ONE id, but whichever scale arrived first would be retained) and
+    /// non-injective (`p("a, b")` vs `p(a, b)` display identically). The
+    /// canonical key normalizes decimals, escapes structural characters, and
+    /// tags argument types, so it is constant on interning equality classes
+    /// and distinct across them. Anything serialized for deterministic
+    /// comparison (e.g.
+    /// [`ProjectionSnapshot`](crate::projection::ProjectionSnapshot)) must
+    /// use this form.
     ///
     /// Returns `None` if the `ExactLitId` was not interned by this index.
-    pub fn exact_lit_display(&self, exact: ExactLitId) -> Option<String> {
+    pub fn exact_lit_key(&self, exact: ExactLitId) -> Option<String> {
         let key = self.exact_atoms.get(exact.atom_index() as usize)?;
         let family = self.exact_to_family.get(&exact)?;
-        Some(format!("{}{}", family, key.temporal))
+        let mut out = String::new();
+        family.push_canonical_key(&mut out);
+        out.push('[');
+        crate::projection::push_canonical_timepoint(&mut out, &key.temporal.start);
+        out.push(',');
+        crate::projection::push_canonical_timepoint(&mut out, &key.temporal.end);
+        out.push(']');
+        Some(out)
     }
 }
 

@@ -6,9 +6,11 @@
 //! preserves superiority and trust semantics by construction (SPEC-020,
 //! §4.2).
 
+use crate::intern::resolve;
 use crate::literal::{InternedLiteralName, Literal};
 use crate::mode::Mode;
 use crate::rule::{RuleLabel, RuleType};
+use crate::temporal::TimePoint;
 use crate::term::Term;
 use crate::{error::Result, index::IndexedTheory, rule::Rule};
 use smallvec::SmallVec;
@@ -163,6 +165,109 @@ impl From<&Literal> for FamilyId {
             mode: lit.mode.clone(),
             negated: lit.negation,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Canonical semantic keys (process-independent, injective)
+// ---------------------------------------------------------------------------
+
+/// Append `s` with every structural key character escaped by `\`.
+///
+/// Structural characters — `\ ( ) , [ ] : #` — delimit fields in canonical
+/// keys. Escaping them inside content makes the encoding injective: no two
+/// distinct field decompositions can produce the same string.
+pub(crate) fn push_key_escaped(out: &mut String, s: &str) {
+    for c in s.chars() {
+        if matches!(c, '\\' | '(' | ')' | ',' | '[' | ']' | ':' | '#') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+}
+
+/// Append the canonical TYPED encoding of a predicate argument.
+///
+/// Symbols are escaped verbatim (they can never begin with an unescaped
+/// `#`), and numerics carry a `#`-prefixed type tag so the symbol `1`, the
+/// integer `1`, and the float `1` cannot collide. Decimals render their
+/// NORMALIZED value: `1.0` and `1.00` are one `Decimal` under `Eq`/`Hash`
+/// (hence one interned identity), so the key must not depend on which
+/// scale happened to be interned first.
+pub(crate) fn push_canonical_term(out: &mut String, term: &Term) {
+    match term {
+        Term::Symbol(id) => push_key_escaped(out, resolve(*id)),
+        Term::Integer(n) => {
+            out.push_str("#i");
+            out.push_str(&n.to_string());
+        }
+        Term::Decimal(d) => {
+            out.push_str("#d");
+            if d.is_zero() {
+                out.push('0');
+            } else {
+                out.push_str(&d.normalize().to_string());
+            }
+        }
+        Term::Float(f) => {
+            out.push_str("#f");
+            out.push_str(&f.value().to_string());
+        }
+    }
+}
+
+/// Append the canonical encoding of a time point: `-inf`, `+inf`, `m<i64>`.
+pub(crate) fn push_canonical_timepoint(out: &mut String, tp: &TimePoint) {
+    match tp {
+        TimePoint::NegInf => out.push_str("-inf"),
+        TimePoint::PosInf => out.push_str("+inf"),
+        TimePoint::Moment(v) => {
+            out.push('m');
+            out.push_str(&v.to_string());
+        }
+    }
+}
+
+impl FamilyId {
+    /// Canonical, process-independent, INJECTIVE key for this family.
+    ///
+    /// `Display` is for humans and is neither canonical nor injective:
+    /// `p("a, b")` and `p(a, b)` display identically, and decimal
+    /// arguments display with whatever scale they were built with even
+    /// though `1.0` and `1.00` are the same value under `Eq`. This key
+    /// escapes structural characters, tags argument types, and normalizes
+    /// decimals, so it is constant on `FamilyId` equality classes and
+    /// distinct across them. Snapshot serialization must use this, never
+    /// `Display`.
+    pub fn canonical_key(&self) -> String {
+        let mut out = String::new();
+        self.push_canonical_key(&mut out);
+        out
+    }
+
+    pub(crate) fn push_canonical_key(&self, out: &mut String) {
+        // Fixed-position header: literal polarity, mode polarity, mode-name
+        // presence tag ('!' = named, '.' = none) — Some("") and None must
+        // not collapse.
+        out.push(if self.negated { '-' } else { '+' });
+        out.push(if self.mode.negation { '-' } else { '+' });
+        match &self.mode.name {
+            Some(name) => {
+                out.push('!');
+                push_key_escaped(out, name);
+            }
+            None => out.push('.'),
+        }
+        out.push(':');
+        push_key_escaped(out, self.functor.resolve());
+        out.push('(');
+        for (i, t) in self.args.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            push_canonical_term(out, t);
+        }
+        out.push(')');
     }
 }
 
@@ -448,19 +553,19 @@ impl ProjectionEngine {
     /// non-deterministic iteration order does not cause spurious test
     /// failures. Labels are sorted alphabetically within each category.
     ///
-    /// Exact literals are rendered through `index.exact_lit_display` —
-    /// their SEMANTIC identity — never through `ExactLitId`'s slot-number
-    /// display: slot numbers follow interning order, which follows rule
-    /// iteration over the theory's randomized `HashMap`, so `exact0` /
-    /// `exact1` can name different literals in otherwise identical runs.
-    /// `index` must be the same index the tokens were projected against;
-    /// an ID unknown to it falls back to the raw slot display.
+    /// Exact literals are rendered through `index.exact_lit_key` and
+    /// families through `FamilyId::canonical_key` — canonical, injective
+    /// semantic keys — never through `ExactLitId`'s slot-number display
+    /// (slot numbers follow interning order, which follows rule iteration
+    /// over the theory's randomized `HashMap`) and never through the
+    /// human-readable `Display` forms (non-canonical for equal decimals of
+    /// different scales, non-injective on argument boundaries). `index`
+    /// must be the same index the tokens were projected against; an ID
+    /// unknown to it falls back to the raw slot display.
     pub fn snapshot(&self, index: &IndexedTheory<'_>) -> ProjectionSnapshot {
         debug_assert_counts(self);
-        let exact_display = |id: ExactLitId| {
-            index
-                .exact_lit_display(id)
-                .unwrap_or_else(|| id.to_string())
+        let exact_key = |id: ExactLitId| {
+            index.exact_lit_key(id).unwrap_or_else(|| id.to_string())
         };
         let mut exact: Vec<(String, String)> = Vec::with_capacity(self.exact_supports);
         let mut family: Vec<(String, String, String)> = Vec::with_capacity(self.family_supports);
@@ -469,20 +574,20 @@ impl ProjectionEngine {
         for token in &self.tokens {
             match token {
                 ProjectionToken::Exact(s) => {
-                    exact.push((s.rule_label.clone(), exact_display(s.exact_lit)));
+                    exact.push((s.rule_label.clone(), exact_key(s.exact_lit)));
                 }
                 ProjectionToken::Family(s) => {
                     family.push((
                         s.rule_label.clone(),
-                        format!("{}", s.family_id),
-                        exact_display(s.source_exact_lit),
+                        s.family_id.canonical_key(),
+                        exact_key(s.source_exact_lit),
                     ));
                 }
                 ProjectionToken::Attack(a) => {
                     attack.push((
                         a.rule_label.clone(),
-                        format!("{}", a.family_id),
-                        exact_display(a.source_exact_lit),
+                        a.family_id.canonical_key(),
+                        exact_key(a.source_exact_lit),
                     ));
                 }
             }
@@ -579,20 +684,22 @@ impl std::fmt::Display for ProjectionDiagnostics {
 /// A deterministic debug snapshot of projection state (OBS-002).
 ///
 /// All entries are sorted by a stable key so that non-deterministic iteration
-/// order does not cause test regressions, and exact literals are rendered by
-/// their semantic identity (e.g. `~p[1,10]`), not by their projection-local
-/// slot number, so snapshots of the same theory agree across processes.
-/// Useful for golden-file or snapshot testing of projected evidence ordering
-/// and tie-break label selection.
+/// order does not cause test regressions, and literals are rendered by their
+/// CANONICAL semantic keys ([`FamilyId::canonical_key`] /
+/// `IndexedTheory::exact_lit_key`) — constant on interning equality classes
+/// (normalized decimals) and injective across them (escaped, typed) — never
+/// by projection-local slot numbers, so snapshots of the same theory agree
+/// across processes. Useful for golden-file or snapshot testing of projected
+/// evidence ordering and tie-break label selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectionSnapshot {
-    /// Sorted `(rule_label, exact_lit_semantic_display)` pairs for exact
-    /// support tokens.
+    /// Sorted `(rule_label, exact_canonical_key)` pairs for exact support
+    /// tokens.
     pub exact: Vec<(String, String)>,
-    /// Sorted `(rule_label, family_display, source_exact_semantic_display)`
+    /// Sorted `(rule_label, family_canonical_key, source_exact_canonical_key)`
     /// triples for family support tokens.
     pub family: Vec<(String, String, String)>,
-    /// Sorted `(rule_label, family_display, source_exact_semantic_display)`
+    /// Sorted `(rule_label, family_canonical_key, source_exact_canonical_key)`
     /// triples for family attack tokens.
     pub attack: Vec<(String, String, String)>,
 }
@@ -1064,13 +1171,19 @@ mod tests {
         engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
         engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
 
+        // Expected canonical keys, derived through the same public API.
+        let id_a = idx.exact_lit_id(&Literal::simple("a"));
+        let id_b = idx.exact_lit_id(&Literal::simple("b"));
+        let key_a = idx.exact_lit_key(id_a).unwrap();
+        let key_b = idx.exact_lit_key(id_b).unwrap();
+
         let snap = engine.snapshot(&idx);
         // Exact entries should be sorted by label.
         assert_eq!(snap.exact[0].0, "f1");
         assert_eq!(snap.exact[1].0, "f2");
-        // Exact literals are rendered semantically, not by interning slot.
-        assert_eq!(snap.exact[0].1, "a");
-        assert_eq!(snap.exact[1].1, "b");
+        // Exact literals are rendered by canonical key, not interning slot.
+        assert_eq!(snap.exact[0].1, key_a);
+        assert_eq!(snap.exact[1].1, key_b);
         // Family entries should be sorted by label.
         assert_eq!(snap.family[0].0, "f1");
         assert_eq!(snap.family[1].0, "f2");
@@ -1081,29 +1194,125 @@ mod tests {
 
     #[test]
     fn snapshot_uses_semantic_identity_not_interning_order() {
-        // The same two rules, indexed in opposite interning order, must
-        // produce IDENTICAL snapshots: exact-literal slot numbers depend on
-        // rule iteration over the theory HashMap and differ across processes.
-        let mut theory = Theory::new();
-        theory.add_rule(Rule::fact("f1", Literal::simple("a")));
-        theory.add_rule(Rule::fact("f2", Literal::simple("b")));
+        // ExactLitId slots follow interning order, which follows rule
+        // iteration over the theory's randomized HashMap. Force the two
+        // orders EXPLICITLY on fresh indexes (an index built from a
+        // populated theory has already interned everything, in the same
+        // order for the same map instance): the slot assignments must
+        // actually differ, yet the snapshots must be identical because
+        // they serialize canonical semantic keys, not slots.
+        let theory = Theory::new();
+        let rule_a = Rule::fact("f1", Literal::simple("a"));
+        let rule_b = Rule::fact("f2", Literal::simple("b"));
+
+        let mut idx_ab = IndexedTheory::build(&theory);
+        let a_slot_first = idx_ab.exact_lit_id(&Literal::simple("a"));
+        let b_slot_second = idx_ab.exact_lit_id(&Literal::simple("b"));
+
+        let mut idx_ba = IndexedTheory::build(&theory);
+        let b_slot_first = idx_ba.exact_lit_id(&Literal::simple("b"));
+        let a_slot_second = idx_ba.exact_lit_id(&Literal::simple("a"));
+
+        // Premise: the two interning orders really assign different slots.
+        assert_ne!(a_slot_first, a_slot_second);
+        assert_ne!(b_slot_second, b_slot_first);
 
         let snap_ab = {
-            let mut idx = make_index(&theory);
             let mut engine = ProjectionEngine::new();
-            engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
-            engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
-            engine.snapshot(&idx)
+            engine.project_rule(&rule_a, &mut idx_ab);
+            engine.project_rule(&rule_b, &mut idx_ab);
+            engine.snapshot(&idx_ab)
         };
         let snap_ba = {
-            let mut idx = make_index(&theory);
             let mut engine = ProjectionEngine::new();
-            // Reverse interning order: "b" gets the lower ExactLitId here.
-            engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
-            engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
-            engine.snapshot(&idx)
+            engine.project_rule(&rule_a, &mut idx_ba);
+            engine.project_rule(&rule_b, &mut idx_ba);
+            engine.snapshot(&idx_ba)
         };
         assert_eq!(snap_ab, snap_ba);
+    }
+
+    #[test]
+    fn exact_key_is_canonical_for_equal_decimals() {
+        // p(1.0) and p(1.00) are equal Decimals, so they intern to ONE
+        // ExactLitId per index; the retained ExactAtomKey is whichever
+        // variant arrived first. The canonical key must not leak that
+        // race: both interning orders yield the same key.
+        use rust_decimal::Decimal;
+        let lit_scale1 = Literal::from_ids(
+            crate::intern::intern("p"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Decimal(Decimal::new(10, 1))], // 1.0
+        );
+        let lit_scale2 = Literal::from_ids(
+            crate::intern::intern("p"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Decimal(Decimal::new(100, 2))], // 1.00
+        );
+
+        let theory = Theory::new();
+        let mut idx1 = IndexedTheory::build(&theory);
+        let id1 = idx1.exact_lit_id(&lit_scale1);
+        // Same equality class: the second variant maps to the same id.
+        assert_eq!(id1, idx1.exact_lit_id(&lit_scale2));
+
+        let mut idx2 = IndexedTheory::build(&theory);
+        let id2 = idx2.exact_lit_id(&lit_scale2);
+        assert_eq!(id2, idx2.exact_lit_id(&lit_scale1));
+
+        assert_eq!(idx1.exact_lit_key(id1), idx2.exact_lit_key(id2));
+    }
+
+    #[test]
+    fn canonical_key_is_injective_on_argument_boundaries() {
+        // p("a, b") (one symbol argument containing ", ") and p(a, b)
+        // (two arguments) display identically via Display; their canonical
+        // keys must differ.
+        let one_arg = FamilyId::new(
+            crate::intern::intern("p").into(),
+            vec![Term::Symbol(crate::intern::intern("a, b"))],
+            Mode::empty(),
+            false,
+        );
+        let two_args = FamilyId::new(
+            crate::intern::intern("p").into(),
+            vec![
+                Term::Symbol(crate::intern::intern("a")),
+                Term::Symbol(crate::intern::intern("b")),
+            ],
+            Mode::empty(),
+            false,
+        );
+        assert_eq!(one_arg.to_string(), two_args.to_string());
+        assert_ne!(one_arg.canonical_key(), two_args.canonical_key());
+    }
+
+    #[test]
+    fn canonical_key_tags_numeric_types() {
+        // The symbol `1`, the integer 1, and the decimal 1 are distinct
+        // identities that all display as `p(1)`.
+        let functor: InternedLiteralName = crate::intern::intern("p").into();
+        let sym = FamilyId::new(
+            functor,
+            vec![Term::Symbol(crate::intern::intern("1"))],
+            Mode::empty(),
+            false,
+        );
+        let int = FamilyId::new(functor, vec![Term::Integer(1)], Mode::empty(), false);
+        let dec = FamilyId::new(
+            functor,
+            vec![Term::Decimal(rust_decimal::Decimal::from(1))],
+            Mode::empty(),
+            false,
+        );
+        let keys = [sym.canonical_key(), int.canonical_key(), dec.canonical_key()];
+        assert_ne!(keys[0], keys[1]);
+        assert_ne!(keys[0], keys[2]);
+        assert_ne!(keys[1], keys[2]);
     }
 
     #[test]

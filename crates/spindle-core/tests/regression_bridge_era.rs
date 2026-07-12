@@ -909,14 +909,20 @@ fn snapshot_deterministic_across_insertion_order() {
     engine.project_rule(theory.get_rule("f2").unwrap(), &mut idx);
     engine.project_rule(theory.get_rule("f1").unwrap(), &mut idx);
 
+    // Expected canonical keys, derived through the same public API.
+    let id_a = idx.exact_lit_id(&Literal::simple("a"));
+    let id_b = idx.exact_lit_id(&Literal::simple("b"));
+    let key_a = idx.exact_lit_key(id_a).unwrap();
+    let key_b = idx.exact_lit_key(id_b).unwrap();
+
     let snap = engine.snapshot(&idx);
     // Entries should be sorted by label despite reverse insertion.
     assert_eq!(snap.exact[0].0, "f1");
     assert_eq!(snap.exact[1].0, "f2");
-    // Exact literals are rendered semantically (process-independent), not
-    // by interning slot number.
-    assert_eq!(snap.exact[0].1, "a");
-    assert_eq!(snap.exact[1].1, "b");
+    // Exact literals are rendered by canonical semantic key
+    // (process-independent), not by interning slot number.
+    assert_eq!(snap.exact[0].1, key_a);
+    assert_eq!(snap.exact[1].1, key_b);
 
     // Repeated calls produce identical results.
     assert_eq!(snap, engine.snapshot(&idx));
