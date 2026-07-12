@@ -46,7 +46,6 @@ pub mod analysis;
 pub mod arith;
 pub mod body;
 pub mod claims;
-pub mod compilation;
 pub mod conclusion;
 pub mod error;
 pub mod explanation;
@@ -75,7 +74,6 @@ pub mod prelude {
     };
     pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
     pub use crate::claims::ClaimsBlock;
-    pub use crate::compilation::{BodyMatchKey, CompiledBody, compile_rule, compile_theory};
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};
     pub use crate::intern::{
