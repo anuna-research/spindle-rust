@@ -203,6 +203,15 @@
 > `SPINDLE_EXHAUSTIVE=full cargo test -p spindle-core --test
 > lean_sdl_exhaustive_difftest --test lean_family_exhaustive_difftest
 > --test lean_trust_oracle_difftest --test spl_parser_difftest -- --ignored`.
+>
+> **CI scope caveat.** CI runs these difftests at DEFAULT scope (no
+> `SPINDLE_EXHAUSTIVE` set): all 4-rule SDL tiers, the curated family shape
+> tiers, and the curated superiority tier — 168,256 family theories plus the
+> default SDL enumeration per run. The `full`-scope figures above (all-64
+> family shapes, triple-superiority SDL) are validated manually with the
+> command above and are NOT re-checked on every merge. A divergence that only
+> manifests in a full-scope-only tier would merge green; rerun the full
+> command after any engine or model semantics change.
 
 # Known Divergences: Rust Engine vs Verified Lean Model (historical)
 

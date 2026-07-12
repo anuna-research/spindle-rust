@@ -535,6 +535,16 @@ fn proptest_rust_lean_arith_agreement() {
             disagreements.len().min(10)
         );
     }
+
+    // A skipped case means the oracle emitted something parse_lean_result
+    // cannot decode (schema drift, or an ok-value outside i64 while Rust
+    // overflowed). Any skip silently shrinks the comparison, so the test
+    // could pass green having compared nothing — treat skips as failures.
+    assert_eq!(
+        skipped, 0,
+        "{skipped} oracle results were unparseable and silently skipped; \
+         fix parse_lean_result or the oracle output schema"
+    );
 }
 
 /// Property test: DIVISION agrees between Rust (rust_decimal) and Lean.

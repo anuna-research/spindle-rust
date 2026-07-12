@@ -96,7 +96,10 @@ local_axioms="$(
 
       {
         code = strip_comments($0)
-        if (code ~ /^[[:space:]]*(axiom|constant)[[:space:]]/) {
+        # Modifiers and attributes may precede the keyword
+        # (`private axiom`, `@[simp] axiom`, `noncomputable constant`),
+        # so anchoring on the keyword alone would be evadable.
+        if (code ~ /^[[:space:]]*((@\[[^]]*\][[:space:]]*)|((private|protected|noncomputable|unsafe|scoped|local)[[:space:]]+))*(axiom|constant)[[:space:]]/) {
           print FILENAME ":" FNR ":" code
         }
       }
@@ -145,6 +148,21 @@ echo "==> Running Lean axiom audit"
 audit_output="$(mktemp)"
 trap 'rm -f "$build_output" "$audit_output"' EXIT
 lake env lean AxiomAudit.lean | tee "$audit_output"
+
+# Guard the "audit silently audited nothing" trap: the awk below only fails on
+# offending lines it SEES, so an empty or truncated audit output would pass
+# vacuously. Assert every `#print axioms` command produced a report line.
+expected_audits="$(grep -c '^#print axioms' AxiomAudit.lean || true)"
+actual_audits="$(grep -cE "does not depend on any axioms|depends on axioms:" "$audit_output" || true)"
+if [ "$actual_audits" -ne "$expected_audits" ]; then
+  echo "error: axiom audit produced $actual_audits report lines for $expected_audits '#print axioms' commands" >&2
+  echo "hint: a listed declaration may have been renamed or removed — update AxiomAudit.lean" >&2
+  exit 1
+fi
+if [ "$expected_audits" -eq 0 ]; then
+  echo "error: AxiomAudit.lean lists no '#print axioms' commands" >&2
+  exit 1
+fi
 
 awk '
 BEGIN {
