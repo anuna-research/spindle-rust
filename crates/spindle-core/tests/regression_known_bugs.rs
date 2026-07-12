@@ -847,3 +847,143 @@ fn test_temporal_body_slot_not_discarded_by_different_window_event() {
          event must not discard the exact p[0,10] slot"
     );
 }
+
+// =============================================================================
+// SPEC-020 REQ-009 / TEST-015: window-identity conflict semantics
+//
+// Temporal windows are opaque identity: complements conflict only when their
+// windows are IDENTICAL. Overlapping-but-distinct windows are independent
+// assertions and may both be concluded. This is a deliberate semantic
+// decision (mirrored by the Lean model's temporal-exact AtomKey); this test
+// pins it so any future change is a spec revision, not an accident.
+// =============================================================================
+
+#[test]
+fn test_overlapping_windows_are_independent_identical_windows_conflict() {
+    let neg_temporal_lit = |name: &str, start: i64, end: i64| {
+        Literal::new(
+            name,
+            true,
+            Default::default(),
+            Temporal::from_bounds(start, end),
+            vec![],
+        )
+    };
+
+    // Identical windows: p[1,10] vs ~p[1,10] ambiguity-block; neither is +d.
+    let mut same = Theory::new();
+    same.add_rule(Rule::defeasible("r1", Vec::new(), temporal_lit("p", 1, 10)));
+    same.add_rule(Rule::defeasible(
+        "r2",
+        Vec::new(),
+        neg_temporal_lit("p", 1, 10),
+    ));
+    let conclusions = reason(&same).unwrap();
+    assert!(
+        !has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", false)
+            && !has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", true),
+        "identical-window complements must ambiguity-block (REQ-009)"
+    );
+
+    // Overlapping distinct windows: p[1,10] vs ~p[5,15] are independent
+    // assertions; both are +d.
+    let mut overlap = Theory::new();
+    overlap.add_rule(Rule::defeasible("r1", Vec::new(), temporal_lit("p", 1, 10)));
+    overlap.add_rule(Rule::defeasible(
+        "r2",
+        Vec::new(),
+        neg_temporal_lit("p", 5, 15),
+    ));
+    let conclusions = reason(&overlap).unwrap();
+    assert!(
+        has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", false)
+            && has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", true),
+        "overlapping distinct-window complements are independent by spec \
+         (REQ-009): windows are opaque identity, overlap is not conflict"
+    );
+}
+
+// =============================================================================
+// BUG 9: why_not.rs -- superiority checked with grounded labels
+//
+// Superiority relations are declared on template labels, but grounding renames
+// rule instances (`r1` -> `r1_0`). why_not compared superiority with the
+// grounded labels, so `is_superior` always returned false for grounded rules
+// and superiority-defeated attackers were reported as spurious blockers,
+// diverging from the reasoner (which compares template labels).
+//
+// STATUS: FIXED -- why_not now compares template labels like defeasible.rs.
+// =============================================================================
+
+#[test]
+fn test_why_not_superiority_uses_template_labels_for_grounded_rules() {
+    use spindle_core::pipeline::{PrepareOptions, prepare};
+
+    let var_lit = |name: &str, neg: bool| {
+        Literal::new(
+            name,
+            neg,
+            Default::default(),
+            Default::default(),
+            vec!["?x".to_string()],
+        )
+    };
+    let ground_lit = |name: &str, neg: bool| {
+        Literal::new(
+            name,
+            neg,
+            Default::default(),
+            Default::default(),
+            vec!["t".to_string()],
+        )
+    };
+
+    let mut theory = Theory::new();
+    theory.add_rule(Rule::fact("f1", ground_lit("bird", false)));
+    theory.add_rule(Rule::fact("f2", ground_lit("injured", false)));
+    theory.add_rule(Rule::fact("f3", ground_lit("heavy", false)));
+    theory.add_rule(Rule::defeasible(
+        "r1",
+        vec![var_lit("bird", false)],
+        var_lit("flies", false),
+    ));
+    theory.add_rule(Rule::defeasible(
+        "a1",
+        vec![var_lit("injured", false)],
+        var_lit("flies", true),
+    ));
+    theory.add_rule(Rule::defeater(
+        "d1",
+        vec![var_lit("heavy", false)],
+        var_lit("flies", true),
+    ));
+    // r1 beats a1 on the template labels; the defeater d1 still blocks flies.
+    theory.add_superiority("r1", "a1");
+
+    let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+    let goal = ground_lit("flies", false);
+
+    let conclusions = reason(&prepared.theory).unwrap();
+    assert!(
+        !conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable && c.literal == goal
+        }),
+        "flies(t) must stay blocked by the undefeated defeater d1"
+    );
+
+    let result = why_not(&prepared.theory, &goal).unwrap();
+    let blocking_rules: Vec<&str> = result
+        .blocked_by
+        .iter()
+        .filter_map(|b| b.blocking_rule.as_deref())
+        .collect();
+    assert!(
+        blocking_rules.iter().any(|r| r.starts_with("d1")),
+        "why_not must name the undefeated defeater d1 as a blocker. Got: {blocking_rules:?}"
+    );
+    assert!(
+        !blocking_rules.iter().any(|r| r.starts_with("a1")),
+        "BUG REGRESSION: a1 is defeated via template-label superiority (r1 > a1) \
+         and must not be reported as a blocker for grounded rules. Got: {blocking_rules:?}"
+    );
+}

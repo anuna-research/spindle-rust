@@ -356,6 +356,35 @@ Trace:
 - CON-001
 - TEST-011
 
+### REQ-009: Conflict and attack are window-identity based; overlap is not conflict
+
+Temporal windows are opaque identity, not intervals with point semantics.
+Two literals conflict (complement, attack, ambiguity-block) only when their
+windows are *identical*. Overlapping-but-distinct windows are independent
+assertions: `p[1,10]` and `~p[5,15]` do NOT attack each other and may both
+be defeasibly concluded from the same theory, while `p[1,10]` and `~p[1,10]`
+ambiguity-block as usual.
+
+This is a deliberate semantic decision, aligned with the exact-identity
+design of REQ-001 and mirrored by the verified Lean model (`AtomKey`
+includes `temporal`; `LitId::complement()` flips negation only). Authors who
+intend point-in-time conflict semantics must normalize windows upstream
+(e.g. author identical windows, or split assertions at window boundaries
+before submission). Interval-overlap conflict detection, if ever wanted, is
+a separate future specification — it requires matching changes to the Lean
+reference model and the difftest generators.
+
+Acceptance criteria:
+
+- identical-window complements ambiguity-block (neither `+d`)
+- overlapping distinct-window complements both conclude `+d`
+- the behavior is pinned by a regression test so any future change to it is
+  a deliberate spec revision, not an accident
+
+Trace:
+- CON-001
+- TEST-015
+
 ---
 
 ## 7. Non-Functional Requirements
@@ -646,6 +675,18 @@ Verify:
 
 Verifies:
 - NFR-003
+
+### TEST-015: Window-identity conflict semantics
+
+Verify:
+- identical-window complements (`p[1,10]` vs `~p[1,10]`) ambiguity-block: neither is `+d`
+- overlapping distinct-window complements (`p[1,10]` vs `~p[5,15]`) are independent: both are `+d`
+
+Implemented as `test_overlapping_windows_are_independent_identical_windows_conflict`
+in `crates/spindle-core/tests/regression_known_bugs.rs`.
+
+Verifies:
+- REQ-009
 
 ### TEST-PBT-001: Family/exact mapping invariants
 
