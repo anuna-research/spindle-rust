@@ -18,12 +18,17 @@ inductive Value where
 
 /-! ## Operator enums -/
 
-/-- N-ary arithmetic operators (associative / variadic). -/
+/-- N-ary arithmetic operators (associative / variadic).
+    `div` is TRUE division (Rust `NaryArithOp::Div`, the `/` operator):
+    left-fold of pairwise division, arity 1 = reciprocal;
+    Integer/Integer promotes to Decimal (REQ-005). Distinct from
+    `BinArithOp.div`, which is Rust's integer-only floor `IDiv`. -/
 inductive NaryArithOp where
   | sum
   | product
   | min
   | max
+  | div
   deriving Repr, BEq, DecidableEq, Inhabited
 
 /-- Binary arithmetic operators (exactly two operands). -/

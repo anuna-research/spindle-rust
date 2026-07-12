@@ -231,14 +231,14 @@ private theorem List.term_beq_self (xs : List Term) : (xs == xs) = true := by
     show (x == x && xs == xs) = true
     rw [Term.beq_self, ih]; rfl
 
-private theorem Literal.beq_self (l : Literal) : (l == l) = true := by
+theorem Literal.beq_self (l : Literal) : (l == l) = true := by
   cases l with
   | mk name neg args =>
     show (name == name && (neg == neg && args == args)) = true
     rw [beq_self_eq_true, beq_self_eq_true, List.term_beq_self]; rfl
 
 /-- Propositional list membership implies BEq-based `elem`. -/
-private theorem elem_of_mem {l : Literal} {xs : Interpretation}
+theorem elem_of_mem {l : Literal} {xs : Interpretation}
     (h : l ∈ xs) : xs.elem l = true := by
   induction xs with
   | nil => contradiction

@@ -46,7 +46,21 @@ theorem Literal.ne_complement (l : Literal) :
     that it never simultaneously derives a literal and its complement from
     the same theory. This captures the fundamental consistency property of
     defeasible logic where +∂ q and +∂ ~q cannot both hold at the same
-    proof tag. -/
+    proof tag.
+
+    SCOPE WARNING: this structure demands monotonicity (inherited from
+    `ReasoningOp`) AND consistency simultaneously, and NO Spindle
+    reasoning level satisfies both. The defeasible level is consistent
+    (`Family.twoSided_consistent`, `Properties.partial_consistent` in
+    SpindleLean) but not monotone
+    (`Properties.defeasible_not_monotone`); the monotone support closure
+    (`supportOp`) is not consistent (it derives both `p` and `~p` from
+    contradictory facts, by design — it ignores defeat). Theorems below
+    that use only the `consistent` field (`whatIf_consistent`,
+    `whatIf_augmented_consistent`, `abduce_consistent`) describe the
+    defeasible level's behavior; theorems that also consume derivations
+    produced via `mono` describe a hypothetical monotone-and-consistent
+    reasoner and do not transfer to the engine as stated. -/
 structure ConsistentReasoningOp extends ReasoningOp where
   /-- Consistency: no theory derives both l and complement(l). -/
   consistent : ∀ T : Theory, ∀ l : Literal,

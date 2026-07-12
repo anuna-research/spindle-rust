@@ -12,7 +12,8 @@
   1. (Trivial) The fuel-based `go` functions are structurally recursive on Nat,
      so they always terminate — this is automatic in Lean.
   2. (Substantive) Fixpoint is reached within |allLiterals(T)| steps,
-     so fuel=1000 suffices for any theory with ≤1000 distinct literals.
+     so the derived default fuel (`t.allLiterals.length + 1`) always
+     suffices — no theory-size precondition is needed.
 
   Note: The fixpoint stability and convergence theorems require `current.Nodup`
   (and for convergence, `current ⊆ allLiterals`). These are invariants of the

@@ -128,7 +128,7 @@ theorem delta_subset_partial (t : Theory) :
             (Closure.lambdaClose t (Closure.deltaClose t)) := by
   intro l hl hcons
   simp only [Closure.partialClose]
-  exact mem_partialClose_go_of_mem t _ _ _ l 1000 (mem_gatedDelta _ l hl hcons)
+  exact mem_partialClose_go_of_mem t _ _ _ l _ (mem_gatedDelta _ l hl hcons)
 
 /-- Delta is a subset of lambda.
     Proof: lambdaClose starts from delta as initial set. -/
@@ -136,7 +136,7 @@ theorem delta_subset_lambda (t : Theory) :
     ∀ l, l ∈ Closure.deltaClose t → l ∈ Closure.lambdaClose t (Closure.deltaClose t) := by
   intro l hl
   simp only [Closure.lambdaClose]
-  exact mem_lambdaClose_go_of_mem t _ _ l 1000 hl
+  exact mem_lambdaClose_go_of_mem t _ _ l _ hl
 
 /-- partialClose.go only contains elements from lambda, given the invariant
     that the initial current ⊆ lambda -/
@@ -172,7 +172,7 @@ theorem partial_subset_lambda (t : Theory) :
        → l ∈ Closure.lambdaClose t (Closure.deltaClose t) := by
   intro l hl
   simp only [Closure.partialClose] at hl
-  exact partial_go_subset_lambda t _ _ _ l 1000
+  exact partial_go_subset_lambda t _ _ _ l _
     (fun x hx => delta_subset_lambda t x (gatedDelta_subset _ x hx)) hl
 
 end Properties

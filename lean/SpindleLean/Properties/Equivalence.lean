@@ -296,20 +296,19 @@ private theorem deltaClose_init_sub_allLiterals (t : Theory) :
 /-- Completeness of +D: if there exists a definite rule with head l whose body
     is satisfied in deltaClose t, then l ∈ deltaClose t.
 
-    Note: requires that the theory has at most 1000 distinct literals, since
-    deltaClose uses fuel=1000. For larger theories, use a custom fuel value. -/
+    Unconditional in the theory's size: `deltaClose`'s default fuel is
+    derived from the literal universe (`t.allLiterals.length + 1`), which
+    always suffices to reach the fixpoint. -/
 theorem reason_plusD_complete (t : Theory) (l : Literal)
-    (hsmall : t.allLiterals.length ≤ 1000)
     (hderiv : ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l
               ∧ r.bodySatisfied (Closure.deltaClose t) = true) :
     l ∈ Closure.deltaClose t := by
   obtain ⟨r, hr, hdef, hhead, hbody⟩ := hderiv
   rw [← hhead]
   simp only [Closure.deltaClose]
-  apply deltaClose_go_fixpoint' t _ 1000 (List.nodup_dedup _)
+  apply deltaClose_go_fixpoint' t _ (t.allLiterals.length + 1) (List.nodup_dedup _)
     (deltaClose_init_sub_allLiterals t) _ r hr hdef hbody
-  -- Fuel bound: allLiterals.length - init.length ≤ 1000
-  -- Since init.length ≥ 0 and allLiterals.length ≤ 1000
+  -- Fuel bound: allLiterals.length - init.length ≤ allLiterals.length + 1
   omega
 
 /-- Bridge to the semantic spec (strategy step 1): if `l` is *definitely
@@ -318,10 +317,9 @@ theorem reason_plusD_complete (t : Theory) (l : Literal)
     DL(d) operator, so the operator is faithfully connected to the algorithm
     rather than left as an unreferenced specification. -/
 theorem deltaClose_of_isDefinitelyDerivable (t : Theory) (l : Literal)
-    (hsmall : t.allLiterals.length ≤ 1000)
     (hderiv : isDefinitelyDerivable t (Closure.deltaClose t) l) :
     l ∈ Closure.deltaClose t :=
-  reason_plusD_complete t l hsmall hderiv
+  reason_plusD_complete t l hderiv
 
 /-- The three-phase decomposition preserves the subset chain:
     (delta-consistent part of) delta ⊆ partial ⊆ lambda.

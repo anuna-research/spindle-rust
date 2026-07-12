@@ -46,9 +46,11 @@ fn nary_op_to_lean(op: &NaryArithOp) -> Option<&'static str> {
         NaryArithOp::Mul => Some("product"),
         NaryArithOp::Min => Some("min"),
         NaryArithOp::Max => Some("max"),
-        // Sub and Div have different semantics in Lean (binary only)
+        // True division maps directly: Lean models rust_decimal division
+        // (int/int → decimal, half-even rounding at the max fitting scale).
+        NaryArithOp::Div => Some("div"),
+        // Sub is modeled in Lean as binary sub / unary neg (see expr_to_json).
         NaryArithOp::Sub => None,
-        NaryArithOp::Div => None,
     }
 }
 
@@ -88,11 +90,6 @@ fn expr_to_json(expr: &ArithExpr) -> Option<JValue> {
                 NaryArithOp::Sub if args.len() == 1 => {
                     let arg = expr_to_json(&args[0])?;
                     Some(json!({"unaryOp": {"op": "neg", "arg": arg}}))
-                }
-                NaryArithOp::Div if args.len() == 2 => {
-                    // Rust int/int division → Decimal; Lean int/int → Int
-                    // This is a known divergence — skip for now
-                    None
                 }
                 _ => {
                     let lean_op = nary_op_to_lean(op)?;
@@ -140,7 +137,13 @@ fn parse_lean_value(j: &JValue) -> Option<LeanValue> {
         return Some(LeanValue::Int(n.as_i64()? as i128));
     }
     if let Some(d) = j.get("decimal") {
-        let n = d.get("n")?.as_i64()? as i128;
+        // The oracle emits mantissas as strings: rust_decimal mantissas
+        // span 96 bits and serde_json only round-trips integers up to i64.
+        let nj = d.get("n")?;
+        let n: i128 = match nj {
+            JValue::String(s) => s.parse().ok()?,
+            _ => nj.as_i64()? as i128,
+        };
         let scale = d.get("scale")?.as_u64()?;
         return Some(LeanValue::Decimal { n, scale });
     }
@@ -338,6 +341,29 @@ fn arb_lean_compatible_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> 
                 op: UnaryArithOp::Abs,
                 expr: Box::new(e),
             }),
+            // True division (2 args; the model handles div-by-zero and
+            // decimal promotion, so operands are unconstrained)
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::NaryOp {
+                op: NaryArithOp::Div,
+                args: vec![a, b],
+            }),
+            // Reciprocal (1-arg division)
+            inner.clone().prop_map(|a| ArithExpr::NaryOp {
+                op: NaryArithOp::Div,
+                args: vec![a],
+            }),
+            // Integer floor division / remainder (type errors on decimals
+            // agree between both sides, so operands are unconstrained)
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::BinOp {
+                op: BinArithOp::IDiv,
+                lhs: Box::new(a),
+                rhs: Box::new(b),
+            }),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::BinOp {
+                op: BinArithOp::Rem,
+                lhs: Box::new(a),
+                rhs: Box::new(b),
+            }),
             // BinOp pow (integer only, small exponents)
             (
                 arb_int_value().prop_map(ArithExpr::Lit),
@@ -509,6 +535,81 @@ fn proptest_rust_lean_arith_agreement() {
             disagreements.len().min(10)
         );
     }
+}
+
+/// Property test: DIVISION agrees between Rust (rust_decimal) and Lean.
+///
+/// Division was previously excluded as a "known divergence" (the Lean
+/// model performed scale-aligned integer division: 1.00 / 2.00 = 0.00).
+/// The Lean model now mirrors rust_decimal `checked_div` — half-even
+/// rounding at the largest scale ≤ 28 whose mantissa fits 96 bits — and
+/// this test exercises it directly with wide value/scale ranges,
+/// including zero divisors, non-terminating quotients (1/3, x/7), and
+/// quotients whose integer part forces scale reduction.
+#[test]
+#[ignore] // requires `lake build ArithOracle` in lean/
+fn proptest_rust_lean_division_agreement() {
+    let oracle_path = match find_oracle_binary() {
+        Some(p) => p,
+        None => {
+            eprintln!("Skipping: Lean ArithOracle not built.");
+            return;
+        }
+    };
+
+    let config = ProptestConfig::with_cases(100);
+    let mut runner = proptest::test_runner::TestRunner::new(config);
+
+    // Wide ranges: mantissas to ±1e9 (forces scale-fit below 28 for big
+    // quotients), scales 0..=8, and deliberate zeros.
+    let arb_operand = prop_oneof![
+        4 => (-1_000_000_000i64..1_000_000_000).prop_map(NumericValue::Integer),
+        4 => (-1_000_000_000i64..1_000_000_000, 0u32..9)
+            .prop_map(|(n, s)| NumericValue::Decimal(Decimal::new(n, s))),
+        1 => Just(NumericValue::Integer(0)),
+        1 => (0u32..9).prop_map(|s| NumericValue::Decimal(Decimal::new(0, s))),
+    ];
+    let strategy = proptest::collection::vec((arb_operand.clone(), arb_operand), 400);
+    let pairs = strategy.new_tree(&mut runner).unwrap().current();
+
+    let mut cases = Vec::new();
+    let mut rust_results = Vec::new();
+
+    for (a, b) in &pairs {
+        let expr = ArithExpr::NaryOp {
+            op: NaryArithOp::Div,
+            args: vec![ArithExpr::Lit(a.clone()), ArithExpr::Lit(b.clone())],
+        };
+        let json_expr = expr_to_json(&expr).expect("division maps to Lean");
+        cases.push(json!({"expr": json_expr, "env": []}));
+        let subst = Substitution::default();
+        rust_results.push((expr.clone(), expr.eval(&subst)));
+    }
+
+    let lean_results =
+        call_oracle_batch(&cases, &oracle_path).expect("oracle batch should succeed");
+    assert_eq!(rust_results.len(), lean_results.len());
+
+    let mut disagreements = Vec::new();
+    for (i, ((expr, rust_result), lean_json)) in
+        rust_results.iter().zip(lean_results.iter()).enumerate()
+    {
+        let lean_result = parse_lean_result(lean_json)
+            .unwrap_or_else(|| panic!("unparseable oracle output: {lean_json}"));
+        if !results_agree(rust_result, &lean_result) {
+            disagreements.push(format!(
+                "Case {i}: expr={expr}, rust={rust_result:?}, lean={lean_result:?}"
+            ));
+        }
+    }
+
+    if !disagreements.is_empty() {
+        for d in &disagreements[..disagreements.len().min(10)] {
+            eprintln!("  DISAGREE: {d}");
+        }
+        panic!("{} division disagreements found", disagreements.len());
+    }
+    eprintln!("Division difftest: {} cases, all agree", rust_results.len());
 }
 
 /// Property test: comparison operators agree between Rust and Lean.

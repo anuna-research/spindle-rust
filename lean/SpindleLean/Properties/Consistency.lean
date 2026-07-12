@@ -47,8 +47,6 @@ theorem supRel_wellFounded_of_no_superiority (t : Theory)
     contains both a literal and its complement.
 
     Hypotheses:
-    - `hsize`: the standard fuel bound (theories with ≤ 1000 distinct
-      literals; matches `reason_plusD_complete`)
     - `hwform`: fact rules have empty bodies (`Theory.WellFormed`)
     - `hwf`: the superiority relation is well-founded (holds for every
       acyclic relation on the finite rule set)
@@ -60,7 +58,6 @@ theorem supRel_wellFounded_of_no_superiority (t : Theory)
     consistency (two mutually-superior opposing rules both win), so the
     well-foundedness hypothesis is necessary, not an artifact. -/
 theorem partial_consistent (t : Theory) (l : Literal)
-    (hsize : t.allLiterals.length ≤ 1000)
     (hwform : t.WellFormed)
     (hwf : WellFounded (SupRel t))
     (hl : l ∈ Closure.partialClose t (Closure.deltaClose t)
@@ -79,7 +76,7 @@ theorem partial_consistent (t : Theory) (l : Literal)
       · rfl
       all_goals rw [Rule.isFact, hrt] at hsf; exact absurd hsf (by decide)
     have hbody : s.body = [] := hwform s hs hft
-    apply reason_plusD_complete t s.head hsize
+    apply reason_plusD_complete t s.head
     refine ⟨s, hs, ?_, rfl, ?_⟩
     · simp only [Rule.isDefinite, hft]; decide
     · simp [Rule.bodySatisfied, hbody]
@@ -152,7 +149,6 @@ theorem partial_consistent (t : Theory) (l : Literal)
 
 /-- Consistency specialized to theories without superiority declarations. -/
 theorem partial_consistent_no_superiority (t : Theory) (l : Literal)
-    (hsize : t.allLiterals.length ≤ 1000)
     (hwform : t.WellFormed)
     (hsup : t.superiority = [])
     (hl : l ∈ Closure.partialClose t (Closure.deltaClose t)
@@ -160,7 +156,7 @@ theorem partial_consistent_no_superiority (t : Theory) (l : Literal)
     (hcl : l.complement ∈ Closure.partialClose t (Closure.deltaClose t)
             (Closure.lambdaClose t (Closure.deltaClose t))) :
     False :=
-  partial_consistent t l hsize hwform
+  partial_consistent t l hwform
     (supRel_wellFounded_of_no_superiority t hsup) hl hcl
 
 end Properties

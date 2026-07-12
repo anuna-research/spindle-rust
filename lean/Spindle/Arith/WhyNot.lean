@@ -52,7 +52,15 @@ structure WhyNotResult where
     blocking reason explaining why q is not derived.
 
     The key soundness requirement is that if the oracle returns
-    `MissingPremise(l)`, then l is genuinely not derived by R from T. -/
+    `MissingPremise(l)`, then l is genuinely not derived by R from T.
+
+    SCOPE: this contract models the case where SOME rule for q exists
+    (`explain_rule_mem` demands a supporting rule in T), so it is not
+    instantiable on theories with no rule for q — Rust's why_not reports
+    a separate "no supporting rule" outcome there, and its `Undetermined`
+    blocking type is likewise outside this model. The theorems below are
+    conditional guarantees about any oracle meeting the contract; no
+    concrete instance is provided. -/
 structure WhyNotOracle (R : ReasoningOp) where
   /-- Given a theory and a non-derived literal, produce a why-not result. -/
   explain : (T : Theory) → (q : Literal) → ¬ R.conclusions T q → WhyNotResult

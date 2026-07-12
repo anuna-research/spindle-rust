@@ -106,7 +106,7 @@ theorem delta_sound (t : Theory) (l : Literal) :
     ∃ r ∈ t.rules, r.isDefinite = true ∧ r.head = l := by
   intro h
   simp only [Closure.deltaClose] at h
-  exact delta_go_sound t _ l 1000 (fun x hx => seed_has_fact t x hx) h
+  exact delta_go_sound t _ l _ (fun x hx => seed_has_fact t x hx) h
 
 -- ═══════════════════════════════════════════════════════════════
 -- Ambiguity blocking (prove-ambiguity task)

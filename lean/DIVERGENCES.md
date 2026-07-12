@@ -1,5 +1,63 @@
 # Divergences: Rust Engine vs Verified Lean Model — RESOLVED
 
+> **Class 5 (2026-07-12, review finding — RESOLVED): defender-wait in
+> `canDisprove2`.** The two-sided model's -d disjunct (3) required only
+> that no superior defender be CURRENTLY applicable, while the engine
+> WAITS whenever a superior defender is still undecided
+> (`any_t_undecided` in `try_disprove_defeasible`). Because N only grows,
+> the model's premature -d was irreversible. Minimal witness:
+> `r0: q -> p`, `r1: => ~p`, `r2: r => q`, `r3: => r`, `r0 > r1` — Rust
+> derives `+d p`, the old model `-d p`. Fixed by requiring every superior
+> productive defender to be DISCARDED (the monotone counterpart of the
+> engine's wait: "not discarded" covers both applicable and undecided).
+> The 4-rule difftest tier could not catch this (it generated no
+> superiority pairs); a curated superiority tier was added
+> (`superiority_shapes` in `lean_family_exhaustive_difftest.rs`, 6,435
+> cases). After the fix: 168,256 theories at default scope, zero
+> divergences.
+>
+> **Class 6 (2026-07-12, review finding — RESOLVED): decimal division.**
+> The Lean arithmetic model aligned scales and performed integer division
+> (`1.00 / 2.00 = 0.00`), and the differential serializer excluded Rust
+> `/` as a "known divergence", keeping CI green around the defect. The
+> model now mirrors `rust_decimal::checked_div` — Integer/Integer
+> promotes to Decimal (REQ-005), quotients round HALF-EVEN at the largest
+> scale ≤ 28 whose mantissa fits 96 bits (verified empirically against
+> rust_decimal 1.40, including tie and scale-reduction cases) — and
+> `BinArithOp.div`/`mod` (Rust `IDiv`/`Rem`) are now integer-only FLOOR
+> operations, as in the engine. Along the way the model gained Rust's
+> bounded-arithmetic behavior: checked i64 integer ops (`fitInt`) and the
+> 96-bit/scale-28 decimal cap with half-even rescaling (`fitDecimal`).
+> Division is difftested directly (`proptest_rust_lean_division_agreement`,
+> plus division/IDiv/Rem in the general expression generator); the skip
+> is gone. REMAINING SCOPE LIMIT: IEEE-754 floats
+> (`NumericValue::Float`) are not modeled; the difftest generator never
+> emits floats, so float behavior is engine-only and unverified.
+>
+> **Fuel derivation (2026-07-12, review finding — RESOLVED).** All
+> closure fuels were hardcoded to 1000, silently truncating theories with
+> more than 1000 literals (a 1001-link strict chain yielded `-D p1001`
+> in the model vs `+D p1001` in the engine), while `reason` accepted
+> arbitrary theories. Default fuel is now DERIVED from the finite literal
+> universe (`t.allLiterals.length + 1`) in both the exact and family
+> models, which the convergence theorems show always reaches the
+> fixpoint; the `≤ 1000` size hypotheses on `reason_plusD_complete`,
+> `partial_consistent`, `faithful_plusD_backward` and
+> `faithful_plusd_backward` are GONE (the theorems are now unconditional
+> in theory size).
+>
+> **Query-layer scope (2026-07-12, review finding — RESOLVED).** The
+> what-if/abduce/why-not theorems quantify over a `ReasoningOp` whose
+> `mono` field defeasible reasoning cannot satisfy
+> (machine-checked: `Properties.defeasible_not_monotone`,
+> SpindleLean/Properties/NonMonotonicity.lean). The contract is now
+> connected to a CONCRETE reasoner: `supportOp`
+> (Spindle/Arith/SupportOp.lean), the semi-naive support closure, whose
+> monotonicity is proven rather than assumed. Module docs in
+> WhatIf/Abduce/QuerySoundness state precisely which results are
+> support-level guarantees and that `ConsistentReasoningOp`
+> (monotone AND consistent) has no Spindle instance.
+>
 > **Resolution (2026-07-04).** Both classes below are resolved; the engine
 > and the verified model now agree on **all 297,760 theories** at full
 > exhaustive scope (0 divergences).

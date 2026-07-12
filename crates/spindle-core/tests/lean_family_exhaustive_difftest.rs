@@ -5,7 +5,10 @@
 //! windows {none, [1,10], [20,30]}, bodies of at most 1 literal, up to
 //! 2 rules with all superiority orientations (plus 3-rule theories without
 //! superiority at `SPINDLE_EXHAUSTIVE=full`) — and compares all four
-//! conclusion tags per exact literal.
+//! conclusion tags per exact literal. Two propositional 4-rule tiers ride
+//! along: the exhaustive superiority-free tier (defeat-discard class) and
+//! a curated tier with single superiority pairs (defender-wait class; see
+//! `superiority_shapes`).
 //!
 //! The family semantics under test (established by
 //! `tests/family_probe.rs`, mirrored in `lean/SpindleLean/Family.lean`):
@@ -31,7 +34,10 @@ use spindle_core::rule::Rule;
 use spindle_core::temporal::{Temporal, TimePoint};
 use spindle_core::theory::Theory;
 
-const ATOMS: &[&str] = &["p", "q"];
+const ATOMS: &[&str] = &["p", "q", "r"];
+/// Number of atoms used by the exhaustive propositional tier ("r" exists
+/// only for the curated superiority tier below).
+const PROP_ATOMS: u8 = 2;
 const WINDOWS: &[Option<(i64, i64)>] = &[None, Some((1, 10)), Some((20, 30))];
 
 /// (atom index, negated, window index into WINDOWS)
@@ -100,9 +106,43 @@ fn temporal_lits() -> Vec<Lit> {
 
 /// Propositional universe: 2 atoms x negation, windowless.
 fn prop_lits() -> Vec<Lit> {
-    (0..ATOMS.len() as u8)
+    (0..PROP_ATOMS)
         .flat_map(|a| [(a, false, 0), (a, true, 0)])
         .collect()
+}
+
+/// Curated shape set for the SUPERIORITY tier: strict/defeasible chains
+/// over three atoms plus attackers and facts, built around the
+/// defender-wait class. The minimal witness lives here:
+///
+///     r0: q -> p    r1: => ~p    r2: r => q    r3: => r    r0 > r1
+///
+/// The engine WAITS on the undecided superior defender r0 (its body `q`
+/// only becomes provable a round later, through r2/r3) and derives +d p;
+/// a model that disproves past a merely-inapplicable superior defender
+/// derives -d p irreversibly. No tier without superiority pairs can
+/// exercise this class.
+fn superiority_shapes() -> Vec<Shape> {
+    let p: Lit = (0, false, 0);
+    let np: Lit = (0, true, 0);
+    let q: Lit = (1, false, 0);
+    let nq: Lit = (1, true, 0);
+    let r: Lit = (2, false, 0);
+    let shape = |rtype, head, body: Vec<Lit>| Shape { rtype, head, body };
+    vec![
+        shape(RType::Strict, p, vec![q]),      // q -> p
+        shape(RType::Strict, q, vec![r]),      // r -> q
+        shape(RType::Defeasible, np, vec![]),  // => ~p
+        shape(RType::Defeasible, p, vec![]),   // => p
+        shape(RType::Defeasible, q, vec![]),   // => q
+        shape(RType::Defeasible, nq, vec![]),  // => ~q
+        shape(RType::Defeasible, r, vec![]),   // => r
+        shape(RType::Defeasible, q, vec![r]),  // r => q
+        shape(RType::Defeasible, p, vec![q]),  // q => p
+        shape(RType::Fact, q, vec![]),         // >> q
+        shape(RType::Fact, r, vec![]),         // >> r
+        shape(RType::Defeater, np, vec![q]),   // q ~> ~p
+    ]
 }
 
 #[derive(Clone, Debug)]
@@ -162,6 +202,42 @@ fn enumerate_cases(level: &str) -> Vec<Case> {
                         ],
                         superiority: vec![],
                     });
+                }
+            }
+        }
+    }
+
+    // Superiority tier: every 4-rule theory over the curated shape set,
+    // each with no superiority and with every single ordered superiority
+    // pair (13 variants per combination). Covers the defender-wait class
+    // that the superiority-free 4-rule tier cannot reach (a -d must not
+    // fire while a superior defender is undecided).
+    let sup_shapes = superiority_shapes();
+    let sn = sup_shapes.len();
+    let mut sup_variants: Vec<Vec<(usize, usize)>> = vec![vec![]];
+    for w in 0..4 {
+        for l in 0..4 {
+            if w != l {
+                sup_variants.push(vec![(w, l)]);
+            }
+        }
+    }
+    for i in 0..sn {
+        for j in (i + 1)..sn {
+            for k in (j + 1)..sn {
+                for m in (k + 1)..sn {
+                    let rules = vec![
+                        sup_shapes[i].clone(),
+                        sup_shapes[j].clone(),
+                        sup_shapes[k].clone(),
+                        sup_shapes[m].clone(),
+                    ];
+                    for sup in &sup_variants {
+                        cases.push(Case {
+                            rules: rules.clone(),
+                            superiority: sup.clone(),
+                        });
+                    }
                 }
             }
         }

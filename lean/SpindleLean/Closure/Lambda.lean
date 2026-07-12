@@ -25,8 +25,10 @@ def lambdaStep (t : Theory) (delta : List Literal) (current : List Literal) : Li
       none
   (current ++ newLits).dedup
 
-/-- Compute lambda closure by iterating to fixpoint -/
-def lambdaClose (t : Theory) (delta : List Literal) (fuel : Nat := 1000) : List Literal :=
+/-- Compute lambda closure by iterating to fixpoint. Default fuel is
+    derived from the finite literal universe (see `deltaClose`). -/
+def lambdaClose (t : Theory) (delta : List Literal)
+    (fuel : Nat := t.allLiterals.length + 1) : List Literal :=
   go t delta delta fuel
 where
   go (t : Theory) (delta current : List Literal) : Nat → List Literal

@@ -12,6 +12,20 @@
   - `abduce_mono`: more rules in T → solutions remain valid
   - `abduce_solution_superset`: supersets of valid solutions are valid
   - Integration with what-if and why-not operators
+
+  ## Scope
+
+  Results that consume `ReasoningOp.mono` (`abduce_solution_superset`,
+  `abduce_mono`, `abduce_union_valid`, `abduce_chain`) hold for MONOTONE
+  reasoners only. The concrete instance is the support closure
+  `supportOp` (SupportOp.lean); Spindle's defeasible conclusions are not
+  monotone (`Properties.defeasible_not_monotone`), so at the defeasible
+  level a superset of a valid solution may FAIL — e.g. extending a
+  solution with the complement of the goal. These theorems therefore
+  guarantee support-level reachability, and the Rust `requires` operator
+  re-verifies each candidate against the full engine precisely because
+  support-level validity does not transfer automatically. See
+  WhatIf.lean's header for the full discussion.
 -/
 import Spindle.Arith.WhyNot
 

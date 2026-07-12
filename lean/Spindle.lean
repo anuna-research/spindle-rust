@@ -22,6 +22,7 @@ import Spindle.Arith.TemporalGrounding
 import Spindle.Arith.Abduce
 import Spindle.Arith.WhatIf
 import Spindle.Arith.WhyNot
+import Spindle.Arith.SupportOp
 import Spindle.Arith.QuerySoundness
 import Spindle.Arith.Requires
 import Spindle.Arith.AsOfFilter

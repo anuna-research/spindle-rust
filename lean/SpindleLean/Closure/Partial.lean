@@ -72,9 +72,10 @@ def partialStep (t : Theory) (delta lambda current : List Literal) : List Litera
     !current.contains lit && canProve t lit delta lambda current
   (current ++ candidates).dedup
 
-/-- Compute partial closure by iterating to fixpoint -/
+/-- Compute partial closure by iterating to fixpoint. Default fuel is
+    derived from the finite literal universe (see `deltaClose`). -/
 def partialClose (t : Theory) (delta lambda : List Literal)
-    (fuel : Nat := 1000) : List Literal :=
+    (fuel : Nat := t.allLiterals.length + 1) : List Literal :=
   go t delta lambda (gatedDelta delta) fuel
 where
   go (t : Theory) (delta lambda current : List Literal) : Nat → List Literal

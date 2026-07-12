@@ -16,7 +16,7 @@
   ArithExpr format:
     { "lit": <Value> }
     { "var": N }
-    { "naryOp": { "op": "sum"|"product"|"min"|"max", "args": [<ArithExpr>] } }
+    { "naryOp": { "op": "sum"|"product"|"min"|"max"|"div", "args": [<ArithExpr>] } }
     { "binOp": { "op": "sub"|"div"|"mod"|"pow", "lhs": <ArithExpr>, "rhs": <ArithExpr> } }
     { "unaryOp": { "op": "neg"|"abs"|"sqrt"|"ceil"|"floor"|"round", "arg": <ArithExpr> } }
 
@@ -49,8 +49,11 @@ private def jsonNat (n : Nat) : Json := Json.num (JsonNumber.fromNat n)
 private def valueToJson : Value → Json
   | .int n => Json.mkObj [("int", jsonInt n)]
   | .decimal n s =>
+    -- The mantissa is emitted as a STRING: rust_decimal mantissas span
+    -- 96 bits, and serde_json on the Rust side loses integers beyond
+    -- i64 precision (it would parse them as f64).
     Json.mkObj [("decimal", Json.mkObj [
-      ("n", jsonInt n),
+      ("n", Json.str (toString n)),
       ("scale", jsonNat s)
     ])]
 
@@ -58,11 +61,15 @@ private def parseValue (j : Json) : Except String Value := do
   -- Try int
   if let some n := j.getObjValAs? Int "int" |>.toOption then
     return .int n
-  -- Try decimal
+  -- Try decimal (mantissa as JSON number or as string)
   if let some obj := j.getObjVal? "decimal" |>.toOption then
-    let n ← obj.getObjValAs? Int "n"
     let scale ← obj.getObjValAs? Nat "scale"
-    return .decimal n scale
+    if let some n := obj.getObjValAs? Int "n" |>.toOption then
+      return .decimal n scale
+    if let some s := obj.getObjValAs? String "n" |>.toOption then
+      if let some n := s.toInt? then
+        return .decimal n scale
+    .error s!"invalid decimal mantissa: {j}"
   .error s!"invalid Value JSON: {j}"
 
 /-! ## Operator JSON -/
@@ -73,6 +80,7 @@ private def parseNaryOp (s : String) : Except String NaryArithOp :=
   | "product" => .ok .product
   | "min" => .ok .min
   | "max" => .ok .max
+  | "div" => .ok .div
   | _ => .error s!"unknown NaryArithOp: {s}"
 
 private def parseBinOp (s : String) : Except String BinArithOp :=

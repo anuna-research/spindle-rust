@@ -28,14 +28,31 @@
     supporter with famSat body in P, and every attacker fact-exempt,
     discarded, or team-defeated by a superior P-applicable defender;
   - -d (canDisprove2): definite complement, unfoundedness, all
-    supporters discarded, or an applicable attacker no superior
-    applicable defender can beat (the spec's -d disjuncts).
+    supporters discarded, or an applicable attacker all of whose
+    superior defenders are DISCARDED (the spec's -d disjuncts).
+
+    The defender condition must be discard, not mere current
+    inapplicability: the engine WAITS while a superior defender is
+    undecided (`try_disprove_defeasible`'s `any_t_undecided` guard in
+    `reason/defeasible.rs`), and because N only grows here, disproving
+    against a defender whose body is merely not-yet-proven would be
+    irreversible. Minimal witness (previously divergent):
+
+        r0: q -> p    r1: => ~p    r2: r => q    r3: => r    r0 > r1
+
+    In round 1 only `r` is proven; r0's body `q` is not yet in P, so an
+    applicability-based check would let r1 disprove `p` permanently,
+    while the engine waits, proves `q`, and then derives `+d p` via the
+    superior defender r0. Requiring the defender to be discarded is the
+    monotone counterpart of the engine's wait: "not discarded" covers
+    both "already applicable" and "still undecided".
 
   Both step components are monotone in (P, N), so fuel-bounded iteration
   reaches the least fixed point. `famReason2` is the executable model
   behind the family oracle and is difftested exhaustively against the
-  engine — including a 4-rule propositional tier that covers the
-  defeat-discard class (`lean_family_exhaustive_difftest.rs`).
+  engine — including a 4-rule propositional tier covering the
+  defeat-discard class and a curated 4-rule superiority tier covering
+  the defender-wait class (`lean_family_exhaustive_difftest.rs`).
 -/
 import SpindleLean.Family
 
@@ -84,8 +101,17 @@ def canProve2 (t : FTheory) (univ delta lambda P N : List FLit)
           || teamDefeats2 t lit s P
 
 /-- -d: definite complement, unfounded, unsupported (all supporters
-    discarded), or attacked by an applicable rule that no superior
-    applicable defender beats. -/
+    discarded), or attacked by an applicable rule ALL of whose superior
+    productive defenders are discarded.
+
+    The defender check is `discardedRule`, not `bodySat P`: a superior
+    defender whose body is merely not yet proven is UNDECIDED, and the
+    engine waits for it (`any_t_undecided` in `try_disprove_defeasible`,
+    reason/defeasible.rs). Since N only grows, disproving past an
+    undecided superior defender would be irreversible — see the module
+    header's minimal witness (`q -> p`, `=> ~p`, `r => q`, `=> r`,
+    `r0 > r1`). Discard is monotone in N, so this disjunct stays sound
+    under growth of (P, N). -/
 def canDisprove2 (t : FTheory) (univ delta lambda P N : List FLit)
     (lit : FLit) : Bool :=
   delta.contains lit.complement
@@ -94,9 +120,10 @@ def canDisprove2 (t : FTheory) (univ delta lambda P N : List FLit)
           !r.isProductive || discardedRule univ lambda N r)
     || ((t.rulesWithHead lit.complement).any fun s =>
           !s.isFact && s.bodySat P
-            && !((t.rulesWithHead lit).any fun d =>
-                  d.isProductive && d.bodySat P
-                    && t.isSuperior d.label s.label))
+            && ((t.rulesWithHead lit).all fun d =>
+                  !d.isProductive
+                    || !t.isSuperior d.label s.label
+                    || discardedRule univ lambda N d))
 
 /-! ## The two-sided step and closure -/
 
@@ -457,7 +484,7 @@ theorem fact_head_mem_famDelta (t : FTheory) (s : FRule) (hs : s ∈ t.rules)
       · refine ih _ x ?_
         simp only [deltaStepWith, List.mem_dedup, List.mem_append]
         exact Or.inl hx
-  exact hgo _ 1000 s.head hseed
+  exact hgo _ _ s.head hseed
 
 /-- The delta closure stays within the theory's literal universe. -/
 theorem famDelta_subset_univ (t : FTheory) :
@@ -498,7 +525,7 @@ theorem famDelta_subset_univ (t : FTheory) :
       split at hx
       · exact h x hx
       · exact ih _ (hstep current h) x hx
-  exact hgo _ 1000 hseed
+  exact hgo _ _ hseed
 
 /-- The lambda closure stays within the theory's literal universe. -/
 theorem famLambda_subset_univ (t : FTheory) (delta : List FLit)
@@ -532,7 +559,7 @@ theorem famLambda_subset_univ (t : FTheory) (delta : List FLit)
       split at hx
       · exact h x hx
       · exact ih _ (hstep current h) x hx
-  exact hgo _ 1000 hdelta
+  exact hgo _ _ hdelta
 
 /-- Delta seeds the lambda closure. -/
 theorem famDelta_subset_lambda (t : FTheory) (delta : List FLit) :
@@ -550,7 +577,7 @@ theorem famDelta_subset_lambda (t : FTheory) (delta : List FLit) :
       · refine ih _ x ?_
         simp only [lambdaStepWith, List.mem_dedup, List.mem_append]
         exact Or.inl hx
-  exact hgo _ 1000
+  exact hgo _ _
 
 /-- A body literal satisfied in the proven set is never dead, provided the
     proven set lives inside lambda, avoids N, and lies in the universe. -/

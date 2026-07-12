@@ -15,6 +15,7 @@ import SpindleLean.Properties.Confluence
 import SpindleLean.Properties.Equivalence
 import SpindleLean.Properties.Faithfulness
 import SpindleLean.Properties.Consistency
+import SpindleLean.Properties.NonMonotonicity
 import SpindleLean.Family
 import SpindleLean.FamilyTwoSided
 import SpindleLean.DiffTest.Oracle

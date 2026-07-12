@@ -21,8 +21,14 @@ def deltaStep (t : Theory) (current : List Literal) : List Literal :=
       none
   (current ++ newLits).dedup
 
-/-- Compute delta closure by iterating to fixpoint with bounded fuel -/
-def deltaClose (t : Theory) (fuel : Nat := 1000) : List Literal :=
+/-- Compute delta closure by iterating to fixpoint with bounded fuel.
+
+    The default fuel is derived from the theory's finite literal universe:
+    each productive round adds at least one literal drawn from
+    `t.allLiterals`, so `t.allLiterals.length + 1` rounds always reach the
+    fixpoint (`deltaClose_converges_bound`). A hardcoded constant would
+    silently truncate the closure on larger theories. -/
+def deltaClose (t : Theory) (fuel : Nat := t.allLiterals.length + 1) : List Literal :=
   go t (t.facts.map (·.head)).dedup fuel
 where
   go (t : Theory) (current : List Literal) : Nat → List Literal

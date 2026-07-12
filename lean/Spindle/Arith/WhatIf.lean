@@ -4,9 +4,27 @@
   Formalizes the what_if operator: given a theory T and hypothetical facts F,
   compute reason(T ∪ F) and return the delta (new conclusions minus original).
 
-  Main results:
-  - `whatIf_empty`: what_if(T, ∅) = ∅
-  - `whatIf_mono`: what_if is monotone in F (more hypotheticals → more conclusions)
+  ## Scope: which reasoner do these theorems describe?
+
+  Every theorem here is parameterized by a `ReasoningOp`, whose `mono`
+  field demands that adding rules preserves conclusions. Spindle's
+  DEFEASIBLE conclusions (+d) do NOT satisfy this: T = {a => p} with
+  fact `a` derives +d p, but adding the fact `~p` retracts it. The
+  machine-checked witness is `Properties.defeasible_not_monotone`
+  (SpindleLean/Properties/NonMonotonicity.lean).
+
+  The contract IS satisfied — provably, not axiomatically — by the
+  monotone SUPPORT closure `supportOp` (Spindle/Arith/SupportOp.lean),
+  the semi-naive forward chaining that treats every rule as strict and
+  ignores defeat, i.e. the engine's grounding/reachability phase.
+  Consequently:
+
+  - `whatIf_empty` holds for ANY reasoner (mono is not used);
+  - `whatIf_mono` and the other mono-dependent results are guarantees
+    about the support level ("more hypotheticals can only enlarge the
+    support of the goal"), NOT about defeasible conclusions. A what-if
+    query against the full defeasible engine may lose conclusions when
+    hypotheticals are added; only the support approximation grows.
 -/
 import Spindle.Arith.GroundRule
 
@@ -39,8 +57,14 @@ theorem Literal.toFact_body (l : Literal) :
     "literal l is derivable from theory T".
 
     The key requirement is **monotonicity**: adding more rules to a theory
-    can only increase the set of derivable conclusions. This holds for
-    Spindle's forward-chaining `reason` function. -/
+    can only increase the set of derivable conclusions.
+
+    WARNING (scope): this holds for the SUPPORT closure — the concrete
+    instance is `supportOp` (SupportOp.lean), with monotonicity proven
+    from the semi-naive evaluator — but it is FALSE for Spindle's
+    defeasible conclusions (+d); see `Properties.defeasible_not_monotone`
+    for the machine-checked counterexample. Theorems that consume `mono`
+    are support-level guarantees only. -/
 structure ReasoningOp where
   /-- The conclusions derivable from a theory. -/
   conclusions : Theory → Literal → Prop

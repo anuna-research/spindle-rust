@@ -39,7 +39,7 @@ private theorem deltaClose_go_nodup (t : Theory) (current : List Literal) (fuel 
 
 private theorem deltaClose_nodup (t : Theory) : (Closure.deltaClose t).Nodup := by
   simp only [Closure.deltaClose]
-  exact deltaClose_go_nodup t _ 1000 (List.nodup_dedup _)
+  exact deltaClose_go_nodup t _ _ (List.nodup_dedup _)
 
 private theorem delta_go_fixpoint_eq (t : Theory) (current : List Literal) (n : Nat)
     (hlen : ((Closure.deltaStep t current).length == current.length) = true) :
@@ -272,7 +272,7 @@ theorem faithful_plusD_forward (t : Theory) (l : Literal)
     (h : l ∈ Closure.deltaClose t) :
     PaperDefiniteProvable t (Closure.deltaClose t) l := by
   simp only [Closure.deltaClose] at h ⊢
-  exact delta_go_strong t _ l 1000
+  exact delta_go_strong t _ l _
     (fun x hx => by
       rw [List.mem_dedup] at hx
       obtain ⟨r, hr, hrhead⟩ := List.mem_map.mp hx
@@ -361,12 +361,11 @@ private theorem facts_dedup_sub_allLiterals (t : Theory) :
   exact List.subset_dedup _ (List.mem_append.mpr (Or.inl (List.mem_map.mpr ⟨r, hrmem, rfl⟩)))
 
 theorem faithful_plusD_backward (t : Theory) (l : Literal)
-    (hsize : t.allLiterals.length ≤ 1000)
     (h : PaperDefiniteProvable t (Closure.deltaClose t) l) :
     l ∈ Closure.deltaClose t := by
   obtain ⟨r, hr, hdef, hhead, hbody⟩ := h
   rw [← hhead]; simp only [Closure.deltaClose]
-  exact delta_go_fixpoint t _ 1000 (List.nodup_dedup _)
+  exact delta_go_fixpoint t _ (t.allLiterals.length + 1) (List.nodup_dedup _)
     (facts_dedup_sub_allLiterals t) (by omega) r hr hdef hbody
 
 private theorem teamDefeats_mono (t : Theory) (lit : Literal) (attacker : Rule)
@@ -455,7 +454,7 @@ theorem faithful_plusd_forward (t : Theory) (l : Literal)
   set partial_ := Closure.partialClose t delta lambda
   have hcan : Closure.canProve t l delta lambda partial_ = true := by
     simp only [Closure.partialClose, partial_] at h ⊢
-    exact partial_go_sound t delta lambda (Closure.gatedDelta delta) l 1000
+    exact partial_go_sound t delta lambda (Closure.gatedDelta delta) l _
       (fun x hx => by
         have hxd := (List.mem_filter.mp hx).1
         have hxc : delta.contains x.complement = false := by
@@ -622,7 +621,7 @@ private theorem deltaClose_go_sub_allLiterals (t : Theory) (current : List Liter
 private theorem deltaClose_sub_allLiterals (t : Theory) :
     ∀ x ∈ Closure.deltaClose t, x ∈ t.allLiterals := by
   simp only [Closure.deltaClose]
-  exact deltaClose_go_sub_allLiterals t _ 1000 (List.nodup_dedup _)
+  exact deltaClose_go_sub_allLiterals t _ (t.allLiterals.length + 1) (List.nodup_dedup _)
     (facts_dedup_sub_allLiterals t)
 
 private theorem lambdaClose_go_sub_allLiterals (t : Theory) (delta current : List Literal)
@@ -643,12 +642,12 @@ private theorem lambdaClose_sub_allLiterals (t : Theory) (delta : List Literal)
     (hsub_delta : ∀ x ∈ delta, x ∈ t.allLiterals) :
     ∀ x ∈ Closure.lambdaClose t delta, x ∈ t.allLiterals := by
   simp only [Closure.lambdaClose]
-  exact lambdaClose_go_sub_allLiterals t delta delta 1000 hnodup_delta hsub_delta
+  exact lambdaClose_go_sub_allLiterals t delta delta (t.allLiterals.length + 1)
+    hnodup_delta hsub_delta
 
 -- Helper for the backward direction to avoid heartbeat timeouts
 set_option maxHeartbeats 400000 in
 private theorem plusd_backward_core (t : Theory)
-    (hsize : t.allLiterals.length ≤ 1000)
     (delta : List Literal) (hd : delta = Closure.deltaClose t)
     (lambda : List Literal) (hl : lambda = Closure.lambdaClose t delta)
     (partial_ : List Literal) (hp : partial_ = Closure.partialClose t delta lambda)
@@ -668,10 +667,11 @@ private theorem plusd_backward_core (t : Theory)
     subst hd; exact deltaClose_sub_allLiterals t
   have hlam : r.head ∈ lambda := by
     subst hl
-    show r.head ∈ Closure.lambdaClose.go t delta delta 1000
-    have hbody_go : r.bodySatisfied (Closure.lambdaClose.go t delta delta 1000) = true := hbody_lam
-    exact lambda_go_fixpoint t delta delta 1000 hnodup_delta hsub_delta (by omega)
-      r hr hprod hbody_go hnotcomp
+    show r.head ∈ Closure.lambdaClose.go t delta delta (t.allLiterals.length + 1)
+    have hbody_go : r.bodySatisfied
+        (Closure.lambdaClose.go t delta delta (t.allLiterals.length + 1)) = true := hbody_lam
+    exact lambda_go_fixpoint t delta delta (t.allLiterals.length + 1)
+      hnodup_delta hsub_delta (by omega) r hr hprod hbody_go hnotcomp
   -- Show canProve returns true
   have hnotcomp_bool : delta.contains r.head.complement = false := by
     cases hc : delta.contains r.head.complement
@@ -696,14 +696,13 @@ private theorem plusd_backward_core (t : Theory)
   have hsub_lam : ∀ x ∈ lambda, x ∈ t.allLiterals := by
     subst hl
     exact lambdaClose_sub_allLiterals t delta hnodup_delta hsub_delta
-  exact partial_go_fixpoint t delta lambda (Closure.gatedDelta delta) 1000
-    (hnodup_delta.filter _)
+  exact partial_go_fixpoint t delta lambda (Closure.gatedDelta delta)
+    (t.allLiterals.length + 1) (hnodup_delta.filter _)
     (fun x hx => hsub_delta x (gatedDelta_subset delta x hx))
     hsub_lam (by omega) r.head hlam hcan
 
 -- +d backward
 theorem faithful_plusd_backward (t : Theory) (l : Literal)
-    (hsize : t.allLiterals.length ≤ 1000)
     (h : PaperDefeasibleProvable t (Closure.deltaClose t)
           (Closure.lambdaClose t (Closure.deltaClose t))
           (Closure.partialClose t (Closure.deltaClose t)
@@ -718,7 +717,7 @@ theorem faithful_plusd_backward (t : Theory) (l : Literal)
   | inr h =>
     obtain ⟨⟨r, hr, hprod, hhead, hbody⟩, hattacks⟩ := h
     subst hhead
-    exact plusd_backward_core t hsize _ rfl _ rfl _ rfl r hr hprod hbody hnotcomp hattacks
+    exact plusd_backward_core t _ rfl _ rfl _ rfl r hr hprod hbody hnotcomp hattacks
 
 theorem faithful_ambiguity_blocking (t : Theory) (l : Literal)
     (delta lambda partial_ : List Literal)

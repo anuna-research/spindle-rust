@@ -226,8 +226,11 @@ def deltaStepWith (t : FTheory) (current : List FLit) : List FLit :=
       some r.head
     else none).dedup
 
-/-- Definite closure to fixpoint. -/
-def deltaCloseWith (t : FTheory) (fuel : Nat := 1000) : List FLit :=
+/-- Definite closure to fixpoint. Default fuel is derived from the finite
+    literal universe: each productive round adds at least one literal from
+    `t.allLiterals`, so `t.allLiterals.length + 1` rounds always reach the
+    fixpoint; a hardcoded constant would silently truncate larger theories. -/
+def deltaCloseWith (t : FTheory) (fuel : Nat := t.allLiterals.length + 1) : List FLit :=
   go ((t.rules.filter (fun r => r.ruleType == .fact)).map (fun r => r.head)).dedup fuel
 where
   go (current : List FLit) : Nat → List FLit
@@ -246,8 +249,8 @@ def lambdaStepWith (t : FTheory) (delta current : List FLit) : List FLit :=
       some r.head
     else none).dedup
 
-def lambdaCloseWith (t : FTheory) (delta : List FLit) (fuel : Nat := 1000) :
-    List FLit :=
+def lambdaCloseWith (t : FTheory) (delta : List FLit)
+    (fuel : Nat := t.allLiterals.length + 1) : List FLit :=
   go delta fuel
 where
   go (current : List FLit) : Nat → List FLit
@@ -299,7 +302,7 @@ def partialStepWith (t : FTheory) (delta lambda current : List FLit) :
   (current ++ candidates).dedup
 
 def partialCloseWith (t : FTheory) (delta lambda : List FLit)
-    (fuel : Nat := 1000) : List FLit :=
+    (fuel : Nat := t.allLiterals.length + 1) : List FLit :=
   go (gatedDeltaF delta) fuel
 where
   go (current : List FLit) : Nat → List FLit
