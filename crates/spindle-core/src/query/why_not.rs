@@ -284,9 +284,13 @@ pub fn why_not_with_conclusions(
                             continue;
                         }
 
+                        // Superiority is declared on template labels; grounded
+                        // instances carry renamed labels (`r1_0`), so compare
+                        // template labels exactly as the reasoner does.
                         if attacker.rule_type == RuleType::Defeater {
                             // Defeaters block unless the rule is explicitly superior
-                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
+                            let rule_superior =
+                                theory.is_superior(rule.template_label(), attacker.template_label());
                             if !rule_superior {
                                 result.blocked_by.push(BlockingCondition::defeated(
                                     &rule.label,
@@ -297,8 +301,9 @@ pub fn why_not_with_conclusions(
                         } else {
                             // For defeasible rules: check superiority both directions
                             let attacker_superior =
-                                theory.is_superior(&attacker.label, &rule.label);
-                            let rule_superior = theory.is_superior(&rule.label, &attacker.label);
+                                theory.is_superior(attacker.template_label(), rule.template_label());
+                            let rule_superior =
+                                theory.is_superior(rule.template_label(), attacker.template_label());
 
                             if rule_superior && !attacker_superior {
                                 // Rule is superior — skip this attacker
