@@ -130,18 +130,18 @@ fn superiority_shapes() -> Vec<Shape> {
     let r: Lit = (2, false, 0);
     let shape = |rtype, head, body: Vec<Lit>| Shape { rtype, head, body };
     vec![
-        shape(RType::Strict, p, vec![q]),      // q -> p
-        shape(RType::Strict, q, vec![r]),      // r -> q
-        shape(RType::Defeasible, np, vec![]),  // => ~p
-        shape(RType::Defeasible, p, vec![]),   // => p
-        shape(RType::Defeasible, q, vec![]),   // => q
-        shape(RType::Defeasible, nq, vec![]),  // => ~q
-        shape(RType::Defeasible, r, vec![]),   // => r
-        shape(RType::Defeasible, q, vec![r]),  // r => q
-        shape(RType::Defeasible, p, vec![q]),  // q => p
-        shape(RType::Fact, q, vec![]),         // >> q
-        shape(RType::Fact, r, vec![]),         // >> r
-        shape(RType::Defeater, np, vec![q]),   // q ~> ~p
+        shape(RType::Strict, p, vec![q]),     // q -> p
+        shape(RType::Strict, q, vec![r]),     // r -> q
+        shape(RType::Defeasible, np, vec![]), // => ~p
+        shape(RType::Defeasible, p, vec![]),  // => p
+        shape(RType::Defeasible, q, vec![]),  // => q
+        shape(RType::Defeasible, nq, vec![]), // => ~q
+        shape(RType::Defeasible, r, vec![]),  // => r
+        shape(RType::Defeasible, q, vec![r]), // r => q
+        shape(RType::Defeasible, p, vec![q]), // q => p
+        shape(RType::Fact, q, vec![]),        // >> q
+        shape(RType::Fact, r, vec![]),        // >> r
+        shape(RType::Defeater, np, vec![q]),  // q ~> ~p
     ]
 }
 

@@ -583,9 +583,7 @@ impl ProjectionEngine {
     /// unknown to it falls back to the raw slot display.
     pub fn snapshot(&self, index: &IndexedTheory<'_>) -> ProjectionSnapshot {
         debug_assert_counts(self);
-        let exact_key = |id: ExactLitId| {
-            index.exact_lit_key(id).unwrap_or_else(|| id.to_string())
-        };
+        let exact_key = |id: ExactLitId| index.exact_lit_key(id).unwrap_or_else(|| id.to_string());
         let mut exact: Vec<(String, String)> = Vec::with_capacity(self.exact_supports);
         let mut family: Vec<(String, String, String)> = Vec::with_capacity(self.family_supports);
         let mut attack: Vec<(String, String, String)> = Vec::with_capacity(self.family_attacks);
@@ -1328,7 +1326,11 @@ mod tests {
             Mode::empty(),
             false,
         );
-        let keys = [sym.canonical_key(), int.canonical_key(), dec.canonical_key()];
+        let keys = [
+            sym.canonical_key(),
+            int.canonical_key(),
+            dec.canonical_key(),
+        ];
         assert_ne!(keys[0], keys[1]);
         assert_ne!(keys[0], keys[2]);
         assert_ne!(keys[1], keys[2]);
