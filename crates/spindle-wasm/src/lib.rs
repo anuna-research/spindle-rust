@@ -460,7 +460,11 @@ impl Spindle {
         }
 
         // Add metadata
-        for (label, meta) in self.theory.metadata() {
+        for (target, meta) in self.theory.metadata() {
+            let label = match target {
+                spindle_core::MetaTarget::Label(l) => l.clone(),
+                spindle_core::MetaTarget::Predicate(sym) => sym.indicator().to_string(),
+            };
             for (key, value) in &meta.properties {
                 let value_str = match value {
                     MetaValue::String(s) => format!("\"{s}\""),

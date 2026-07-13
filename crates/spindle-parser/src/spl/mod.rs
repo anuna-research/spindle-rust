@@ -35,6 +35,7 @@ mod expressions;
 pub(crate) mod lexer;
 pub(crate) mod literals;
 mod metadata;
+mod predicate;
 mod rules;
 
 use spindle_core::Theory;

@@ -10,6 +10,7 @@ use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::superiority::{Superiority, SuperiorityIndex};
 use crate::trust::TrustPolicy;
+use crate::vocabulary::declaration::{MetaTarget, PredicateDeclaration};
 
 /// Parse a string literal, handling negation prefix
 fn parse_literal_str(s: &str) -> Literal {
@@ -47,8 +48,16 @@ pub struct Theory {
     superiorities: Vec<Superiority>,
     /// Indexed superiority for O(1) lookup
     sup_index: SuperiorityIndex,
-    /// Metadata indexed by label
-    metadata: HashMap<String, Meta>,
+    /// Metadata indexed by a structured target (rule label or predicate symbol).
+    ///
+    /// Label-based metadata keeps its historical behavior via the `add_meta` /
+    /// `get_meta` wrappers, which key into `MetaTarget::Label` (SPEC-024 CON-008).
+    metadata: HashMap<MetaTarget, Meta>,
+    /// First-class predicate declarations in source/insertion order.
+    ///
+    /// Raw declarations are stored in order so conflict diagnostics retain every
+    /// origin (SPEC-024 CON-008).
+    predicate_declarations: Vec<PredicateDeclaration>,
     /// Auto-generated label counter
     label_counter: usize,
     /// Trust policy parsed from trust directives
@@ -175,9 +184,17 @@ impl Theory {
         self.sup_index.is_superior(superior, inferior)
     }
 
-    /// Add metadata for a label
+    /// Add metadata for a label (compatibility wrapper over `MetaTarget::Label`).
     pub fn add_meta(&mut self, label: &str, key: &str, value: MetaValue) {
-        let meta = self.metadata.entry(label.to_string()).or_default();
+        self.add_meta_target(MetaTarget::Label(label.to_string()), key, value);
+    }
+
+    /// Add metadata for a structured target (SPEC-024 CON-008).
+    ///
+    /// Existing metadata property merge and overwrite semantics apply to
+    /// predicate targets exactly as they do to label targets.
+    pub fn add_meta_target(&mut self, target: MetaTarget, key: &str, value: MetaValue) {
+        let meta = self.metadata.entry(target).or_default();
         meta.properties.insert(key.to_string(), value);
     }
 
@@ -191,14 +208,29 @@ impl Theory {
         self.add_meta(label, key, MetaValue::List(values));
     }
 
-    /// Get metadata for a label
+    /// Get metadata for a label (compatibility wrapper over `MetaTarget::Label`).
     pub fn get_meta(&self, label: &str) -> Option<&Meta> {
-        self.metadata.get(label)
+        self.metadata.get(&MetaTarget::Label(label.to_string()))
     }
 
-    /// Get all metadata
-    pub fn metadata(&self) -> &HashMap<String, Meta> {
+    /// Get metadata for a structured target (SPEC-024 CON-008).
+    pub fn get_meta_target(&self, target: &MetaTarget) -> Option<&Meta> {
+        self.metadata.get(target)
+    }
+
+    /// Get all metadata, keyed by structured target.
+    pub fn metadata(&self) -> &HashMap<MetaTarget, Meta> {
         &self.metadata
+    }
+
+    /// Add a predicate declaration, preserving source/insertion order (SPEC-024 CON-008).
+    pub fn add_predicate_declaration(&mut self, declaration: PredicateDeclaration) {
+        self.predicate_declarations.push(declaration);
+    }
+
+    /// Get all predicate declarations in source/insertion order.
+    pub fn predicate_declarations(&self) -> &[PredicateDeclaration] {
+        &self.predicate_declarations
     }
 
     /// Copy metadata from another theory
@@ -386,7 +418,7 @@ mod tests {
         let mut theory = Theory::new();
         theory.add_meta_string("r1", "key", "value");
         let all_meta = theory.metadata();
-        assert!(all_meta.contains_key("r1"));
+        assert!(all_meta.contains_key(&MetaTarget::Label("r1".to_string())));
     }
 
     #[test]

@@ -75,6 +75,9 @@ pub(crate) fn process_expr_with_line(
         "except" => process_rule_with_line(theory, RuleType::Defeater, &list[1..], line),
         "during" => process_during_rule_with_line(theory, &list[1..], line, cleaned_input),
         "prefer" => process_prefer_with_line(theory, &list[1..], line),
+        "predicate" => {
+            super::predicate::process_predicate_declaration(theory, &list[1..], line, expr.offset())
+        }
         "meta" => process_meta_with_line(theory, &list[1..], line),
         "claims" => process_claims(theory, &list[1..], line, cleaned_input),
         "trusts" => process_trusts(theory, &list[1..], line),

@@ -300,12 +300,9 @@ pub(crate) fn process_meta_with_line(
         });
     }
 
-    let label = args[0].as_atom().ok_or_else(|| ParseError::ParserError {
-        line,
-        message: "meta label must be an atom".to_string(),
-        format: ParserFormat::Spl,
-        source_line: None,
-    })?;
+    // Resolve the target: a bare label atom or a structured
+    // (predicate functor arity) target (SPEC-024 REQ-017).
+    let target = super::predicate::parse_meta_target(&args[0], line)?;
 
     // Process each property: (key "value") or (key ("v1" "v2"))
     for prop in &args[1..] {
@@ -343,7 +340,7 @@ pub(crate) fn process_meta_with_line(
                 }
             };
 
-            theory.add_meta(label, key, value);
+            theory.add_meta_target(target.clone(), key, value);
         }
     }
 
