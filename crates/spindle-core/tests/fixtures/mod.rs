@@ -18,6 +18,8 @@
 //! }
 //! ```
 
+#![allow(dead_code)]
+
 use spindle_core::literal::Literal;
 use spindle_core::mode::Mode;
 use spindle_core::rule::Rule;

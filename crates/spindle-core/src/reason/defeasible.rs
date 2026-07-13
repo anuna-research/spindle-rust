@@ -23,10 +23,115 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::index::{IndexedTheory, LitId};
+use crate::projection::FamilyId;
 use crate::rule::RuleType;
 use crate::theory::Theory;
 
 use super::state::{LiteralBitSet, ReasoningState};
+
+/// Compute the lambda over-approximation: everything that COULD be
+/// defeasibly provable, ignoring attacks and superiority. Mirrors
+/// `lean/SpindleLean/Closure/Lambda.lean` (`lambdaClose`).
+///
+/// Seeds from the definite conclusions (+D), then repeatedly fires
+/// productive rules (fact/strict/defeasible — not defeaters) whose logic
+/// body literals are all already in lambda, excluding heads whose
+/// complement is definite. Arithmetic body constraints and un-interned
+/// body literals are treated as satisfiable, keeping this a genuine
+/// over-approximation.
+///
+/// Literals OUTSIDE lambda can never be defeasibly proved — in particular,
+/// rules with circular, unfounded bodies (e.g. `p => p`) never place their
+/// head in lambda. Seeding such literals as -d lets the worklist discard
+/// unfounded attackers instead of letting a rule that can never fire block
+/// conclusions forever (well-founded reading; see lean/DIVERGENCES.md
+/// class 2).
+fn compute_lambda<'t>(
+    theory: &'t Theory,
+    indexed: &IndexedTheory<'t>,
+    definite_proven: &LiteralBitSet,
+    body_remaining_init: &FxHashMap<&'t str, usize>,
+) -> LiteralBitSet {
+    let mut lambda = definite_proven.clone();
+    // Mirror the main worklist's counter mechanics — including family-aware
+    // body matching and per-slot idempotent satisfaction — with all attack
+    // and superiority checks ignored. Starting from a pristine clone of the
+    // body counters keeps lambda's notion of "body satisfiable" identical to
+    // the fixed point's notion of "body satisfied".
+    let mut remaining = body_remaining_init.clone();
+    let mut satisfied: FxHashMap<&'t str, fixedbitset::FixedBitSet> = theory
+        .rules()
+        .map(|r| {
+            (
+                r.label.as_str(),
+                fixedbitset::FixedBitSet::with_capacity(r.body.len()),
+            )
+        })
+        .collect();
+    let mut queue: VecDeque<LitId> = VecDeque::new();
+
+    // Seed with all definite literals.
+    for &id in indexed.all_literal_ids() {
+        if definite_proven.contains(id) {
+            queue.push_back(id);
+        }
+    }
+
+    // Fire rules whose bodies are already fully satisfied (e.g. empty bodies).
+    for rule in theory.rules() {
+        if !matches!(
+            rule.rule_type,
+            RuleType::Fact | RuleType::Strict | RuleType::Defeasible
+        ) {
+            continue;
+        }
+        if remaining.get(rule.label.as_str()).copied().unwrap_or(0) == 0 {
+            for head in &rule.head {
+                if let Some(head_id) = indexed.get_lit_id(head)
+                    && !lambda.contains(head_id)
+                    && !definite_proven.contains(head_id.complement())
+                {
+                    lambda.insert(head_id);
+                    queue.push_back(head_id);
+                }
+            }
+        }
+    }
+
+    // Propagate to fixpoint.
+    while let Some(id) = queue.pop_front() {
+        let event_lit = indexed.resolve_literal(id);
+        for rule in indexed.rules_with_body_id(id) {
+            if !matches!(
+                rule.rule_type,
+                RuleType::Fact | RuleType::Strict | RuleType::Defeasible
+            ) {
+                continue;
+            }
+            let (Some(rem), Some(sat)) = (
+                remaining.get_mut(rule.label.as_str()),
+                satisfied.get_mut(rule.label.as_str()),
+            ) else {
+                continue;
+            };
+            let was_unsatisfied = *rem > 0;
+            super::cover_body_slots(rule, &event_lit, sat, rem);
+            if was_unsatisfied && *rem == 0 {
+                for head in &rule.head {
+                    if let Some(head_id) = indexed.get_lit_id(head)
+                        && !lambda.contains(head_id)
+                        && !definite_proven.contains(head_id.complement())
+                    {
+                        lambda.insert(head_id);
+                        queue.push_back(head_id);
+                    }
+                }
+            }
+        }
+    }
+
+    lambda
+}
 
 /// Run Phase 2 (defeasible fixed-point) and Phase 3 (negative emission).
 pub(crate) fn resolve_defeasible(
@@ -40,7 +145,11 @@ pub(crate) fn resolve_defeasible(
     let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
 
     // --- Seed +d from +D (subsumption), but respect condition (2) ---
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    // Sort by SPL string for deterministic iteration order. This is
+    // lexicographic (not temporal), which is intentional: we only need a
+    // stable, reproducible ordering here, not temporal precedence.
+    let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
     for &lit_id in &all_ids {
         if state.definite_proven.contains(lit_id) {
             let comp_id = lit_id.complement();
@@ -73,6 +182,36 @@ pub(crate) fn resolve_defeasible(
     }
 
     // --- Seed -d for literals that can never be defeasibly proved ---
+    // Lambda over-approximation: literals outside it are unfounded (no
+    // non-circular support path exists), so they seed -d and the worklist
+    // discards any attacker that depends on them (well-founded reading,
+    // mirrors the Lean model's lambda-based attack discard).
+    let lambda = compute_lambda(
+        theory,
+        indexed,
+        &state.definite_proven,
+        &state.defeasible_body_remaining,
+    );
+    // Live family support: how many members of each family are still
+    // possibly provable — in the lambda over-approximation AND not yet
+    // disproven. An atemporal body literal is satisfiable (famSat) while
+    // its family has live members, so -d events must not discard its
+    // rules until the LAST live member is dead. Defeat events (a -d for
+    // a lambda-alive member, e.g. a superiority loss) decrement the
+    // count, so a family whose every candidate has been defeated does
+    // discard its dependents — the spec's condition (3) inductive
+    // discard (see the reviewer-reported regression fixed here).
+    let mut family_live: FxHashMap<FamilyId, usize> = FxHashMap::default();
+    for &id in indexed.all_literal_ids() {
+        if lambda.contains(id) {
+            *family_live
+                .entry(FamilyId::from(&indexed.resolve_literal(id)))
+                .or_insert(0) += 1;
+        }
+    }
+    // Idempotence guard: a literal's death is counted at most once even if
+    // multiple -d events are queued for it.
+    let mut counted_dead: FxHashSet<LitId> = FxHashSet::default();
     for &lit_id in &all_ids {
         if state.defeasible_proven.contains(lit_id) || state.defeasible_disproven.contains(lit_id) {
             continue;
@@ -85,22 +224,34 @@ pub(crate) fn resolve_defeasible(
             continue;
         }
 
-        // -D q: check if Rsd[q] is empty (no strict/defeasible rules can fire)
-        let has_sd_rule = indexed.rules_with_head_id(lit_id).iter().any(|r| {
-            matches!(
-                r.rule_type,
-                RuleType::Strict | RuleType::Defeasible | RuleType::Fact
-            )
-        });
-
-        if !has_sd_rule {
+        // -D q and unfounded: q is outside the lambda over-approximation,
+        // so no chain of productive rules can ever establish it. This
+        // subsumes the "Rsd[q] is empty" check (a literal with no
+        // productive rules never enters lambda unless definite).
+        if !lambda.contains(lit_id) {
             state.defeasible_disproven.insert(lit_id);
             worklist.push_back((lit_id, false));
         }
     }
 
     // --- Seed empty-body defeasible/strict rules not yet decided ---
-    for rule in theory.rules() {
+    let mut empty_body_rules: Vec<_> = theory
+        .rules()
+        .filter(|rule| {
+            rule.body.is_empty()
+                && matches!(
+                    rule.rule_type,
+                    RuleType::Defeasible | RuleType::Strict | RuleType::Fact
+                )
+        })
+        .collect();
+    empty_body_rules.sort_by(|lhs, rhs| {
+        lhs.head_literal()
+            .to_spl()
+            .cmp(&rhs.head_literal().to_spl())
+            .then_with(|| lhs.label.cmp(&rhs.label))
+    });
+    for rule in empty_body_rules {
         if rule.body.is_empty()
             && matches!(
                 rule.rule_type,
@@ -119,175 +270,227 @@ pub(crate) fn resolve_defeasible(
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
                 &state.rule_discarded,
+                &mut state.projection_labels,
                 &mut worklist,
                 &mut state.conclusions,
             );
         }
     }
 
-    // --- Fixed-point loop ---
-    while let Some((q_id, proved)) = worklist.pop_front() {
-        // Update rule counters for ALL rules containing q in body
-        let rules_with_q: Vec<String> = indexed
-            .rules_with_body_id(q_id)
-            .iter()
-            .map(|r| r.label.clone())
-            .collect();
+    // --- Fixed-point loop (with battle-resolution sweeps) ---
+    //
+    // The inner loop is event-driven. Battles among rules that never
+    // receive a triggering event (e.g. competing empty-body rules in a
+    // fact-free theory) would otherwise stay undecided, leaving
+    // spec-derivable -d conclusions (disjunct (3): an applicable,
+    // unbeaten attacker) underived — and the discards that depend on
+    // them unapplied, blocking valid downstream conclusions. After the
+    // event queue drains, sweep every undecided literal with the +d/-d
+    // inference conditions; any new decision queues events, and the
+    // event loop re-enters. Terminates: each productive sweep decides at
+    // least one literal.
+    // SIMPLIFY: sweep restarts make Phase 2 worst-case quadratic in the
+    // literal count — replace with dependency-tracked scheduling if
+    // profiling ever shows this on theories within NFR bounds
+    // (trace: SPEC-019).
+    loop {
+        while let Some((q_id, proved)) = worklist.pop_front() {
+            // Update rule counters for ALL rules containing q in body
+            let mut rules_with_q: Vec<String> = indexed
+                .rules_with_body_id(q_id)
+                .iter()
+                .map(|r| r.label.clone())
+                .collect();
+            rules_with_q.sort_by(|lhs, rhs| {
+                theory
+                    .get_rule(lhs)
+                    .expect("rule label from body index must exist")
+                    .head_literal()
+                    .to_spl()
+                    .cmp(
+                        &theory
+                            .get_rule(rhs)
+                            .expect("rule label from body index must exist")
+                            .head_literal()
+                            .to_spl(),
+                    )
+                    .then_with(|| lhs.cmp(rhs))
+            });
 
-        for rule_label in &rules_with_q {
+            let event_lit = indexed.resolve_literal(q_id);
+            let event_family = FamilyId::from(&event_lit);
+            // A -d event that defeats a lambda-alive member shrinks its
+            // family's live support, once per member (idempotent). Done once
+            // per event rather than per rule so a defeated member with no body
+            // occurrence still decrements its family's live count.
+            if !proved && lambda.contains(q_id) && counted_dead.insert(q_id) {
+                if let Some(c) = family_live.get_mut(&event_family) {
+                    *c = c.saturating_sub(1);
+                }
+            }
+
+            for rule_label in &rules_with_q {
+                let rule = theory
+                    .get_rule(rule_label)
+                    .expect("rule label from body index must exist");
+                if proved {
+                    // Mark the body slots this +d literal satisfies. Per-slot
+                    // tracking makes the decrement idempotent, so several
+                    // temporal members of one family satisfying a single
+                    // atemporal body slot count once — a rule becomes
+                    // applicable only when every distinct slot has a satisfier
+                    // (prevents unsound +d — see SPEC-020 regression).
+                    let satisfied = state
+                        .defeasible_slots_satisfied
+                        .get_mut(rule_label.as_str())
+                        .expect("rule slot bitset must exist");
+                    let remaining = state
+                        .defeasible_body_remaining
+                        .get_mut(rule_label.as_str())
+                        .expect("rule body counter must exist");
+                    super::cover_body_slots(rule, &event_lit, satisfied, remaining);
+                } else {
+                    // Family-aware discard (SPEC-020; famSat semantics). A -d
+                    // event for literal L only discards a rule when it removes
+                    // the LAST way to satisfy a body literal:
+                    //  - a TEMPORAL body literal requires exactly L (same
+                    //    family AND same window), so an exact match discards;
+                    //  - an ATEMPORAL body literal is family-satisfiable, so it
+                    //    is dead only when its family has no LIVE member left —
+                    //    members outside lambda never counted (unfounded), and
+                    //    lambda-alive members stop counting when defeated. A
+                    //    family with a live member may still fire the rule
+                    //    later, and as an attacker it keeps blocking meanwhile.
+                    let should_discard = rule.body.iter().any(|bl| match bl.as_logic() {
+                        Some(logic) => {
+                            let b = logic.to_literal();
+                            if b.is_temporal() {
+                                // Temporal body: requires exactly this literal.
+                                // FamilyId excludes the window (as does Literal
+                                // PartialEq), so compare the window explicitly
+                                // instead of `b == event_lit`.
+                                FamilyId::from(&b) == event_family
+                                    && b.temporal == event_lit.temporal
+                            } else {
+                                // Atemporal body: dead only when its family has
+                                // no live member. (This event reaches the rule
+                                // via the exact or family index, so b is in the
+                                // event's family.)
+                                FamilyId::from(&b) == event_family
+                                    && family_live.get(&event_family).copied().unwrap_or(0) == 0
+                            }
+                        }
+                        None => false,
+                    });
+                    if should_discard {
+                        *state.rule_discarded.get_mut(rule_label.as_str()).unwrap() = true;
+                    }
+                }
+            }
+
             if proved {
-                let remaining = state
-                    .defeasible_body_remaining
-                    .get_mut(rule_label.as_str())
-                    .unwrap();
-                if *remaining > 0 {
-                    *remaining -= 1;
-                }
-            } else {
-                *state.rule_discarded.get_mut(rule_label.as_str()).unwrap() = true;
-            }
-        }
-
-        if proved {
-            // q just proved +d
-            // 1. Try to prove/disprove heads of newly-applicable rules
-            for rule_label in &rules_with_q {
-                let rule = theory.get_rule(rule_label).unwrap();
-                if !matches!(
-                    rule.rule_type,
-                    RuleType::Strict | RuleType::Defeasible | RuleType::Fact
-                ) {
-                    continue;
-                }
-                let remaining = state.defeasible_body_remaining[rule_label.as_str()];
-                let discarded = state.rule_discarded[rule_label.as_str()];
-                if remaining == 0 && !discarded {
-                    let head_id = indexed
-                        .get_lit_id(rule.head_literal())
-                        .expect("Head literal missing from index");
-                    try_prove_defeasible(
-                        head_id,
-                        indexed,
-                        theory,
-                        &state.definite_proven,
-                        &mut state.defeasible_proven,
-                        &mut state.defeasible_disproven,
-                        &state.defeasible_body_remaining,
-                        &state.rule_discarded,
-                        &mut worklist,
-                        &mut state.conclusions,
-                    );
-                    // Re-check complement (resolved attacker may unblock)
-                    let comp_head = head_id.complement();
-                    try_prove_defeasible(
-                        comp_head,
-                        indexed,
-                        theory,
-                        &state.definite_proven,
-                        &mut state.defeasible_proven,
-                        &mut state.defeasible_disproven,
-                        &state.defeasible_body_remaining,
-                        &state.rule_discarded,
-                        &mut worklist,
-                        &mut state.conclusions,
-                    );
-                    try_disprove_defeasible(
-                        comp_head,
-                        indexed,
-                        theory,
-                        &state.definite_proven,
-                        &mut state.defeasible_proven,
-                        &mut state.defeasible_disproven,
-                        &state.defeasible_body_remaining,
-                        &state.rule_discarded,
-                        &mut worklist,
-                    );
-                }
-            }
-
-            // Handle defeaters that become newly applicable
-            for rule_label in &rules_with_q {
-                let rule = theory.get_rule(rule_label).unwrap();
-                if rule.rule_type != RuleType::Defeater {
-                    continue;
-                }
-                let remaining = state.defeasible_body_remaining[rule_label.as_str()];
-                let discarded = state.rule_discarded[rule_label.as_str()];
-                if remaining == 0 && !discarded {
-                    let head_id = indexed
-                        .get_lit_id(rule.head_literal())
-                        .expect("Head literal missing from index");
-                    let comp_head = head_id.complement();
-                    try_prove_defeasible(
-                        comp_head,
-                        indexed,
-                        theory,
-                        &state.definite_proven,
-                        &mut state.defeasible_proven,
-                        &mut state.defeasible_disproven,
-                        &state.defeasible_body_remaining,
-                        &state.rule_discarded,
-                        &mut worklist,
-                        &mut state.conclusions,
-                    );
-                    try_disprove_defeasible(
-                        comp_head,
-                        indexed,
-                        theory,
-                        &state.definite_proven,
-                        &mut state.defeasible_proven,
-                        &mut state.defeasible_disproven,
-                        &state.defeasible_body_remaining,
-                        &state.rule_discarded,
-                        &mut worklist,
-                    );
-                }
-            }
-
-            // q being +d may cause ~q to become -d
-            let comp_id = q_id.complement();
-            try_disprove_defeasible(
-                comp_id,
-                indexed,
-                theory,
-                &state.definite_proven,
-                &mut state.defeasible_proven,
-                &mut state.defeasible_disproven,
-                &state.defeasible_body_remaining,
-                &state.rule_discarded,
-                &mut worklist,
-            );
-        } else {
-            // q just proved -d
-            // 1. Rules with q in body are now discarded → try -d for their heads
-            //    and re-check ~head (attacker removed → might unblock)
-            for rule_label in &rules_with_q {
-                let rule = theory.get_rule(rule_label).unwrap();
-                let head_id = indexed
-                    .get_lit_id(rule.head_literal())
-                    .expect("Head literal missing from index");
-
-                if matches!(
-                    rule.rule_type,
-                    RuleType::Strict | RuleType::Defeasible | RuleType::Fact
-                ) {
-                    try_disprove_defeasible(
-                        head_id,
-                        indexed,
-                        theory,
-                        &state.definite_proven,
-                        &mut state.defeasible_proven,
-                        &mut state.defeasible_disproven,
-                        &state.defeasible_body_remaining,
-                        &state.rule_discarded,
-                        &mut worklist,
-                    );
+                // q just proved +d
+                // 1. Try to prove/disprove heads of newly-applicable rules
+                for rule_label in &rules_with_q {
+                    let rule = theory.get_rule(rule_label).unwrap();
+                    if !matches!(
+                        rule.rule_type,
+                        RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                    ) {
+                        continue;
+                    }
+                    let remaining = state.defeasible_body_remaining[rule_label.as_str()];
+                    let discarded = state.rule_discarded[rule_label.as_str()];
+                    if remaining == 0 && !discarded {
+                        let head_id = indexed
+                            .get_lit_id(rule.head_literal())
+                            .expect("Head literal missing from index");
+                        try_prove_defeasible(
+                            head_id,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut state.projection_labels,
+                            &mut worklist,
+                            &mut state.conclusions,
+                        );
+                        // Re-check complement (resolved attacker may unblock)
+                        let comp_head = head_id.complement();
+                        try_prove_defeasible(
+                            comp_head,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut state.projection_labels,
+                            &mut worklist,
+                            &mut state.conclusions,
+                        );
+                        try_disprove_defeasible(
+                            comp_head,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut worklist,
+                        );
+                    }
                 }
 
-                // Rule is now discarded as attacker → re-check complement
-                let comp_head = head_id.complement();
-                try_prove_defeasible(
-                    comp_head,
+                // Handle defeaters that become newly applicable
+                for rule_label in &rules_with_q {
+                    let rule = theory.get_rule(rule_label).unwrap();
+                    if rule.rule_type != RuleType::Defeater {
+                        continue;
+                    }
+                    let remaining = state.defeasible_body_remaining[rule_label.as_str()];
+                    let discarded = state.rule_discarded[rule_label.as_str()];
+                    if remaining == 0 && !discarded {
+                        let head_id = indexed
+                            .get_lit_id(rule.head_literal())
+                            .expect("Head literal missing from index");
+                        let comp_head = head_id.complement();
+                        try_prove_defeasible(
+                            comp_head,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut state.projection_labels,
+                            &mut worklist,
+                            &mut state.conclusions,
+                        );
+                        try_disprove_defeasible(
+                            comp_head,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut worklist,
+                        );
+                    }
+                }
+
+                // q being +d may cause ~q to become -d
+                let comp_id = q_id.complement();
+                try_disprove_defeasible(
+                    comp_id,
                     indexed,
                     theory,
                     &state.definite_proven,
@@ -296,15 +499,87 @@ pub(crate) fn resolve_defeasible(
                     &state.defeasible_body_remaining,
                     &state.rule_discarded,
                     &mut worklist,
+                );
+            } else {
+                // q just proved -d
+                // 1. Rules with q in body are now discarded → try -d for their heads
+                //    and re-check ~head (attacker removed → might unblock)
+                for rule_label in &rules_with_q {
+                    let rule = theory.get_rule(rule_label).unwrap();
+                    let head_id = indexed
+                        .get_lit_id(rule.head_literal())
+                        .expect("Head literal missing from index");
+
+                    if matches!(
+                        rule.rule_type,
+                        RuleType::Strict | RuleType::Defeasible | RuleType::Fact
+                    ) {
+                        try_disprove_defeasible(
+                            head_id,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut worklist,
+                        );
+                    }
+
+                    // Rule is now discarded as attacker → re-check complement
+                    let comp_head = head_id.complement();
+                    try_prove_defeasible(
+                        comp_head,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut state.projection_labels,
+                        &mut worklist,
+                        &mut state.conclusions,
+                    );
+                }
+
+                // q being -d means attackers using q in body are discarded
+                // → try +d for complement(q)
+                let comp_id = q_id.complement();
+                try_prove_defeasible(
+                    comp_id,
+                    indexed,
+                    theory,
+                    &state.definite_proven,
+                    &mut state.defeasible_proven,
+                    &mut state.defeasible_disproven,
+                    &state.defeasible_body_remaining,
+                    &state.rule_discarded,
+                    &mut state.projection_labels,
+                    &mut worklist,
                     &mut state.conclusions,
                 );
             }
+        }
 
-            // q being -d means attackers using q in body are discarded
-            // → try +d for complement(q)
-            let comp_id = q_id.complement();
+        // Battle-resolution sweep: try to decide every remaining literal.
+        for &lit_id in &all_ids {
             try_prove_defeasible(
-                comp_id,
+                lit_id,
+                indexed,
+                theory,
+                &state.definite_proven,
+                &mut state.defeasible_proven,
+                &mut state.defeasible_disproven,
+                &state.defeasible_body_remaining,
+                &state.rule_discarded,
+                &mut state.projection_labels,
+                &mut worklist,
+                &mut state.conclusions,
+            );
+            try_disprove_defeasible(
+                lit_id,
                 indexed,
                 theory,
                 &state.definite_proven,
@@ -313,15 +588,18 @@ pub(crate) fn resolve_defeasible(
                 &state.defeasible_body_remaining,
                 &state.rule_discarded,
                 &mut worklist,
-                &mut state.conclusions,
             );
+        }
+        if worklist.is_empty() {
+            break;
         }
     }
 
     // ====================================================================
     // PHASE 3: Emit remaining conclusions (-D, -d)
     // ====================================================================
-    let all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
+    all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
 
     for lit_id in all_ids {
         if !state.definite_proven.contains(lit_id) {
@@ -357,6 +635,7 @@ fn try_prove_defeasible(
     defeasible_disproven: &mut LiteralBitSet,
     body_remaining: &FxHashMap<&str, usize>,
     rule_discarded: &FxHashMap<&str, bool>,
+    projection_labels: &mut FxHashSet<String>,
     worklist: &mut VecDeque<(LitId, bool)>,
     conclusions: &mut Vec<Conclusion>,
 ) {
@@ -409,6 +688,13 @@ fn try_prove_defeasible(
         .copied()
         .collect();
 
+    // Keep scanning applicable attackers even after the proof is known to fail.
+    // Projection labels drive the projection engine's explanation surface, so
+    // blocked literals should retain every grounded attacker/supporter that
+    // actually participated instead of whichever blocker happened to appear
+    // first in iteration order.
+    let mut blocked_by_applicable_attacker = false;
+
     for attacker in &attacking_rules {
         let att_discarded = rule_discarded
             .get(attacker.label.as_str())
@@ -429,27 +715,30 @@ fn try_prove_defeasible(
             .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
 
         if att_remaining > 0 {
-            // Strict attackers cannot be defeated by superiority
-            if attacker.rule_type == RuleType::Strict {
-                return;
-            }
-            // Defeasible attacker with undecided body: if a superior
-            // applicable rule defeats it, the attacker is countered.
+            // Attacker with undecided body: if a superior applicable rule
+            // defeats it, the attacker is countered. Spec condition (3)'s
+            // beaten disjunct (∃t ∈ Rsd[q]: t applicable AND t > s) applies
+            // to strict attackers too — a strict rule that is DEFINITELY
+            // applicable already blocks via condition (2) (+D ~q), so
+            // superiority here only ever overrides a merely defeasibly
+            // applicable strict attacker.
             if defeated_by_superior {
                 continue;
             }
-            return;
-        }
-
-        // Strict attackers always block (cannot be defeated by superiority)
-        if attacker.rule_type == RuleType::Strict {
+            projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
             return;
         }
 
         // Attacker is applicable. Need ∃t ∈ Rsd[q]: t applicable AND t > s
         if !defeated_by_superior {
-            return; // undefeated attacker
+            projection_labels.insert(attacker.label.clone());
+            blocked_by_applicable_attacker = true;
         }
+    }
+
+    if blocked_by_applicable_attacker {
+        projection_labels.extend(applicable_supporters.iter().map(|rule| rule.label.clone()));
+        return;
     }
 
     // All conditions met.
@@ -576,12 +865,13 @@ fn try_disprove_defeasible(
             continue; // attacker not applicable
         }
 
-        // Strict attackers always block
-        if attacker.rule_type == RuleType::Strict {
-            defeasible_disproven.insert(q);
-            worklist.push_back((q, false));
-            return;
-        }
+        // Note: strict attackers are NOT special-cased here. A DEFINITELY
+        // applicable strict attacker already blocks via +D ~q (disjunct (2)
+        // above); a merely defeasibly-applicable strict attacker is subject to
+        // the same superiority check as any other attacker, mirroring
+        // `try_prove_defeasible` and the Lean `canDisprove2` model (see
+        // lean/DIVERGENCES.md). Special-casing it here made +d/-d
+        // order-dependent.
 
         // Attacker s is applicable. Check: ∀t ∈ Rsd[q]: t discarded OR ¬(t > s)
         // But if any t is undecided (not discarded, not applicable), can't conclude

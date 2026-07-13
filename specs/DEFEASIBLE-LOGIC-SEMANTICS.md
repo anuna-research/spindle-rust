@@ -60,30 +60,46 @@ A **proof** is a sequence `P = (P(1), P(2), ..., P(n))` where each `P(i)` is a t
 
 ### +d q (Defeasibly Provable)
 
-Either `q` is already definitely provable, **OR** all three conditions hold:
+`~q` must not be definitely provable (condition (2) — it gates **both**
+clauses), and then either `q` is already definitely provable, **OR** both
+remaining conditions hold:
 
 1. There exists an applicable strict-or-defeasible rule for `q`
-2. `~q` is not definitely provable (no monotonic override)
+2. `~q` is not definitely provable (no monotonic override) — applies to the
+   definite-subsumption clause too
 3. Every rule for `~q` is either inapplicable, or defeated by a superior applicable rule for `q`
 
 ```
 +d q  iff
-    +D q ∈ P
-    OR  (
-        (1)  ∃r ∈ Rsd[q] : ∀a ∈ body(r), +d a ∈ P          -- r is applicable
-        AND
-        (2)  -D ~q ∈ P                                        -- ~q not definitely proved
-        AND
-        (3)  ∀s ∈ R[~q]:                                      -- for EVERY contrary rule
-                ∃a ∈ body(s), -d a ∈ P                         --   s is discarded
-                OR                                              --   OR
-                ∃t ∈ Rsd[q]:                                   --   there exists a rule t for q
-                    (∀a ∈ body(t), +d a ∈ P)  AND  t > s       --     that is applicable AND superior
+    (2)  -D ~q ∈ P                                        -- ~q not definitely proved (gates BOTH clauses)
+    AND (
+        +D q ∈ P
+        OR  (
+            (1)  ∃r ∈ Rsd[q] : ∀a ∈ body(r), +d a ∈ P      -- r is applicable
+            AND
+            (3)  ∀s ∈ R[~q]:                                -- for EVERY contrary rule
+                    ∃a ∈ body(s), -d a ∈ P                   --   s is discarded
+                    OR                                        --   OR
+                    ∃t ∈ Rsd[q]:                             --   there exists a rule t for q
+                        (∀a ∈ body(t), +d a ∈ P)  AND  t > s --     that is applicable AND superior
         )
+    )
 ```
 
 **Key points:**
+- Condition (2) gates the definite-subsumption clause as well: when `+D q`
+  and `+D ~q` both hold, **neither** literal is defeasibly provable (see
+  Worked Example 1). This is a deliberate, paraconsistent deviation from
+  Antoniou et al. (where `+Δq → +∂q` is unconditional): strict
+  contradictions are quarantined at the definite level instead of
+  propagating, which makes the defeasible level consistent for every input
+  with acyclic superiority. Machine-checked against the Lean model by the
+  exhaustive difftest (`lean_sdl_exhaustive_difftest.rs`).
 - Condition (3) quantifies over **all** rules for `~q` — including strict, defeasible, *and* defeaters
+- The beaten disjunct of condition (3) (`t > s`) also applies when `s` is a
+  **strict** rule: a strict attacker that is *definitely* applicable already
+  blocks via condition (2), so superiority here only ever overrides a merely
+  defeasibly-applicable strict attacker
 - Condition (1) only considers strict/defeasible rules for `q` — defeaters cannot *establish* a conclusion
 - The defeating rule `t` in condition (3) must also be strict or defeasible (from `Rsd[q]`)
 
@@ -106,6 +122,32 @@ The mirror/dual of `+d`:
                     (∃a ∈ body(t), -d a ∈ P)  OR  ¬(t > s)    --     t is discarded OR t doesn't beat s
         )
 ```
+
+### Well-founded strengthening: unfounded literals are -d
+
+The inductive `-d` clauses above cannot decide literals whose only support
+is circular (e.g. `p => p`): discarding the rule requires `-d p`, which
+requires discarding the rule. The engine therefore adopts a **well-founded
+reading** via the lambda over-approximation:
+
+```
+λ  =  the least set containing every +D literal and closed under:
+      if r ∈ Rsd, every a ∈ body(r) is in λ, and ~head(r) is not +D,
+      then head(r) ∈ λ
+```
+
+λ is everything that could *conceivably* be defeasibly provable, ignoring
+attack and superiority entirely. Any literal **outside** λ is unfounded —
+no non-circular chain of productive rules can ever establish it — and is
+seeded `-d`. Consequently an attacker whose body depends on an unfounded
+literal is discarded rather than blocking forever: *a rule that can never
+fire has no veto power*.
+
+This decides the loop cases the pure inductive proof theory leaves
+undecided, in the direction of well-founded semantics (cf. Maher's
+well-founded defeasible logic). It mirrors `Closure/Lambda.lean` and
+`attackReaches` in the Lean model exactly, and is machine-checked against
+it by the exhaustive difftest.
 
 ---
 

@@ -3,15 +3,28 @@
 //! Given a goal literal and a theory, the [`abduce`] function uses backward
 //! chaining to find minimal sets of facts whose addition would enable the
 //! goal to be proven via the standard reasoning pipeline.
+//!
+//! Uses query-shape-aware support: atemporal goals and body literals match by
+//! family, while bounded temporal literals remain exact per SPEC-020.
+//!
+//! `abduce()` returns raw hypothesis sets derived from rule bodies. It does
+//! not verify that adding those facts actually makes the goal provable after
+//! defeaters or conflicts are considered. Use [`super::requires`] for verified
+//! fact-set search.
 
-use std::collections::HashSet;
 use std::fmt;
 
+use rustc_hash::FxHashSet;
+
+use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::projection::canonical_literal_key;
 use crate::reason::reason;
 use crate::rule::RuleType;
 use crate::theory::Theory;
+
+use super::{has_positive_match, semantic_literal_matches};
 
 // =============================================================================
 // TYPES
@@ -20,20 +33,28 @@ use crate::theory::Theory;
 /// A solution to an abduction problem
 #[derive(Debug, Clone)]
 pub struct AbductionSolution {
-    /// Facts that need to be assumed
-    pub facts: HashSet<Literal>,
+    /// Facts that need to be assumed.
+    ///
+    /// Stored as an ordered `Vec` rather than a `HashSet` because `Literal`
+    /// equality and hashing deliberately ignore temporal bounds (see
+    /// `impl PartialEq for Literal`). A set keyed on `Literal` would silently
+    /// collapse distinct temporal variants of the same family — e.g. `p[1,10]`
+    /// and `p[20,30]` — dropping a required premise. Callers dedup on the
+    /// injective canonical literal key before inserting, so this holds no
+    /// duplicates.
+    pub facts: Vec<Literal>,
     /// Rules that would be used in the derivation
-    pub rules_used: HashSet<String>,
+    pub rules_used: FxHashSet<String>,
     /// Confidence score (if trust-weighted)
     pub confidence: f64,
 }
 
 impl AbductionSolution {
     /// Create a new abduction solution
-    pub fn new(facts: HashSet<Literal>) -> Self {
+    pub fn new(facts: Vec<Literal>) -> Self {
         Self {
             facts,
-            rules_used: HashSet::new(),
+            rules_used: FxHashSet::default(),
             confidence: 1.0,
         }
     }
@@ -51,6 +72,7 @@ impl AbductionSolution {
 
 /// Result of an abduction query
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct AbductionResult {
     /// The goal literal
     pub goal: Literal,
@@ -96,7 +118,7 @@ impl fmt::Display for AbductionResult {
             if sol.is_already_provable() {
                 writeln!(f, "  {}. Already provable", i + 1)?;
             } else {
-                let facts: Vec<_> = sol.facts.iter().map(|l| l.to_string()).collect();
+                let facts: Vec<_> = sol.facts.iter().map(|l: &Literal| l.to_string()).collect();
                 writeln!(f, "  {}. Add facts: {{{}}}", i + 1, facts.join(", "))?;
             }
         }
@@ -108,85 +130,132 @@ impl fmt::Display for AbductionResult {
 // OPERATORS
 // =============================================================================
 
+/// Check whether `goal` is positively supported according to SPEC-020 query
+/// semantics: exact-temporal for bounded literals, family-aware for atemporal.
+fn is_goal_provable(goal: &Literal, conclusions: &[Conclusion]) -> bool {
+    has_positive_match(goal, conclusions)
+}
+
+/// Order-independent, exact-temporal signature for a hypothesis fact-set.
+///
+/// Uses [`canonical_literal_key`] rather than `Literal` equality (which
+/// ignores temporal bounds) or `Literal::to_spl` (which is not injective over
+/// typed terms — symbolic `1`, integer `1`, and float `1.0` all render as
+/// `(p 1)`), so candidates differing only in temporal window or term type are
+/// treated as distinct.
+fn fact_set_key(facts: &[Literal]) -> String {
+    let mut keys: Vec<String> = facts.iter().map(canonical_literal_key).collect();
+    keys.sort();
+    keys.join("\x1f")
+}
+
+/// Check whether `lit` is satisfied according to the literal's own match
+/// semantics. Atemporal premises match by family; bounded premises stay exact.
+fn is_body_satisfied(lit: &Literal, conclusions: &[Conclusion]) -> bool {
+    has_positive_match(lit, conclusions)
+}
+
 /// Perform abductive reasoning: "What facts would make this goal provable?"
 ///
 /// Uses backward chaining to find minimal sets of facts that would
-/// enable the goal to be proven.
+/// enable the goal to be proven. Atemporal goals and premises use family
+/// matching; bounded temporal literals stay exact. Returns at most
+/// `max_solutions` raw hypothesis sets; callers that need verified fact-sets
+/// should use [`super::requires`].
 pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<AbductionResult> {
+    let conclusions = reason(theory)?;
+    abduce_with_conclusions(theory, goal, &conclusions, max_solutions)
+}
+
+/// Perform abductive reasoning using already-computed conclusions.
+///
+/// This avoids re-running the full reasoning pipeline when the caller already
+/// has conclusions for `theory`.
+pub fn abduce_with_conclusions(
+    theory: &Theory,
+    goal: &Literal,
+    conclusions: &[Conclusion],
+    max_solutions: usize,
+) -> Result<AbductionResult> {
     let mut result = AbductionResult::new(goal.clone());
 
-    // First check if already provable
-    let conclusions = reason(theory)?;
-    let is_provable = conclusions
-        .iter()
-        .any(|c| c.literal == *goal && c.conclusion_type.is_positive());
-
-    if is_provable {
-        result
-            .solutions
-            .push(AbductionSolution::new(HashSet::new()));
+    if is_goal_provable(goal, conclusions) {
+        result.solutions.push(AbductionSolution::new(Vec::new()));
         return Ok(result);
     }
 
-    // Collect what's already proven
-    let proven: HashSet<_> = conclusions
-        .iter()
-        .filter(|c| c.conclusion_type.is_positive())
-        .map(|c| c.literal.clone())
-        .collect();
-
-    // Find rules that could derive the goal
-    let mut solutions: Vec<HashSet<Literal>> = Vec::new();
+    // Find rules that could derive the goal according to the goal's own match
+    // semantics: exact when bounded, family-aware when atemporal.
+    //
+    // Each candidate is keyed by its exact-temporal signature (see
+    // [`fact_set_key`]) so that hypothesis sets are deduplicated by precise
+    // temporal content, not by `Literal` equality (which ignores temporal).
+    let mut candidates: Vec<(String, Vec<Literal>, FxHashSet<String>)> = Vec::new();
 
     for rule in theory.rules() {
-        if rule.head_literal() == goal && rule.rule_type != RuleType::Defeater {
-            // Find missing body literals (only logic literals)
-            let body_lits: Vec<Literal> = rule
-                .body
-                .iter()
-                .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
-                .collect();
-            let missing: HashSet<_> = body_lits
-                .into_iter()
-                .filter(|b| !proven.contains(b))
-                .collect();
+        if semantic_literal_matches(goal, rule.head_literal())
+            && rule.rule_type != RuleType::Defeater
+        {
+            // Find missing body literals using each premise's own match
+            // semantics. Deduplicate on the injective canonical key so that
+            // distinct temporal variants of the same family (e.g. p[1,10] and
+            // p[20,30]) and distinct typed terms rendering identically (e.g.
+            // p(1) as symbol vs integer) are all retained as separate
+            // required premises.
+            let mut missing: Vec<Literal> = Vec::new();
+            let mut missing_keys: FxHashSet<String> = FxHashSet::default();
+            for bl in &rule.body {
+                let Some(lit) = bl.as_logic().map(|l| l.to_literal()) else {
+                    continue;
+                };
+                if !is_body_satisfied(&lit, conclusions)
+                    && missing_keys.insert(canonical_literal_key(&lit))
+                {
+                    missing.push(lit);
+                }
+            }
 
             if missing.is_empty() {
-                // All body satisfied, shouldn't happen if not provable
-                // (could be blocked by defeater/conflict)
+                // All body satisfied but goal not provable — blocked by
+                // defeater/conflict; skip this rule path.
                 continue;
             }
 
-            // Simple: just add missing as hypotheses
-            // More sophisticated: recursively find hypotheses for each missing
-            solutions.push(missing);
+            // Canonicalize the retained fact order by exact key: two rules
+            // can derive the goal from the SAME fact-set listed in different
+            // body orders, and rule iteration follows the theory's randomized
+            // HashMap — whichever rule is seen first would otherwise decide
+            // the order of `AbductionSolution::facts` (and of `requires` /
+            // rendered output) nondeterministically.
+            missing.sort_by_cached_key(canonical_literal_key);
 
-            if solutions.len() >= max_solutions {
-                break;
+            let missing_key = fact_set_key(&missing);
+            if let Some((_, _, rules_used)) = candidates
+                .iter_mut()
+                .find(|(key, _, _)| *key == missing_key)
+            {
+                rules_used.insert(rule.label.clone());
+            } else {
+                let mut rules_used: FxHashSet<String> = FxHashSet::default();
+                rules_used.insert(rule.label.clone());
+                candidates.push((missing_key, missing, rules_used));
             }
         }
     }
 
-    // If no direct rules, try to find indirect paths (simplified)
-    if solutions.is_empty() {
-        // Add the goal itself as a hypothesis (trivial solution)
-        let mut trivial = HashSet::new();
-        trivial.insert(goal.clone());
-        solutions.push(trivial);
+    // If no direct rules, try the trivial solution (add goal itself)
+    if candidates.is_empty() {
+        let trivial = vec![goal.clone()];
+        candidates.push((fact_set_key(&trivial), trivial, FxHashSet::default()));
     }
 
-    // Sort by size (smallest first) and limit
-    solutions.sort_by_key(|s| s.len());
-    solutions.truncate(max_solutions);
+    // Sort by size (smallest first), then by exact-temporal key for
+    // determinism regardless of rule iteration order.
+    candidates.sort_by(|(ka, fa, _), (kb, fb, _)| fa.len().cmp(&fb.len()).then_with(|| ka.cmp(kb)));
 
-    for facts in solutions {
+    for (_, facts, rules_used) in candidates.into_iter().take(max_solutions) {
         let mut sol = AbductionSolution::new(facts);
-        // Track rules used (simplified)
-        for rule in theory.rules() {
-            if rule.head_literal() == goal {
-                sol.rules_used.insert(rule.label.clone());
-            }
-        }
+        sol.rules_used = rules_used;
         result.solutions.push(sol);
     }
 
@@ -196,6 +265,8 @@ pub fn abduce(theory: &Theory, goal: &Literal, max_solutions: usize) -> Result<A
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rule::Rule;
+    use crate::temporal::{Temporal, TimePoint};
 
     // ==========================================================================
     // HELPER FUNCTIONS
@@ -216,9 +287,83 @@ mod tests {
         th
     }
 
+    fn temporal_lit(name: &str, start: i64, end: i64) -> Literal {
+        Literal::new(
+            name,
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(start), TimePoint::Moment(end)),
+            vec![],
+        )
+    }
+
+    /// `p` applied to a single typed term — symbol `"1"` and integer `1`
+    /// both render as `(p 1)` in SPL but are distinct literals.
+    fn typed_p(term: crate::term::Term) -> Literal {
+        Literal::from_ids(
+            crate::intern::intern("p"),
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::empty(),
+            vec![term],
+        )
+    }
+
     // ==========================================================================
     // ABDUCTION OPERATOR TESTS - Basic Functionality
     // ==========================================================================
+
+    #[test]
+    fn abduce_retains_distinct_typed_premises() {
+        use crate::term::Term;
+
+        // Both premises render as (p 1) in SPL; a to_spl()-keyed dedup would
+        // drop one and report a single-fact solution that cannot fire the rule.
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r",
+            vec![
+                typed_p(Term::Symbol(crate::intern::intern("1"))),
+                typed_p(Term::Integer(1)),
+            ],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        assert_eq!(result.solutions.len(), 1);
+        assert_eq!(
+            result.solutions[0].facts.len(),
+            2,
+            "symbolic 1 and integer 1 are distinct premises and must both be required"
+        );
+    }
+
+    #[test]
+    fn abduce_distinguishes_typed_fact_sets_across_rules() {
+        use crate::term::Term;
+
+        // Two alternative rules whose required fact-sets differ only in term
+        // type; a rendered-SPL fact_set_key would collide them into one
+        // candidate and lose an abduction solution.
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r_sym",
+            vec![typed_p(Term::Symbol(crate::intern::intern("1")))],
+            Literal::simple("q"),
+        ));
+        th.add_rule(Rule::defeasible(
+            "r_int",
+            vec![typed_p(Term::Integer(1))],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        assert_eq!(
+            result.solutions.len(),
+            2,
+            "typed variants must stay separate abduction solutions"
+        );
+    }
 
     #[test]
     fn test_abduce_returns_result() {
@@ -249,6 +394,28 @@ mod tests {
         let sol = result.smallest_solution().unwrap();
         assert!(sol.is_already_provable());
         assert_eq!(sol.size(), 0);
+    }
+
+    #[test]
+    fn dedup_canonicalizes_fact_order_across_rules() {
+        // Two rules derive the same goal from the SAME missing facts with
+        // bodies listed in opposite orders. Rule iteration follows the
+        // theory's randomized HashMap, so whichever rule is seen first would
+        // otherwise decide the order of the deduplicated candidate's facts.
+        // The retained facts must be in canonical (exact-key-sorted) order
+        // regardless of the winner, and both rules must be credited.
+        let mut th = Theory::new();
+        th.add_defeasible_rule(&["alpha", "beta"], "goal");
+        th.add_defeasible_rule(&["beta", "alpha"], "goal");
+
+        let result = abduce(&th, &Literal::simple("goal"), 10).unwrap();
+        assert_eq!(result.solutions.len(), 1, "same fact-set must deduplicate");
+        let sol = &result.solutions[0];
+        let keys: Vec<String> = sol.facts.iter().map(Literal::to_spl).collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(keys, sorted, "facts must be in canonical sorted order");
+        assert_eq!(sol.rules_used.len(), 2, "both rules contribute");
     }
 
     // ==========================================================================
@@ -411,6 +578,34 @@ mod tests {
     }
 
     #[test]
+    fn test_abduction_solution_tracks_only_contributing_rules() {
+        let mut theory = Theory::new();
+        let r1 = theory.add_defeasible_rule(&["p"], "goal");
+        let r2 = theory.add_defeasible_rule(&["q", "r"], "goal");
+
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(sol.facts.len(), 1);
+        assert!(sol.rules_used.contains(&r1));
+        assert!(!sol.rules_used.contains(&r2));
+    }
+
+    #[test]
+    fn test_abduction_solution_merges_rules_for_identical_hypotheses() {
+        let mut theory = Theory::new();
+        let r1 = theory.add_defeasible_rule(&["p"], "goal");
+        let r2 = theory.add_strict_rule(&["p"], "goal");
+
+        let result = abduce(&theory, &Literal::simple("goal"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(sol.facts.len(), 1);
+        assert!(sol.rules_used.contains(&r1));
+        assert!(sol.rules_used.contains(&r2));
+    }
+
+    #[test]
     fn test_smallest_solution() {
         let mut theory = Theory::new();
         theory.add_defeasible_rule(&["a"], "goal");
@@ -457,5 +652,175 @@ mod tests {
         let result = AbductionResult::new(Literal::simple("x"));
         let s = result.to_string();
         assert!(s.contains("No hypotheses"));
+    }
+
+    // ==========================================================================
+    // FAMILY-AWARE TESTS
+    // ==========================================================================
+
+    #[test]
+    fn test_abduce_family_aware_already_provable() {
+        // Temporal fact p[1,10] should satisfy atemporal goal query for p
+        // via family matching.
+        let mut th = Theory::new();
+        let temporal_lit = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_lit));
+
+        let result = abduce(&th, &Literal::simple("p"), 10).unwrap();
+        assert!(
+            result.is_already_provable(),
+            "Temporal p[1,10] should family-satisfy atemporal goal p"
+        );
+    }
+
+    #[test]
+    fn test_abduce_family_aware_body_satisfaction() {
+        // Rule: a => goal. Temporal fact a[5,15] should satisfy body literal a
+        // via family matching, yielding no missing facts.
+        let mut th = Theory::new();
+        let temporal_a = Literal::new(
+            "a",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(5),
+                crate::temporal::TimePoint::Moment(15),
+            ),
+            vec![],
+        );
+        th.add_rule(Rule::fact("f1", temporal_a));
+        th.add_defeasible_rule(&["a"], "goal");
+
+        let result = abduce(&th, &Literal::simple("goal"), 10).unwrap();
+        assert!(
+            result.is_already_provable(),
+            "Temporal a[5,15] should family-satisfy body literal a"
+        );
+    }
+
+    #[test]
+    fn test_abduce_returns_raw_candidates_even_if_blocked() {
+        // Rule: bird => flies.  Defeater: broken_wing =X> ~flies.
+        // When broken_wing is already true, abduce should still report the
+        // raw missing premise {bird}; verification belongs to requires().
+        let mut th = Theory::new();
+        th.add_fact("broken_wing");
+        th.add_defeasible_rule(&["bird"], "flies");
+        th.add_defeater(&["broken_wing"], "~flies");
+
+        let result = abduce(&th, &Literal::simple("flies"), 10).unwrap();
+        assert!(result.has_solutions());
+        assert!(
+            result
+                .solutions
+                .iter()
+                .any(|sol| sol.facts == vec![Literal::simple("bird")])
+        );
+    }
+
+    #[test]
+    fn test_abduce_returns_valid_raw_solutions() {
+        // Rule: p => q. No defeaters. The raw hypothesis {p} should be found.
+        let mut th = Theory::new();
+        th.add_defeasible_rule(&["p"], "q");
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        assert!(result.has_solutions());
+        let sol = result.smallest_solution().unwrap();
+        assert!(sol.facts.contains(&Literal::simple("p")));
+    }
+
+    #[test]
+    fn test_abduce_family_head_match() {
+        // Rule with temporal head p[1,10] should be considered as a candidate
+        // when the goal is atemporal p, because they share the same family.
+        let mut th = Theory::new();
+        let temporal_head = temporal_lit("p", 1, 10);
+        let body = vec![Literal::simple("a")];
+        th.add_rule(crate::rule::Rule::defeasible("r1", body, temporal_head));
+
+        let result = abduce(&th, &Literal::simple("p"), 10).unwrap();
+        assert!(result.has_solutions());
+        let sol = result.smallest_solution().unwrap();
+        assert!(
+            sol.facts.contains(&Literal::simple("a")),
+            "Should find body literal 'a' as hypothesis via family head match"
+        );
+    }
+
+    #[test]
+    fn test_abduce_temporal_goal_does_not_cross_match_other_window() {
+        let mut th = Theory::new();
+        th.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+
+        let goal = temporal_lit("p", 1, 10);
+        let result = abduce(&th, &goal, 10).unwrap();
+
+        assert!(
+            !result.is_already_provable(),
+            "A different temporal window must not satisfy a bounded goal"
+        );
+        let sol = result.smallest_solution().unwrap();
+        let fact = sol.facts.first().unwrap();
+        assert_eq!(fact.to_spl(), goal.to_spl());
+    }
+
+    #[test]
+    fn test_abduce_temporal_body_requires_exact_window() {
+        let mut th = Theory::new();
+        th.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+        th.add_fact("block");
+        th.add_rule(Rule::defeasible(
+            "r1",
+            vec![temporal_lit("p", 1, 10)],
+            Literal::simple("q"),
+        ));
+        th.add_defeater(&["block"], "~q");
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+        let fact = sol.facts.first().unwrap();
+
+        assert_eq!(
+            fact.to_spl(),
+            temporal_lit("p", 1, 10).to_spl(),
+            "A temporal premise should stay exact during body satisfaction"
+        );
+    }
+
+    #[test]
+    fn test_abduce_preserves_all_temporal_variants_in_body() {
+        // Rule body requires BOTH p[1,10] and p[20,30] — distinct temporal
+        // windows of the same family. Neither is provable, so both must appear
+        // as separate hypotheses. `Literal` equality/hashing ignore temporal,
+        // so a set-keyed collection would drop one and understate the premises.
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r1",
+            vec![temporal_lit("p", 1, 10), temporal_lit("p", 20, 30)],
+            Literal::simple("q"),
+        ));
+
+        let result = abduce(&th, &Literal::simple("q"), 10).unwrap();
+        let sol = result.smallest_solution().unwrap();
+
+        assert_eq!(
+            sol.facts.len(),
+            2,
+            "Both temporal variants must be retained as distinct premises"
+        );
+        let keys: std::collections::BTreeSet<String> =
+            sol.facts.iter().map(Literal::to_spl).collect();
+        assert!(keys.contains(&temporal_lit("p", 1, 10).to_spl()));
+        assert!(keys.contains(&temporal_lit("p", 20, 30).to_spl()));
     }
 }

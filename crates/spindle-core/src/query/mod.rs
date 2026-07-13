@@ -19,7 +19,9 @@
 
 pub mod why_not;
 
-pub use why_not::{BlockingCondition, BlockingType, WhyNotResult, why_not};
+pub use why_not::{
+    BlockingCondition, BlockingType, WhyNotResult, why_not, why_not_with_conclusions,
+};
 
 use std::fmt;
 
@@ -28,14 +30,16 @@ use crate::error::Result;
 use crate::index::IndexedTheory;
 use crate::literal::Literal;
 use crate::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
+use crate::projection::FamilyId;
 use crate::reason::{Reasoner, reason_with_options};
 use crate::temporal::TimePoint;
 use crate::theory::MetaValue;
 use crate::theory::Theory;
+use crate::trust::WeightedConclusion;
 use crate::trust::{TrustPolicy, TrustValue};
 
 pub mod abduce;
-pub use abduce::{AbductionResult, AbductionSolution, abduce};
+pub use abduce::{AbductionResult, AbductionSolution, abduce, abduce_with_conclusions};
 
 pub mod requires;
 pub use requires::{
@@ -67,6 +71,140 @@ impl Default for QueryArgs {
         Self {
             prepare_options: PrepareOptions::default(),
             max_solutions: 10,
+        }
+    }
+}
+
+// =============================================================================
+// QUERY MATCH MODE — CON-004
+// =============================================================================
+
+/// How a query literal is matched against reasoning conclusions (CON-004).
+///
+/// The match mode controls whether a query respects exact temporal windows,
+/// ignores temporal bounds (family matching), or uses deterministic wildcard
+/// selection when multiple temporal variants exist.
+///
+/// # Variants
+///
+/// | Mode              | Temporal required? | Matching semantics                     |
+/// |-------------------|--------------------|----------------------------------------|
+/// | `ExactTemporal`   | Yes                | Exact temporal window match (TEST-008) |
+/// | `Family`          | No                 | Any family member matches (TEST-009)   |
+/// | `WildcardTemporal`| No                 | Deterministic variant selection         |
+///
+/// # Auto-detection
+///
+/// [`QueryMatchMode::detect`] inspects the query literal and returns:
+/// - `ExactTemporal` when the literal has concrete temporal bounds.
+/// - `Family` when the literal has no temporal bounds.
+///
+/// `WildcardTemporal` is an explicit opt-in mode. Literal syntax alone does
+/// not carry enough information to auto-select deterministic wildcard
+/// behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QueryMatchMode {
+    /// Match only the exact temporal window specified in the query literal.
+    ///
+    /// `query(p[1,10])` matches conclusion `p[1,10]` but **not** `p[20,30]`,
+    /// even though both belong to the same family (TEST-008).
+    ExactTemporal,
+
+    /// Match any conclusion belonging to the same atemporal family.
+    ///
+    /// `query(p)` matches both `p[1,10]` and `p[20,30]` because all share
+    /// the same [`FamilyId`] (TEST-009). Returns the strongest conclusion
+    /// type found across all family members.
+    Family,
+
+    /// Match any family member, but select a single deterministic representative.
+    ///
+    /// When multiple temporal variants exist, selects the member with the
+    /// earliest start time (ties broken by earliest end time). This provides
+    /// stable, reproducible query results while still matching across temporal
+    /// variants.
+    WildcardTemporal,
+}
+
+impl QueryMatchMode {
+    /// Auto-detect the appropriate match mode from a query literal.
+    ///
+    /// Returns `ExactTemporal` if the literal has concrete temporal bounds,
+    /// otherwise returns `Family`.
+    pub fn detect(literal: &Literal) -> Self {
+        if literal.is_temporal() {
+            Self::ExactTemporal
+        } else {
+            Self::Family
+        }
+    }
+}
+
+fn default_query_match_mode(literal: &Literal) -> QueryMatchMode {
+    QueryMatchMode::detect(literal)
+}
+
+pub(crate) fn exact_literal_match(expected: &Literal, candidate: &Literal) -> bool {
+    expected.name_id() == candidate.name_id()
+        && expected.negation == candidate.negation
+        && expected.mode == candidate.mode
+        && expected.predicate_args() == candidate.predicate_args()
+        && expected.temporal == candidate.temporal
+}
+
+pub(crate) fn literal_matches(
+    match_mode: QueryMatchMode,
+    expected: &Literal,
+    candidate: &Literal,
+) -> bool {
+    match match_mode {
+        QueryMatchMode::ExactTemporal => exact_literal_match(expected, candidate),
+        // WildcardTemporal uses the same family-membership predicate here.
+        // Deterministic representative selection happens in
+        // `match_wildcard_temporal`, not in this boolean predicate.
+        QueryMatchMode::Family | QueryMatchMode::WildcardTemporal => {
+            FamilyId::from(expected) == FamilyId::from(candidate)
+        }
+    }
+}
+
+pub(crate) fn semantic_match_mode(literal: &Literal) -> QueryMatchMode {
+    QueryMatchMode::detect(literal)
+}
+
+pub(crate) fn semantic_literal_matches(expected: &Literal, candidate: &Literal) -> bool {
+    literal_matches(semantic_match_mode(expected), expected, candidate)
+}
+
+pub(crate) fn find_positive_match<'a>(
+    literal: &Literal,
+    conclusions: &'a [Conclusion],
+) -> Option<&'a Conclusion> {
+    let match_mode = semantic_match_mode(literal);
+    conclusions.iter().find(|c| {
+        c.conclusion_type.is_positive() && literal_matches(match_mode, literal, &c.literal)
+    })
+}
+
+pub(crate) fn has_positive_match(literal: &Literal, conclusions: &[Conclusion]) -> bool {
+    find_positive_match(literal, conclusions).is_some()
+}
+
+/// Like [`has_positive_match`] but always uses EXACT literal identity, never
+/// family matching — an atemporal literal only matches an atemporal
+/// conclusion, not an arbitrary temporal window of the same family.
+pub(crate) fn has_exact_positive_match(literal: &Literal, conclusions: &[Conclusion]) -> bool {
+    conclusions
+        .iter()
+        .any(|c| c.conclusion_type.is_positive() && exact_literal_match(literal, &c.literal))
+}
+
+impl fmt::Display for QueryMatchMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ExactTemporal => write!(f, "exact-temporal"),
+            Self::Family => write!(f, "family"),
+            Self::WildcardTemporal => write!(f, "wildcard-temporal"),
         }
     }
 }
@@ -134,7 +272,7 @@ pub(crate) fn run_reasoning(
     args: &QueryArgs,
 ) -> Result<Vec<Conclusion>> {
     let prepared = prepare(theory, args.prepare_options.clone())?;
-    let mut indexed = IndexedTheory::build(&prepared.theory);
+    let mut indexed = IndexedTheory::try_build(&prepared.theory)?;
     reasoner.reason(&mut indexed)
 }
 
@@ -165,6 +303,7 @@ impl fmt::Display for QueryStatus {
 
 /// Result of querying a literal from a theory
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct QueryResult {
     /// The queried literal
     pub literal: Literal,
@@ -243,8 +382,10 @@ impl TrustFilter {
 
     /// Check if a conclusion passes this filter using derived (weakest-link) trust.
     ///
-    /// Computes trust degrees via `compute_weighted_conclusions`, so a high-trust
-    /// rule with low-trust premises gets the minimum trust across the chain.
+    /// When `min_degree` is set, trust degrees are needed. Pass a pre-computed
+    /// `weighted_cache` (from [`compute_weighted_conclusions`]) to avoid
+    /// recomputing on every call when filtering multiple conclusions in a loop.
+    /// If `None`, the weighted conclusions are computed on the fly.
     ///
     /// For the source pattern check, rule metadata is consulted directly (with
     /// template_label fallback for grounded instances).
@@ -254,6 +395,7 @@ impl TrustFilter {
         conclusions: &[Conclusion],
         theory: &Theory,
         reference_time: Option<TimePoint>,
+        weighted_cache: Option<&[WeightedConclusion]>,
     ) -> bool {
         let policy = match &self.policy {
             Some(p) => p,
@@ -298,10 +440,18 @@ impl TrustFilter {
             }
         }
 
-        // Check minimum degree using derived (weakest-link) trust
+        // Check minimum degree using derived (weakest-link) trust.
+        //
+        // When `weighted_cache` is provided, use it directly to avoid
+        // recomputing `compute_weighted_conclusions` on every call.
         if let Some(min) = self.min_degree {
-            let weighted =
-                compute_weighted_conclusions(conclusions, theory, policy, reference_time);
+            let owned;
+            let weighted = if let Some(cache) = weighted_cache {
+                cache
+            } else {
+                owned = compute_weighted_conclusions(conclusions, theory, policy, reference_time);
+                &owned
+            };
             let wc = weighted.iter().find(|wc| {
                 wc.literal.to_spl() == conclusion.literal.to_spl()
                     && wc.conclusion_type == conclusion.conclusion_type
@@ -321,10 +471,14 @@ pub fn query(theory: &Theory, literal: &Literal) -> Result<QueryResult> {
     query_with_options(theory, literal, PrepareOptions::default())
 }
 
-/// Query a literal against a theory with custom options
+/// Query a literal against a theory with custom options.
 ///
-/// This is the primary API for as-of queries. Use `reference_time` in options
-/// to query at a specific point in time:
+/// Uses exact matching for bounded temporal literals and family matching for
+/// atemporal literals, keeping the default `query()` semantics aligned with
+/// `why_not()` and `abduce()` for the same query shape.
+///
+/// For explicit wildcard selection or other match semantics, use
+/// [`query_with_match_mode`].
 ///
 /// ```rust
 /// use spindle_core::prelude::*;
@@ -347,25 +501,167 @@ pub fn query_with_options(
     literal: &Literal,
     opts: PrepareOptions,
 ) -> Result<QueryResult> {
+    query_with_match_mode(theory, literal, default_query_match_mode(literal), opts)
+}
+
+/// Query a literal against a theory using an explicit match mode (CON-004).
+///
+/// This is the primary API for temporal-family-aware queries. The `match_mode`
+/// parameter controls how the query literal is matched against conclusions:
+///
+/// - [`QueryMatchMode::ExactTemporal`]: Only conclusions with matching temporal
+///   bounds count. `query(p[1,10])` does **not** match `p[20,30]`.
+/// - [`QueryMatchMode::Family`]: Any conclusion sharing the same [`FamilyId`]
+///   counts. `query(p)` matches `p[1,10]`, `p[20,30]`, and bare `p`.
+/// - [`QueryMatchMode::WildcardTemporal`]: Like `Family`, but selects a single
+///   deterministic representative (earliest start time) when multiple temporal
+///   variants exist.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use spindle_core::prelude::*;
+/// use spindle_core::query::{query_with_match_mode, QueryMatchMode};
+///
+/// let result = query_with_match_mode(
+///     &theory,
+///     &Literal::simple("p"),
+///     QueryMatchMode::Family,
+///     PrepareOptions::default(),
+/// )?;
+/// ```
+pub fn query_with_match_mode(
+    theory: &Theory,
+    literal: &Literal,
+    match_mode: QueryMatchMode,
+    opts: PrepareOptions,
+) -> Result<QueryResult> {
     let conclusions = reason_with_options(theory, opts)?;
+    match match_mode {
+        QueryMatchMode::ExactTemporal => match_exact_temporal(literal, &conclusions),
+        QueryMatchMode::Family => match_family(literal, &conclusions),
+        QueryMatchMode::WildcardTemporal => match_wildcard_temporal(literal, &conclusions),
+    }
+}
+
+/// ExactTemporal matching: conclusion must match both atemporal identity AND
+/// temporal bounds of the query literal.
+fn match_exact_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
     let complement = literal.complement();
 
-    // Check if literal is provable
-    for conc in &conclusions {
-        if conc.literal == *literal && conc.conclusion_type.is_positive() {
+    // Check if literal is provable with exact temporal match
+    for conc in conclusions {
+        if conc.conclusion_type.is_positive() && exact_literal_match(literal, &conc.literal) {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Provable)
                 .with_conclusion_type(conc.conclusion_type));
         }
     }
 
-    // Check if complement is provable (refuted)
-    for conc in &conclusions {
-        if conc.literal == complement && conc.conclusion_type.is_positive() {
+    // Check if complement is provable with exact temporal match (refuted)
+    for conc in conclusions {
+        if conc.conclusion_type.is_positive() && exact_literal_match(&complement, &conc.literal) {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
         }
     }
 
-    // Unknown
+    Ok(QueryResult::new(literal.clone(), QueryStatus::Unknown))
+}
+
+/// Family matching: any conclusion whose FamilyId matches the query's FamilyId
+/// counts as a match. Returns the strongest conclusion type found.
+fn strongest_positive_conclusion_type<'a>(
+    conclusions: impl IntoIterator<Item = &'a Conclusion>,
+) -> Option<ConclusionType> {
+    conclusions.into_iter().fold(None, |best, conc| {
+        if !conc.conclusion_type.is_positive() {
+            return best;
+        }
+
+        Some(match best {
+            Some(ConclusionType::DefinitelyProvable) => ConclusionType::DefinitelyProvable,
+            _ if conc.conclusion_type == ConclusionType::DefinitelyProvable => {
+                ConclusionType::DefinitelyProvable
+            }
+            Some(prev) => prev,
+            None => conc.conclusion_type,
+        })
+    })
+}
+
+fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
+    let family = FamilyId::from(literal);
+    let complement_family = family.complement();
+
+    let best_positive = strongest_positive_conclusion_type(
+        conclusions
+            .iter()
+            .filter(|conc| FamilyId::from(&conc.literal) == family),
+    );
+
+    if let Some(ct) = best_positive {
+        return Ok(
+            QueryResult::new(literal.clone(), QueryStatus::Provable).with_conclusion_type(ct)
+        );
+    }
+
+    // Check if complement family is provable (refuted)
+    for conc in conclusions {
+        if conc.conclusion_type.is_positive() {
+            let conc_family = FamilyId::from(&conc.literal);
+            if conc_family == complement_family {
+                return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
+            }
+        }
+    }
+
+    Ok(QueryResult::new(literal.clone(), QueryStatus::Unknown))
+}
+
+/// WildcardTemporal matching: like Family, but when multiple temporal variants
+/// match, use deterministic ordering (earliest start time, ties broken by
+/// earliest end time). The returned conclusion type stays aligned with that
+/// selected representative instead of being promoted from a different family
+/// member.
+fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
+    let family = FamilyId::from(literal);
+    let complement_family = family.complement();
+
+    // Collect all positive conclusions in the family, then pick the
+    // deterministic representative.
+    let mut family_positives: Vec<&Conclusion> = conclusions
+        .iter()
+        .filter(|c| c.conclusion_type.is_positive() && FamilyId::from(&c.literal) == family)
+        .collect();
+
+    if !family_positives.is_empty() {
+        // Sort by temporal start (earliest first), then end (earliest first).
+        family_positives.sort_by(|a, b| {
+            a.literal
+                .temporal
+                .start
+                .cmp(&b.literal.temporal.start)
+                .then_with(|| a.literal.temporal.end.cmp(&b.literal.temporal.end))
+        });
+
+        let representative = family_positives[0];
+        // Use the earliest representative's literal instead of the bare query
+        // literal, so callers can inspect which temporal variant was selected.
+        return Ok(
+            QueryResult::new(representative.literal.clone(), QueryStatus::Provable)
+                .with_conclusion_type(representative.conclusion_type),
+        );
+    }
+
+    // Check if complement family is provable (refuted)
+    for conc in conclusions {
+        if conc.conclusion_type.is_positive() {
+            let conc_family = FamilyId::from(&conc.literal);
+            if conc_family == complement_family {
+                return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
+            }
+        }
+    }
+
     Ok(QueryResult::new(literal.clone(), QueryStatus::Unknown))
 }
 
@@ -730,6 +1026,13 @@ mod tests {
     }
 
     #[test]
+    fn test_blocking_condition_undetermined() {
+        let bc = BlockingCondition::undetermined("r1", "no explicit blocker");
+        assert_eq!(bc.blocking_type, BlockingType::Undetermined);
+        assert_eq!(bc.blocking_rule, None);
+    }
+
+    #[test]
     fn test_blocking_type_display() {
         assert_eq!(
             format!("{}", BlockingType::MissingPremise),
@@ -737,6 +1040,7 @@ mod tests {
         );
         assert_eq!(format!("{}", BlockingType::Defeated), "defeated");
         assert_eq!(format!("{}", BlockingType::Contradicted), "contradicted");
+        assert_eq!(format!("{}", BlockingType::Undetermined), "undetermined");
     }
 
     // ==========================================================================
@@ -1428,7 +1732,7 @@ mod tests {
         let filter = TrustFilter::new();
         let theory = Theory::new();
         let conclusion = Conclusion::defeasibly_provable(Literal::simple("a")).with_rule("r1");
-        assert!(filter.passes(&conclusion, &[], &theory, None));
+        assert!(filter.passes(&conclusion, &[], &theory, None, None));
     }
 
     #[test]
@@ -1456,8 +1760,8 @@ mod tests {
             .unwrap();
 
         // 0.9 >= 0.7 → passes; 0.3 < 0.7 → fails
-        assert!(filter.passes(c_a, &conclusions, &theory, None));
-        assert!(!filter.passes(c_b, &conclusions, &theory, None));
+        assert!(filter.passes(c_a, &conclusions, &theory, None, None));
+        assert!(!filter.passes(c_b, &conclusions, &theory, None, None));
     }
 
     #[test]
@@ -1481,8 +1785,8 @@ mod tests {
             .find(|c| c.literal.name() == "b" && c.is_positive())
             .unwrap();
 
-        assert!(filter.passes(c_a, &conclusions, &theory, None)); // matches "agent:"
-        assert!(!filter.passes(c_b, &conclusions, &theory, None)); // doesn't match
+        assert!(filter.passes(c_a, &conclusions, &theory, None, None)); // matches "agent:"
+        assert!(!filter.passes(c_b, &conclusions, &theory, None, None)); // doesn't match
     }
 
     #[test]
@@ -1493,7 +1797,7 @@ mod tests {
         // No policy set, so filter should pass everything
         let theory = Theory::new();
         let conclusion = Conclusion::defeasibly_provable(Literal::simple("a"));
-        assert!(filter.passes(&conclusion, &[], &theory, None));
+        assert!(filter.passes(&conclusion, &[], &theory, None, None));
     }
 
     #[test]
@@ -1529,9 +1833,9 @@ mod tests {
             .find(|c| c.literal.name() == "c" && c.is_positive())
             .unwrap();
 
-        assert!(filter.passes(c_a, &conclusions, &theory, None)); // agent: + 0.9 >= 0.5
-        assert!(!filter.passes(c_b, &conclusions, &theory, None)); // agent: + 0.3 < 0.5
-        assert!(!filter.passes(c_c, &conclusions, &theory, None)); // system: no match
+        assert!(filter.passes(c_a, &conclusions, &theory, None, None)); // agent: + 0.9 >= 0.5
+        assert!(!filter.passes(c_b, &conclusions, &theory, None, None)); // agent: + 0.3 < 0.5
+        assert!(!filter.passes(c_c, &conclusions, &theory, None, None)); // system: no match
     }
 
     #[test]
@@ -1559,8 +1863,432 @@ mod tests {
 
         // Derived conclusion should have weakest-link degree 0.3 < 0.5 → fails
         assert!(
-            !filter.passes(c_derived, &conclusions, &theory, None),
+            !filter.passes(c_derived, &conclusions, &theory, None, None),
             "Derived conclusion should fail filter because weakest-link degree (0.3) < min (0.5)"
+        );
+    }
+
+    // ==========================================================================
+    // QUERY MATCH MODE TESTS — CON-004
+    // ==========================================================================
+
+    use crate::temporal::Temporal;
+
+    /// Helper: create a temporal literal `name[start, end]`.
+    fn temporal_lit(name: &str, start: i64, end: i64) -> Literal {
+        Literal::new(
+            name,
+            false,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(start), TimePoint::Moment(end)),
+            vec![],
+        )
+    }
+
+    // -- QueryMatchMode::detect --
+
+    #[test]
+    fn detect_exact_temporal_for_bounded_literal() {
+        let lit = temporal_lit("p", 1, 10);
+        assert_eq!(QueryMatchMode::detect(&lit), QueryMatchMode::ExactTemporal);
+    }
+
+    #[test]
+    fn detect_family_for_atemporal_literal() {
+        let lit = Literal::simple("p");
+        assert_eq!(QueryMatchMode::detect(&lit), QueryMatchMode::Family);
+    }
+
+    #[test]
+    fn default_query_mode_matches_detect_for_atemporal_literal() {
+        let lit = Literal::simple("p");
+        assert_eq!(default_query_match_mode(&lit), QueryMatchMode::Family);
+    }
+
+    // -- ExactTemporal mode (TEST-008) --
+
+    #[test]
+    fn exact_temporal_matches_same_window() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let result = query_with_match_mode(
+            &theory,
+            &temporal_lit("p", 1, 10),
+            QueryMatchMode::ExactTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+    }
+
+    #[test]
+    fn exact_temporal_rejects_different_window() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        // Query p[20,30] should NOT match p[1,10] in ExactTemporal mode.
+        let result = query_with_match_mode(
+            &theory,
+            &temporal_lit("p", 20, 30),
+            QueryMatchMode::ExactTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            result.status,
+            QueryStatus::Unknown,
+            "ExactTemporal should not cross-match different windows"
+        );
+    }
+
+    #[test]
+    fn exact_temporal_refuted_by_complement_same_window() {
+        let mut theory = Theory::new();
+        // Fact: ~p[1,10]
+        let neg_lit = Literal::new(
+            "p",
+            true,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", neg_lit));
+
+        let result = query_with_match_mode(
+            &theory,
+            &temporal_lit("p", 1, 10),
+            QueryMatchMode::ExactTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Refuted);
+    }
+
+    // -- Family mode (TEST-009) --
+
+    #[test]
+    fn family_matches_temporal_variant() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        // Query bare `p` in Family mode should match the temporal fact p[1,10].
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::Family,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+    }
+
+    #[test]
+    fn family_matches_multiple_temporal_variants() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+        theory.add_rule(Rule::fact("f2", temporal_lit("p", 20, 30)));
+
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::Family,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+    }
+
+    #[test]
+    fn family_does_not_match_different_predicate() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("q"),
+            QueryMatchMode::Family,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Unknown);
+    }
+
+    #[test]
+    fn family_refuted_by_complement_family() {
+        let mut theory = Theory::new();
+        // Fact: ~p[1,10]
+        let neg_lit = Literal::new(
+            "p",
+            true,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", neg_lit));
+
+        // Query bare `p` should be refuted because ~p family has a member.
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::Family,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Refuted);
+    }
+
+    #[test]
+    fn family_prefers_definite_over_defeasible() {
+        let mut theory = Theory::new();
+        // Strict rule: => p (produces +D p)
+        theory.add_rule(Rule::fact("f1", Literal::simple("p")));
+
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::Family,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+        assert!(result.is_definitely_provable());
+    }
+
+    // -- WildcardTemporal mode --
+
+    #[test]
+    fn wildcard_temporal_matches_family() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::WildcardTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+    }
+
+    #[test]
+    fn wildcard_temporal_selects_earliest() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+        theory.add_rule(Rule::fact("f2", temporal_lit("p", 1, 10)));
+
+        // Despite f1 being added first, WildcardTemporal should deterministically
+        // select the earliest-start member (p[1,10]).
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::WildcardTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+    }
+
+    #[test]
+    fn wildcard_temporal_uses_selected_representative_conclusion_type() {
+        let conclusions = vec![
+            Conclusion::defeasibly_provable(temporal_lit("p", 1, 10)),
+            Conclusion::definitely_provable(temporal_lit("p", 20, 30)),
+        ];
+
+        let result = match_wildcard_temporal(&Literal::simple("p"), &conclusions).unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+        assert_eq!(result.literal.temporal.start, TimePoint::Moment(1));
+        assert_eq!(result.literal.temporal.end, TimePoint::Moment(10));
+        assert!(
+            result.is_defeasibly_provable(),
+            "WildcardTemporal must report the selected representative's proof strength"
+        );
+    }
+
+    #[test]
+    fn wildcard_temporal_unknown_for_no_match() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let result = query_with_match_mode(
+            &theory,
+            &Literal::simple("q"),
+            QueryMatchMode::WildcardTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(result.status, QueryStatus::Unknown);
+    }
+
+    // -- Default query() uses semantic match detection --
+
+    #[test]
+    fn default_query_matches_temporal_variant() {
+        // The default query() should match across temporal variants (wildcard
+        // behavior), not require exact temporal bounds.
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        // Querying bare `p` should find the temporal fact p[1,10].
+        let result = query(&theory, &Literal::simple("p")).unwrap();
+        assert_eq!(
+            result.status,
+            QueryStatus::Provable,
+            "default query() should match temporal variants via family semantics"
+        );
+    }
+
+    #[test]
+    fn default_query_uses_exact_temporal_for_bounded_literal() {
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 1, 10)));
+
+        let result = query(&theory, &temporal_lit("p", 20, 30)).unwrap();
+
+        assert_eq!(
+            result.status,
+            QueryStatus::Unknown,
+            "default query() should not cross-match disjoint temporal windows"
+        );
+    }
+
+    #[test]
+    fn default_query_preserves_strongest_conclusion_type_across_family() {
+        let mut theory = Theory::new();
+        theory.add_fact("support");
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("support")],
+            temporal_lit("p", 1, 10),
+        ));
+        theory.add_rule(Rule::fact("f1", temporal_lit("p", 20, 30)));
+
+        let result = query(&theory, &Literal::simple("p")).unwrap();
+
+        assert_eq!(result.status, QueryStatus::Provable);
+        assert!(result.is_definitely_provable());
+    }
+
+    #[test]
+    fn default_query_refuted_by_complement_family() {
+        // The default query() should detect refutation across temporal families.
+        let mut theory = Theory::new();
+        let neg_lit = Literal::new(
+            "p",
+            true,
+            crate::mode::Mode::empty(),
+            Temporal::new(TimePoint::Moment(1), TimePoint::Moment(10)),
+            vec![],
+        );
+        theory.add_rule(Rule::fact("f1", neg_lit));
+
+        let result = query(&theory, &Literal::simple("p")).unwrap();
+        assert_eq!(
+            result.status,
+            QueryStatus::Refuted,
+            "default query() should detect complement family for refutation"
+        );
+    }
+
+    // -- WildcardTemporal selects earliest representative --
+
+    #[test]
+    fn wildcard_temporal_selects_earliest_representative() {
+        // Build a theory where two temporal variants of `p` are proven:
+        // p[1,10] and p[20,30]. WildcardTemporal should select p[1,10]
+        // as the representative and return it in the result literal,
+        // unlike Family which just returns the query literal unchanged.
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+
+        let head_early = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(1),
+                crate::temporal::TimePoint::Moment(10),
+            ),
+            vec![],
+        );
+        let head_late = Literal::new(
+            "p",
+            false,
+            crate::mode::Mode::empty(),
+            crate::temporal::Temporal::new(
+                crate::temporal::TimePoint::Moment(20),
+                crate::temporal::TimePoint::Moment(30),
+            ),
+            vec![],
+        );
+
+        theory.add_rule(Rule::defeasible(
+            "r1",
+            vec![Literal::simple("a")],
+            head_early.clone(),
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r2",
+            vec![Literal::simple("a")],
+            head_late,
+        ));
+
+        let family_result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::Family,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        let wildcard_result = query_with_match_mode(
+            &theory,
+            &Literal::simple("p"),
+            QueryMatchMode::WildcardTemporal,
+            PrepareOptions::default(),
+        )
+        .unwrap();
+
+        // Both should be provable.
+        assert_eq!(family_result.status, QueryStatus::Provable);
+        assert_eq!(wildcard_result.status, QueryStatus::Provable);
+
+        // WildcardTemporal should select p[1,10] as the representative
+        // literal — the result literal should carry the temporal bounds
+        // of the earliest variant.
+        assert_eq!(
+            wildcard_result.literal.temporal.start,
+            crate::temporal::TimePoint::Moment(1),
+            "WildcardTemporal should select earliest temporal representative"
+        );
+    }
+
+    // -- Display --
+
+    #[test]
+    fn match_mode_display() {
+        assert_eq!(
+            format!("{}", QueryMatchMode::ExactTemporal),
+            "exact-temporal"
+        );
+        assert_eq!(format!("{}", QueryMatchMode::Family), "family");
+        assert_eq!(
+            format!("{}", QueryMatchMode::WildcardTemporal),
+            "wildcard-temporal"
         );
     }
 }

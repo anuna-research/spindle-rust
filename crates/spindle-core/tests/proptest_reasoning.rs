@@ -235,13 +235,13 @@ proptest! {
         let mut theory = spindle_core::theory::Theory::new();
         theory.add_fact(&fact_atom);
         let r1 = theory.add_defeasible_rule(&[fact_atom.as_str()], &head_atom);
-        let r2 = theory.add_defeasible_rule(&[fact_atom.as_str()], &format!("~{}", head_atom));
+        let r2 = theory.add_defeasible_rule(&[fact_atom.as_str()], &format!("~{head_atom}"));
         theory.add_superiority(&r2, &r1);
 
         let conclusions = reason(&theory).unwrap();
         let defeasible = conclusion_set(&conclusions, ConclusionType::DefeasiblyProvable);
 
-        let neg = format!("~{}", head_atom);
+        let neg = format!("~{head_atom}");
         prop_assert!(
             defeasible.contains(&neg),
             "Superior rule's conclusion ~{} should be +d, got: {:?}",

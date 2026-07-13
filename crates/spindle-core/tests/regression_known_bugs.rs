@@ -20,9 +20,7 @@ mod fixtures;
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::explanation::explain;
 use spindle_core::literal::Literal;
-use spindle_core::query::{
-    BlockingType, RequiresOptions, RequiresSearchStatus, abduce, requires_with_options, why_not,
-};
+use spindle_core::query::{BlockingType, RequiresOptions, abduce, requires_with_options, why_not};
 use spindle_core::reason::reason;
 use spindle_core::rule::{Rule, RuleType};
 use spindle_core::theory::Theory;
@@ -388,59 +386,33 @@ fn test_requires_verified_rejects_defeater_blocked_candidate() {
         result.solutions.is_empty(),
         "Verified requires should not return defeater-blocked candidates"
     );
-    assert!(
-        result.verification.raw_examined >= 1,
-        "At least one raw candidate should be examined"
-    );
+    assert_eq!(result.verification.raw_examined, 1);
     assert_eq!(
         result.verification.accepted, 0,
         "Defeater-blocked candidate should not be accepted"
     );
     assert_eq!(
-        result.verification.raw_examined, result.verification.rejected,
-        "All examined candidates should be rejected in this scenario"
+        result.verification.rejected, 1,
+        "Defeater-blocked candidate should be rejected during verification"
     );
-    assert_eq!(result.search_status, RequiresSearchStatus::BoundedComplete);
 }
 
 #[test]
-fn test_abduce_may_return_unverified_candidate_documented() {
-    // Raw abduce behavior remains unchanged: it may return body-satisfying
-    // candidates that fail under full defeasible reasoning.
+fn test_abduce_returns_raw_candidate_for_defeater_blocked_goal() {
+    // abduce returns raw missing-fact hypotheses; verification belongs to
+    // requires().
     let mut theory = Theory::new();
     theory.add_defeasible_rule(&["p"], "q");
     theory.add_defeater(&["p"], "~q");
 
     let result = abduce(&theory, &Literal::simple("q"), 10).unwrap();
     assert!(
-        result.has_solutions(),
-        "Raw abduce should still return body-level candidates"
+        result
+            .solutions
+            .iter()
+            .any(|solution| solution.facts.contains(&Literal::simple("p"))),
+        "The raw candidate p should still be returned by abduce"
     );
-
-    for (i, solution) in result.solutions.iter().enumerate() {
-        if solution.is_already_provable() {
-            continue;
-        }
-
-        let mut modified = theory.clone();
-        for fact_lit in &solution.facts {
-            let label = format!("__abduce_test_{i}_{}", fact_lit.name());
-            modified.add_rule(Rule::fact(&label, fact_lit.clone()));
-        }
-
-        let modified_conclusions = reason(&modified).unwrap();
-        let goal_achieved = modified_conclusions.iter().any(|c| {
-            c.conclusion_type == ConclusionType::DefeasiblyProvable
-                && c.literal.name() == "q"
-                && !c.literal.negation
-        });
-
-        if !goal_achieved {
-            return;
-        }
-    }
-
-    panic!("Expected at least one raw abduce candidate to fail verification");
 }
 
 #[test]
@@ -646,4 +618,372 @@ fn test_why_not_with_ambiguity() {
             "why_not should report blockers when literal is blocked by ambiguity."
         );
     }
+}
+
+// ============================================================================
+// Regression: family-aware discard must still discard DEFEATED premises
+// (reviewer-reported regression on the family-aware discard change).
+//
+// a => p, a => ~p with r2 > r1 defeats p. The attacker p => ~q depends on
+// the defeated premise, so it must be discarded (spec condition (3):
+// exists a in body(s) with -d a) and q must be derivable via a => q.
+// The family-aware guard must only protect premises whose family still
+// has LIVE (lambda-alive, not-yet-defeated) members — not premises that
+// genuinely lost a superiority battle.
+// ============================================================================
+
+#[test]
+fn test_defeated_premise_discards_dependent_attacker() {
+    let mut theory = Theory::new();
+    theory.add_fact("a");
+    let r1 = theory.add_defeasible_rule(&["a"], "p");
+    let r2 = theory.add_defeasible_rule(&["a"], "~p");
+    theory.add_superiority(&r2, &r1);
+    // Attacker of q, depending on the defeated premise p.
+    theory.add_defeater(&["p"], "~q");
+    theory.add_defeasible_rule(&["a"], "q");
+
+    let conclusions = reason(&theory).unwrap();
+
+    let plus_d = |name: &str, neg: bool| {
+        conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable
+                && c.literal.name() == name
+                && c.literal.negation == neg
+        })
+    };
+
+    assert!(plus_d("p", true), "~p should win via superiority");
+    assert!(!plus_d("p", false), "p should be defeated (-d)");
+    assert!(
+        plus_d("q", false),
+        "q must be derivable: its only attacker depends on the defeated premise p \
+         and must be discarded (condition (3) inductive discard)"
+    );
+}
+
+// =============================================================================
+// BUG 7: reason -- SPEC-020 family body matching double-counts body slots
+//
+// The body-satisfaction counter decremented once per matching *event* rather
+// than once per satisfied body *slot*. Because an atemporal body literal `p`
+// is family-satisfied by any temporal member (`p[0,10]`, `p[20,30]`, ...),
+// two members of one family each decremented the same slot, consuming the
+// counter budget of an unrelated, still-unproven body literal and firing the
+// rule unsoundly.
+//
+// Reachable only via literal-level temporals through the core API: the SPL
+// surface attaches windows at the rule level, collapsing such facts to one
+// atemporal literal. See the branch code review (2026-07-05).
+// =============================================================================
+
+use spindle_core::temporal::Temporal;
+
+fn temporal_lit(name: &str, start: i64, end: i64) -> Literal {
+    Literal::new(
+        name,
+        false,
+        Default::default(),
+        Temporal::from_bounds(start, end),
+        vec![],
+    )
+}
+
+fn has_conclusion(
+    conclusions: &[spindle_core::conclusion::Conclusion],
+    kind: ConclusionType,
+    name: &str,
+    neg: bool,
+) -> bool {
+    conclusions
+        .iter()
+        .any(|c| c.conclusion_type == kind && c.literal.name() == name && c.literal.negation == neg)
+}
+
+#[test]
+fn test_family_members_do_not_double_satisfy_defeasible_body_slot() {
+    // Facts p[0,10], p[20,30]; rule r: p, x => y with x unprovable.
+    // The two p-family facts must satisfy the single atemporal `p` slot once,
+    // leaving `x`'s slot unsatisfied, so y must NOT be defeasibly provable.
+    let mut theory = Theory::new();
+    theory.add_rule(Rule::fact("f_early", temporal_lit("p", 0, 10)));
+    theory.add_rule(Rule::fact("f_late", temporal_lit("p", 20, 30)));
+    theory.add_rule(Rule::new(
+        "r",
+        RuleType::Defeasible,
+        vec![Literal::simple("p"), Literal::simple("x")],
+        vec![Literal::simple("y")],
+    ));
+
+    let conclusions = reason(&theory).unwrap();
+
+    assert!(
+        !has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "y", false),
+        "y must NOT be +d: its body literal x is never proven, so the rule cannot fire"
+    );
+    assert!(
+        has_conclusion(
+            &conclusions,
+            ConclusionType::DefeasiblyNotProvable,
+            "y",
+            false
+        ),
+        "y should be -d"
+    );
+}
+
+#[test]
+fn test_family_members_do_not_double_satisfy_strict_body_slot() {
+    // Same shape as above but a STRICT rule: the definite (+D) core must stay
+    // sound. y must NOT be definitely (or defeasibly) provable.
+    let mut theory = Theory::new();
+    theory.add_rule(Rule::fact("f_early", temporal_lit("p", 0, 10)));
+    theory.add_rule(Rule::fact("f_late", temporal_lit("p", 20, 30)));
+    theory.add_rule(Rule::new(
+        "r",
+        RuleType::Strict,
+        vec![Literal::simple("p"), Literal::simple("x")],
+        vec![Literal::simple("y")],
+    ));
+
+    let conclusions = reason(&theory).unwrap();
+
+    assert!(
+        !has_conclusion(&conclusions, ConclusionType::DefinitelyProvable, "y", false),
+        "y must NOT be +D: the strict rule's body literal x is never proven"
+    );
+    assert!(
+        !has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "y", false),
+        "y must NOT be +d either (no sound derivation)"
+    );
+}
+
+// =============================================================================
+// BUG 8: reason -- strict-attacker superiority handled asymmetrically
+//
+// try_prove_defeasible let a superior applicable supporter beat a
+// defeasibly-applicable strict attacker, but try_disprove_defeasible
+// short-circuited ("strict attackers always block") before the superiority
+// check. The two disagreed, so +d/-d for the same literal depended on the
+// event-processing order (i.e. on literal names). Isomorphic theories must
+// agree.
+// =============================================================================
+
+#[test]
+fn test_strict_attacker_superiority_is_order_independent() {
+    // => prem (defeasible); prem -> ~q (strict s1); => c; c => q (r_q); r_q > s1.
+    // `prem` is only defeasibly provable, so the strict rule s1 does NOT fire
+    // at the definite level (+D ~q never holds) — it is a merely
+    // defeasibly-applicable strict attacker. With r_q superior to it, q must
+    // win (+d q), and the answer must not depend on the name of `prem`.
+    fn build(prem: &str) -> Theory {
+        let mut theory = Theory::new();
+        theory.add_defeasible_rule(&[], prem);
+        theory.add_rule(Rule::new(
+            "s1",
+            RuleType::Strict,
+            vec![Literal::simple(prem)],
+            vec![Literal::negated("q")],
+        ));
+        theory.add_fact("c");
+        let r_q = theory.add_defeasible_rule(&["c"], "q");
+        theory.add_superiority(&r_q, "s1");
+        theory
+    }
+
+    let plus_d_q = |theory: &Theory| -> bool {
+        let conclusions = reason(theory).unwrap();
+        has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "q", false)
+    };
+
+    let with_a = plus_d_q(&build("a"));
+    let with_z = plus_d_q(&build("z"));
+
+    assert_eq!(
+        with_a, with_z,
+        "isomorphic theories (prem renamed a->z) must agree on q"
+    );
+    assert!(
+        with_a,
+        "r_q > s1 must let q win over the merely defeasibly-applicable strict attacker"
+    );
+}
+
+// =============================================================================
+// BUG 9: reason -- temporal body discard used window-insensitive equality
+//
+// The -d discard check compared a temporal body literal to the disproved
+// event with Literal's PartialEq, which deliberately ignores the temporal
+// window. An atemporal -d event therefore "exactly matched" a windowed body
+// slot in a different window and wrongly discarded a satisfiable rule.
+// =============================================================================
+
+#[test]
+fn test_temporal_body_slot_not_discarded_by_different_window_event() {
+    // => c; c => p[0,10]; r: p, p[0,10] => y.
+    // The unfounded atemporal `p` is seeded -d, but that must not discard r:
+    // its temporal slot p[0,10] is satisfied and its atemporal `p` slot is
+    // family-satisfied by +d p[0,10]. So y must be +d.
+    let mut theory = Theory::new();
+    theory.add_fact("c");
+    theory.add_rule(Rule::new(
+        "r_p",
+        RuleType::Defeasible,
+        vec![Literal::simple("c")],
+        vec![temporal_lit("p", 0, 10)],
+    ));
+    theory.add_rule(Rule::new(
+        "r",
+        RuleType::Defeasible,
+        vec![Literal::simple("p"), temporal_lit("p", 0, 10)],
+        vec![Literal::simple("y")],
+    ));
+
+    let conclusions = reason(&theory).unwrap();
+
+    assert!(
+        has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "y", false),
+        "y must be +d: both body slots are satisfiable and the atemporal -d p \
+         event must not discard the exact p[0,10] slot"
+    );
+}
+
+// =============================================================================
+// SPEC-020 REQ-009 / TEST-015: window-identity conflict semantics
+//
+// Temporal windows are opaque identity: complements conflict only when their
+// windows are IDENTICAL. Overlapping-but-distinct windows are independent
+// assertions and may both be concluded. This is a deliberate semantic
+// decision (mirrored by the Lean model's temporal-exact AtomKey); this test
+// pins it so any future change is a spec revision, not an accident.
+// =============================================================================
+
+#[test]
+fn test_overlapping_windows_are_independent_identical_windows_conflict() {
+    let neg_temporal_lit = |name: &str, start: i64, end: i64| {
+        Literal::new(
+            name,
+            true,
+            Default::default(),
+            Temporal::from_bounds(start, end),
+            vec![],
+        )
+    };
+
+    // Identical windows: p[1,10] vs ~p[1,10] ambiguity-block; neither is +d.
+    let mut same = Theory::new();
+    same.add_rule(Rule::defeasible("r1", Vec::new(), temporal_lit("p", 1, 10)));
+    same.add_rule(Rule::defeasible(
+        "r2",
+        Vec::new(),
+        neg_temporal_lit("p", 1, 10),
+    ));
+    let conclusions = reason(&same).unwrap();
+    assert!(
+        !has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", false)
+            && !has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", true),
+        "identical-window complements must ambiguity-block (REQ-009)"
+    );
+
+    // Overlapping distinct windows: p[1,10] vs ~p[5,15] are independent
+    // assertions; both are +d.
+    let mut overlap = Theory::new();
+    overlap.add_rule(Rule::defeasible("r1", Vec::new(), temporal_lit("p", 1, 10)));
+    overlap.add_rule(Rule::defeasible(
+        "r2",
+        Vec::new(),
+        neg_temporal_lit("p", 5, 15),
+    ));
+    let conclusions = reason(&overlap).unwrap();
+    assert!(
+        has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", false)
+            && has_conclusion(&conclusions, ConclusionType::DefeasiblyProvable, "p", true),
+        "overlapping distinct-window complements are independent by spec \
+         (REQ-009): windows are opaque identity, overlap is not conflict"
+    );
+}
+
+// =============================================================================
+// BUG 9: why_not.rs -- superiority checked with grounded labels
+//
+// Superiority relations are declared on template labels, but grounding renames
+// rule instances (`r1` -> `r1_0`). why_not compared superiority with the
+// grounded labels, so `is_superior` always returned false for grounded rules
+// and superiority-defeated attackers were reported as spurious blockers,
+// diverging from the reasoner (which compares template labels).
+//
+// STATUS: FIXED -- why_not now compares template labels like defeasible.rs.
+// =============================================================================
+
+#[test]
+fn test_why_not_superiority_uses_template_labels_for_grounded_rules() {
+    use spindle_core::pipeline::{PrepareOptions, prepare};
+
+    let var_lit = |name: &str, neg: bool| {
+        Literal::new(
+            name,
+            neg,
+            Default::default(),
+            Default::default(),
+            vec!["?x".to_string()],
+        )
+    };
+    let ground_lit = |name: &str, neg: bool| {
+        Literal::new(
+            name,
+            neg,
+            Default::default(),
+            Default::default(),
+            vec!["t".to_string()],
+        )
+    };
+
+    let mut theory = Theory::new();
+    theory.add_rule(Rule::fact("f1", ground_lit("bird", false)));
+    theory.add_rule(Rule::fact("f2", ground_lit("injured", false)));
+    theory.add_rule(Rule::fact("f3", ground_lit("heavy", false)));
+    theory.add_rule(Rule::defeasible(
+        "r1",
+        vec![var_lit("bird", false)],
+        var_lit("flies", false),
+    ));
+    theory.add_rule(Rule::defeasible(
+        "a1",
+        vec![var_lit("injured", false)],
+        var_lit("flies", true),
+    ));
+    theory.add_rule(Rule::defeater(
+        "d1",
+        vec![var_lit("heavy", false)],
+        var_lit("flies", true),
+    ));
+    // r1 beats a1 on the template labels; the defeater d1 still blocks flies.
+    theory.add_superiority("r1", "a1");
+
+    let prepared = prepare(&theory, PrepareOptions::default()).unwrap();
+    let goal = ground_lit("flies", false);
+
+    let conclusions = reason(&prepared.theory).unwrap();
+    assert!(
+        !conclusions.iter().any(|c| {
+            c.conclusion_type == ConclusionType::DefeasiblyProvable && c.literal == goal
+        }),
+        "flies(t) must stay blocked by the undefeated defeater d1"
+    );
+
+    let result = why_not(&prepared.theory, &goal).unwrap();
+    let blocking_rules: Vec<&str> = result
+        .blocked_by
+        .iter()
+        .filter_map(|b| b.blocking_rule.as_deref())
+        .collect();
+    assert!(
+        blocking_rules.iter().any(|r| r.starts_with("d1")),
+        "why_not must name the undefeated defeater d1 as a blocker. Got: {blocking_rules:?}"
+    );
+    assert!(
+        !blocking_rules.iter().any(|r| r.starts_with("a1")),
+        "BUG REGRESSION: a1 is defeated via template-label superiority (r1 > a1) \
+         and must not be reported as a blocker for grounded rules. Got: {blocking_rules:?}"
+    );
 }

@@ -33,13 +33,134 @@ pub(crate) mod definite;
 pub(crate) mod facts;
 pub(crate) mod state;
 
+use fixedbitset::FixedBitSet;
+use rustc_hash::FxHashSet;
+
 use crate::conclusion::Conclusion;
 use crate::error::Result;
 use crate::index::IndexedTheory;
+use crate::literal::Literal;
 use crate::pipeline::{PrepareOptions, prepare};
+use crate::projection::{
+    FamilyId, ProjectionDiagnostics, ProjectionEngine, ProjectionSnapshot, ProjectionToken,
+};
+use crate::rule::Rule;
 use crate::theory::Theory;
 
 use self::state::ReasoningState;
+
+/// Yield the body-slot indices of `rule` that a proven/disproven `event`
+/// literal satisfies, using the same match semantics as
+/// [`IndexedTheory::rules_with_body`](crate::index::IndexedTheory::rules_with_body):
+///
+/// - a **temporal** body slot is satisfied only by the exact literal — same
+///   family *and* same window;
+/// - an **atemporal** body slot is family-satisfiable, so any member of its
+///   family (any window, or none) satisfies it.
+///
+/// Each matching body position is yielded once; non-logic (arithmetic) body
+/// elements never match. This is the per-slot inverse of the body index: it
+/// tells the counter machinery *which* slot an event covers, so that several
+/// family members satisfying one atemporal slot count as a single
+/// satisfaction rather than one decrement each.
+pub(crate) fn matched_body_slots<'r>(
+    rule: &'r Rule,
+    event: &'r Literal,
+) -> impl Iterator<Item = usize> + 'r {
+    let event_family = FamilyId::from(event);
+    rule.body.iter().enumerate().filter_map(move |(i, bl)| {
+        let logic = bl.as_logic()?;
+        let b = logic.to_literal();
+        let matches = if b.is_temporal() {
+            // Exact-window identity: FamilyId excludes the temporal field, so
+            // the window must be compared explicitly (Literal's PartialEq also
+            // ignores it).
+            FamilyId::from(&b) == event_family && b.temporal == event.temporal
+        } else {
+            FamilyId::from(&b) == event_family
+        };
+        matches.then_some(i)
+    })
+}
+
+/// Record that `event` satisfies zero or more body slots of `rule`,
+/// decrementing `remaining` once per slot satisfied for the **first** time.
+///
+/// Idempotent per slot: repeated events matching the same slot — e.g. two
+/// temporal members of one family both satisfying a single atemporal body
+/// literal — decrement `remaining` exactly once, so a rule becomes applicable
+/// only when every distinct body slot has some satisfier.
+pub(crate) fn cover_body_slots(
+    rule: &Rule,
+    event: &Literal,
+    satisfied: &mut FixedBitSet,
+    remaining: &mut usize,
+) {
+    for slot in matched_body_slots(rule, event) {
+        if !satisfied.contains(slot) {
+            satisfied.insert(slot);
+            if *remaining > 0 {
+                *remaining -= 1;
+            }
+        }
+    }
+}
+
+pub(crate) struct ReasoningTrace {
+    pub conclusions: Vec<Conclusion>,
+    pub projection_labels: FxHashSet<String>,
+}
+
+fn collect_projection_labels(state: &ReasoningState<'_>, theory: &Theory) -> FxHashSet<String> {
+    // Gather candidate labels from all three sources: rules on a positive
+    // conclusion, rules whose defeasible body is fully covered, and labels the
+    // fixed-point loop recorded for the explanation surface (attackers plus
+    // supporters of blocked literals).
+    let mut labels = state
+        .conclusions
+        .iter()
+        .filter(|c| c.is_positive())
+        .filter_map(|c| c.rule_label.clone())
+        .collect::<FxHashSet<_>>();
+
+    labels.extend(
+        state
+            .defeasible_body_remaining
+            .iter()
+            .filter(|(label, remaining)| {
+                **remaining == 0 && !state.rule_discarded.get(**label).copied().unwrap_or(false)
+            })
+            .map(|(label, _)| (*label).to_string()),
+    );
+    labels.extend(state.projection_labels.iter().cloned());
+
+    // Drop rules that are *decisively defeated*: applicable (body covered, not
+    // `rule_discarded`) yet their head lost the conclusion to a positively-proven
+    // complement — e.g. `bird => flies` when `~flies` is superior, giving `-d
+    // flies` and `+d ~flies`. Such a loser is also recorded as an "applicable
+    // supporter of a blocked literal" by the fixed-point loop, so projecting it
+    // would emit phantom FamilySupport for support it never provided.
+    //
+    // A rule survives if any head is *not* decisively defeated, i.e. the head is
+    // itself positively proven, OR its complement is not proven. The latter keeps
+    // genuine ambiguity blockers (Nixon diamond: `=> pacifist` vs `=> ~pacifist`,
+    // neither proven) — they actively block and belong on the explanation surface.
+    // Both checks use EXACT literal identity, never family matching: an
+    // independent positive window like `p[1,10]` must not vouch for a defeated
+    // atemporal `=> p` whose exact head lost to `+d ~p`, or the loser would be
+    // retained and project phantom support it never provided.
+    // Defeaters are exempt entirely: they project *attacks*, not support, and
+    // never assert their head positively.
+    labels.retain(|label| match theory.get_rule(label) {
+        None => true,
+        Some(rule) if rule.rule_type.is_defeater() => true,
+        Some(rule) => rule.head.iter().any(|h| {
+            crate::query::has_exact_positive_match(h, &state.conclusions)
+                || !crate::query::has_exact_positive_match(&h.complement(), &state.conclusions)
+        }),
+    });
+    labels
+}
 
 // ---------------------------------------------------------------------------
 // Reasoner trait
@@ -112,10 +233,34 @@ pub fn select_reasoner(name: &str) -> Box<dyn Reasoner> {
 }
 
 // ---------------------------------------------------------------------------
+// ReasonResult: enriched output with projection tokens
+// ---------------------------------------------------------------------------
+
+/// The result of a full reasoning pass, including both conclusions and
+/// projection tokens.
+///
+/// The projection engine runs automatically on positive contributors and on
+/// applicable blockers, emitting [`ProjectionToken`]s that carry family-level
+/// support and attack information without synthetic bridge rules.
+#[derive(Debug, Clone)]
+pub struct ReasonResult {
+    /// All conclusions (positive and negative) from the DL(d) reasoner.
+    pub conclusions: Vec<Conclusion>,
+    /// Projection tokens emitted for positive contributors and blocker rules.
+    /// These provide family-level support/attack semantics for temporal
+    /// literals even when a rule only prevented a proof.
+    pub projection_tokens: Vec<ProjectionToken>,
+    /// Structured diagnostic counters for projection activity.
+    pub diagnostics: ProjectionDiagnostics,
+    /// Deterministic debug snapshot of projection state.
+    pub snapshot: ProjectionSnapshot,
+}
+
+// ---------------------------------------------------------------------------
 // Free-function convenience API (unchanged public surface)
 // ---------------------------------------------------------------------------
 
-/// Perform defeasible reasoning on a theory
+/// Perform defeasible reasoning on a theory.
 pub fn reason(theory: &Theory) -> Result<Vec<Conclusion>> {
     reason_with_options(theory, PrepareOptions::default())
 }
@@ -158,8 +303,67 @@ pub fn reason_with_options(theory: &Theory, opts: PrepareOptions) -> Result<Vec<
 /// Internally builds an [`IndexedTheory`] and delegates to
 /// [`reason_indexed`].
 pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
-    let mut indexed = IndexedTheory::build(theory);
+    let mut indexed = IndexedTheory::try_build(theory)?;
     reason_indexed(&mut indexed)
+}
+
+/// Perform full reasoning with projection tokens on a theory.
+///
+/// Like [`reason`], but returns a [`ReasonResult`] that includes
+/// projection tokens alongside conclusions. The projection engine runs on
+/// positive contributors and applicable blockers, preserving both temporal
+/// and authored atemporal contributors in the family-level audit stream.
+pub fn reason_full(theory: &Theory) -> Result<ReasonResult> {
+    reason_full_with_options(theory, PrepareOptions::default())
+}
+
+/// Perform full reasoning with projection tokens and custom options.
+///
+/// Like [`reason_with_options`], but returns a [`ReasonResult`] that
+/// includes projection tokens alongside conclusions.
+pub fn reason_full_with_options(theory: &Theory, opts: PrepareOptions) -> Result<ReasonResult> {
+    let prepared = prepare(theory, opts)?;
+    reason_full_prepared(&prepared.theory)
+}
+
+/// Perform full reasoning with projection tokens on a prepared theory.
+///
+/// Like [`reason_prepared`], but returns a [`ReasonResult`] that
+/// includes projection tokens alongside conclusions.
+pub fn reason_full_prepared(theory: &Theory) -> Result<ReasonResult> {
+    let mut indexed = IndexedTheory::try_build(theory)?;
+    reason_full_indexed(&mut indexed)
+}
+
+/// Core reasoning with projection, operating on an already-indexed theory.
+///
+/// Runs the standard DL(d) algorithm, then projects contributing rules
+/// through the [`ProjectionEngine`] to produce family-level support and
+/// attack tokens.
+pub fn reason_full_indexed(indexed: &mut IndexedTheory<'_>) -> Result<ReasonResult> {
+    let trace = reason_indexed_trace(indexed)?;
+    let ReasoningTrace {
+        conclusions,
+        projection_labels: contributing_labels,
+    } = trace;
+
+    let mut engine = ProjectionEngine::with_capacity(conclusions.len() * 2);
+    let theory = indexed.theory();
+    for label in &contributing_labels {
+        if let Some(rule) = theory.get_rule(label) {
+            engine.try_project_rule(rule, indexed)?;
+        }
+    }
+
+    let diagnostics = engine.diagnostics();
+    let snapshot = engine.snapshot(indexed);
+
+    Ok(ReasonResult {
+        conclusions,
+        projection_tokens: engine.into_tokens(),
+        diagnostics,
+        snapshot,
+    })
 }
 
 /// Core reasoning loop operating on an already-indexed theory.
@@ -175,6 +379,10 @@ pub fn reason_prepared(theory: &Theory) -> Result<Vec<Conclusion>> {
 /// 3. **Negative Conclusions** -- emit `-D` and `-d` for all unproven
 ///    literals.
 pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>> {
+    Ok(reason_indexed_trace(indexed)?.conclusions)
+}
+
+pub(crate) fn reason_indexed_trace(indexed: &mut IndexedTheory<'_>) -> Result<ReasoningTrace> {
     let theory = indexed.theory();
 
     // Pre-allocate state sized for the theory.
@@ -193,7 +401,12 @@ pub fn reason_indexed(indexed: &mut IndexedTheory<'_>) -> Result<Vec<Conclusion>
     // Phase 2: Defeasible fixed-point loop + Phase 3: Negative conclusions
     defeasible::resolve_defeasible(theory, indexed, &mut state);
 
-    Ok(state.conclusions)
+    let projection_labels = collect_projection_labels(&state, theory);
+
+    Ok(ReasoningTrace {
+        conclusions: state.conclusions,
+        projection_labels,
+    })
 }
 
 #[cfg(test)]
@@ -202,7 +415,9 @@ mod tests {
     use crate::conclusion::ConclusionType;
     use crate::index::LitId;
     use crate::literal::Literal;
-    use crate::rule::RuleType;
+    use crate::projection::ProjectionToken;
+    use crate::rule::{Rule, RuleType};
+    use crate::temporal::Temporal;
 
     use super::state::LiteralBitSet;
 
@@ -1366,6 +1581,161 @@ mod tests {
             !has_bird_outside,
             "bird should NOT be provable at time 3000 (outside temporal window)"
         );
+    }
+
+    #[test]
+    fn test_reason_keeps_disjoint_temporal_windows_distinct() {
+        let early = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::from_bounds(1, 10),
+            vec![],
+        );
+        let late = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::from_bounds(20, 30),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_rule(Rule::fact("f1", early));
+        theory.add_rule(Rule::defeasible("r1", vec![late], Literal::simple("q")));
+
+        let conclusions = reason(&theory).unwrap();
+
+        assert!(
+            !conclusions.iter().any(|c| {
+                c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.name() == "q"
+                    && !c.literal.negation
+            }),
+            "a fact for p[1,10] must not satisfy a rule body requiring p[20,30]"
+        );
+    }
+
+    #[test]
+    fn test_reason_full_defeater_projects_attack_with_exact_support() {
+        let temporal_head = Literal::new(
+            "q",
+            true,
+            Default::default(),
+            Temporal::from_bounds(1, 10),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_rule(Rule::defeater(
+            "d1",
+            vec![Literal::simple("a")],
+            temporal_head,
+        ));
+
+        let result = reason_full(&theory).unwrap();
+
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Attack(attack) if attack.rule_label == "d1"
+        )));
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Exact(exact) if exact.rule_label == "d1"
+        )));
+    }
+
+    #[test]
+    fn test_reason_full_does_not_project_defeated_rule_as_support() {
+        // `bird => flies` and `penguin => ~flies` with `~flies` superior. `flies`
+        // is defeated (`-d flies`), so the applicable-but-beaten flies rule must
+        // NOT emit a support token, while the winning `~flies` rule must. The
+        // loser's body is fully satisfied and it is not `rule_discarded`, so this
+        // is exactly the case the naive body-remaining projection got wrong.
+        let mut theory = Theory::new();
+        theory.add_fact("bird");
+        theory.add_fact("penguin");
+        theory.add_rule(Rule::defeasible(
+            "r_fly",
+            vec![Literal::simple("bird")],
+            Literal::simple("flies"),
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_nofly",
+            vec![Literal::simple("penguin")],
+            Literal::simple("flies").complement(),
+        ));
+        theory.add_superiority("r_nofly", "r_fly");
+
+        let result = reason_full(&theory).unwrap();
+
+        // The loser's head is defeasibly disproven.
+        assert!(
+            result.conclusions.iter().any(|c| {
+                c.literal.name() == "flies"
+                    && !c.literal.negation
+                    && c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+            }),
+            "expected -d flies"
+        );
+
+        // The defeated rule must not appear in any projection token.
+        assert!(
+            !result.projection_tokens.iter().any(|t| matches!(
+                t,
+                ProjectionToken::Family(s) if s.rule_label == "r_fly"
+            )),
+            "defeated rule r_fly must not emit FamilySupport"
+        );
+        assert!(
+            !result.projection_tokens.iter().any(|t| matches!(
+                t,
+                ProjectionToken::Exact(s) if s.rule_label == "r_fly"
+            )),
+            "defeated rule r_fly must not emit ExactSupport"
+        );
+
+        // The winning rule still projects support for ~flies.
+        assert!(
+            result.projection_tokens.iter().any(|t| matches!(
+                t,
+                ProjectionToken::Family(s) if s.rule_label == "r_nofly"
+            )),
+            "winning rule r_nofly must emit FamilySupport"
+        );
+    }
+
+    #[test]
+    fn test_reason_full_projects_mixed_temporal_and_atemporal_contributors() {
+        let temporal_head = Literal::new(
+            "p",
+            false,
+            Default::default(),
+            Temporal::from_bounds(1, 10),
+            vec![],
+        );
+        let mut theory = Theory::new();
+        theory.add_fact("a");
+        theory.add_rule(Rule::defeasible(
+            "r_temporal",
+            vec![Literal::simple("a")],
+            temporal_head,
+        ));
+        theory.add_rule(Rule::defeasible(
+            "r_atemporal",
+            vec![Literal::simple("a")],
+            Literal::negated("p"),
+        ));
+
+        let result = reason_full(&theory).unwrap();
+
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Family(family) if family.rule_label == "r_temporal"
+        )));
+        assert!(result.projection_tokens.iter().any(|token| matches!(
+            token,
+            ProjectionToken::Family(family) if family.rule_label == "r_atemporal"
+        )));
     }
 
     #[test]

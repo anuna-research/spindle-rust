@@ -7,7 +7,15 @@
 use std::collections::VecDeque;
 
 use fixedbitset::FixedBitSet;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+/// Per-rule tracking of which body slots have been satisfied, keyed by rule
+/// label. Each bitset has one bit per body position; a set bit means some
+/// proven literal has satisfied that slot. Paired with `*_body_remaining` to
+/// make counter decrements idempotent per slot (SPEC-020 family matching:
+/// several temporal members of one family satisfy a single atemporal body
+/// slot exactly once).
+pub(crate) type SlotsSatisfied<'a> = FxHashMap<&'a str, FixedBitSet>;
 
 use crate::conclusion::Conclusion;
 use crate::index::LitId;
@@ -24,6 +32,7 @@ use crate::literal::Literal;
 /// is inserted, it stays inserted for the lifetime of the reasoning pass.
 /// This matches DL(d) semantics where derivations are permanent within a
 /// single pass.
+#[derive(Clone)]
 pub(crate) struct LiteralBitSet {
     bits: FixedBitSet,
 }
@@ -106,14 +115,26 @@ pub(crate) struct ReasoningState<'a> {
     /// Phase 1 per-rule body counter (strict rules only).
     pub(crate) definite_body_remaining: FxHashMap<&'a str, usize>,
 
+    /// Phase 1 per-rule satisfied body-slot bitsets (strict rules only).
+    /// Keeps `definite_body_remaining` decrements idempotent per slot.
+    pub(crate) definite_slots_satisfied: SlotsSatisfied<'a>,
+
     /// Phase 2 per-rule body counter (all rule types).
     pub(crate) defeasible_body_remaining: FxHashMap<&'a str, usize>,
+
+    /// Phase 2 per-rule satisfied body-slot bitsets (all rule types).
+    /// Keeps `defeasible_body_remaining` decrements idempotent per slot.
+    pub(crate) defeasible_slots_satisfied: SlotsSatisfied<'a>,
 
     /// Phase 2 per-rule tracking: has any body literal been proved -d?
     pub(crate) rule_discarded: FxHashMap<&'a str, bool>,
 
     /// Accumulated conclusions.
     pub(crate) conclusions: Vec<Conclusion>,
+
+    /// Additional rule labels that should be projected even when they do not
+    /// appear on a positive conclusion, such as applicable blockers.
+    pub(crate) projection_labels: FxHashSet<String>,
 }
 
 impl<'a> ReasoningState<'a> {
@@ -132,12 +153,21 @@ impl<'a> ReasoningState<'a> {
                 rule_count,
                 Default::default(),
             ),
+            definite_slots_satisfied: FxHashMap::with_capacity_and_hasher(
+                rule_count,
+                Default::default(),
+            ),
             defeasible_body_remaining: FxHashMap::with_capacity_and_hasher(
+                rule_count,
+                Default::default(),
+            ),
+            defeasible_slots_satisfied: FxHashMap::with_capacity_and_hasher(
                 rule_count,
                 Default::default(),
             ),
             rule_discarded: FxHashMap::with_capacity_and_hasher(rule_count, Default::default()),
             conclusions: Vec::with_capacity(estimated_conclusions),
+            projection_labels: FxHashSet::with_capacity_and_hasher(rule_count, Default::default()),
         }
     }
 
@@ -245,6 +275,7 @@ mod tests {
         assert!(state.definite_body_remaining.is_empty());
         assert!(state.defeasible_body_remaining.is_empty());
         assert!(state.rule_discarded.is_empty());
+        assert!(state.projection_labels.is_empty());
     }
 
     #[test]

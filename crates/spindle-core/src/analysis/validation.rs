@@ -235,11 +235,7 @@ mod tests {
             ),
         ];
         let diags = validate_theory(&rules);
-        assert!(
-            diags.is_empty(),
-            "expected no diagnostics, got: {:?}",
-            diags
-        );
+        assert!(diags.is_empty(), "expected no diagnostics, got: {diags:?}");
     }
 
     #[test]
@@ -298,8 +294,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W004"),
-            "expected no W004, got: {:?}",
-            diags
+            "expected no W004, got: {diags:?}"
         );
     }
 
@@ -340,8 +335,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W002"),
-            "p(a) and ~p(b) should not be flagged as tautological: {:?}",
-            diags,
+            "p(a) and ~p(b) should not be flagged as tautological: {diags:?}",
         );
     }
 
@@ -380,8 +374,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W002"),
-            "O(p) and ~p should not be flagged as tautological: {:?}",
-            diags,
+            "O(p) and ~p should not be flagged as tautological: {diags:?}",
         );
     }
 
@@ -398,8 +391,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W002"),
-            "p@[0,10] and ~p@[20,30] should not be flagged as tautological: {:?}",
-            diags,
+            "p@[0,10] and ~p@[20,30] should not be flagged as tautological: {diags:?}",
         );
     }
 
@@ -429,8 +421,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W003"),
-            "strict p(a) should not shadow defeasible p(b): {:?}",
-            diags,
+            "strict p(a) should not shadow defeasible p(b): {diags:?}",
         );
     }
 
@@ -475,8 +466,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W003"),
-            "strict O(p) should not shadow defeasible p: {:?}",
-            diags,
+            "strict O(p) should not shadow defeasible p: {diags:?}",
         );
     }
 
@@ -506,8 +496,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             codes(&diags).contains(&"W004"),
-            "p(a) should be unreachable when only p(b) is produced: {:?}",
-            diags,
+            "p(a) should be unreachable when only p(b) is produced: {diags:?}",
         );
     }
 
@@ -537,8 +526,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             !codes(&diags).contains(&"W004"),
-            "p(a) should be reachable when p(a) is produced: {:?}",
-            diags,
+            "p(a) should be reachable when p(a) is produced: {diags:?}",
         );
     }
 
@@ -556,8 +544,7 @@ mod tests {
         let diags = validate_theory(&rules);
         assert!(
             codes(&diags).contains(&"W004"),
-            "p should be unreachable when only O(p) is produced: {:?}",
-            diags,
+            "p should be unreachable when only O(p) is produced: {diags:?}",
         );
     }
 
@@ -641,13 +628,11 @@ mod tests {
         let diag_codes = codes(&diags);
         assert!(
             !diag_codes.contains(&"W002"),
-            "no tautology false positives expected: {:?}",
-            diags,
+            "no tautology false positives expected: {diags:?}",
         );
         assert!(
             !diag_codes.contains(&"W003"),
-            "no shadowing false positives expected: {:?}",
-            diags,
+            "no shadowing false positives expected: {diags:?}",
         );
     }
 
@@ -659,7 +644,7 @@ mod tests {
             message: "test message".to_string(),
             rules: vec!["r1".to_string()],
         };
-        let s = format!("{}", d);
+        let s = format!("{d}");
         assert!(s.contains("Warning"));
         assert!(s.contains("W001"));
         assert!(s.contains("test message"));

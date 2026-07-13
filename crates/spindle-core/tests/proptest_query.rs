@@ -4,7 +4,7 @@
 //!
 //! - TEST-001: `what_if(empty hypotheticals)` produces the same provability as `reason()`
 //! - TEST-002: `why_not` returns valid `BlockingType` variants for non-provable literals
-//! - TEST-003: `abduce` solutions, when injected as facts, make the goal provable
+//! - TEST-003: `abduce` returns structurally valid raw hypothesis sets
 //! - TEST-004: `requires` verified facts make the goal provable when injected
 
 use proptest::prelude::*;
@@ -185,6 +185,7 @@ proptest! {
                         BlockingType::MissingPremise
                             | BlockingType::Defeated
                             | BlockingType::Contradicted
+                            | BlockingType::Undetermined
                     ),
                     "Invalid blocking type: {:?}",
                     bc.blocking_type
@@ -205,16 +206,17 @@ proptest! {
 }
 
 // =============================================================================
-// TEST-003: abduce solutions verify
+// TEST-003: abduce returns raw hypotheses
 // =============================================================================
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 
-    /// For any non-provable literal, each abduction solution should
-    /// (when injected as facts) make the goal provable via what_if.
+    /// For any literal, abduction should return structurally valid raw
+    /// hypotheses without panicking. Some raw hypotheses may still be blocked
+    /// by defeaters or conflicts after injection.
     #[test]
-    fn abduce_solutions_verify(theory in arb_theory(), atom in arb_query_atom()) {
+    fn abduce_returns_raw_hypotheses(theory in arb_theory(), atom in arb_query_atom()) {
         let lit = Literal::simple(&atom);
         let ab_result = abduce(&theory, &lit, 5).unwrap();
 

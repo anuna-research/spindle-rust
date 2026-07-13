@@ -13,6 +13,8 @@
 //! ([`super::defeasible::resolve_defeasible`]), not here, because they
 //! require the full ambiguity blocking check.
 
+use fixedbitset::FixedBitSet;
+
 use crate::conclusion::Conclusion;
 use crate::index::IndexedTheory;
 use crate::rule::RuleType;
@@ -27,14 +29,23 @@ pub(crate) fn initialize_facts<'a>(
     indexed: &mut IndexedTheory<'_>,
     state: &mut ReasoningState<'a>,
 ) {
-    // Populate body_remaining and rule_discarded for all rules
+    // Populate body_remaining, per-slot satisfaction bitsets, and
+    // rule_discarded for all rules. The bitsets track which body slots have
+    // been satisfied so that counter decrements are idempotent per slot even
+    // when several family members satisfy one atemporal body literal.
     for rule in theory.rules() {
         state
             .definite_body_remaining
             .insert(&rule.label, rule.body.len());
         state
+            .definite_slots_satisfied
+            .insert(&rule.label, FixedBitSet::with_capacity(rule.body.len()));
+        state
             .defeasible_body_remaining
             .insert(&rule.label, rule.body.len());
+        state
+            .defeasible_slots_satisfied
+            .insert(&rule.label, FixedBitSet::with_capacity(rule.body.len()));
         state.rule_discarded.insert(&rule.label, false);
     }
 

@@ -778,13 +778,11 @@ fn pipeline_collects_diagnostics_from_all_stages() {
 
     assert!(
         stages.contains("validate"),
-        "Pipeline should have a diagnostic from the validate stage; stages: {:?}",
-        stages,
+        "Pipeline should have a diagnostic from the validate stage; stages: {stages:?}",
     );
     assert!(
         stages.contains("ground"),
-        "Pipeline should have a diagnostic from the ground stage; stages: {:?}",
-        stages,
+        "Pipeline should have a diagnostic from the ground stage; stages: {stages:?}",
     );
 }
 

@@ -42,6 +42,25 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
+- **Breaking**: bounded temporal queries now match exact windows (SPEC-020
+  REQ-006). `query`, `requires`, `what_if`, and `abduce` goals carrying a
+  bounded temporal window (e.g. `p@[1,10]`) only match conclusions with the
+  *identical* window. Previously the window was ignored, so a bounded query
+  matched any conclusion in the same family — including atemporal `p` or
+  `p@[20,30]`. A query window strictly contained in a proven window (query
+  `p@[1,10]` vs proven `p@[0,20]`) now also returns `unknown`. This applies
+  to the CLI (`spindle query`/`requires`/`what-if`) and WASM surfaces even
+  though the JSON envelope schemas (`spindle.query.v1`, `spindle.requires.v2`)
+  are unchanged — only the reported status for bounded queries differs.
+  Atemporal queries still match any family member. Call
+  `query_with_match_mode(theory, literal, QueryMatchMode::Family)` to restore
+  family-wide matching for a bounded literal.
+- **Breaking**: `AbductionSolution.facts` changed from `HashSet<Literal>` to
+  `Vec<Literal>`, deduplicated by injective canonical key so distinct temporal
+  windows and typed terms are no longer collapsed.
+- **Breaking**: `AbductionSolution.rules_used` now lists only the rules that
+  produce that specific solution's fact-set, not every rule whose head matches
+  the goal.
 - **Breaking**: `From<NumericValue> for Term` replaced with `TryFrom<NumericValue> for Term`.
   Non-finite floats (NaN, Inf) now return an error instead of silently coercing to `0.0`.
 - `Literal::predicate_ids` migrated from `Vec<SymbolId>` to `Vec<Term>`.

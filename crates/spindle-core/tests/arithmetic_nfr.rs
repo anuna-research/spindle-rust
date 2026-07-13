@@ -117,8 +117,7 @@ fn nfr_001_grounding_performance_regression() {
     for i in 0..200 {
         let body_fact = i % 500;
         spl_no_arith.push_str(&format!(
-            "(normally r{} (data item-{} ?v) (processed item-{} ?v))\n",
-            i, body_fact, body_fact
+            "(normally r{i} (data item-{body_fact} ?v) (processed item-{body_fact} ?v))\n"
         ));
     }
 
@@ -131,8 +130,7 @@ fn nfr_001_grounding_performance_regression() {
     for i in 0..200 {
         let body_fact = i % 500;
         spl_arith.push_str(&format!(
-            "(normally r{} (and (data item-{} ?v) (limit ?lim) (> ?v ?lim)) (flagged item-{} ?v))\n",
-            i, body_fact, body_fact
+            "(normally r{i} (and (data item-{body_fact} ?v) (limit ?lim) (> ?v ?lim)) (flagged item-{body_fact} ?v))\n"
         ));
     }
 
@@ -161,8 +159,7 @@ fn nfr_001_grounding_performance_regression() {
         let ratio = with_arith.as_nanos() as f64 / baseline.as_nanos() as f64;
         if ratio > 10.0 {
             eprintln!(
-                "WARNING: arithmetic grounding overhead is {:.1}x (baseline={:?}, arith={:?})",
-                ratio, baseline, with_arith
+                "WARNING: arithmetic grounding overhead is {ratio:.1}x (baseline={baseline:?}, arith={with_arith:?})"
             );
         }
     }

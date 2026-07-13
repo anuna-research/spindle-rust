@@ -2,7 +2,8 @@
 //!
 //! [`requires_with_options`] verifies each raw abduction candidate by injecting
 //! candidate facts and re-running full reasoning. Only candidates that make the
-//! goal positively provable are returned.
+//! goal positively provable under the same exact-vs-family semantics as
+//! `abduce()` are returned.
 
 use std::collections::HashSet;
 
@@ -14,6 +15,7 @@ use crate::rule::Rule;
 use crate::theory::Theory;
 
 use super::abduce::{AbductionSolution, abduce};
+use super::has_positive_match;
 
 /// Default upper bound for raw candidates verified by `requires`.
 pub const DEFAULT_MAX_RAW_CANDIDATES: usize = 1000;
@@ -24,6 +26,12 @@ pub struct RequiresOptions {
     /// Maximum number of verified solutions to return.
     pub max_solutions: usize,
     /// Maximum number of raw candidates to examine.
+    ///
+    /// Candidates are **deduplicated before** they count against this budget:
+    /// several rules yielding the identical hypothesis fact-set consume a
+    /// single slot, not one each. A theory with duplicate-heavy candidates can
+    /// therefore complete within budget where per-occurrence counting would
+    /// have reported [`RequiresSearchStatus::BudgetExhausted`].
     pub max_raw_candidates: usize,
 }
 
@@ -43,7 +51,9 @@ pub enum RequiresSearchStatus {
     /// all available candidates were exhausted or `max_solutions` was reached.
     BoundedComplete,
     /// Search terminated because the raw-candidate budget was reached while
-    /// more raw candidates exist.
+    /// more raw candidates exist. Budget accounting is over **distinct**
+    /// hypothesis fact-sets (see [`RequiresOptions::max_raw_candidates`]), so
+    /// duplicate candidates do not, on their own, trigger this status.
     BudgetExhausted,
 }
 
@@ -78,9 +88,7 @@ fn canonical_fact_key(solution: &AbductionSolution) -> String {
 }
 
 fn is_goal_provable(conclusions: &[Conclusion], goal: &Literal) -> bool {
-    conclusions
-        .iter()
-        .any(|c| c.literal == *goal && c.conclusion_type.is_positive())
+    has_positive_match(goal, conclusions)
 }
 
 fn verify_candidate(
@@ -211,6 +219,6 @@ pub fn requires(theory: &Theory, goal: &Literal) -> Result<Vec<Literal>> {
     Ok(result
         .solutions
         .first()
-        .map(|s| s.facts.iter().cloned().collect())
+        .map(|s| s.facts.clone())
         .unwrap_or_default())
 }

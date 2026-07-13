@@ -213,9 +213,9 @@ mod tests {
 
     #[test]
     fn float_round_trip() {
-        let dto = TermDto::Float(3.14);
+        let dto = TermDto::Float(3.25);
         let json = serde_json::to_string(&dto).unwrap();
-        assert_eq!(json, r#"{"type":"float","value":3.14}"#);
+        assert_eq!(json, r#"{"type":"float","value":3.25}"#);
         let back: TermDto = serde_json::from_str(&json).unwrap();
         assert_eq!(dto, back);
     }
@@ -231,7 +231,7 @@ mod tests {
         for dto in &terms {
             let term = dto.to_term().expect("to_term should succeed");
             let back = TermDto::from(&term);
-            assert_eq!(dto, &back, "round-trip failed for {:?}", dto);
+            assert_eq!(dto, &back, "round-trip failed for {dto:?}");
         }
     }
 }

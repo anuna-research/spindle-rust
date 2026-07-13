@@ -96,14 +96,14 @@ fn test_012_04_decimal_preserves_scale() {
 // ===========================================================================
 #[test]
 fn test_012_05_float_round_trip() {
-    let dto = TermDto::Float(3.14);
+    let dto = TermDto::Float(3.25);
     let json = serde_json::to_string(&dto).unwrap();
     let back: TermDto = serde_json::from_str(&json).unwrap();
     assert_eq!(dto, back);
 
     let v: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(v["type"], "float");
-    assert_eq!(v["value"], 3.14);
+    assert_eq!(v["value"], 3.25);
 }
 
 // ===========================================================================
@@ -185,20 +185,16 @@ fn test_012_08_term_dto_to_term_round_trip() {
     for (term, expected_dto) in &cases {
         // Term → TermDto
         let dto = TermDto::from(term);
-        assert_eq!(&dto, expected_dto, "Term→TermDto mismatch for {:?}", term);
+        assert_eq!(&dto, expected_dto, "Term→TermDto mismatch for {term:?}");
 
         // TermDto → Term → TermDto (full round-trip)
         let back_term = dto.to_term().expect("to_term should succeed");
         let back_dto = TermDto::from(&back_term);
-        assert_eq!(
-            &dto, &back_dto,
-            "TermDto round-trip mismatch for {:?}",
-            term
-        );
+        assert_eq!(&dto, &back_dto, "TermDto round-trip mismatch for {term:?}");
 
         // JSON round-trip
         let json = serde_json::to_string(&dto).unwrap();
         let json_back: TermDto = serde_json::from_str(&json).unwrap();
-        assert_eq!(&dto, &json_back, "JSON round-trip mismatch for {:?}", term);
+        assert_eq!(&dto, &json_back, "JSON round-trip mismatch for {term:?}");
     }
 }
