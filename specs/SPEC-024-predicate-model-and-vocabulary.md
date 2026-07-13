@@ -2,7 +2,7 @@
 id: SPEC-024
 title: Predicate Model, Theory Signatures, and Vocabulary
 status: draft
-version: 0.1.0
+version: 0.2.0
 created: 2026-07-13
 last-updated: 2026-07-13
 authors: Codex (GPT-5, AI agent)
@@ -14,9 +14,9 @@ protocol: USDD Agent Protocol v1.11.0
 
 ## Orientation
 
-**Intent:** Give Spindle a structural vocabulary model so tools can identify
-`assign-to/2`, describe its ordered arguments, inspect observed argument kinds,
-and validate applications without parsing conventions out of literal names.
+**Intent:** Give Spindle a structural vocabulary model so authors can declare
+`assign-to/2`, tools can describe its ordered arguments, and validators can
+inspect applications without parsing conventions out of literal names.
 
 **Metaphor:** A [[SPEC-024-predicate-model-and-vocabulary#Theory|theory]] is a program; its [[SPEC-024-predicate-model-and-vocabulary#Theory Signature|theory
 signature]] is the exported symbol table, and its [[SPEC-024-predicate-model-and-vocabulary#Vocabulary|vocabulary]] is
@@ -29,6 +29,8 @@ the annotated catalogue built from that table. Neither is the execution engine.
   semantic identity or a wire key.
 - [[SPEC-024-predicate-model-and-vocabulary#Predicate Signature|`PredicateSignature`]] adds ordered argument names and
   primitive sorts; it does not change defeasible inference.
+- [[SPEC-024-predicate-model-and-vocabulary#Predicate Declaration|`PredicateDeclaration`]] is a first-class SPL and
+  `Theory` member; predicate descriptions use a structured [[SPEC-024-predicate-model-and-vocabulary#Predicate Metadata Target|metadata target]].
 - [[SPEC-024-predicate-model-and-vocabulary#Literal Pattern|`LiteralPattern`]] and [[SPEC-024-predicate-model-and-vocabulary#Ground Literal|`GroundLiteral`]]
   are validated phase types around the compatibility [[SPEC-024-predicate-model-and-vocabulary#Literal|`Literal`]]
   model.
@@ -37,8 +39,9 @@ the annotated catalogue built from that table. Neither is the execution engine.
 - [[SPEC-024-predicate-model-and-vocabulary#Theory|`Theory`]] remains the canonical Spindle term. "Ontology" is an
   interoperability description, not a duplicate Rust type.
 
-**Load-bearing requirements:** [[SPEC-024-predicate-model-and-vocabulary#REQ-001]], [[SPEC-024-predicate-model-and-vocabulary#REQ-003]], [[SPEC-024-predicate-model-and-vocabulary#REQ-005]],
-[[SPEC-024-predicate-model-and-vocabulary#REQ-009]], [[SPEC-024-predicate-model-and-vocabulary#REQ-012]], and [[SPEC-024-predicate-model-and-vocabulary#REQ-013]].
+**Load-bearing requirements:** [[SPEC-024-predicate-model-and-vocabulary#REQ-001]], [[SPEC-024-predicate-model-and-vocabulary#REQ-005]],
+[[SPEC-024-predicate-model-and-vocabulary#REQ-009]], [[SPEC-024-predicate-model-and-vocabulary#REQ-012]], [[SPEC-024-predicate-model-and-vocabulary#REQ-016]],
+[[SPEC-024-predicate-model-and-vocabulary#REQ-017]], and [[SPEC-024-predicate-model-and-vocabulary#REQ-018]].
 
 **Structure:**
 
@@ -50,10 +53,10 @@ the annotated catalogue built from that table. Neither is the execution engine.
                               ^
               +---------------+---------------+
               |                               |
-    +---------+----------+          +---------+----------+
-    | Literal / Pattern  |          | PredicateSignature |
-    | observed uses      |          | declared intent    |
-    +---------+----------+          +---------+----------+
+    +---------+----------+          +----------------------+
+    | Literal / Pattern  |          | PredicateDeclaration |
+    | observed uses      |          | signature + origin   |
+    +---------+----------+          +----------+-----------+
               |                               |
               +---------------+---------------+
                               |
@@ -88,27 +91,28 @@ an argument schema, or generated documentation are consequently tempted to:
 
 1. encode type or role information in the functor name;
 2. recover that information with suffix regular expressions;
-3. use a literal-level ID whose identity is either too broad or too narrow; or
-4. infer one schema from whichever literal occurrence happens to be visited first.
+3. use a literal-level ID whose identity is either too broad or too narrow;
+4. infer one schema from whichever literal occurrence happens to be visited first; or
+5. keep declarations and descriptions in an external sidecar that can drift from the theory.
 
 These approaches are fragile. A naming convention is not a type system, a
 regular expression cannot establish semantic identity, and Spindle's existing
 literal IDs deliberately answer different questions.
 
 The immediate stakeholder intent is to make predicate structure explicit for
-library consumers and downstream message vocabularies. The feature SHALL expose
-structural discovery and validation while preserving the current reasoning
-semantics.
+theory authors, library consumers, and downstream message vocabularies. The
+feature SHALL provide a first-class declaration form, structural discovery,
+and validation while preserving the current reasoning semantics.
 
 ### 1.1 User goals
 
 | User | Goal | Success criterion |
 |---|---|---|
-| Theory author | See which predicates a theory uses | Every head and logical body occurrence contributes the correct functor and arity |
+| Theory author | Declare a predicate before or independently of its use | The theory stores its ordered argument names, sorts, and source provenance |
 | Tooling author | Key documentation and mappings without name regexes | A typed `PredicateSymbol` is available from public APIs and structured serialization |
-| Integrator | Describe argument roles and primitive sorts | A checked `PredicateSignature` can be attached to a symbol |
+| Integrator | Describe argument roles and primitive sorts | A checked `PredicateDeclaration` is available from the parsed theory |
 | Validator author | Detect malformed applications before an effectful boundary | A `Shape` returns deterministic, positional diagnostics |
-| Reasoner maintainer | Preserve existing proof behavior | Adding declarations, profiles, or vocabulary annotations does not change conclusions |
+| Reasoner maintainer | Preserve existing proof behavior | Adding declarations, predicate metadata, profiles, or shapes does not change conclusions |
 
 ### 1.2 Current identities that remain authoritative
 
@@ -131,7 +135,9 @@ The distinctions are normative in [[SPEC-024-predicate-model-and-vocabulary#CON-
 - A public `PredicateSymbol` value composed of functor and arity.
 - A reversible Prolog-style predicate-indicator notation for humans.
 - Checked primitive argument declarations in `PredicateSignature`.
-- Deterministic `TheorySignature` extraction from rule heads and logical bodies.
+- First-class `(predicate name ((argument sort) ...))` SPL declarations stored in `Theory`.
+- Structured predicate targets for existing SPL `meta` properties such as `description`.
+- Deterministic `TheorySignature` extraction from declarations, rule heads, and logical bodies.
 - `LiteralPattern` and `GroundLiteral` phase types compatible with the current AST.
 - Observed primitive argument kinds in `ArgumentProfile`.
 - Non-semantic `Shape` validation.
@@ -144,7 +150,6 @@ The distinctions are normative in [[SPEC-024-predicate-model-and-vocabulary#CON-
 - Subtyping, type inference, coercion, or dependent argument constraints.
 - Changing unification, numeric equality, defeat, temporal projection, or modal semantics.
 - Encoding a signature in a functor name.
-- A new SPL declaration form in this revision.
 - A normative RDF, RDFS, OWL, or SHACL mapping.
 - Per-theory predicates in a CBCL dialect definition.
 
@@ -173,21 +178,49 @@ with one ordered declaration per argument position. Each declaration has a
 stable argument name and a [[SPEC-024-predicate-model-and-vocabulary#Primitive Sort|primitive sort]]. Its declaration
 count always equals the symbol arity.
 
-### 3.4 Theory Signature
+### 3.4 Predicate Declaration
+
+A **PredicateDeclaration** is an origin-bearing theory statement containing
+a checked predicate signature. It declares structure, not a fact or rule, and
+therefore does not itself establish or derive any literal.
+
+The canonical SPL form is positional and Lisp-like:
+
+```spl
+(predicate assign-to
+  ((task symbol)
+   (agent symbol)))
+```
+
+### 3.5 Predicate Metadata Target
+
+A **PredicateMetadataTarget** is the structured `meta` selector
+`(predicate functor arity)`. It attaches existing metadata properties to one
+predicate symbol without overloading a rule label or parsing a predicate
+indicator string.
+
+```spl
+(meta (predicate assign-to 2)
+  (description "Assign a task to an agent."))
+```
+
+The selector is a reference inside `meta`, not a second declaration.
+
+### 3.6 Theory Signature
 
 A **TheorySignature** is the deterministic set of predicate symbols available
 to a [[SPEC-024-predicate-model-and-vocabulary#Theory|theory]], plus any checked predicate-signature declarations
 associated with those symbols. Availability is the union of observed logical
 occurrences and explicit declarations; neither source uses naming conventions.
 
-### 3.5 Vocabulary
+### 3.7 Vocabulary
 
 A **Vocabulary** is a derived, inspectable catalogue of theory terms. Each
 entry is keyed by `PredicateSymbol` and may carry a `PredicateSignature`, an
 `ArgumentProfile`, a description, and occurrence provenance. It is a tooling
 projection, not a second source of reasoning truth.
 
-### 3.6 Literal
+### 3.8 Literal
 
 A **Literal** is a positive or negated application of a predicate to arguments,
 with Spindle's optional modal and temporal structure. In the public Rust API,
@@ -195,27 +228,27 @@ the existing `Literal` remains the compatibility AST and may still contain
 unresolved symbols or temporal variables. Code that requires a phase invariant
 uses one of the checked types below.
 
-### 3.7 Literal Pattern
+### 3.9 Literal Pattern
 
 A **LiteralPattern** is an application that still requires grounding. It
 contains at least one variable, arithmetic argument expression, or unresolved
 temporal endpoint. It cannot be submitted where a ground application is
 required without an explicit grounding transition.
 
-### 3.8 Ground Literal
+### 3.10 Ground Literal
 
 A **GroundLiteral** is a checked literal with no variable symbols, arithmetic
 argument expressions, interval variable, or unresolved temporal endpoints.
 The wrapper proves this invariant at construction time.
 
-### 3.9 Primitive Sort
+### 3.11 Primitive Sort
 
 A **PrimitiveSort** is one of `symbol`, `integer`, `decimal`, `float`, `number`,
 or `any`. The first four correspond to current `Term` variants. `number`
 accepts all three numeric variants according to existing numeric compatibility;
 `any` accepts any ground `Term`. Primitive sorts do not assign domain meaning.
 
-### 3.10 Argument Profile
+### 3.12 Argument Profile
 
 An **ArgumentProfile** is observational evidence, grouped by predicate symbol
 and argument position, about kinds found in a theory. Observable kinds are
@@ -223,23 +256,21 @@ and argument position, about kinds found in a theory. Observable kinds are
 `arithmetic-expression`. A profile does not claim that future occurrences are
 constrained to the observed kinds.
 
-### 3.11 Shape
+### 3.13 Shape
 
 A **Shape** is a set of validation constraints compiled from a predicate
 signature. It checks arity and known argument values and reports deferred
 positions for unresolved patterns. Shape validation is separate from inference.
 
-### 3.12 Theory
+### 3.14 Theory
 
-A **Theory** is Spindle's canonical aggregate for rules, facts, superiority
-relations, metadata, and other axiomatic inputs. Predicate declarations are
-supplied alongside the current `Theory` API in this revision and may move into
-the aggregate only after first-class SPL syntax is specified. An ontology may
-be represented by a theory, but **Ontology** SHALL remain an explanatory
-semantic-web term in this revision and SHALL NOT be introduced as an alias or
-duplicate Rust type.
+A **Theory** is Spindle's canonical aggregate for predicate declarations,
+rules, facts, superiority relations, metadata, and other axiomatic inputs. An
+ontology may be represented by a theory, but **Ontology** SHALL remain an
+explanatory semantic-web term in this revision and SHALL NOT be introduced as
+an alias or duplicate Rust type.
 
-### 3.13 Identity lattice
+### 3.15 Identity lattice
 
 | Identity | Functor | Arity | Values | Polarity | Mode | Temporal | Purpose |
 |---|---:|---:|---:|---:|---:|---:|---|
@@ -257,13 +288,14 @@ richer identities are equal.
 
 The design has four layers:
 
-1. **Syntax and phase:** classify applications as literal patterns or ground literals.
-2. **Symbol:** project any logical application to functor plus arity.
-3. **Schema and validation:** attach argument declarations and compile shapes.
-4. **Catalogue:** derive a theory signature, observations, descriptions, and provenance.
+1. **Syntax and phase:** parse declarations and classify literal applications.
+2. **Symbol:** project declarations and applications to functor plus arity.
+3. **Schema and validation:** check declarations and compile shapes.
+4. **Catalogue:** derive a theory signature, observations, metadata, and provenance.
 
-The reasoner continues to consume the existing theory and literal structures.
-The new layers inspect or validate them and do not participate in rule firing.
+The reasoner consumes the extended theory but ignores declarations and
+predicate metadata during rule firing. These structures support discovery and
+explicit validation without changing proof semantics.
 
 ### 4.2 Purity Boundary Map
 
@@ -272,16 +304,17 @@ The new layers inspect or validate them and do not participate in rule firing.
 - construct and compare `PredicateSymbol`;
 - classify literal phases;
 - derive occurrence and aggregate argument profiles;
-- check `PredicateSignature` invariants;
+- check `PredicateSignature` and `PredicateDeclaration` invariants;
+- resolve structured predicate metadata targets;
 - compile and apply `Shape`;
 - merge and sort theory-signature and vocabulary entries; and
 - render structured diagnostics.
 
 #### Effectful shell
 
-- parse untrusted predicate indicators;
+- parse untrusted predicate indicators, declarations, and metadata targets;
+- attach parser source provenance to declarations and metadata;
 - traverse parsed theories and collect rule-label provenance;
-- load caller-supplied vocabulary annotations;
 - serialize results; and
 - expose results through CLI, FFI, or service adapters.
 
@@ -294,7 +327,7 @@ effectful adapters.
 ### 4.3 Composition-first placement
 
 The design reuses `InternedLiteralName`, `Term`, `Literal`, `BodyLogicLiteral`,
-`RuleLabel`, and `Theory`. It adds small checked projections in
+`RuleLabel`, `Meta`, and `Theory`. It adds small checked projections in
 `spindle-core`, parser recognition in `spindle-parser`, and additive DTOs in
 `spindle-contract`. No new dependency or parallel ontology subsystem is
 required.
@@ -427,9 +460,10 @@ declaration.
 associate each observed use with its rule label, head-or-body role, and
 zero-based occurrence position.
 
-**Acceptance criteria:** Descriptions are joined through a structured map keyed
-by `PredicateSymbol`; no description or provenance relationship is recovered
-from a literal-name prefix, suffix, or regular expression.
+**Acceptance criteria:** Descriptions are joined from `Meta` entries whose
+structured target contains the `PredicateSymbol`; no description or provenance
+relationship is recovered from a rule-label string, literal-name prefix,
+suffix, or regular expression.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-005]], [[SPEC-024-predicate-model-and-vocabulary#ADR-006]], [[SPEC-024-predicate-model-and-vocabulary#TEST-011]].
 
@@ -448,20 +482,22 @@ as type matches.
 
 ### REQ-013: Validation is non-semantic
 
-Declarations, profiles, vocabulary annotations, and shape diagnostics SHALL NOT
+Declarations, predicate metadata, profiles, and shape diagnostics SHALL NOT
 change the conclusion set or proof traces produced by the reasoner.
 
-**Acceptance criteria:** Reasoning the same rules with no schema metadata, with
-valid metadata, and with conflicting metadata produces identical logical
-results. Callers MAY reject a theory at their own boundary after validation;
+**Acceptance criteria:** Reasoning the same rules with no declarations, with
+valid declarations and metadata, and with conflicting declarations produces
+identical logical results. Callers MAY reject a theory at their own boundary
+after validation;
 the core reasoner does not do so implicitly.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#ADR-004]], [[SPEC-024-predicate-model-and-vocabulary#TEST-013]], [[SPEC-024-predicate-model-and-vocabulary#NFR-003]].
 
 ### REQ-014: Structured serialization
 
-Public serialization of predicate symbols, signatures, profiles, shapes, and
-vocabulary entries SHALL use structured fields and SHALL NOT use a
+Public serialization of predicate symbols, declarations, metadata targets,
+signatures, profiles, shapes, and vocabulary entries SHALL use structured
+fields and SHALL NOT use a
 predicate-indicator string as the sole machine key.
 
 **Acceptance criteria:** The JSON contracts in [[SPEC-024-predicate-model-and-vocabulary#CON-007]] round-trip functors
@@ -477,17 +513,54 @@ The first implementation SHALL preserve existing public `Literal`,
 behavior while adding the new APIs.
 
 **Acceptance criteria:** Existing source and test suites compile without
-requiring consumers to adopt signatures, profiles, shapes, or phase wrappers.
+requiring consumers to adopt declarations, signatures, profiles, shapes, or
+phase wrappers. Existing theories containing no declaration forms parse and
+reason unchanged.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#ADR-003]], [[SPEC-024-predicate-model-and-vocabulary#TEST-015]].
+
+### REQ-016: First-class predicate declaration
+
+SPL SHALL recognize the declaration grammar in
+[[SPEC-024-predicate-model-and-vocabulary#CON-008]] and SHALL store each valid declaration, including source provenance, in `Theory`.
+
+**Acceptance criteria:** `(predicate assign-to ((task symbol) (agent symbol)))`
+produces `assign-to/2`; `(predicate emergency ())` produces `emergency/0`;
+arity is derived only from the argument list; and the form adds no fact or rule.
+
+**Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-008]], [[SPEC-024-predicate-model-and-vocabulary#TEST-021]].
+
+### REQ-017: Structured predicate metadata
+
+SPL SHALL allow `meta` to target a predicate structurally as
+`(predicate functor arity)` and SHALL keep this target distinct from rule-label
+metadata.
+
+**Acceptance criteria:** Metadata for `(predicate assign-to 2)` describes only
+`assign-to/2`; it cannot collide with `assign-to/1` or with a rule whose label
+is `assign-to`; and vocabulary derivation obtains the description without
+parsing a string key.
+
+**Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-008]], [[SPEC-024-predicate-model-and-vocabulary#TEST-022]].
+
+### REQ-018: Undeclared predicate compatibility
+
+Parsing and reasoning SHALL continue to accept predicate applications that have
+no matching declaration.
+
+**Acceptance criteria:** Existing theories remain valid. Validation MAY report
+`UndeclaredPredicate` according to caller policy, but the parser and reasoner do
+not reject or suppress the application implicitly.
+
+**Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-004]], [[SPEC-024-predicate-model-and-vocabulary#TEST-023]].
 
 ## 6. Non-Functional Requirements
 
 ### NFR-001: Determinism
 
-For structurally equal theories and annotations, serialized theory signatures,
-profiles, diagnostics, and vocabulary entries SHALL be byte-identical across
-runs on the same Spindle version, independent of `HashMap` iteration order.
+For structurally equal theories, declarations, and predicate metadata,
+serialized theory signatures, profiles, diagnostics, and vocabulary entries
+SHALL be byte-identical across runs on the same Spindle version, independent of `HashMap` iteration order.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-005]], [[SPEC-024-predicate-model-and-vocabulary#CON-007]], [[SPEC-024-predicate-model-and-vocabulary#TEST-016]].
 
@@ -510,11 +583,12 @@ projections SHALL produce zero differences in conclusions and proof metadata.
 
 ### NFR-004: Bounded untrusted parsing
 
-Predicate-indicator recognition SHALL use the caller's configured input-size
-limit, use checked arity conversion, perform no catastrophic-backtracking
-regular expression, and either consume the complete input or return an error.
+Predicate-indicator, predicate-declaration, and predicate-metadata recognition
+SHALL use the caller's configured input-size limit, use checked arity
+conversion, perform no catastrophic-backtracking regular expression, and
+either consume the complete input or return an error.
 
-**Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-002]], [[SPEC-024-predicate-model-and-vocabulary#TEST-018]].
+**Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-002]], [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#TEST-018]], [[SPEC-024-predicate-model-and-vocabulary#TEST-021]], [[SPEC-024-predicate-model-and-vocabulary#TEST-022]].
 
 ## 7. Contracts
 
@@ -687,8 +761,11 @@ pub struct TheorySignature {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeclarationState {
-    Declared(PredicateSignature),
-    Conflict(Box<[PredicateSignature]>),
+    Declared {
+        signature: PredicateSignature,
+        origins: Box<[DeclarationOrigin]>,
+    },
+    Conflict(Box<[PredicateDeclaration]>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -703,12 +780,6 @@ pub struct PredicateOrigin {
     pub role: OccurrenceRole,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct VocabularyAnnotations {
-    pub descriptions: BTreeMap<PredicateSymbol, String>,
-    pub declarations: Vec<PredicateSignature>,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VocabularyEntry {
     pub symbol: PredicateSymbol,
@@ -719,26 +790,22 @@ pub struct VocabularyEntry {
 }
 
 impl TheorySignature {
-    pub fn derive(
-        theory: &Theory,
-        declarations: impl IntoIterator<Item = PredicateSignature>,
-    ) -> Self;
+    pub fn derive(theory: &Theory) -> Self;
 }
 
 impl Vocabulary {
-    pub fn derive(
-        theory: &Theory,
-        annotations: &VocabularyAnnotations,
-    ) -> VocabularyReport;
+    pub fn derive(theory: &Theory) -> VocabularyReport;
 }
 ```
 
-The symbol set is the union of observed applications and supplied declarations.
-Rules are traversed in stable `RuleLabel` order. Head and body positions use
-source order. Origins are sorted by rule label, role (`Head` before `Body`),
-and index. An annotation for a symbol with no observed occurrence is retained
-as a declared vocabulary entry and emits
-`VocabularyDiagnostic::UnobservedDeclaration`; it is not silently discarded.
+The symbol set is the union of observed applications and declarations owned by
+`Theory`. Identical signatures merge their declaration origins; incompatible
+signatures remain a conflict with every source-provenanced declaration. Rules
+are traversed in stable `RuleLabel` order. Head and body positions use source
+order. Origins are sorted by rule label, role (`Head` before `Body`), and index.
+Predicate descriptions are read from `MetaTarget::Predicate`; metadata for a
+symbol with neither a declaration nor an observed occurrence emits
+`VocabularyDiagnostic::UnresolvedPredicateMetadata` and is not joined by name.
 
 ### CON-006: Shape validation
 
@@ -799,9 +866,90 @@ remain unchanged.
 ```
 
 Arrays preserve argument order. Entry order is `(functor code-point order,
-arity numeric order)`. Enum strings are lowercase kebab case. Unknown enum
+arity numeric order)`. A serialized metadata target uses
+`{"kind":"predicate","symbol":{"functor":"assign-to","arity":2}}`, never an
+indicator string. Enum strings are lowercase kebab case. Unknown enum
 strings and inconsistent arities are rejected rather than preserved as partially
 valid objects.
+
+### CON-008: SPL predicate declarations and metadata targets
+
+The SPL grammar extends existing top-level statements and `meta` targets:
+
+```ebnf
+statement             = predicate-declaration | existing-statement ;
+predicate-declaration = "(" "predicate" functor argument-list ")" ;
+argument-list         = "(" argument-declaration* ")" ;
+argument-declaration  = "(" argument-name primitive-sort ")" ;
+primitive-sort        = "symbol" | "integer" | "decimal" | "float"
+                      | "number" | "any" ;
+meta                   = "(" "meta" meta-target property* ")" ;
+meta-target            = label | predicate-target ;
+predicate-target       = "(" "predicate" functor arity ")" ;
+```
+
+The parser SHALL recognize these forms structurally using the existing
+S-expression AST. It SHALL NOT render and reparse a predicate indicator. The
+`predicate` atom is special only in top-level declaration and `meta` target
+contexts; it remains available as a literal functor where those contexts do not
+apply.
+
+```rust
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceLocation {
+    pub byte_offset: usize,
+    pub line: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DeclarationOrigin {
+    Parsed(SourceLocation),
+    Programmatic,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PredicateDeclaration {
+    pub signature: PredicateSignature,
+    pub origin: DeclarationOrigin,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum MetaTarget {
+    Label(String),
+    Predicate(PredicateSymbol),
+}
+
+pub struct Theory {
+    // Existing fields remain.
+    predicate_declarations: Vec<PredicateDeclaration>,
+    metadata: HashMap<MetaTarget, Meta>,
+}
+
+impl Theory {
+    pub fn add_predicate_declaration(&mut self, declaration: PredicateDeclaration);
+    pub fn predicate_declarations(&self) -> &[PredicateDeclaration];
+    pub fn get_meta_target(&self, target: &MetaTarget) -> Option<&Meta>;
+}
+```
+
+`DeclarationOrigin` SHALL distinguish parser source provenance from a
+programmatic declaration with no source location. `Theory` stores raw
+declarations in source/insertion order so conflict diagnostics retain every
+origin. Existing `add_meta`, `get_meta`, and label-based metadata behavior SHALL
+remain as compatibility wrappers around `MetaTarget::Label`. Existing metadata
+property merge and overwrite semantics also apply to predicate targets.
+
+The canonical declaration contains no inline description. Predicate properties
+use the same `meta` mechanism as rule properties:
+
+```spl
+(predicate assign-to
+  ((task symbol)
+   (agent symbol)))
+
+(meta (predicate assign-to 2)
+  (description "Assign a task to an agent."))
+```
 
 ## 8. Architecture Decisions
 
@@ -873,8 +1021,8 @@ requires its own specification and formal semantics.
 **Status:** Proposed.
 
 **Context:** Current `Term` values distinguish symbols and three numeric
-representations. Domain sorts such as `Task` and `Agent` require nominal typing,
-subsumption, and a source of declarations not currently present in SPL.
+representations. Domain sorts such as `Task` and `Agent` require nominal typing, subsumption,
+and semantics beyond the structural declarations introduced here.
 
 **Decision:** Model the current primitive value space plus `number` and `any`.
 Keep observation kinds more precise than compatibility sorts.
@@ -890,11 +1038,12 @@ tooling without pretending that symbol values carry ontology classes.
 Description and provenance are useful, but predicate availability must reflect
 the rules being reasoned over.
 
-**Decision:** Derive vocabulary entries from theory traversal and join optional
-annotations through `PredicateSymbol`.
+**Decision:** Derive vocabulary entries from theory declarations and rule
+traversal, then join existing `Meta` through `MetaTarget::Predicate`.
 
-**Consequences:** Documentation remains synchronized with observed use.
-Unobserved declarations are explicit diagnostics rather than hidden drift.
+**Consequences:** `Theory` is the single source for declarations, observations,
+and descriptions. Unobserved declarations remain documented; predicate metadata
+with no declared or observed target is an explicit diagnostic.
 
 ### ADR-007: Theory is canonical; Ontology is contextual
 
@@ -911,6 +1060,26 @@ directly to one standard ontology model.
 **Consequences:** The API remains precise about Spindle semantics while leaving
 room for an explicit RDF/OWL/SHACL adapter later.
 
+### ADR-008: First-class declaration with reusable metadata
+
+**Status:** Proposed.
+
+**Context:** A predicate signature must be authorable in SPL and retained in
+`Theory`. Putting `(description ...)` inside `predicate` would duplicate the
+existing `meta` mechanism, while targeting metadata by `assign-to/2` would
+reintroduce string parsing and collide with rule labels or overloaded arities.
+
+**Decision:** Add the positional declaration form
+`(predicate name ((argument sort) ...))`. Extend `meta` with the structured
+selector `(predicate name arity)`. Store declarations as an ordered sequence and
+metadata under a typed `MetaTarget`.
+
+**Consequences:** The syntax follows SPL's S-expression and metadata conventions;
+arity is derived structurally; descriptions work for declared and implicitly
+observed predicates; declaration conflicts retain source provenance; and no
+predicate indicator becomes a storage key. `Theory` gains private declaration
+storage and a typed metadata key while preserving label-based APIs.
+
 ## 9. Validation and Error Model
 
 Errors are divided by boundary:
@@ -920,10 +1089,12 @@ Errors are divided by boundary:
 | Construction | `PredicateSymbolError` | Arity does not fit `u32` |
 | Indicator parsing | `PredicateIndicatorError` | Ambiguous slash, invalid escape, trailing input, overflow |
 | Signature construction | `PredicateSignatureError` | Arity mismatch, empty name, duplicate name |
+| Declaration parsing | `PredicateDeclarationError` | Invalid argument list, unknown sort, duplicate argument name |
+| Metadata target parsing | `MetaTargetError` | Invalid predicate arity or malformed structured target |
 | Phase construction | `GroundnessError` | Variable argument, interval variable, unresolved temporal endpoint |
 | Grounding | `GroundingError` | Missing binding, incompatible binding, unevaluated expression |
 | Validation | `ShapeDiagnostic` | Predicate or primitive-sort mismatch, deferred position |
-| Vocabulary derivation | `VocabularyDiagnostic` | Conflicting or unobserved declaration |
+| Vocabulary derivation | `VocabularyDiagnostic` | Conflicting declaration, undeclared use, unresolved predicate metadata |
 
 Errors and diagnostics SHALL carry structural values and positions. Human
 messages MAY include predicate indicators but SHALL NOT require consumers to
@@ -931,8 +1102,11 @@ parse those messages.
 
 ## 10. Security and Robustness
 
-1. Indicator parsing follows [[SPEC-024-predicate-model-and-vocabulary#CON-002]] and [[SPEC-024-predicate-model-and-vocabulary#NFR-004]]; a permissive regex
-   or split-on-last-slash implementation is not conforming.
+1. Indicator parsing follows [[SPEC-024-predicate-model-and-vocabulary#CON-002]];
+   declaration and metadata-target parsing follows
+   [[SPEC-024-predicate-model-and-vocabulary#CON-008]]. All three obey
+   [[SPEC-024-predicate-model-and-vocabulary#NFR-004]]; permissive suffix regexes and split-on-last-slash recognition
+   are not conforming.
 2. Structured JSON is the authority for machine interchange. Display strings
    are never reparsed implicitly.
 3. Description and provenance text is untrusted data. Serializers SHALL escape
@@ -948,17 +1122,18 @@ parse those messages.
 ### OBS-001: Derivation summary
 
 The vocabulary report SHALL expose counts for distinct predicate symbols,
-observed occurrences, declarations, declaration conflicts, and shape
-diagnostics. Library code returns these values; adapters MAY emit metrics or
-logs from them.
+observed occurrences, declarations, declaration conflicts, unresolved predicate
+metadata targets, undeclared uses, and shape diagnostics. Library code returns
+these values; adapters MAY emit metrics or logs from them.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#REQ-009]], [[SPEC-024-predicate-model-and-vocabulary#REQ-010]], [[SPEC-024-predicate-model-and-vocabulary#REQ-011]], [[SPEC-024-predicate-model-and-vocabulary#TEST-019]].
 
 ### OBS-002: Structural diagnostics
 
 Every conflict or validation diagnostic SHALL include the structured
-`PredicateSymbol` and, when applicable, argument position and rule-label
-origin. It SHALL NOT expose only a formatted predicate-indicator string.
+`PredicateSymbol` and, when applicable, argument position, declaration origin,
+or rule-label origin. It SHALL NOT expose only a formatted
+predicate-indicator string.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#REQ-010]], [[SPEC-024-predicate-model-and-vocabulary#REQ-012]], [[SPEC-024-predicate-model-and-vocabulary#TEST-020]].
 
@@ -1018,21 +1193,21 @@ is marked not applicable rather than silently skipped.
 
 ### TEST-009: Complete TheorySignature
 
-- **Positive:** Derive symbols from heads and logical bodies across polarity, mode, temporal, and zero-arity cases.
+- **Positive:** Derive symbols from declarations, heads, and logical bodies across polarity, mode, temporal, unobserved, and zero-arity cases.
 - **Negative input:** Include arithmetic constraints and arithmetic predicate arguments.
 - **Negative output:** Assert constraints add no symbol, argument expressions still count toward body arity, and no logical occurrence is omitted.
 
 ### TEST-010: Declaration conflict handling
 
-- **Positive:** Deduplicate identical declarations.
-- **Negative input:** Supply conflicting names and conflicting sorts in different insertion orders.
+- **Positive:** Deduplicate identical parsed and programmatic declarations while retaining every origin.
+- **Negative input:** Supply conflicting names and conflicting sorts in different source and insertion orders.
 - **Negative output:** Assert all distinct conflicts are retained in stable order and no winner is selected.
 
 ### TEST-011: Vocabulary provenance
 
-- **Positive:** Derive one entry with sorted head/body origins and a structured description annotation.
-- **Negative input:** Supply an annotation for an unobserved symbol.
-- **Negative output:** Assert the entry and diagnostic are retained and no name-based relationship is inferred.
+- **Positive:** Derive one entry with sorted head/body origins and a description from `(meta (predicate p 1) ...)`.
+- **Negative input:** Supply predicate metadata for a symbol with neither a declaration nor an occurrence.
+- **Negative output:** Assert an unresolved-target diagnostic is returned and no label- or name-based relationship is inferred.
 
 ### TEST-012: Shape validation
 
@@ -1042,13 +1217,13 @@ is marked not applicable rather than silently skipped.
 
 ### TEST-013: Reasoning parity
 
-- **Positive:** Reason over a representative theory without annotations.
-- **Negative input:** Add valid, invalid, and conflicting schema annotations.
+- **Positive:** Reason over a representative theory without declarations or predicate metadata.
+- **Negative input:** Add valid and conflicting declarations plus predicate metadata.
 - **Negative output:** Differentially assert identical conclusions and proof metadata in every case.
 
 ### TEST-014: Structured serialization
 
-- **Positive:** Round-trip the example in [[SPEC-024-predicate-model-and-vocabulary#CON-007]], including a slash-bearing functor.
+- **Positive:** Round-trip the example in [[SPEC-024-predicate-model-and-vocabulary#CON-007]], including a declaration, structured metadata target, and slash-bearing functor.
 - **Negative input:** Reject unknown enum values, inconsistent array arity, and invalid schema versions.
 - **Negative output:** Assert no serialized map uses an indicator as its sole key and order is canonical.
 
@@ -1056,12 +1231,12 @@ is marked not applicable rather than silently skipped.
 
 - **Positive:** Compile existing public API examples and run the pre-feature suite.
 - **Negative input:** Enable and disable optional `serde` support where applicable.
-- **Negative output:** Assert no existing DTO or method changes shape or behavior.
+- **Negative output:** Assert no existing DTO or method changes shape or behavior and declaration-free SPL remains valid.
 
 ### TEST-016: Deterministic output
 
 - **Positive:** Derive output repeatedly from equal theories built in different insertion orders.
-- **Negative input:** Randomize rule, declaration, and annotation insertion order.
+- **Negative input:** Randomize rule, declaration, and predicate-metadata insertion order.
 - **Negative output:** Assert byte-identical serialization and diagnostic ordering.
 
 ### TEST-017: Complexity envelope
@@ -1072,14 +1247,14 @@ is marked not applicable rather than silently skipped.
 
 ### TEST-018: Parser robustness
 
-- **Positive:** Parse valid indicators at configured size boundaries.
-- **Negative input:** Fuzz arbitrary UTF-8, long digit runs, escape runs, and slash-heavy strings.
-- **Negative output:** Assert bounded completion, full consumption, checked overflow, and no panic.
+- **Positive:** Parse valid indicators, declarations, and predicate metadata targets at configured size boundaries.
+- **Negative input:** Fuzz arbitrary UTF-8, malformed argument lists, unknown sorts, long digit runs, escape runs, and slash-heavy strings.
+- **Negative output:** Assert bounded completion, full consumption, checked overflow, structural recognition, and no panic.
 
 ### TEST-019: Derivation summary
 
 - **Positive:** Verify every summary count against a hand-enumerated theory.
-- **Negative input:** Include conflicts and unobserved declarations.
+- **Negative input:** Include conflicts, unobserved declarations, unresolved predicate metadata, and undeclared uses.
 - **Negative output:** Assert counts do not depend on output filtering or logging configuration.
 
 ### TEST-020: Structural diagnostics
@@ -1087,6 +1262,24 @@ is marked not applicable rather than silently skipped.
 - **Positive:** Verify symbols, positions, and origins in diagnostics.
 - **Negative input:** Use functors requiring indicator quoting.
 - **Negative output:** Assert consumers can identify the predicate without parsing diagnostic text.
+
+### TEST-021: Predicate declaration syntax and storage
+
+- **Positive:** Parse binary and zero-arity declarations and inspect them through `Theory::predicate_declarations()`.
+- **Negative input:** Reject malformed binder lists, unknown sorts, empty argument names, and duplicate argument names.
+- **Negative output:** Assert arity equals binder count, source provenance is retained, and rule/fact counts do not change.
+
+### TEST-022: Structured predicate metadata target
+
+- **Positive:** Attach a description to `assign-to/2` and retrieve it through `MetaTarget::Predicate`.
+- **Negative input:** Use malformed arity and compare same-name predicates at different arities plus a same-name rule label.
+- **Negative output:** Assert only the exact structured target receives metadata and no indicator string is stored or parsed.
+
+### TEST-023: Undeclared predicate compatibility
+
+- **Positive:** Parse and reason over an existing declaration-free theory.
+- **Negative input:** Validate the theory under a policy that reports undeclared predicates.
+- **Negative output:** Assert the optional diagnostic does not alter parsing, conclusions, or proof traces.
 
 ## 13. Traceability Matrix
 
@@ -1105,31 +1298,37 @@ is marked not applicable rather than silently skipped.
 | [[SPEC-024-predicate-model-and-vocabulary#REQ-011]] | [[SPEC-024-predicate-model-and-vocabulary#CON-005]], [[SPEC-024-predicate-model-and-vocabulary#ADR-006]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-011]], [[SPEC-024-predicate-model-and-vocabulary#TEST-019]] |
 | [[SPEC-024-predicate-model-and-vocabulary#REQ-012]] | [[SPEC-024-predicate-model-and-vocabulary#CON-006]], [[SPEC-024-predicate-model-and-vocabulary#ADR-004]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-012]], [[SPEC-024-predicate-model-and-vocabulary#TEST-020]] |
 | [[SPEC-024-predicate-model-and-vocabulary#REQ-013]] | [[SPEC-024-predicate-model-and-vocabulary#ADR-004]], [[SPEC-024-predicate-model-and-vocabulary#NFR-003]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-013]] |
-| [[SPEC-024-predicate-model-and-vocabulary#REQ-014]] | [[SPEC-024-predicate-model-and-vocabulary#CON-007]], [[SPEC-024-predicate-model-and-vocabulary#ADR-002]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-014]], [[SPEC-024-predicate-model-and-vocabulary#TEST-016]] |
-| [[SPEC-024-predicate-model-and-vocabulary#REQ-015]] | [[SPEC-024-predicate-model-and-vocabulary#ADR-003]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-015]] |
-| [[SPEC-024-predicate-model-and-vocabulary#NFR-001]] | [[SPEC-024-predicate-model-and-vocabulary#CON-005]], [[SPEC-024-predicate-model-and-vocabulary#CON-007]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-016]] |
+| [[SPEC-024-predicate-model-and-vocabulary#REQ-014]] | [[SPEC-024-predicate-model-and-vocabulary#CON-007]], [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-002]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-014]], [[SPEC-024-predicate-model-and-vocabulary#TEST-016]] |
+| [[SPEC-024-predicate-model-and-vocabulary#REQ-015]] | [[SPEC-024-predicate-model-and-vocabulary#ADR-003]], [[SPEC-024-predicate-model-and-vocabulary#ADR-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-015]], [[SPEC-024-predicate-model-and-vocabulary#TEST-023]] |
+| [[SPEC-024-predicate-model-and-vocabulary#REQ-016]] | [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-021]] |
+| [[SPEC-024-predicate-model-and-vocabulary#REQ-017]] | [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-022]] |
+| [[SPEC-024-predicate-model-and-vocabulary#REQ-018]] | [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-004]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-023]] |
+| [[SPEC-024-predicate-model-and-vocabulary#NFR-001]] | [[SPEC-024-predicate-model-and-vocabulary#CON-005]], [[SPEC-024-predicate-model-and-vocabulary#CON-007]], [[SPEC-024-predicate-model-and-vocabulary#CON-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-016]] |
 | [[SPEC-024-predicate-model-and-vocabulary#NFR-002]] | [[SPEC-024-predicate-model-and-vocabulary#CON-005]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-017]] |
 | [[SPEC-024-predicate-model-and-vocabulary#NFR-003]] | [[SPEC-024-predicate-model-and-vocabulary#REQ-013]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-013]] |
-| [[SPEC-024-predicate-model-and-vocabulary#NFR-004]] | [[SPEC-024-predicate-model-and-vocabulary#CON-002]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-018]] |
-| [[SPEC-024-predicate-model-and-vocabulary#OBS-001]] | [[SPEC-024-predicate-model-and-vocabulary#CON-005]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-019]] |
-| [[SPEC-024-predicate-model-and-vocabulary#OBS-002]] | [[SPEC-024-predicate-model-and-vocabulary#CON-006]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-020]] |
+| [[SPEC-024-predicate-model-and-vocabulary#NFR-004]] | [[SPEC-024-predicate-model-and-vocabulary#CON-002]], [[SPEC-024-predicate-model-and-vocabulary#CON-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-018]], [[SPEC-024-predicate-model-and-vocabulary#TEST-021]], [[SPEC-024-predicate-model-and-vocabulary#TEST-022]] |
+| [[SPEC-024-predicate-model-and-vocabulary#OBS-001]] | [[SPEC-024-predicate-model-and-vocabulary#CON-005]], [[SPEC-024-predicate-model-and-vocabulary#CON-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-019]] |
+| [[SPEC-024-predicate-model-and-vocabulary#OBS-002]] | [[SPEC-024-predicate-model-and-vocabulary#CON-006]], [[SPEC-024-predicate-model-and-vocabulary#CON-008]] | [[SPEC-024-predicate-model-and-vocabulary#TEST-020]] |
 
 ## 14. Migration and Implementation Sequence
 
-1. Add `PredicateSymbol`, its direct projection trait, and identity-law tests to
-   `spindle-core`.
-2. Add the indicator recognizer to `spindle-parser`; keep structured fields as
-   the contract representation.
-3. Centralize variable recognition and add `GroundLiteral` plus
+1. Add `PredicateSymbol`, primitive sorts, signatures, and identity-law tests
+   to `spindle-core`.
+2. Add ordered `PredicateDeclaration` storage and typed `MetaTarget` storage to
+   `Theory`, preserving label-based metadata wrappers.
+3. Extend `spindle-parser` with the structural declaration and predicate-target
+   grammar, parser provenance, and negative-input tests.
+4. Add the indicator recognizer for display/CLI interoperability; keep
+   structured fields as the contract representation.
+5. Derive `TheorySignature`, `ArgumentProfile`, and `Vocabulary` directly from
+   `Theory`, including predicate metadata and conflict diagnostics.
+6. Centralize variable recognition and add `GroundLiteral` plus
    `LiteralPattern` compatibility wrappers.
-4. Change grounding boundaries incrementally to return `GroundLiteral`, with
+7. Change grounding boundaries incrementally to return `GroundLiteral`, with
    temporary internal `as_literal()` adapters where required.
-5. Add primitive sorts, signatures, profiles, theory-signature derivation, and
-   vocabulary derivation as pure projections.
-6. Add shape validation and structural reports without wiring them into the
-   reasoner.
-7. Add typed V2 DTOs and deterministic serialization.
-8. Run differential reasoning, parser fuzzing, property tests, and the full
+8. Add shape validation, typed V2 DTOs, and structural reports without wiring
+   them into the reasoner.
+9. Run differential reasoning, parser fuzzing, property tests, and the full
    existing workspace suite before considering deprecation of unchecked paths.
 
 No existing type is deprecated by this specification. A later implementation
@@ -1140,7 +1339,6 @@ compatibility window.
 
 | Decision | Rationale for deferral | Owner / trigger |
 |---|---|---|
-| First-class SPL predicate declarations | Syntax should follow the proven API model and needs separate parser/source-location design | Core maintainers after [[SPEC-024-predicate-model-and-vocabulary#CON-004]] implementation |
 | Nominal and ontology sorts | Requires class identity, subsumption, and interaction with unification | Semantics maintainers; new specification required |
 | RDF/OWL/SHACL mapping | Arity, modality, defeasibility, and closed-world validation need an explicit mapping policy | Interoperability maintainer; adapter use case |
 | CBCL message content profile | CBCL dialects describe transport vocabulary; a message content type/profile can point to a Spindle vocabulary without embedding per-theory predicates in the dialect | CBCL and Spindle maintainers; joint integration spec |
@@ -1156,10 +1354,12 @@ by one AI model, it SHALL remain `draft` until:
 
 1. a different model family reviews the identity boundaries, contracts, and
    requirement-targeted tests;
-2. a human maintainer approves the terminology and non-semantic boundary;
+2. a human maintainer approves the terminology, declaration syntax, metadata
+   target, and non-semantic boundary;
 3. a fresh-context reader, given only [[SPEC-024-predicate-model-and-vocabulary#Orientation]], can restate the intent,
-   predict that `p(a)` and `~p(b)` share `p/1` but not literal identity, and
-   locate the artefact that decides whether shapes affect reasoning; and
+   predict that `p(a)` and `~p(b)` share `p/1` but not literal identity, explain
+   where `assign-to/2` gets its description, and locate the artefact that
+   decides whether shapes affect reasoning; and
 4. `zetl` validation reports no unexplained dead technical-concept links.
 
 Current gate status: **pending**.
@@ -1169,6 +1369,10 @@ Current gate status: **pending**.
 <details>
 <summary>Revision history</summary>
 
+- 0.2.0 (2026-07-13): Added first-class positional SPL predicate declarations,
+  `Theory` declaration storage, structured predicate metadata targets, source
+  provenance, undeclared-use compatibility, and corresponding contracts and
+  tests.
 - 0.1.0 (2026-07-13): Initial draft defining predicate symbols, indicators,
   signatures, theory signatures, vocabulary, literal phase types, argument
   profiles, and non-semantic shapes.
