@@ -45,65 +45,98 @@ pub(crate) struct ObservedOccurrence {
     pub kinds: Vec<ObservedArgumentKind>,
 }
 
+/// A logical occurrence whose functor cannot form a valid predicate symbol — an
+/// empty or control-character functor (SPEC-024 CON-001). It is surfaced as a
+/// diagnostic rather than silently dropped from the derivation.
+pub(crate) struct MalformedOccurrence {
+    pub functor: String,
+    pub arity: usize,
+}
+
+/// The result of one theory traversal: occurrences that project to a valid
+/// predicate symbol, and those whose functor is malformed.
+pub(crate) struct ObservedTraversal {
+    pub valid: Vec<ObservedOccurrence>,
+    pub malformed: Vec<MalformedOccurrence>,
+}
+
 /// Traverse the theory once, visiting each logical occurrence in a rule head or
 /// logical rule body exactly once (SPEC-024 NFR-002). Rules are visited in
 /// stable [`RuleLabel`] order; head and body positions use source order.
-pub(crate) fn observed(theory: &Theory) -> Vec<ObservedOccurrence> {
+///
+/// An occurrence whose functor cannot form a predicate symbol (empty or
+/// containing a control character) is recorded as malformed rather than dropped,
+/// so a theory carrying such a literal is not silently erased from the model.
+pub(crate) fn observed(theory: &Theory) -> ObservedTraversal {
     let mut rules: Vec<_> = theory.rules_with_labels().collect();
     rules.sort_by_key(|(label, _)| *label);
 
-    let mut occurrences = Vec::new();
+    let mut valid = Vec::new();
+    let mut malformed = Vec::new();
     for (label, rule) in rules {
         for (index, head) in rule.head.iter().enumerate() {
-            if let Ok(symbol) = head.predicate_symbol() {
-                let kinds = head
-                    .predicate_args()
-                    .iter()
-                    .map(ObservedArgumentKind::of_term)
-                    .collect();
-                occurrences.push(ObservedOccurrence {
-                    symbol,
-                    origin: PredicateOrigin {
-                        rule: label.clone(),
-                        role: OccurrenceRole::Head {
-                            index: index as u32,
+            match head.predicate_symbol() {
+                Ok(symbol) => {
+                    let kinds = head
+                        .predicate_args()
+                        .iter()
+                        .map(ObservedArgumentKind::of_term)
+                        .collect();
+                    valid.push(ObservedOccurrence {
+                        symbol,
+                        origin: PredicateOrigin {
+                            rule: label.clone(),
+                            role: OccurrenceRole::Head {
+                                index: index as u32,
+                            },
                         },
-                    },
-                    kinds,
-                });
+                        kinds,
+                    });
+                }
+                Err(_) => malformed.push(MalformedOccurrence {
+                    functor: head.interned_name().resolve().to_string(),
+                    arity: head.predicate_args().len(),
+                }),
             }
         }
 
         for (index, body) in rule.body.iter().enumerate() {
             // Arithmetic constraints are not logical predicate applications and
             // contribute no predicate symbol (SPEC-024 REQ-009).
-            if let BodyLiteral::Logic(logic) = body
-                && let Ok(symbol) = logic.predicate_symbol()
-            {
-                let kinds = logic
-                    .predicate_args()
-                    .iter()
-                    .map(ObservedArgumentKind::of_body_arg)
-                    .collect();
-                occurrences.push(ObservedOccurrence {
-                    symbol,
-                    origin: PredicateOrigin {
-                        rule: label.clone(),
-                        role: OccurrenceRole::Body {
-                            index: index as u32,
-                        },
-                    },
-                    kinds,
-                });
+            if let BodyLiteral::Logic(logic) = body {
+                match logic.predicate_symbol() {
+                    Ok(symbol) => {
+                        let kinds = logic
+                            .predicate_args()
+                            .iter()
+                            .map(ObservedArgumentKind::of_body_arg)
+                            .collect();
+                        valid.push(ObservedOccurrence {
+                            symbol,
+                            origin: PredicateOrigin {
+                                rule: label.clone(),
+                                role: OccurrenceRole::Body {
+                                    index: index as u32,
+                                },
+                            },
+                            kinds,
+                        });
+                    }
+                    Err(_) => malformed.push(MalformedOccurrence {
+                        functor: logic.interned_name().resolve().to_string(),
+                        arity: logic.predicate_args().len(),
+                    }),
+                }
             }
         }
     }
-    occurrences
+    ObservedTraversal { valid, malformed }
 }
 
-/// Collect `(symbol, origin)` pairs for every observed logical occurrence.
+/// Collect `(symbol, origin)` pairs for every valid observed logical occurrence.
 pub(crate) fn collect_occurrences(theory: &Theory) -> Vec<(PredicateSymbol, PredicateOrigin)> {
     observed(theory)
+        .valid
         .into_iter()
         .map(|o| (o.symbol, o.origin))
         .collect()
@@ -158,6 +191,15 @@ pub enum VocabularyDiagnostic {
         /// The affected predicate symbol.
         symbol: PredicateSymbol,
     },
+    /// A logical occurrence whose functor cannot form a valid predicate symbol —
+    /// an empty or control-character functor — so it is reported here rather than
+    /// silently dropped from the model (SPEC-024 CON-001).
+    MalformedPredicate {
+        /// The rejected functor spelling.
+        functor: String,
+        /// The application arity.
+        arity: usize,
+    },
 }
 
 /// Summary counts for a vocabulary derivation (SPEC-024 OBS-001).
@@ -180,6 +222,10 @@ pub struct DerivationSummary {
     /// (variables and arithmetic expressions) are not counted, since they are
     /// pending validation rather than problems (SPEC-024 OBS-001).
     pub shape_diagnostics: usize,
+    /// Distinct malformed functors (empty or control-character) observed in rule
+    /// heads or bodies. These occurrences are counted in `observed_occurrences`
+    /// but excluded from the catalogue (SPEC-024 CON-001).
+    pub malformed_predicates: usize,
 }
 
 /// The full result of vocabulary derivation (SPEC-024 CON-005).
@@ -194,8 +240,8 @@ pub struct VocabularyReport {
 }
 
 fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
-    let occurrences = observed(theory);
-    let observed_occurrences = occurrences.len();
+    let ObservedTraversal { valid, malformed } = observed(theory);
+    let observed_occurrences = valid.len() + malformed.len();
     let declaration_states = derive_declaration_states(theory);
 
     // Group observations by symbol. Keying by the interned symbol in a HashMap
@@ -205,7 +251,7 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
     // so each occurrence's kinds and origin move into the accumulator rather than
     // being cloned.
     let mut per_symbol: HashMap<PredicateSymbol, SymbolAccumulator> = HashMap::new();
-    for occ in occurrences {
+    for occ in valid {
         let symbol = occ.symbol;
         per_symbol
             .entry(symbol)
@@ -271,13 +317,32 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
         }
     }
 
-    // Impose (functor code point, arity) order on the entries once, resolving
-    // each functor a single time instead of on every comparison during
-    // accumulation (SPEC-024 CON-001, NFR-001).
-    entries.sort_by_cached_key(|e| (e.symbol.functor().resolve().to_string(), e.symbol.arity()));
+    // Surface malformed functors (empty or control-character) once each, rather
+    // than dropping the occurrences silently (SPEC-024 CON-001). Malformed
+    // functors are rare, so a linear dedup is adequate.
+    let mut malformed_predicates = 0usize;
+    let mut seen_malformed: Vec<(String, usize)> = Vec::new();
+    for m in malformed {
+        let key = (m.functor.clone(), m.arity);
+        if !seen_malformed.contains(&key) {
+            seen_malformed.push(key);
+            malformed_predicates += 1;
+            diagnostics.push(VocabularyDiagnostic::MalformedPredicate {
+                functor: m.functor,
+                arity: m.arity,
+            });
+        }
+    }
 
-    // Deterministic diagnostic order independent of HashMap iteration.
-    diagnostics.sort_by_key(diagnostic_key);
+    // Impose (functor code point, arity) order on the entries once, resolving
+    // each functor a single time. `resolve()` returns a `&'static str`, so the
+    // cached key borrows it rather than cloning every spelling (SPEC-024 CON-001,
+    // NFR-001).
+    entries.sort_by_cached_key(|e| (e.symbol.functor().resolve(), e.symbol.arity()));
+
+    // Deterministic diagnostic order independent of HashMap iteration. The key
+    // borrows functor spellings rather than allocating them.
+    diagnostics.sort_by(|a, b| diagnostic_key(a).cmp(&diagnostic_key(b)));
 
     let summary = DerivationSummary {
         distinct_symbols: entries.len(),
@@ -287,6 +352,7 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
         unresolved_predicate_metadata,
         undeclared_uses,
         shape_diagnostics,
+        malformed_predicates,
     };
 
     VocabularyReport {
@@ -296,12 +362,22 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
     }
 }
 
-/// A sort key giving diagnostics a total, deterministic order.
-fn diagnostic_key(d: &VocabularyDiagnostic) -> (u8, PredicateSymbol) {
+/// A sort key giving diagnostics a total, deterministic order. The functor
+/// spelling is borrowed, not cloned; symbol variants resolve to a `&'static str`.
+fn diagnostic_key(d: &VocabularyDiagnostic) -> (u8, &str, u64) {
     match d {
-        VocabularyDiagnostic::ConflictingDeclaration { symbol } => (0, *symbol),
-        VocabularyDiagnostic::UndeclaredPredicate { symbol } => (1, *symbol),
-        VocabularyDiagnostic::UnresolvedPredicateMetadata { symbol } => (2, *symbol),
+        VocabularyDiagnostic::ConflictingDeclaration { symbol } => {
+            (0, symbol.functor().resolve(), u64::from(symbol.arity()))
+        }
+        VocabularyDiagnostic::UndeclaredPredicate { symbol } => {
+            (1, symbol.functor().resolve(), u64::from(symbol.arity()))
+        }
+        VocabularyDiagnostic::UnresolvedPredicateMetadata { symbol } => {
+            (2, symbol.functor().resolve(), u64::from(symbol.arity()))
+        }
+        VocabularyDiagnostic::MalformedPredicate { functor, arity } => {
+            (3, functor.as_str(), *arity as u64)
+        }
     }
 }
 

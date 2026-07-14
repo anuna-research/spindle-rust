@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use spindle_core::vocabulary::{
     ArgumentDecl, DeclarationState, MetaTarget, ObservedArgumentKind, PredicateSymbol,
-    PrimitiveSort, VocabularyDiagnostic, VocabularyEntry, VocabularyReport,
+    PredicateSymbolError, PrimitiveSort, VocabularyDiagnostic, VocabularyEntry, VocabularyReport,
 };
 
 /// The schema identifier for a serialized vocabulary (SPEC-024 CON-007).
@@ -61,6 +61,15 @@ pub enum VocabularyDtoError {
         /// The offending arity.
         found: usize,
     },
+    /// A predicate functor was empty.
+    #[error("predicate functor is empty")]
+    EmptyFunctor,
+    /// A predicate functor contained a control character.
+    #[error("predicate functor contains a control character {ch:?}")]
+    ControlFunctor {
+        /// The offending character.
+        ch: char,
+    },
 }
 
 /// A predicate symbol in structured form (SPEC-024 CON-002).
@@ -85,11 +94,21 @@ impl TryFrom<&PredicateSymbolDto> for PredicateSymbol {
     type Error = VocabularyDtoError;
 
     fn try_from(dto: &PredicateSymbolDto) -> Result<Self, Self::Error> {
-        PredicateSymbol::try_new(dto.functor.as_str().into(), dto.arity as usize).map_err(|_| {
-            VocabularyDtoError::ArityOverflow {
-                found: dto.arity as usize,
-            }
-        })
+        PredicateSymbol::try_new(dto.functor.as_str().into(), dto.arity as usize)
+            .map_err(map_symbol_error)
+    }
+}
+
+/// Map a core [`PredicateSymbolError`] to its DTO counterpart, preserving the
+/// distinction between an arity overflow and a malformed functor rather than
+/// reporting every failure as an overflow.
+fn map_symbol_error(error: PredicateSymbolError) -> VocabularyDtoError {
+    match error {
+        PredicateSymbolError::ArityOverflow { actual } => {
+            VocabularyDtoError::ArityOverflow { found: actual }
+        }
+        PredicateSymbolError::EmptyFunctor => VocabularyDtoError::EmptyFunctor,
+        PredicateSymbolError::ControlCharacter { ch } => VocabularyDtoError::ControlFunctor { ch },
     }
 }
 
@@ -196,6 +215,14 @@ pub enum VocabularyDiagnosticDto {
         /// The affected symbol.
         symbol: PredicateSymbolDto,
     },
+    /// A functor that cannot form a valid predicate symbol (empty or containing a
+    /// control character), reported rather than dropped.
+    MalformedPredicate {
+        /// The rejected functor spelling.
+        functor: String,
+        /// The application arity.
+        arity: u64,
+    },
 }
 
 impl From<&VocabularyDiagnostic> for VocabularyDiagnosticDto {
@@ -214,6 +241,12 @@ impl From<&VocabularyDiagnostic> for VocabularyDiagnosticDto {
             VocabularyDiagnostic::UnresolvedPredicateMetadata { symbol } => {
                 VocabularyDiagnosticDto::UnresolvedPredicateMetadata {
                     symbol: (*symbol).into(),
+                }
+            }
+            VocabularyDiagnostic::MalformedPredicate { functor, arity } => {
+                VocabularyDiagnosticDto::MalformedPredicate {
+                    functor: functor.clone(),
+                    arity: *arity as u64,
                 }
             }
         }
@@ -257,6 +290,10 @@ impl VocabularyReportDto {
             });
         }
         for entry in &self.entries {
+            // Reject a symbol the core constructor would reject — an empty or
+            // control-character functor, or an unrepresentable arity — so
+            // validation never accepts a core-invalid symbol (SPEC-024 CON-001).
+            PredicateSymbol::try_from(&entry.symbol)?;
             let arity = entry.symbol.arity;
             if entry.profile.len() as u64 != u64::from(arity) {
                 return Err(VocabularyDtoError::InconsistentArity {
@@ -455,6 +492,42 @@ mod tests {
             dto.validate(),
             Err(VocabularyDtoError::UnknownSort { .. })
         ));
+    }
+
+    #[test]
+    fn try_from_maps_empty_functor_not_arity_overflow() {
+        let dto = PredicateSymbolDto {
+            functor: String::new(),
+            arity: 1,
+        };
+        assert_eq!(
+            PredicateSymbol::try_from(&dto),
+            Err(VocabularyDtoError::EmptyFunctor)
+        );
+    }
+
+    #[test]
+    fn try_from_maps_control_functor_not_arity_overflow() {
+        let dto = PredicateSymbolDto {
+            functor: "a\nb".to_string(),
+            arity: 1,
+        };
+        assert_eq!(
+            PredicateSymbol::try_from(&dto),
+            Err(VocabularyDtoError::ControlFunctor { ch: '\n' })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_core_invalid_symbol() {
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
+        let entry = dto
+            .entries
+            .iter_mut()
+            .find(|e| e.symbol.functor == "assign-to" && e.symbol.arity == 2)
+            .unwrap();
+        entry.symbol.functor = String::new();
+        assert_eq!(dto.validate(), Err(VocabularyDtoError::EmptyFunctor));
     }
 
     #[test]

@@ -40,6 +40,12 @@ impl TheorySignature {
     /// The symbol set is the union of observed applications (rule heads and
     /// logical rule bodies) and declarations owned by the theory. Availability
     /// never uses naming conventions.
+    ///
+    /// An occurrence whose functor cannot form a predicate symbol (empty or
+    /// control-character; SPEC-024 CON-001) contributes no symbol, since none
+    /// exists to record. Vocabulary derivation reports such occurrences as a
+    /// `MalformedPredicate` diagnostic; this availability query simply excludes
+    /// them.
     pub fn derive(theory: &Theory) -> Self {
         let mut symbols = BTreeSet::new();
 

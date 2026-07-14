@@ -325,6 +325,45 @@ fn test_011_unresolved_predicate_metadata_diagnostic() {
     );
 }
 
+#[test]
+fn malformed_functor_is_surfaced_not_silently_dropped() {
+    // A functor an existing input can still create — here an empty functor via
+    // add_fact("") — cannot form a predicate symbol. It must be counted and
+    // reported, not silently erased from the derived model (SPEC-024 CON-001).
+    let mut theory = Theory::new();
+    theory.add_fact("");
+
+    let report = Vocabulary::derive(&theory);
+    assert_eq!(report.summary.observed_occurrences, 1);
+    assert_eq!(report.summary.malformed_predicates, 1);
+    assert!(report.diagnostics.iter().any(|d| matches!(
+        d,
+        VocabularyDiagnostic::MalformedPredicate { functor, arity }
+            if functor.is_empty() && *arity == 0
+    )));
+    // The malformed occurrence produces no catalogue entry.
+    assert!(report.vocabulary.entries.is_empty());
+}
+
+#[test]
+fn repeated_malformed_functor_reported_once() {
+    let mut theory = Theory::new();
+    theory.add_fact("");
+    theory.add_fact("");
+    let report = Vocabulary::derive(&theory);
+    // Both occurrences are counted, but the diagnostic is deduped.
+    assert_eq!(report.summary.observed_occurrences, 2);
+    assert_eq!(report.summary.malformed_predicates, 1);
+    assert_eq!(
+        report
+            .diagnostics
+            .iter()
+            .filter(|d| matches!(d, VocabularyDiagnostic::MalformedPredicate { .. }))
+            .count(),
+        1
+    );
+}
+
 // ---------------------------------------------------------------------------
 // TEST-013: Reasoning parity
 // ---------------------------------------------------------------------------
