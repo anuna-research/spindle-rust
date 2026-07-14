@@ -6,6 +6,8 @@
 //! machine key. Enum strings are lowercase kebab case; unknown enum strings and
 //! inconsistent arities are rejected rather than preserved (SPEC-024 CON-007).
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use spindle_core::vocabulary::{
@@ -394,10 +396,12 @@ impl VocabularyReportDto {
                 });
             }
             // No core `DeclarationState` is simultaneously coherent and
-            // conflicting, and declaration origins belong to a coherent
-            // signature; reject field combinations no core state represents.
+            // conflicting, and a coherent declaration always carries its
+            // origins: `signature` and `declaration_origins` are present
+            // exactly together. Reject field combinations no core state
+            // represents, including a presence mismatch in either direction.
             if (entry.signature.is_some() && entry.conflict.is_some())
-                || (entry.declaration_origins.is_some() && entry.signature.is_none())
+                || (entry.signature.is_some() != entry.declaration_origins.is_some())
             {
                 return Err(VocabularyDtoError::ContradictoryDeclaration {
                     functor: entry.symbol.functor.clone(),
@@ -456,6 +460,11 @@ fn validate_signature(
             found: sig.arguments.len(),
         });
     }
+    // Track each name's first position so duplicate detection stays linear;
+    // this untrusted path has no argument-count bound the SPL parser has, so a
+    // rescan of preceding arguments per position would be Θ(n²) on crafted
+    // payloads.
+    let mut seen: HashMap<&str, usize> = HashMap::with_capacity(sig.arguments.len());
     for (position, arg) in sig.arguments.iter().enumerate() {
         PrimitiveSort::from_name(&arg.sort).ok_or_else(|| VocabularyDtoError::UnknownSort {
             found: arg.sort.clone(),
@@ -467,10 +476,7 @@ fn validate_signature(
                 position,
             });
         }
-        if let Some(first) = sig.arguments[..position]
-            .iter()
-            .position(|a| a.name == arg.name)
-        {
+        if let Some(&first) = seen.get(arg.name.as_str()) {
             return Err(VocabularyDtoError::DuplicateArgumentName {
                 functor: symbol.functor.clone(),
                 arity: symbol.arity,
@@ -479,6 +485,7 @@ fn validate_signature(
                 second: position,
             });
         }
+        seen.insert(arg.name.as_str(), position);
     }
     Ok(())
 }
@@ -781,6 +788,22 @@ mod tests {
             .unwrap();
         assert!(entry.signature.is_some());
         entry.conflict = Some(vec![]);
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::ContradictoryDeclaration { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_signature_without_declaration_origins() {
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
+        let entry = dto
+            .entries
+            .iter_mut()
+            .find(|e| e.symbol.functor == "assign-to" && e.symbol.arity == 2)
+            .unwrap();
+        assert!(entry.signature.is_some());
+        entry.declaration_origins = None;
         assert!(matches!(
             dto.validate(),
             Err(VocabularyDtoError::ContradictoryDeclaration { .. })
