@@ -20,6 +20,19 @@ pub enum PredicateSymbolError {
         /// The rejected argument count.
         actual: usize,
     },
+    /// The functor was empty. An empty functor cannot be rendered as a bare
+    /// indicator and its quoted form `""/n` is rejected by the recognizer, so it
+    /// could never round-trip (SPEC-024 CON-002, REQ-003).
+    #[error("predicate functor is empty")]
+    EmptyFunctor,
+    /// The functor contained a control character. The recognizer rejects control
+    /// characters in a quoted functor, so such a symbol could never round-trip
+    /// (SPEC-024 CON-002, REQ-003).
+    #[error("predicate functor contains a control character {ch:?}")]
+    ControlCharacter {
+        /// The offending character.
+        ch: char,
+    },
 }
 
 /// The structural identity of a predicate: functor plus arity (SPEC-024 REQ-001).
@@ -44,13 +57,23 @@ impl PredicateSymbol {
     /// Construct a predicate symbol from a functor and argument count.
     ///
     /// Returns [`PredicateSymbolError::ArityOverflow`] when `arity` cannot be
-    /// represented as a `u32`.
+    /// represented as a `u32`, and rejects functors that could never round-trip
+    /// through the indicator notation: an empty functor or one containing a
+    /// control character (SPEC-024 CON-002, REQ-003). Every accepted symbol
+    /// therefore renders to an indicator the recognizer parses back exactly.
     pub fn try_new(
         functor: InternedLiteralName,
         arity: usize,
     ) -> Result<Self, PredicateSymbolError> {
         let arity = u32::try_from(arity)
             .map_err(|_| PredicateSymbolError::ArityOverflow { actual: arity })?;
+        let spelling = functor.resolve();
+        if spelling.is_empty() {
+            return Err(PredicateSymbolError::EmptyFunctor);
+        }
+        if let Some(ch) = spelling.chars().find(|c| c.is_control()) {
+            return Err(PredicateSymbolError::ControlCharacter { ch });
+        }
         Ok(Self { functor, arity })
     }
 
@@ -195,6 +218,34 @@ mod tests {
             err,
             Err(PredicateSymbolError::ArityOverflow { actual: usize::MAX })
         );
+    }
+
+    #[test]
+    fn empty_and_control_functors_rejected() {
+        assert_eq!(
+            PredicateSymbol::try_new(InternedLiteralName::intern(""), 1),
+            Err(PredicateSymbolError::EmptyFunctor)
+        );
+        assert_eq!(
+            PredicateSymbol::try_new(InternedLiteralName::intern("a\nb"), 1),
+            Err(PredicateSymbolError::ControlCharacter { ch: '\n' })
+        );
+    }
+
+    #[test]
+    fn every_constructible_symbol_round_trips_through_its_indicator() {
+        // A functor with a space is not bare-renderable but round-trips quoted;
+        // control characters and empty functors are rejected at construction, so
+        // no constructible symbol can render to an indicator the recognizer would
+        // reject (SPEC-024 REQ-003).
+        for name in ["p", "assign-to", "rate/limit", "a b", "a\"b"] {
+            let s = sym(name, 2);
+            let rendered = s.indicator().to_string();
+            assert!(
+                !rendered.chars().any(|c| c.is_control()),
+                "rendered indicator {rendered:?} must be free of control characters",
+            );
+        }
     }
 
     #[test]

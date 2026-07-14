@@ -52,6 +52,18 @@ impl ShapeReport {
     pub fn is_empty(&self) -> bool {
         self.diagnostics.is_empty()
     }
+
+    /// The number of genuine mismatches — predicate or sort — excluding
+    /// [`ShapeDiagnostic::Deferred`] positions, which are not problems but
+    /// arguments (variables, arithmetic expressions) that cannot be validated
+    /// until grounding (SPEC-024 OBS-001). Use this for problem counts so an
+    /// ordinary rule with variable arguments is not reported as diagnostic noise.
+    pub fn mismatch_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| !matches!(d, ShapeDiagnostic::Deferred { .. }))
+            .count()
+    }
 }
 
 /// A set of validation constraints compiled from a predicate signature
@@ -242,6 +254,35 @@ mod tests {
                 actual: ObservedArgumentKind::Variable,
             }]
         );
+    }
+
+    #[test]
+    fn mismatch_count_excludes_deferred() {
+        // One real sort mismatch and one deferred variable: only the mismatch counts.
+        let s = shape("p", vec![PrimitiveSort::Integer, PrimitiveSort::Integer]);
+        let lit = Literal::from_ids(
+            intern("p"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("x")), Term::Symbol(intern("?Y"))],
+        );
+        let report = s.validate(&lit).unwrap();
+        assert_eq!(report.diagnostics.len(), 2);
+        assert_eq!(report.mismatch_count(), 1);
+    }
+
+    #[test]
+    fn mismatch_count_zero_for_all_variables() {
+        let s = shape("p", vec![PrimitiveSort::Integer, PrimitiveSort::Symbol]);
+        let lit = Literal::from_ids(
+            intern("p"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![Term::Symbol(intern("?X")), Term::Symbol(intern("?Y"))],
+        );
+        assert_eq!(s.validate(&lit).unwrap().mismatch_count(), 0);
     }
 
     #[test]

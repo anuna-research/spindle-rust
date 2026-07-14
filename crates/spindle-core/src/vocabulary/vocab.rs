@@ -1,6 +1,6 @@
 //! Provenanced vocabulary derivation (SPEC-024 CON-005, REQ-011, OBS-001).
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use super::declaration::MetaTarget;
 use super::profile::ArgumentProfile;
@@ -175,8 +175,10 @@ pub struct DerivationSummary {
     pub unresolved_predicate_metadata: usize,
     /// Observed symbols without a declaration.
     pub undeclared_uses: usize,
-    /// Shape diagnostics produced by validating observed uses of declared
-    /// symbols against their compiled shapes.
+    /// Genuine shape mismatches (predicate or sort) found by validating observed
+    /// uses of declared symbols against their compiled shapes. Deferred positions
+    /// (variables and arithmetic expressions) are not counted, since they are
+    /// pending validation rather than problems (SPEC-024 OBS-001).
     pub shape_diagnostics: usize,
 }
 
@@ -193,15 +195,22 @@ pub struct VocabularyReport {
 
 fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
     let occurrences = observed(theory);
+    let observed_occurrences = occurrences.len();
     let declaration_states = derive_declaration_states(theory);
 
-    // Group observations by symbol (BTreeMap keeps (functor, arity) order).
-    let mut per_symbol: BTreeMap<PredicateSymbol, SymbolAccumulator> = BTreeMap::new();
-    for occ in &occurrences {
-        let acc = per_symbol
-            .entry(occ.symbol)
-            .or_insert_with(|| SymbolAccumulator::new(occ.symbol));
-        acc.observe(occ);
+    // Group observations by symbol. Keying by the interned symbol in a HashMap
+    // hashes on the functor's `SymbolId`, avoiding the RwLock-guarded functor
+    // resolution that ordering a BTreeMap would incur on every insert; the final
+    // entries are sorted once, below (SPEC-024 NFR-002). Occurrences are consumed
+    // so each occurrence's kinds and origin move into the accumulator rather than
+    // being cloned.
+    let mut per_symbol: HashMap<PredicateSymbol, SymbolAccumulator> = HashMap::new();
+    for occ in occurrences {
+        let symbol = occ.symbol;
+        per_symbol
+            .entry(symbol)
+            .or_insert_with(|| SymbolAccumulator::new(symbol))
+            .observe(occ);
     }
     // Ensure declared-but-unobserved symbols still get an entry.
     for symbol in declaration_states.keys() {
@@ -231,7 +240,7 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
             Some(DeclarationState::Declared { signature, .. }) => {
                 let shape = Shape::from(signature);
                 for kinds in &acc.observed_kinds {
-                    shape_diagnostics += shape.validate_kinds(symbol, kinds).diagnostics.len();
+                    shape_diagnostics += shape.validate_kinds(symbol, kinds).mismatch_count();
                 }
             }
             None => {
@@ -262,12 +271,17 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
         }
     }
 
+    // Impose (functor code point, arity) order on the entries once, resolving
+    // each functor a single time instead of on every comparison during
+    // accumulation (SPEC-024 CON-001, NFR-001).
+    entries.sort_by_cached_key(|e| (e.symbol.functor().resolve().to_string(), e.symbol.arity()));
+
     // Deterministic diagnostic order independent of HashMap iteration.
     diagnostics.sort_by_key(diagnostic_key);
 
     let summary = DerivationSummary {
         distinct_symbols: entries.len(),
-        observed_occurrences: occurrences.len(),
+        observed_occurrences,
         declarations: theory.predicate_declarations().len(),
         declaration_conflicts,
         unresolved_predicate_metadata,
@@ -291,9 +305,10 @@ fn diagnostic_key(d: &VocabularyDiagnostic) -> (u8, PredicateSymbol) {
     }
 }
 
-/// Read predicate descriptions from `MetaTarget::Predicate` entries.
-fn predicate_descriptions(theory: &Theory) -> BTreeMap<PredicateSymbol, String> {
-    let mut out = BTreeMap::new();
+/// Read predicate descriptions from `MetaTarget::Predicate` entries. The result
+/// is looked up by symbol only, so a `HashMap` (no functor resolution) suffices.
+fn predicate_descriptions(theory: &Theory) -> HashMap<PredicateSymbol, String> {
+    let mut out = HashMap::new();
     for (target, meta) in theory.metadata() {
         if let MetaTarget::Predicate(symbol) = target
             && let Some(value) = meta.properties.get("description")
@@ -324,12 +339,12 @@ impl SymbolAccumulator {
         }
     }
 
-    fn observe(&mut self, occ: &ObservedOccurrence) {
+    fn observe(&mut self, occ: ObservedOccurrence) {
         for (position, kind) in occ.kinds.iter().enumerate() {
             self.profile.observe(position, *kind);
         }
-        self.origins.push(occ.origin.clone());
-        self.observed_kinds.push(occ.kinds.clone());
+        self.origins.push(occ.origin);
+        self.observed_kinds.push(occ.kinds);
     }
 }
 
