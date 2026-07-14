@@ -2,7 +2,7 @@
 id: SPEC-025
 title: Linked-Data and Semantic-Web Ingestion (A-Box Bridge)
 status: draft
-version: 0.4.0
+version: 0.4.1
 created: 2026-07-14
 last-updated: 2026-07-14
 authors: Claude (Opus 4.8, AI agent)
@@ -590,12 +590,15 @@ individuals appear until the reasoner runs user-supplied rules.
 
 ### REQ-011: Determinism
 
-For **byte-identical** source input, identical options, and an identical prefix
-registry, the produced theory, its SPL rendering, its `IngestReport`, and its
-diagnostics SHALL be byte-identical across runs (independent of hash-map
-iteration order; skolem symbols are a function of `(dataset identity, encounter
-ordinal)` per [[SPEC-025-linked-data-ingestion#REQ-004]]; duplicate-fact labels
-are assigned by first encounter). For inputs that
+For **byte-identical** source input, identical options — including the same
+`instance_token` value, or none — and an identical prefix registry, the produced
+theory, its SPL rendering, its `IngestReport`, and its diagnostics SHALL be
+byte-identical across runs (independent of hash-map iteration order; skolem
+symbols are a function of `(effective dataset key, encounter ordinal)` per
+[[SPEC-025-linked-data-ingestion#REQ-004]], where the effective dataset key
+includes the instance token when set; duplicate-fact labels are assigned by
+first encounter). Two runs differ in output **only** when their `instance_token`
+values differ. For inputs that
 are equal only up to triple reordering, the produced **fact set** (ignoring
 skolem symbol spellings and label assignment) SHALL be isomorphic, but output
 bytes MAY differ: encounter-order skolem naming cannot be reorder-invariant,
@@ -610,11 +613,13 @@ deferred.
 ### NFR-001: Determinism
 
 See [[SPEC-025-linked-data-ingestion#REQ-011]]. Skolem naming and duplicate
-labeling SHALL derive from a deterministic function of `(dataset identity,
-encounter ordinal)`, never from a random or clock source or from hash-map
-iteration. An optional caller-supplied ingestion-instance token
-([[SPEC-025-linked-data-ingestion#REQ-004]]) is the sole permitted source of
-cross-run variation and is excluded from the byte-identical guarantee.
+labeling SHALL derive from a deterministic function of `(effective dataset key,
+encounter ordinal)` — the effective dataset key being the source-supplied
+`DatasetId` prefixed by the optional `instance_token`
+([[SPEC-025-linked-data-ingestion#REQ-004]]) — never from a random or clock
+source or from hash-map iteration. The instance token is part of that key, so a
+fixed token (or none) is fully deterministic; only runs whose token values
+**differ** are excluded from the byte-identical guarantee.
 
 ### NFR-002: Bounded, streaming parsing
 
@@ -1110,7 +1115,9 @@ findings (4 P1, 3 P2) on identity/error contracts, provenance-preserving source
 and dedup APIs, and SPL round-trip of common terms and graph metadata; all are
 addressed in 0.3.0. Review round 3 returned 4 findings (1 P1, 3 P2) on the
 unexposed instance-token option, graph provenance in the canonical `Theory`, and
-fixed-token determinism; all are addressed in 0.4.0 — see the changelog.
+fixed-token determinism; all are addressed in 0.4.0. Round 4 (1 P2) aligned the
+REQ-011 and NFR-001 determinism clauses with the fixed-token behavior; addressed
+in 0.4.1 — see the changelog.
 
 Dead-link note: the concept links [[W3C RDF 1.2 Concepts]],
 [[SPARQL 1.1 Query Language]], and [[RDF Dataset Canonicalization]] are
@@ -1119,7 +1126,7 @@ intentionally dead pending concept pages for these external standards
 Links to [[SPEC-024-predicate-model-and-vocabulary]] resolve once that branch
 merges.
 
-Current gate status: **pending** (rounds 2–3 addressed in 0.3.0–0.4.0; awaiting
+Current gate status: **pending** (rounds 2–4 addressed in 0.3.0–0.4.1; awaiting
 human maintainer approval and dependent SPEC-024 merge).
 
 ## Changelog
@@ -1127,6 +1134,13 @@ human maintainer approval and dependent SPEC-024 merge).
 <details>
 <summary>Revision history</summary>
 
+- 0.4.1 (2026-07-14): Address adversarial review round 4 (1 finding). [P2]
+  Aligned the normative determinism clauses with the 0.4.0 fixed-token behavior:
+  REQ-011 and NFR-001 now define skolem naming over `(effective dataset key,
+  encounter ordinal)` — the key including `instance_token` when set — and exclude
+  only runs whose token values *differ*, so a fixed token stays deterministic
+  ([[SPEC-025-linked-data-ingestion#REQ-011]],
+  [[SPEC-025-linked-data-ingestion#NFR-001]]).
 - 0.4.0 (2026-07-14): Address adversarial review round 3 (4 findings). [P1]
   Exposed the ingestion-instance token as `IngestOptions::instance_token` and
   defined the **effective dataset key** (`(token, DatasetId)`) it forms for
