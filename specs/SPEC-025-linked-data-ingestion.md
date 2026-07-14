@@ -2,7 +2,7 @@
 id: SPEC-025
 title: Linked-Data and Semantic-Web Ingestion (A-Box Bridge)
 status: draft
-version: 0.2.0
+version: 0.3.0
 created: 2026-07-14
 last-updated: 2026-07-14
 authors: Claude (Opus 4.8, AI agent)
@@ -288,15 +288,24 @@ small and explicit.
   the core deduplicates identical fact literals, retaining a single rule
   label. Trust weighting therefore *annotates* rather than *reconciles*.
   Ingestion compensates at its own layer (deterministic label assignment,
-  duplicate reporting — [[SPEC-025-linked-data-ingestion#CON-008]]); true
-  reconciliation is a deferred core change.
+  full assertion-record retention — [[SPEC-025-linked-data-ingestion#CON-008]]);
+  true reconciliation is a deferred core change.
+- **G-5 — no per-fact metadata syntax in SPL:** `(given ...)` facts carry no
+  label or inline-metadata grammar, and the `claims` block exposes only fixed
+  keywords, so a quad's named-`graph` context cannot be rendered to parseable
+  SPL. Ingestion retains every `(origin, graph)` assertion in the `IngestReport`
+  ([[SPEC-025-linked-data-ingestion#CON-008]]) — lossless programmatically — but
+  SPL round-trip preserves only `source` provenance. A parseable graph syntax
+  (e.g. a `:graph` `claims` field plus a parser contract) is deferred
+  ([[SPEC-025-linked-data-ingestion#Deferred Decisions]]).
 
 **Verdict:** the predicate branch affords everything explicit-triple ingestion
 needs, and several pieces (`ArgumentProfile`, class-as-unary, the slash-quoting
 indicator recognizer, predicate metadata for `rdfs:comment`, `GroundLiteral`)
 are close to purpose-built for it. The real limits are `Term`'s untagged value
-space (G-1) and the absence of alternative-proof aggregation (G-4), which this
-spec accepts and documents for v1.
+space (G-1), the absence of alternative-proof aggregation (G-4), and SPL's lack
+of per-fact metadata for graph context (G-5) — all accepted and documented for
+v1, with programmatic retention where SPL cannot round-trip.
 
 ## 5. Architecture
 
@@ -360,7 +369,12 @@ Internal fact identity SHALL use the full IRI, verbatim, as one interned
 symbol. CURIE compaction SHALL be applied only in presentation layers (human-
 facing SPL emission with compaction explicitly enabled, CLI display) through a
 single global prefix registry, SHALL be deterministic given the same registry,
-and SHALL never affect identity, unification, or round-tripping.
+and SHALL never affect identity or unification. The round-trip guarantee
+([[SPEC-025-linked-data-ingestion#REQ-008]]) is scoped to **default full-IRI
+emission**; compacted display is opt-in (`--compact-iris`) and is explicitly
+**non-round-trippable**, because the SPL parser has no prefix registry and would
+intern a CURIE such as `foaf:knows` literally rather than recovering the full
+IRI. Round-trippable emission therefore keeps compaction off.
 
 **Acceptance criteria:** two documents binding `ex:` to different namespaces
 produce facts whose functors are the two distinct full IRIs — no collision; the
@@ -401,18 +415,35 @@ predicate position.
 
 ### REQ-004: Blank-node skolemization
 
-Blank nodes SHALL be skolemized to fresh symbols scoped to **one ingestion of
-one source dataset**: within a single ingestion run of a single source, equal
-blank-node identifiers — including across named graphs of one dataset, where
-blank nodes may be shared — map to one symbol; across sources, or across
-separate ingestion runs, they never unify. Blank-node labels are not stable
-identifiers ([[W3C RDF 1.2 Concepts]]); skolem symbols therefore encode the
-ingestion instance, not the label alone.
+Blank nodes SHALL be skolemized to symbols scoped to a **dataset identity** — a
+stable key derived from the retrieval origin (and, for a multi-document source,
+the specific document that supplied the quad;
+[[SPEC-025-linked-data-ingestion#REQ-007]]). Within one dataset identity, equal
+blank-node labels — including across named graphs of one dataset, where blank
+nodes may be shared — map to one symbol via a deterministic per-dataset
+encounter ordinal; across distinct dataset identities they never unify, because
+the dataset key is part of the skolem spelling. Blank-node labels are not stable
+identifiers across datasets ([[W3C RDF 1.2 Concepts]]); the dataset key, not the
+label alone, establishes identity.
 
-**Acceptance criteria:** `_:b1` in two separately-ingested documents produces
-two distinct symbols; `_:b1` twice within one document produces the same
-symbol; `_:b1` appearing in two named graphs of one TriG dataset produces the
-same symbol.
+Skolem naming is therefore a pure function of `(dataset identity, encounter
+ordinal)`, so re-ingesting a byte-identical dataset reproduces the same symbols
+— required for byte-identical determinism
+([[SPEC-025-linked-data-ingestion#REQ-011]]). Cross-run *freshness* (two
+ingestions of the same bytes yielding non-unifying blank nodes) is **not** a
+default guarantee, because it is mutually exclusive with that determinism under
+spelling-interned symbols and a no-clock/no-random rule
+([[SPEC-025-linked-data-ingestion#NFR-001]]). A caller that needs distinct
+identities per ingestion MAY supply an explicit **ingestion-instance token**
+mixed into the dataset key; that token is excluded from the REQ-011 byte-
+identical guarantee (varying it necessarily varies output).
+
+**Acceptance criteria:** `_:b1` from two distinct dataset identities (two
+different origins, or two documents of a dereferencing source) produces two
+distinct symbols; `_:b1` twice within one dataset produces the same symbol;
+`_:b1` shared across two named graphs of one TriG dataset produces the same
+symbol; re-ingesting the same dataset with the same options reproduces identical
+symbols (unless an instance token is supplied).
 
 **Traces:** [[SPEC-025-linked-data-ingestion#CON-001]], [[SPEC-025-linked-data-ingestion#TEST-004]].
 
@@ -437,10 +468,13 @@ term as a variable.
 
 ### REQ-006: Per-source provenance keyed by retrieval origin
 
-Ingestion SHALL attribute each fact to its **retrieval origin** — the canonical
-file path, URL, or authenticated endpoint IRI the bytes were actually read
-from — through the existing `claims`/`source` metadata mechanism, and SHALL NOT
-introduce a second provenance model. The quad's graph name, when present,
+Ingestion SHALL attribute each fact to the **retrieval origin of the quad that
+produced it** — the canonical file path, URL, or authenticated endpoint IRI the
+bytes were actually read from, carried per quad on
+[[SPEC-025-linked-data-ingestion#CON-005|`AttributedQuad`]] so a multi-document
+source (redirects, dereferencing) never lets one document's content inherit
+another's origin or trust — through the existing `claims`/`source` metadata
+mechanism, and SHALL NOT introduce a second provenance model. The quad's graph name, when present,
 SHALL be recorded as a separate `graph` context metadatum and SHALL NOT be used
 as the claimant: a graph name is chosen by the (possibly untrusted) document
 and is not required to denote its graph ([[W3C RDF 1.2 Concepts]]); it may
@@ -469,9 +503,11 @@ RDF-XML.
 
 **Acceptance criteria:** the same `Mapping` produces identical facts regardless
 of which adapter supplied the quads; a well-formed Turtle document ingests
-successfully; a malformed document in atomic mode yields a structured
-`SourceError` and **no** theory; the same document in streaming mode yields the
-facts mapped before the failure plus a diagnostic identifying it.
+successfully; a malformed document in atomic mode yields `Err(IngestError)`
+whose `report.theory` is `None` (with counters and a fatal diagnostic retained)
+and whose `cause` is the structured `SourceError`; the same document in
+streaming mode yields `Ok` with the facts mapped before the failure plus a
+diagnostic identifying it.
 
 **Traces:** [[SPEC-025-linked-data-ingestion#CON-005]], [[SPEC-025-linked-data-ingestion#CON-008]], [[SPEC-025-linked-data-ingestion#ADR-005]], [[SPEC-025-linked-data-ingestion#ADR-007]], [[SPEC-025-linked-data-ingestion#TEST-007]].
 
@@ -479,23 +515,39 @@ facts mapped before the failure plus a diagnostic identifying it.
 
 Ingestion SHALL return a `Theory` — the canonical output — and SHALL provide an
 emitter rendering that theory (including `claims` provenance) to SPL text with
-full IRIs (compaction off). Because SPL re-infers term variants from spelling
-(a symbol spelled `2` reparses as `Integer(2)`; a `Float` without an exponent
-reparses as `Decimal`), byte-level round-trip fidelity is guaranteed **only
-for facts whose terms have injective SPL spellings**. The emitter SHALL detect
-every fact containing a `Symbol` whose spelling matches SPL's integer,
-decimal, or float grammar, or a `Float` whose rendering lacks an exponent
-marker, and SHALL report each in the `IngestReport` as a `lossy_spl`
-diagnostic. Re-parsing emitted SPL SHALL reproduce the original facts and
-source metadata exactly when no `lossy_spl` diagnostic was reported, and
-re-emission after re-parsing SHALL be byte-identical (idempotence from the
-first re-parse onward). A typed SPL term syntax that removes this caveat is
-deferred ([[SPEC-025-linked-data-ingestion#Deferred Decisions]]).
+full IRIs (compaction off). SPL re-infers term variants from spelling, so the
+emitter SHALL render terms to avoid ambiguity where it can and flag the
+residue:
+
+- **`Decimal` disambiguation:** every `Decimal` SHALL be rendered with a
+  fractional marker (minimum `.0`), so a zero-scale decimal such as
+  `"2"^^xsd:decimal`, and an integer promoted beyond `i64` into `Decimal`, never
+  matches SPL's integer grammar. Since SPL reparses a `.`-bearing, exponent-less
+  numeric token as `Decimal` and `rust_decimal` compares by value (`2 == 2.0`),
+  such facts round-trip to an **equal** `Term` with no diagnostic.
+- **`lossy_spl` residue:** the emitter SHALL detect and report in the
+  `IngestReport` (as `lossy_spl`) every fact containing a `Symbol` whose spelling
+  matches SPL's integer, decimal, or float grammar; a `Float` whose rendering
+  lacks an exponent marker (it would reparse as `Decimal`); or any `Decimal`
+  whose rendering still matches the integer grammar (a defensive check on the
+  marker rule).
+
+Round-trip fidelity covers **facts and `source` (origin) provenance**. The
+`graph` context is **not** representable in current SPL — `(given ...)` facts
+have no per-fact metadata syntax and the `claims` block carries only fixed
+keywords — so `graph` is retained only in the `IngestReport` assertion log
+([[SPEC-025-linked-data-ingestion#CON-008]]); a parseable `graph` SPL syntax is
+deferred ([[SPEC-025-linked-data-ingestion#Deferred Decisions]]). Re-parsing
+emitted SPL SHALL reproduce the original facts and `source` metadata exactly
+when no `lossy_spl` diagnostic was reported, and re-emission after re-parsing
+SHALL be byte-identical (idempotence from the first re-parse onward). A typed
+SPL term syntax that removes the `lossy_spl` caveat is likewise deferred.
 
 **Acceptance criteria:** for a corpus with no `lossy_spl` diagnostics,
-emit → parse → compare yields equal facts and source metadata; ingesting
-`"2"^^xsd:string` produces a `lossy_spl` diagnostic naming the fact; for any
-corpus, parse(emit(T)) followed by emit is byte-stable.
+emit → parse → compare yields equal facts and `source` metadata; `"2"^^xsd:decimal`
+and an integer beyond `i64` round-trip as equal `Decimal`s with **no** `lossy_spl`
+diagnostic; `"2"^^xsd:string` produces a `lossy_spl` diagnostic naming the fact;
+for any corpus, parse(emit(T)) followed by emit is byte-stable.
 
 **Traces:** [[SPEC-025-linked-data-ingestion#CON-004]], [[SPEC-025-linked-data-ingestion#CON-008]], [[SPEC-025-linked-data-ingestion#TEST-008]].
 
@@ -533,8 +585,9 @@ individuals appear until the reasoner runs user-supplied rules.
 For **byte-identical** source input, identical options, and an identical prefix
 registry, the produced theory, its SPL rendering, its `IngestReport`, and its
 diagnostics SHALL be byte-identical across runs (independent of hash-map
-iteration order; skolem symbols use a per-ingestion counter in input encounter
-order; duplicate-fact labels are assigned by first encounter). For inputs that
+iteration order; skolem symbols are a function of `(dataset identity, encounter
+ordinal)` per [[SPEC-025-linked-data-ingestion#REQ-004]]; duplicate-fact labels
+are assigned by first encounter). For inputs that
 are equal only up to triple reordering, the produced **fact set** (ignoring
 skolem symbol spellings and label assignment) SHALL be isomorphic, but output
 bytes MAY differ: encounter-order skolem naming cannot be reorder-invariant,
@@ -549,8 +602,11 @@ deferred.
 ### NFR-001: Determinism
 
 See [[SPEC-025-linked-data-ingestion#REQ-011]]. Skolem naming and duplicate
-labeling SHALL derive from deterministic per-ingestion encounter order, never
-from a random or clock source or from hash-map iteration.
+labeling SHALL derive from a deterministic function of `(dataset identity,
+encounter ordinal)`, never from a random or clock source or from hash-map
+iteration. An optional caller-supplied ingestion-instance token
+([[SPEC-025-linked-data-ingestion#REQ-004]]) is the sole permitted source of
+cross-run variation and is excluded from the byte-identical guarantee.
 
 ### NFR-002: Bounded, streaming parsing
 
@@ -585,8 +641,10 @@ pub struct MappingOptions {
     pub limits: IngestLimits,
 }
 
-/// Pure: no I/O. Skolem state is a per-ingestion counter carried in `ctx`.
-pub fn map_quad(quad: &Quad, ctx: &mut MapContext, opts: &MappingOptions)
+/// Pure: no I/O. `ctx` holds per-`DatasetId` skolem counters, so blank-node
+/// scope follows the quad's own dataset (REQ-004); `input.origin` becomes the
+/// fact's claimant (REQ-006).
+pub fn map_quad(input: &AttributedQuad, ctx: &mut MapContext, opts: &MappingOptions)
     -> Result<MappedFact, MapError>;
 ```
 
@@ -656,24 +714,44 @@ Facts are grouped by `origin`; each group renders as:
 (Illustrative shape with `<placeholders>`, not parseable SPL — hence the plain
 fence.)
 
-which is exactly the existing `claims` block. The `graph` metadatum, when
-present, is rendered as inline fact metadata, not as a claimant. Callers
-supply `(trusts <origin> <weight>)` separately. With `provenance = false`,
-facts render as bare `(given ...)` statements. Round-trippable emission uses
-full IRIs; CURIE compaction is opt-in display only
-([[SPEC-025-linked-data-ingestion#CON-002]]).
+which is exactly the existing `claims` block. The `graph` metadatum is **not**
+rendered in SPL: `(given ...)` facts have no per-fact metadata syntax and the
+`claims` block carries only fixed keywords, so graph context is retained only in
+the `IngestReport` assertion log ([[SPEC-025-linked-data-ingestion#CON-008]]);
+a parseable graph syntax is deferred
+([[SPEC-025-linked-data-ingestion#Deferred Decisions]]). Every `Decimal` is
+rendered with a fractional marker so it does not reparse as `Integer`
+([[SPEC-025-linked-data-ingestion#REQ-008]]). Callers supply
+`(trusts <origin> <weight>)` separately. With `provenance = false`, facts render
+as bare `(given ...)` statements. Round-trippable emission uses full IRIs; CURIE
+compaction is opt-in display only ([[SPEC-025-linked-data-ingestion#CON-002]]).
 
 ### CON-005: TripleSource
 
 ```rust
+/// A quad annotated with the identity of the document that actually supplied
+/// it, so a multi-document source attributes each quad correctly and scopes
+/// blank nodes per document.
+pub struct AttributedQuad {
+    pub quad: Quad,
+    /// Retrieval origin (claimant) of *this* quad — the URL/path the bytes were
+    /// read from, which for a dereferencing source varies within one stream
+    /// (REQ-006).
+    pub origin: Symbol,
+    /// Dataset identity for blank-node scoping (REQ-004): a stable key for the
+    /// specific document this quad came from. Two quads from different fetched
+    /// documents carry different `dataset` keys even under one `TripleSource`.
+    pub dataset: DatasetId,
+}
+
 pub trait TripleSource {
-    /// Stream quads. Item errors carry a fatality classification.
+    /// Stream attributed quads. Item errors carry a fatality classification.
+    /// Each item already knows its own origin and dataset scope, so the driver
+    /// never inherits one document's provenance for another's quads.
     fn quads(&mut self)
-        -> Result<Box<dyn Iterator<Item = Result<Quad, SourceError>> + '_>, SourceError>;
-    /// The retrieval origin used as claimant for this source's quads (REQ-006).
-    fn origin(&self) -> Option<Symbol>;
-    /// Namespace declarations observed in the source (advisory, presentation
-    /// only — CON-002). Empty when the format has none.
+        -> Result<Box<dyn Iterator<Item = Result<AttributedQuad, SourceError>> + '_>, SourceError>;
+    /// Namespace declarations observed so far (advisory, presentation only —
+    /// CON-002). Empty when the format has none.
     fn prefixes(&self) -> Vec<(String, String)>;
 }
 
@@ -683,6 +761,11 @@ pub struct FileSource { /* format, reader, base IRI, limits */ }   // Phase 1
 pub struct SparqlSource { /* endpoint, CONSTRUCT query, http, limits */ } // Phase 2
 pub struct DereferenceSource { /* seed IRIs, http, limits, visited */ }   // Phase 3
 ```
+
+A single-document `FileSource` emits one `dataset`/`origin` for all its quads; a
+`DereferenceSource` emits a distinct `dataset`/`origin` per fetched document, so
+per-quad provenance (REQ-006) and per-document blank-node scope (REQ-004) both
+hold without the driver guessing.
 
 ### CON-006: Limits
 
@@ -731,29 +814,56 @@ pub struct IngestOptions {
     pub error_mode: ErrorMode,             // default Atomic
 }
 
+/// One (origin, graph) assertion of a fact. The reasoning `Theory` holds each
+/// fact literal once (the core deduplicates by literal), but *every* assertion
+/// context is retained here so no (origin, graph) pair is lost — including the
+/// same triple asserted in two named graphs of one origin, which is invisible
+/// to literal dedup because `graph` is not part of fact identity.
+pub struct AssertionRecord {
+    pub fact: GroundLiteral,
+    pub origin: Symbol,
+    pub graph: Option<Symbol>,
+}
+
 pub struct IngestReport {
-    pub theory: Option<Theory>,            // None on atomic failure
+    /// `Some` on success; `None` only inside `IngestError::report` on atomic
+    /// failure.
+    pub theory: Option<Theory>,
     pub triples_read: u64,
-    pub facts_added: u64,
-    /// Identical fact asserted by >1 origin: the label/`source` metadatum is
-    /// assigned to the first origin in deterministic ingest order; all other
-    /// claimants are recorded here (G-4).
-    pub duplicates: Vec<DuplicateFact>,
+    pub facts_added: u64,           // distinct fact literals in `theory`
+    /// Every (origin, graph) assertion, in deterministic encounter order —
+    /// a superset of `facts_added` whenever a literal is asserted more than
+    /// once (multiple origins, multiple graphs, or both). The canonical
+    /// `source` metadatum for a deduplicated literal is assigned to its first
+    /// record; the rest remain recoverable here (G-4, G-5).
+    pub assertions: Vec<AssertionRecord>,
     /// Term-projection degrades (CON-003), `?`-escapes (REQ-005),
     /// SPL-lossy facts (REQ-008), limit hits (REQ-009), prefix conflicts
     /// (CON-002), per-item source errors (streaming mode).
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// Carries the partial report *and* the fatal cause on atomic failure, so
+/// counters, diagnostics, and `theory = None` are never lost to the error path.
+pub struct IngestError {
+    pub report: IngestReport,   // theory = None
+    pub cause: SourceError,
+}
+
 pub fn ingest(source: &mut dyn TripleSource, opts: &IngestOptions)
-    -> Result<IngestReport, SourceError>;   // Err only on fatal error in Atomic mode
+    -> Result<IngestReport, IngestError>;   // Err (with report) only on a fatal error in Atomic mode
 ```
 
-`ingest` owns deduplication and stable label assignment (encounter order,
-[[SPEC-025-linked-data-ingestion#REQ-011]]): the core reasoner deduplicates
-identical fact literals and would otherwise keep an arbitrary label, so the
-bridge resolves it deterministically *before* the core sees the theory and
-reports every suppressed claimant.
+`ingest` owns deduplication, assertion-record retention, and stable label
+assignment (encounter order, [[SPEC-025-linked-data-ingestion#REQ-011]]): the
+core reasoner deduplicates identical fact literals and would otherwise keep an
+arbitrary label, so the bridge resolves labels deterministically *before* the
+core sees the theory while retaining every suppressed `(origin, graph)`
+assertion in `assertions`. Deduplication for the reasoner and provenance
+retention are thus separate concerns: the `Theory` is minimal, the report is
+complete. On an atomic fatal error, `ingest` returns `Err(IngestError)` whose
+`report` carries `theory = None`, the counters and diagnostics gathered so far,
+and whose `cause` is the fatal `SourceError`.
 
 ## 9. Architecture Decisions
 
@@ -893,9 +1003,9 @@ Atomic vs streaming behavior is defined in
 - **Negative output:** beyond-`i64` → `Decimal`; beyond-`Decimal` → `Symbol` + diagnostic; ill-typed → `Symbol` + diagnostic; no literal aborts ingestion; numeric kinds stay distinct in `Vocabulary::derive`.
 
 ### TEST-004: Skolemization
-- **Positive:** repeated `_:b1` in one document unifies; `_:b1` shared across two named graphs of one TriG dataset unifies.
-- **Negative input:** same label across two documents; same document ingested twice.
-- **Negative output:** cross-source and cross-run blank nodes never unify.
+- **Positive:** repeated `_:b1` in one dataset unifies; `_:b1` shared across two named graphs of one TriG dataset unifies; re-ingesting the same dataset with the same options reproduces identical skolem symbols (determinism).
+- **Negative input:** same label across two distinct dataset identities (two origins, or two documents of a dereferencing source); the same dataset re-ingested under distinct explicit instance tokens.
+- **Negative output:** blank nodes from distinct dataset identities never unify; with distinct instance tokens the two ingestions do not unify (and REQ-011 byte-identity is not claimed across differing tokens).
 
 ### TEST-005: Ground output and variable escaping
 - **Positive:** every fact is a `GroundLiteral`.
@@ -910,12 +1020,12 @@ Atomic vs streaming behavior is defined in
 ### TEST-007: TripleSource / ingest driver / static adapter
 - **Positive:** Turtle/N-Triples/N-Quads/TriG/RDF-XML ingest to identical facts.
 - **Negative input:** malformed document in atomic mode; the same in streaming mode.
-- **Negative output:** atomic → structured fatal `SourceError`, `theory = None`; streaming → partial theory plus a diagnostic; never a silent partial theory.
+- **Negative output:** atomic → `Err(IngestError)` whose `cause` is the fatal `SourceError` and whose `report.theory` is `None` (counters/diagnostics present); streaming → `Ok` with a partial theory plus a diagnostic; never a silent partial theory.
 
 ### TEST-008: SPL round-trip (scoped)
-- **Positive:** corpus without `lossy_spl` diagnostics: emit (full IRIs), re-parse, compare facts + source metadata; re-emission byte-stable.
-- **Negative input:** `"2"^^xsd:string`; a `Float` rendering without exponent.
-- **Negative output:** each such fact produces a `lossy_spl` diagnostic naming it; parse∘emit is idempotent from the first re-parse onward.
+- **Positive:** corpus without `lossy_spl` diagnostics: emit (full IRIs), re-parse, compare facts + `source` metadata; re-emission byte-stable. `"2"^^xsd:decimal` and an integer beyond `i64` (promoted to `Decimal`) emit with a `.0` marker and re-parse as **equal** `Decimal`s with no `lossy_spl` diagnostic.
+- **Negative input:** `"2"^^xsd:string`; a `Float` rendering without exponent; a fact carrying a `graph` context.
+- **Negative output:** the numeric-string and exponent-less-float facts each produce a `lossy_spl` diagnostic naming them; the `graph` context is absent from the emitted SPL but present in the `IngestReport` assertion log; parse∘emit is idempotent from the first re-parse onward.
 
 ### TEST-009: Bounded ingestion
 - **Positive:** ingest within limits.
@@ -955,6 +1065,7 @@ Atomic vs streaming behavior is defined in
 | Trust-aware conflict reconciliation (defeasible ingestion mode; core alternative-proof aggregation across claimants) | Imported triples are strict facts; the core deduplicates identical literals and keeps conflicting strict facts provable (G-4) | Multi-source arbitration use case; core reasoner spec |
 | Tagged term encoding (IRI vs string vs lang-tagged vs skolem) | `Term` has four untagged variants; collisions documented in [[SPEC-025-linked-data-ingestion#Term Projection]] | Fidelity requirement from a consumer; `Term` extension spec |
 | Typed SPL term syntax (or quote-aware string terms) | SPL re-infers term variants from spelling, so `Symbol("2")`-style facts cannot round-trip byte-exactly ([[SPEC-025-linked-data-ingestion#REQ-008]]) | SPL grammar revision |
+| Parseable graph-context SPL syntax (e.g. a `:graph` `claims` field + parser contract) | `(given ...)` facts have no per-fact metadata grammar, so named-graph context is retained only in the `IngestReport` (G-5) and not round-tripped through SPL | Consumer needing graph context in SPL text |
 | T-Box → rules (RDFS/OWL entailment) | Open-world/monotonic vs closed-world/defeasible needs a formal mapping policy | Successor spec; interoperability use case |
 | SHACL validation onto `Shape` | Needs a SHACL-core → `PredicateSignature`/`Shape` mapping | Validation use case; builds on SPEC-024 `Shape` |
 | SPARQL `SELECT` row mapping | `SELECT` yields solution mappings, not a graph; needs its own row → fact contract | Analyst demand beyond `CONSTRUCT` |
@@ -975,7 +1086,10 @@ technical-concept links. It depends on the
 [[SPEC-024-predicate-model-and-vocabulary]] branch being merged.
 
 Review round 1 (adversarial, different model family) returned 11 findings
-(7 high, 4 medium); all are addressed in 0.2.0 — see the changelog.
+(7 high, 4 medium); all are addressed in 0.2.0. Review round 2 returned 7
+findings (4 P1, 3 P2) on identity/error contracts, provenance-preserving source
+and dedup APIs, and SPL round-trip of common terms and graph metadata; all are
+addressed in 0.3.0 — see the changelog.
 
 Dead-link note: the concept links [[W3C RDF 1.2 Concepts]],
 [[SPARQL 1.1 Query Language]], and [[RDF Dataset Canonicalization]] are
@@ -984,14 +1098,38 @@ intentionally dead pending concept pages for these external standards
 Links to [[SPEC-024-predicate-model-and-vocabulary]] resolve once that branch
 merges.
 
-Current gate status: **pending** (awaiting round-2 review and human
-maintainer approval).
+Current gate status: **pending** (round-2 review addressed in 0.3.0; awaiting
+human maintainer approval and dependent SPEC-024 merge).
 
 ## Changelog
 
 <details>
 <summary>Revision history</summary>
 
+- 0.3.0 (2026-07-14): Address adversarial review round 2 (7 findings).
+  [P1] `TripleSource` now streams `AttributedQuad` carrying per-quad origin and
+  a `DatasetId` scope, so multi-document sources attribute each quad and isolate
+  blank nodes per document ([[SPEC-025-linked-data-ingestion#CON-005]],
+  [[SPEC-025-linked-data-ingestion#REQ-006]]). [P1] Reconciled blank-node scope
+  with determinism: skolem identity is a function of `(dataset identity,
+  encounter ordinal)` (deterministic, re-ingestion-stable), cross-run freshness
+  is opt-in via an instance token excluded from the byte-identical guarantee
+  ([[SPEC-025-linked-data-ingestion#REQ-004]],
+  [[SPEC-025-linked-data-ingestion#REQ-011]],
+  [[SPEC-025-linked-data-ingestion#NFR-001]]). [P1] Replaced the
+  multi-origin-only `duplicates` list with an `AssertionRecord` log retaining
+  every `(origin, graph)` assertion, separating reasoning dedup from provenance
+  retention ([[SPEC-025-linked-data-ingestion#CON-008]], new G-5). [P1] `ingest`
+  returns `Err(IngestError)` carrying the partial report (`theory = None`) and
+  fatal cause, so atomic-failure counters/diagnostics survive
+  ([[SPEC-025-linked-data-ingestion#CON-008]],
+  [[SPEC-025-linked-data-ingestion#REQ-007]]). [P2] Every `Decimal` renders with
+  a fractional marker so zero-scale and beyond-`i64` decimals round-trip as equal
+  `Decimal`s ([[SPEC-025-linked-data-ingestion#REQ-008]]). [P2] Scoped `graph`
+  context out of SPL round-trip (retained in the `IngestReport`; parseable syntax
+  deferred — G-5). [P2] Scoped the round-trip guarantee to full-IRI emission;
+  compacted display is explicitly non-round-trippable
+  ([[SPEC-025-linked-data-ingestion#REQ-002]]).
 - 0.2.0 (2026-07-14): Address adversarial review round 1 (11 findings).
   Narrowed the trust claim to provenance *annotation* and named the
   strict-fact/deduplication limits (new G-4, revised
