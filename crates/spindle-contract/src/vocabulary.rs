@@ -264,9 +264,11 @@ pub struct VocabularyEntryDto {
     /// declaration.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub signature: Option<SignatureDto>,
-    /// Every distinct origin of the coherent declaration, present exactly when
-    /// `signature` is, so a coherent declaration keeps the same provenance a
-    /// conflicting one does (SPEC-024 CON-007).
+    /// Every distinct origin of the coherent declaration, so a coherent
+    /// declaration keeps the same provenance a conflicting one does (SPEC-024
+    /// CON-007). Serialization always emits it alongside `signature`; a
+    /// `spindle.vocabulary/1` document may omit it when declaration provenance
+    /// is unknown, but it never appears without `signature`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub declaration_origins: Option<Vec<DeclarationOriginDto>>,
     /// Every distinct conflicting declaration, present only when the symbol's
@@ -396,12 +398,13 @@ impl VocabularyReportDto {
                 });
             }
             // No core `DeclarationState` is simultaneously coherent and
-            // conflicting, and a coherent declaration always carries its
-            // origins: `signature` and `declaration_origins` are present
-            // exactly together. Reject field combinations no core state
-            // represents, including a presence mismatch in either direction.
+            // conflicting, and declaration origins belong to a coherent
+            // signature; reject field combinations no core state represents.
+            // A signature without `declaration_origins` stays valid: the
+            // documented `spindle.vocabulary/1` contract (SPEC-024 CON-007)
+            // lets a producer omit provenance it does not have.
             if (entry.signature.is_some() && entry.conflict.is_some())
-                || (entry.signature.is_some() != entry.declaration_origins.is_some())
+                || (entry.declaration_origins.is_some() && entry.signature.is_none())
             {
                 return Err(VocabularyDtoError::ContradictoryDeclaration {
                     functor: entry.symbol.functor.clone(),
@@ -795,7 +798,10 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_signature_without_declaration_origins() {
+    fn validate_accepts_v1_signature_without_declaration_origins() {
+        // The documented spindle.vocabulary/1 example (SPEC-024 CON-007) has a
+        // coherent signature and no declaration_origins; that payload must
+        // keep validating.
         let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
         let entry = dto
             .entries
@@ -804,10 +810,7 @@ mod tests {
             .unwrap();
         assert!(entry.signature.is_some());
         entry.declaration_origins = None;
-        assert!(matches!(
-            dto.validate(),
-            Err(VocabularyDtoError::ContradictoryDeclaration { .. })
-        ));
+        dto.validate().unwrap();
     }
 
     #[test]

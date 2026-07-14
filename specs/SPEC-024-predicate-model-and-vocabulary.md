@@ -862,6 +862,9 @@ remain unchanged.
           { "name": "agent", "sort": "symbol" }
         ]
       },
+      "declaration_origins": [
+        { "kind": "programmatic" }
+      ],
       "profile": [
         ["symbol", "variable"],
         ["symbol", "variable"]
@@ -877,7 +880,11 @@ remain unchanged.
 ```
 
 Arrays preserve argument order. Entry order is `(functor code-point order,
-arity numeric order)`. A serialized metadata target uses
+arity numeric order)`. `declaration_origins` carries every distinct origin of a
+coherent declaration (`{"kind":"parsed","byte_offset":…,"line":…}` or
+`{"kind":"programmatic"}`); the serializer always emits it alongside
+`signature`, a producer without provenance may omit it, and it never appears
+without `signature`. A serialized metadata target uses
 `{"kind":"predicate","symbol":{"functor":"assign-to","arity":2}}`, never an
 indicator string. Enum strings are lowercase kebab case. Unknown enum
 strings and inconsistent arities are rejected rather than preserved as partially
