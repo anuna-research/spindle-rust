@@ -22,6 +22,9 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - SPL: first-class `(predicate name ((arg sort) ...))` declarations and
     structured `(meta (predicate functor arity) ...)` metadata targets, stored
     in `Theory` with source provenance. Undeclared predicates remain valid.
+    Declarations may also carry inline `meta` properties
+    (`(predicate name (...) (description "..."))`) as sugar for the separate
+    metadata target.
   - Predicate-indicator recognizer (`functor/arity`) in `spindle-parser`.
   - Additive `spindle.vocabulary/1` JSON DTOs in `spindle-contract`.
   - **Breaking (internal):** `Theory::metadata()` now returns

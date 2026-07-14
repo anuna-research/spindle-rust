@@ -26,18 +26,22 @@ fn err(line: usize, message: impl Into<String>) -> ParseError {
     }
 }
 
-/// Process a predicate declaration: `(predicate functor ((arg sort) ...))`
-/// (SPEC-024 REQ-016).
+/// Process a predicate declaration:
+/// `(predicate functor ((arg sort) ...) property*)` (SPEC-024 REQ-016).
 ///
 /// Arity is derived structurally from the argument list. The form adds no fact
 /// or rule; it stores a [`PredicateDeclaration`] with source provenance.
+///
+/// Optional trailing `(key value)` properties are inline metadata: they are
+/// exact sugar for a separate `(meta (predicate functor arity) ...)` statement
+/// and desugar into the same `MetaTarget::Predicate` store (SPEC-024 ADR-008).
 pub(crate) fn process_predicate_declaration(
     theory: &mut Theory,
     args: &[SExpr],
     line: usize,
     byte_offset: usize,
 ) -> Result<(), ParseError> {
-    if args.len() != 2 {
+    if args.len() < 2 {
         return Err(err(
             line,
             "predicate declaration requires a functor and an argument list: (predicate name ((arg sort) ...))",
@@ -88,6 +92,17 @@ pub(crate) fn process_predicate_declaration(
 
     let origin = DeclarationOrigin::Parsed(SourceLocation::new(byte_offset, line));
     theory.add_predicate_declaration(PredicateDeclaration::new(signature, origin));
+
+    // Optional trailing properties are inline metadata sugar for
+    // `(meta (predicate functor arity) ...)` (SPEC-024 ADR-008).
+    if args.len() > 2 {
+        super::metadata::apply_meta_properties(
+            theory,
+            &MetaTarget::Predicate(symbol),
+            &args[2..],
+            line,
+        )?;
+    }
     Ok(())
 }
 

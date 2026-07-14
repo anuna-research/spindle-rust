@@ -66,6 +66,76 @@ fn test_021_declaration_does_not_change_rule_or_fact_counts() {
     assert_eq!(with_decl.predicate_declarations().len(), 1);
 }
 
+#[test]
+fn test_021_inline_metadata_desugars_to_predicate_target() {
+    let theory = parse_spl(
+        "(predicate assign-to\n\
+         ((task symbol) (agent symbol))\n\
+         (description \"Assign a task to an agent.\")\n\
+         (tags (\"planning\" \"scheduling\")))",
+    )
+    .unwrap();
+
+    // The declaration is still stored, adds no rule/fact.
+    assert_eq!(theory.predicate_declarations().len(), 1);
+    assert_eq!(theory.rule_count(), 0);
+
+    // Inline properties land in the same MetaTarget::Predicate store.
+    let meta = theory
+        .get_meta_target(&MetaTarget::Predicate(sym("assign-to", 2)))
+        .expect("inline metadata present");
+    assert_eq!(
+        meta.properties.get("description"),
+        Some(&MetaValue::String("Assign a task to an agent.".to_string()))
+    );
+    assert_eq!(
+        meta.properties.get("tags"),
+        Some(&MetaValue::List(vec![
+            "planning".to_string(),
+            "scheduling".to_string()
+        ]))
+    );
+}
+
+#[test]
+fn test_021_inline_and_separate_meta_are_equivalent() {
+    let inline =
+        parse_spl("(predicate assign-to ((task symbol) (agent symbol)) (description \"d\"))")
+            .unwrap();
+    let separate = parse_spl(
+        "(predicate assign-to ((task symbol) (agent symbol)))\n\
+         (meta (predicate assign-to 2) (description \"d\"))",
+    )
+    .unwrap();
+
+    let target = MetaTarget::Predicate(sym("assign-to", 2));
+    assert_eq!(
+        inline.get_meta_target(&target).map(|m| &m.properties),
+        separate.get_meta_target(&target).map(|m| &m.properties),
+    );
+}
+
+#[test]
+fn test_021_inline_and_separate_meta_merge() {
+    // Inline description plus a later separate meta property merge into one entry.
+    let theory = parse_spl(
+        "(predicate assign-to ((task symbol) (agent symbol)) (description \"d\"))\n\
+         (meta (predicate assign-to 2) (source \"handbook\"))",
+    )
+    .unwrap();
+    let meta = theory
+        .get_meta_target(&MetaTarget::Predicate(sym("assign-to", 2)))
+        .unwrap();
+    assert_eq!(
+        meta.properties.get("description"),
+        Some(&MetaValue::String("d".to_string()))
+    );
+    assert_eq!(
+        meta.properties.get("source"),
+        Some(&MetaValue::String("handbook".to_string()))
+    );
+}
+
 // ---------------------------------------------------------------------------
 // TEST-022: Structured predicate metadata target
 // ---------------------------------------------------------------------------
@@ -97,7 +167,7 @@ fn test_022_predicate_metadata_target_is_distinct() {
         label_meta.properties.get("note"),
         Some(&MetaValue::String("rule-level".to_string()))
     );
-    assert!(label_meta.properties.get("description").is_none());
+    assert!(!label_meta.properties.contains_key("description"));
 
     // It does not collide with a different arity.
     assert!(

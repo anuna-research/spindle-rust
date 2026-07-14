@@ -2,9 +2,9 @@
 id: SPEC-024
 title: Predicate Model, Theory Signatures, and Vocabulary
 status: draft
-version: 0.2.0
+version: 0.3.0
 created: 2026-07-13
-last-updated: 2026-07-13
+last-updated: 2026-07-14
 authors: Codex (GPT-5, AI agent)
 reviewers: Core Maintainers (pending)
 protocol: USDD Agent Protocol v1.11.0
@@ -878,7 +878,7 @@ The SPL grammar extends existing top-level statements and `meta` targets:
 
 ```ebnf
 statement             = predicate-declaration | existing-statement ;
-predicate-declaration = "(" "predicate" functor argument-list ")" ;
+predicate-declaration = "(" "predicate" functor argument-list property* ")" ;
 argument-list         = "(" argument-declaration* ")" ;
 argument-declaration  = "(" argument-name primitive-sort ")" ;
 primitive-sort        = "symbol" | "integer" | "decimal" | "float"
@@ -939,17 +939,30 @@ origin. Existing `add_meta`, `get_meta`, and label-based metadata behavior SHALL
 remain as compatibility wrappers around `MetaTarget::Label`. Existing metadata
 property merge and overwrite semantics also apply to predicate targets.
 
-The canonical declaration contains no inline description. Predicate properties
-use the same `meta` mechanism as rule properties:
+Predicate properties use the same `meta` mechanism as rule properties. They
+MAY be written either as a separate `meta` statement or inline as trailing
+properties of the declaration. The two forms are exactly equivalent: inline
+properties are sugar that desugars into the same `MetaTarget::Predicate` store,
+so no second metadata mechanism is introduced (see
+[[SPEC-024-predicate-model-and-vocabulary#ADR-008]]).
 
 ```spl
+; Separate form
 (predicate assign-to
   ((task symbol)
    (agent symbol)))
-
 (meta (predicate assign-to 2)
   (description "Assign a task to an agent."))
+
+; Equivalent inline form
+(predicate assign-to
+  ((task symbol)
+   (agent symbol))
+  (description "Assign a task to an agent."))
 ```
+
+Inline properties and a separate `meta` statement targeting the same predicate
+merge under the existing per-key overwrite semantics.
 
 ## 8. Architecture Decisions
 
@@ -1065,20 +1078,32 @@ room for an explicit RDF/OWL/SHACL adapter later.
 **Status:** Proposed.
 
 **Context:** A predicate signature must be authorable in SPL and retained in
-`Theory`. Putting `(description ...)` inside `predicate` would duplicate the
-existing `meta` mechanism, while targeting metadata by `assign-to/2` would
-reintroduce string parsing and collide with rule labels or overloaded arities.
+`Theory`. Targeting metadata by the `assign-to/2` string would reintroduce
+string parsing and collide with rule labels or overloaded arities. An earlier
+revision of this ADR also rejected inline `(description ...)` inside `predicate`
+on the grounds that it would *duplicate* the `meta` mechanism; authoring
+feedback found the mandatory two-statement form clunky for the common case of a
+declaration with a one-line description.
 
 **Decision:** Add the positional declaration form
 `(predicate name ((argument sort) ...))`. Extend `meta` with the structured
 selector `(predicate name arity)`. Store declarations as an ordered sequence and
-metadata under a typed `MetaTarget`.
+metadata under a typed `MetaTarget`. Additionally, permit trailing `meta`
+properties *inline* on the declaration —
+`(predicate name ((argument sort) ...) (key value) ...)` — defined as exact
+sugar that desugars into the same `MetaTarget::Predicate` store. This does not
+duplicate the mechanism (the original objection): there is still one metadata
+model and one storage location; the inline form is only a surface convenience
+handled by the shared property recognizer.
 
 **Consequences:** The syntax follows SPL's S-expression and metadata conventions;
 arity is derived structurally; descriptions work for declared and implicitly
 observed predicates; declaration conflicts retain source provenance; and no
 predicate indicator becomes a storage key. `Theory` gains private declaration
-storage and a typed metadata key while preserving label-based APIs.
+storage and a typed metadata key while preserving label-based APIs. Because the
+inline form desugars, a declaration's inline properties and a separate
+`(meta (predicate name arity) ...)` statement merge under the same per-key
+overwrite semantics, and neither form affects reasoning.
 
 ## 9. Validation and Error Model
 
@@ -1265,9 +1290,9 @@ is marked not applicable rather than silently skipped.
 
 ### TEST-021: Predicate declaration syntax and storage
 
-- **Positive:** Parse binary and zero-arity declarations and inspect them through `Theory::predicate_declarations()`.
+- **Positive:** Parse binary and zero-arity declarations and inspect them through `Theory::predicate_declarations()`. Parse a declaration carrying inline `meta` properties and assert they are retrievable through `MetaTarget::Predicate` and equal to the separate `(meta (predicate ...) ...)` form.
 - **Negative input:** Reject malformed binder lists, unknown sorts, empty argument names, and duplicate argument names.
-- **Negative output:** Assert arity equals binder count, source provenance is retained, and rule/fact counts do not change.
+- **Negative output:** Assert arity equals binder count, source provenance is retained, rule/fact counts do not change, and inline properties merge with a separate predicate `meta` under per-key overwrite semantics.
 
 ### TEST-022: Structured predicate metadata target
 
@@ -1369,6 +1394,11 @@ Current gate status: **pending**.
 <details>
 <summary>Revision history</summary>
 
+- 0.3.0 (2026-07-14): Permitted optional inline `meta` properties on predicate
+  declarations as sugar that desugars into the same `MetaTarget::Predicate`
+  store (CON-008 grammar, ADR-008 revision, TEST-021). Reverses the earlier
+  ADR-008 stance against inline descriptions on ergonomic grounds without
+  introducing a second metadata mechanism.
 - 0.2.0 (2026-07-13): Added first-class positional SPL predicate declarations,
   `Theory` declaration storage, structured predicate metadata targets, source
   provenance, undeclared-use compatibility, and corresponding contracts and

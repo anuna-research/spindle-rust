@@ -15,14 +15,11 @@ proptest! {
     /// re-parsing (the canonical indicator round-trips).
     #[test]
     fn recognizer_is_total_and_bounded(input in ".{0,64}") {
-        match parse_predicate_indicator(&input) {
-            Ok(symbol) => {
-                let rendered = symbol.indicator().to_string();
-                let reparsed = parse_predicate_indicator(&rendered)
-                    .expect("canonical indicator must re-parse");
-                prop_assert_eq!(symbol, reparsed);
-            }
-            Err(_) => {}
+        if let Ok(symbol) = parse_predicate_indicator(&input) {
+            let rendered = symbol.indicator().to_string();
+            let reparsed =
+                parse_predicate_indicator(&rendered).expect("canonical indicator must re-parse");
+            prop_assert_eq!(symbol, reparsed);
         }
     }
 

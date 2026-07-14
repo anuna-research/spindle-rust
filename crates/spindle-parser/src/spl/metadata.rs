@@ -304,8 +304,21 @@ pub(crate) fn process_meta_with_line(
     // (predicate functor arity) target (SPEC-024 REQ-017).
     let target = super::predicate::parse_meta_target(&args[0], line)?;
 
-    // Process each property: (key "value") or (key ("v1" "v2"))
-    for prop in &args[1..] {
+    apply_meta_properties(theory, &target, &args[1..], line)
+}
+
+/// Apply `(key "value")` / `(key ("v1" "v2"))` properties to a metadata target.
+///
+/// Shared by the `meta` statement and by inline predicate-declaration metadata,
+/// so both forms use identical parsing and the same `Theory` metadata store
+/// (SPEC-024 CON-008, ADR-008).
+pub(crate) fn apply_meta_properties(
+    theory: &mut Theory,
+    target: &spindle_core::vocabulary::MetaTarget,
+    props: &[SExpr],
+    line: usize,
+) -> Result<(), ParseError> {
+    for prop in props {
         if let Some(prop_list) = prop.as_list()
             && prop_list.len() >= 2
         {

@@ -244,6 +244,25 @@ theory's [vocabulary](#the-predicate-vocabulary).
 The arity is derived from the number of argument declarations, so
 `assign-to/2` above has two positions and `emergency/0` has none.
 
+### Inline Metadata
+
+A declaration may carry trailing `meta` properties inline, so you don't have to
+write a separate `(meta (predicate ...) ...)` statement for the common case:
+
+```spl
+(predicate assign-to
+  ((task  symbol)
+   (agent symbol))
+  (description "Assign a task to an agent.")
+  (tags ("planning" "scheduling")))
+```
+
+Inline properties are exact sugar for the [separate metadata
+target](#predicate-metadata-targets) — they land in the same predicate metadata
+store — so the declaration above is equivalent to writing the declaration and a
+`(meta (predicate assign-to 2) ...)` statement with the same properties. Inline
+and separate metadata for the same predicate merge (later values win per key).
+
 ### Primitive Sorts
 
 Each argument declares one primitive sort. Sorts describe the *value space*
