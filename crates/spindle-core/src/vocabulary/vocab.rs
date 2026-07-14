@@ -47,10 +47,13 @@ pub(crate) struct ObservedOccurrence {
 
 /// A logical occurrence whose functor cannot form a valid predicate symbol — an
 /// empty or control-character functor (SPEC-024 CON-001). It is surfaced as a
-/// diagnostic rather than silently dropped from the derivation.
+/// diagnostic rather than silently dropped from the derivation, retaining its
+/// source provenance so callers can locate an otherwise indistinguishable
+/// occurrence (e.g. `""/0`).
 pub(crate) struct MalformedOccurrence {
     pub functor: String,
     pub arity: usize,
+    pub origin: PredicateOrigin,
 }
 
 /// The result of one theory traversal: occurrences that project to a valid
@@ -96,6 +99,12 @@ pub(crate) fn observed(theory: &Theory) -> ObservedTraversal {
                 Err(_) => malformed.push(MalformedOccurrence {
                     functor: head.interned_name().resolve().to_string(),
                     arity: head.predicate_args().len(),
+                    origin: PredicateOrigin {
+                        rule: label.clone(),
+                        role: OccurrenceRole::Head {
+                            index: index as u32,
+                        },
+                    },
                 }),
             }
         }
@@ -125,6 +134,12 @@ pub(crate) fn observed(theory: &Theory) -> ObservedTraversal {
                     Err(_) => malformed.push(MalformedOccurrence {
                         functor: logic.interned_name().resolve().to_string(),
                         arity: logic.predicate_args().len(),
+                        origin: PredicateOrigin {
+                            rule: label.clone(),
+                            role: OccurrenceRole::Body {
+                                index: index as u32,
+                            },
+                        },
                     }),
                 }
             }
@@ -199,6 +214,9 @@ pub enum VocabularyDiagnostic {
         functor: String,
         /// The application arity.
         arity: usize,
+        /// Sorted provenance of every occurrence with this functor and arity, so
+        /// an otherwise indistinguishable occurrence can be located.
+        origins: Box<[PredicateOrigin]>,
     },
 }
 
@@ -317,21 +335,25 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
         }
     }
 
-    // Surface malformed functors (empty or control-character) once each, rather
-    // than dropping the occurrences silently (SPEC-024 CON-001). Malformed
-    // functors are rare, so a linear dedup is adequate.
-    let mut malformed_predicates = 0usize;
-    let mut seen_malformed: Vec<(String, usize)> = Vec::new();
+    // Surface malformed functors (empty or control-character) rather than
+    // dropping the occurrences silently (SPEC-024 CON-001). Group by
+    // (functor, arity) through a HashMap so deduplication is linear, collecting
+    // each occurrence's origin; the diagnostics are sorted below for determinism.
+    let mut malformed_groups: HashMap<(String, usize), Vec<PredicateOrigin>> = HashMap::new();
     for m in malformed {
-        let key = (m.functor.clone(), m.arity);
-        if !seen_malformed.contains(&key) {
-            seen_malformed.push(key);
-            malformed_predicates += 1;
-            diagnostics.push(VocabularyDiagnostic::MalformedPredicate {
-                functor: m.functor,
-                arity: m.arity,
-            });
-        }
+        malformed_groups
+            .entry((m.functor, m.arity))
+            .or_default()
+            .push(m.origin);
+    }
+    let malformed_predicates = malformed_groups.len();
+    for ((functor, arity), mut origins) in malformed_groups {
+        origins.sort();
+        diagnostics.push(VocabularyDiagnostic::MalformedPredicate {
+            functor,
+            arity,
+            origins: origins.into_boxed_slice(),
+        });
     }
 
     // Impose (functor code point, arity) order on the entries once, resolving
@@ -375,7 +397,7 @@ fn diagnostic_key(d: &VocabularyDiagnostic) -> (u8, &str, u64) {
         VocabularyDiagnostic::UnresolvedPredicateMetadata { symbol } => {
             (2, symbol.functor().resolve(), u64::from(symbol.arity()))
         }
-        VocabularyDiagnostic::MalformedPredicate { functor, arity } => {
+        VocabularyDiagnostic::MalformedPredicate { functor, arity, .. } => {
             (3, functor.as_str(), *arity as u64)
         }
     }

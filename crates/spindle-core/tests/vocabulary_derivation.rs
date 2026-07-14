@@ -336,11 +336,25 @@ fn malformed_functor_is_surfaced_not_silently_dropped() {
     let report = Vocabulary::derive(&theory);
     assert_eq!(report.summary.observed_occurrences, 1);
     assert_eq!(report.summary.malformed_predicates, 1);
-    assert!(report.diagnostics.iter().any(|d| matches!(
-        d,
-        VocabularyDiagnostic::MalformedPredicate { functor, arity }
-            if functor.is_empty() && *arity == 0
-    )));
+    let malformed: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter_map(|d| match d {
+            VocabularyDiagnostic::MalformedPredicate {
+                functor,
+                arity,
+                origins,
+            } => Some((functor, *arity, origins)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(malformed.len(), 1);
+    let (functor, arity, origins) = &malformed[0];
+    assert!(functor.is_empty() && *arity == 0);
+    // The occurrence's provenance is retained so an indistinguishable ""/0 can be
+    // located: it is the head of the generated fact rule.
+    assert_eq!(origins.len(), 1);
+    assert!(matches!(origins[0].role, OccurrenceRole::Head { index: 0 }));
     // The malformed occurrence produces no catalogue entry.
     assert!(report.vocabulary.entries.is_empty());
 }
@@ -351,17 +365,19 @@ fn repeated_malformed_functor_reported_once() {
     theory.add_fact("");
     theory.add_fact("");
     let report = Vocabulary::derive(&theory);
-    // Both occurrences are counted, but the diagnostic is deduped.
+    // Both occurrences are counted, and the diagnostic is deduped into one entry
+    // that retains both origins.
     assert_eq!(report.summary.observed_occurrences, 2);
     assert_eq!(report.summary.malformed_predicates, 1);
-    assert_eq!(
-        report
-            .diagnostics
-            .iter()
-            .filter(|d| matches!(d, VocabularyDiagnostic::MalformedPredicate { .. }))
-            .count(),
-        1
-    );
+    let origin_counts: Vec<usize> = report
+        .diagnostics
+        .iter()
+        .filter_map(|d| match d {
+            VocabularyDiagnostic::MalformedPredicate { origins, .. } => Some(origins.len()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(origin_counts, vec![2]);
 }
 
 // ---------------------------------------------------------------------------

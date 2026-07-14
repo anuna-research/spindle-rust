@@ -9,8 +9,9 @@
 use serde::{Deserialize, Serialize};
 
 use spindle_core::vocabulary::{
-    ArgumentDecl, DeclarationState, MetaTarget, ObservedArgumentKind, PredicateSymbol,
-    PredicateSymbolError, PrimitiveSort, VocabularyDiagnostic, VocabularyEntry, VocabularyReport,
+    ArgumentDecl, DeclarationState, MetaTarget, ObservedArgumentKind, OccurrenceRole,
+    PredicateOrigin, PredicateSymbol, PredicateSymbolError, PrimitiveSort, VocabularyDiagnostic,
+    VocabularyEntry, VocabularyReport,
 };
 
 /// The schema identifier for a serialized vocabulary (SPEC-024 CON-007).
@@ -222,6 +223,8 @@ pub enum VocabularyDiagnosticDto {
         functor: String,
         /// The application arity.
         arity: u64,
+        /// Sorted provenance of every occurrence with this functor and arity.
+        origins: Vec<OriginDto>,
     },
 }
 
@@ -243,12 +246,15 @@ impl From<&VocabularyDiagnostic> for VocabularyDiagnosticDto {
                     symbol: (*symbol).into(),
                 }
             }
-            VocabularyDiagnostic::MalformedPredicate { functor, arity } => {
-                VocabularyDiagnosticDto::MalformedPredicate {
-                    functor: functor.clone(),
-                    arity: *arity as u64,
-                }
-            }
+            VocabularyDiagnostic::MalformedPredicate {
+                functor,
+                arity,
+                origins,
+            } => VocabularyDiagnosticDto::MalformedPredicate {
+                functor: functor.clone(),
+                arity: *arity as u64,
+                origins: origins.iter().map(origin_to_dto).collect(),
+            },
         }
     }
 }
@@ -290,10 +296,12 @@ impl VocabularyReportDto {
             });
         }
         for entry in &self.entries {
-            // Reject a symbol the core constructor would reject — an empty or
-            // control-character functor, or an unrepresentable arity — so
-            // validation never accepts a core-invalid symbol (SPEC-024 CON-001).
-            PredicateSymbol::try_from(&entry.symbol)?;
+            // Reject a functor the core constructor would reject — empty or
+            // containing a control character — so validation never accepts a
+            // core-invalid symbol. The string invariant is checked directly so a
+            // long-running validator never interns (and thus never permanently
+            // leaks) transient DTO functors (SPEC-024 CON-001).
+            PredicateSymbol::validate_functor(&entry.symbol.functor).map_err(map_symbol_error)?;
             let arity = entry.symbol.arity;
             if entry.profile.len() as u64 != u64::from(arity) {
                 return Err(VocabularyDtoError::InconsistentArity {
@@ -339,6 +347,19 @@ impl VocabularyReportDto {
     }
 }
 
+/// Convert one occurrence origin to its structured form.
+fn origin_to_dto(origin: &PredicateOrigin) -> OriginDto {
+    let (role, index) = match origin.role {
+        OccurrenceRole::Head { index } => ("head", index),
+        OccurrenceRole::Body { index } => ("body", index),
+    };
+    OriginDto {
+        rule: origin.rule.clone(),
+        role: role.to_string(),
+        index,
+    }
+}
+
 fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
     let signature = match &entry.declaration {
         Some(DeclarationState::Declared { signature, .. }) => Some(SignatureDto {
@@ -356,21 +377,7 @@ fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
         .iter()
         .map(|kinds| kinds.iter().map(|k| k.name().to_string()).collect())
         .collect();
-    let origins = entry
-        .origins
-        .iter()
-        .map(|o| {
-            let (role, index) = match o.role {
-                spindle_core::vocabulary::OccurrenceRole::Head { index } => ("head", index),
-                spindle_core::vocabulary::OccurrenceRole::Body { index } => ("body", index),
-            };
-            OriginDto {
-                rule: o.rule.clone(),
-                role: role.to_string(),
-                index,
-            }
-        })
-        .collect();
+    let origins = entry.origins.iter().map(origin_to_dto).collect();
     VocabularyEntryDto {
         symbol: entry.symbol.into(),
         signature,
@@ -528,6 +535,24 @@ mod tests {
             .unwrap();
         entry.symbol.functor = String::new();
         assert_eq!(dto.validate(), Err(VocabularyDtoError::EmptyFunctor));
+    }
+
+    #[test]
+    fn malformed_predicate_dto_carries_origins() {
+        let mut theory = Theory::new();
+        theory.add_fact(""); // empty functor: no valid predicate symbol
+        let dto = VocabularyReportDto::from(&Vocabulary::derive(&theory));
+        let json = serde_json::to_value(&dto).unwrap();
+        let diag = &json["diagnostics"][0];
+        assert_eq!(diag["kind"], "malformed-predicate");
+        assert_eq!(diag["functor"], "");
+        assert_eq!(diag["arity"], 0);
+        assert_eq!(diag["origins"][0]["role"], "head");
+        // The report carries no entries, so it round-trips and validates.
+        let back: VocabularyReportDto =
+            serde_json::from_str(&serde_json::to_string(&dto).unwrap()).unwrap();
+        back.validate().unwrap();
+        assert_eq!(dto, back);
     }
 
     #[test]

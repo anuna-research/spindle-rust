@@ -67,14 +67,22 @@ impl PredicateSymbol {
     ) -> Result<Self, PredicateSymbolError> {
         let arity = u32::try_from(arity)
             .map_err(|_| PredicateSymbolError::ArityOverflow { actual: arity })?;
-        let spelling = functor.resolve();
-        if spelling.is_empty() {
+        Self::validate_functor(functor.resolve())?;
+        Ok(Self { functor, arity })
+    }
+
+    /// Check that `functor` can form a predicate symbol: it is non-empty and
+    /// free of control characters (SPEC-024 CON-002). Shared by [`Self::try_new`]
+    /// so consumers can enforce the same invariant on a raw string — e.g. when
+    /// validating deserialized data — without interning it.
+    pub fn validate_functor(functor: &str) -> Result<(), PredicateSymbolError> {
+        if functor.is_empty() {
             return Err(PredicateSymbolError::EmptyFunctor);
         }
-        if let Some(ch) = spelling.chars().find(|c| c.is_control()) {
+        if let Some(ch) = functor.chars().find(|c| c.is_control()) {
             return Err(PredicateSymbolError::ControlCharacter { ch });
         }
-        Ok(Self { functor, arity })
+        Ok(())
     }
 
     /// The interned functor name.
