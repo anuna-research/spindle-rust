@@ -808,3 +808,79 @@ fn temporal_pipeline_emits_temporal_diagnostic_when_rules_removed() {
         ctx.diagnostics,
     );
 }
+
+// ===========================================================================
+// Declarations survive theory reconstruction (SPEC-024 CON-008)
+// ===========================================================================
+
+#[test]
+fn predicate_declarations_survive_default_pipeline() {
+    use spindle_core::vocabulary::{
+        ArgumentDecl, DeclarationOrigin, PredicateDeclaration, PredicateSignature, PredicateSymbol,
+        PrimitiveSort, Vocabulary, VocabularyDiagnostic,
+    };
+
+    // A theory with a used declared predicate and an unused declared predicate,
+    // run through the default pipeline (wildcard rewrite + grounding).
+    let mut theory = Theory::new();
+    theory.add_fact("bird");
+    theory.add_defeasible_rule(&["bird"], "flies");
+    let symbol = PredicateSymbol::try_new("flies".into(), 0).unwrap();
+    let sig = PredicateSignature::try_new(symbol, vec![]).unwrap();
+    theory.add_predicate_declaration(PredicateDeclaration::new(
+        sig,
+        DeclarationOrigin::Programmatic,
+    ));
+    let declared = PredicateSymbol::try_new("who".into(), 1).unwrap();
+    let sig = PredicateSignature::try_new(
+        declared,
+        vec![ArgumentDecl::new("x", PrimitiveSort::Symbol)],
+    )
+    .unwrap();
+    theory.add_predicate_declaration(PredicateDeclaration::new(
+        sig,
+        DeclarationOrigin::Programmatic,
+    ));
+    let result = prepare(&theory, PrepareOptions::default()).unwrap();
+
+    // Declarations are carried through every reconstruction stage.
+    assert_eq!(result.theory.predicate_declarations().len(), 2);
+
+    // The declared symbol stays declared in the derived vocabulary — it is not
+    // downgraded to UndeclaredPredicate by preparation.
+    let report = Vocabulary::derive(&result.theory);
+    assert!(!report.diagnostics.iter().any(|d| matches!(
+        d,
+        VocabularyDiagnostic::UndeclaredPredicate { symbol } if *symbol == PredicateSymbol::try_new("flies".into(), 0).unwrap()
+    )));
+    let entry = report
+        .vocabulary
+        .entries
+        .iter()
+        .find(|e| e.symbol == declared)
+        .expect("declared-but-unused symbol still catalogued after prepare");
+    assert!(entry.declaration.is_some());
+}
+
+#[test]
+fn temporal_filter_preserves_declarations() {
+    use spindle_core::vocabulary::{
+        DeclarationOrigin, PredicateDeclaration, PredicateSignature, PredicateSymbol,
+    };
+
+    let mut theory = fixtures::temporal_theory();
+    let symbol = PredicateSymbol::try_new("declared-only".into(), 0).unwrap();
+    let sig = PredicateSignature::try_new(symbol, vec![]).unwrap();
+    theory.add_predicate_declaration(PredicateDeclaration::new(
+        sig,
+        DeclarationOrigin::Programmatic,
+    ));
+
+    let pipeline = Pipeline::builder()
+        .stage(TemporalFilter {
+            reference_time: TimePoint::from_millis(300),
+        })
+        .build();
+    let (filtered, _) = pipeline.run(theory).unwrap();
+    assert_eq!(filtered.predicate_declarations().len(), 1);
+}

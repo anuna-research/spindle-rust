@@ -86,18 +86,14 @@ pub(crate) fn derive_declaration_states(
 
 /// Resolve one symbol's declarations into a [`DeclarationState`].
 fn resolve_declaration_group(decls: Vec<PredicateDeclaration>) -> DeclarationState {
-    // Dedup exact-identical declarations (same signature and origin).
-    let mut distinct: Vec<PredicateDeclaration> = Vec::new();
-    for decl in decls {
-        if !distinct.contains(&decl) {
-            distinct.push(decl);
-        }
-    }
-
     // Impose a canonical `(signature, origin)` order so both the conflict payload
     // and the merged origin list are independent of insertion/traversal order
-    // (SPEC-024 NFR-001, REQ-010).
+    // (SPEC-024 NFR-001, REQ-010), then drop exact-identical declarations (same
+    // signature and origin). Sorting first keeps deduplication O(D log D) instead
+    // of a quadratic contains-scan (SPEC-024 NFR-002).
+    let mut distinct = decls;
     distinct.sort();
+    distinct.dedup();
 
     let first_signature = &distinct[0].signature;
     let all_agree = distinct.iter().all(|d| &d.signature == first_signature);

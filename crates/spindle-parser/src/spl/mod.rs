@@ -38,6 +38,8 @@ mod metadata;
 mod predicate;
 mod rules;
 
+pub use predicate::DECLARATION_ARGUMENT_LIMIT;
+
 use spindle_core::Theory;
 
 use crate::ParseError;

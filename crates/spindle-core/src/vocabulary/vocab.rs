@@ -1,8 +1,7 @@
 //! Provenanced vocabulary derivation (SPEC-024 CON-005, REQ-011, OBS-001).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use super::declaration::MetaTarget;
 use super::profile::ArgumentProfile;
 use super::shape::Shape;
 use super::sort::ObservedArgumentKind;
@@ -286,6 +285,11 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
     // Predicate descriptions, keyed by symbol.
     let descriptions = predicate_descriptions(theory);
 
+    // Snapshot the available symbols before the accumulator map is consumed, so
+    // metadata-target resolution below is a constant-time membership check
+    // rather than a scan of every entry (SPEC-024 NFR-002).
+    let available: HashSet<PredicateSymbol> = per_symbol.keys().copied().collect();
+
     let mut entries = Vec::with_capacity(per_symbol.len());
     let mut diagnostics = Vec::new();
     let mut declaration_conflicts = 0usize;
@@ -326,10 +330,8 @@ fn derive_vocabulary(theory: &Theory) -> VocabularyReport {
 
     // Predicate metadata whose symbol is neither declared nor observed.
     let mut unresolved_predicate_metadata = 0usize;
-    for target in theory.metadata().keys() {
-        if let MetaTarget::Predicate(symbol) = target
-            && !entries.iter().any(|e| e.symbol == *symbol)
-        {
+    for symbol in theory.predicate_metadata().keys() {
+        if !available.contains(symbol) {
             unresolved_predicate_metadata += 1;
             diagnostics.push(VocabularyDiagnostic::UnresolvedPredicateMetadata { symbol: *symbol });
         }
@@ -403,14 +405,12 @@ fn diagnostic_key(d: &VocabularyDiagnostic) -> (u8, &str, u64) {
     }
 }
 
-/// Read predicate descriptions from `MetaTarget::Predicate` entries. The result
+/// Read predicate descriptions from the predicate metadata store. The result
 /// is looked up by symbol only, so a `HashMap` (no functor resolution) suffices.
 fn predicate_descriptions(theory: &Theory) -> HashMap<PredicateSymbol, String> {
     let mut out = HashMap::new();
-    for (target, meta) in theory.metadata() {
-        if let MetaTarget::Predicate(symbol) = target
-            && let Some(value) = meta.properties.get("description")
-        {
+    for (symbol, meta) in theory.predicate_metadata() {
+        if let Some(value) = meta.properties.get("description") {
             let text = match value {
                 MetaValue::String(s) => s.clone(),
                 MetaValue::List(items) => items.join(" "),

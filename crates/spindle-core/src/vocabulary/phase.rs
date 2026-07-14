@@ -68,6 +68,13 @@ pub enum GroundingError {
         /// The unbound functor variable's spelling.
         variable: String,
     },
+    /// The functor variable was bound, but to a term that cannot serve as a
+    /// functor (only a symbol term can), so substitution left it unchanged.
+    #[error("functor variable ({variable}) is bound to a non-symbol term")]
+    IncompatibleFunctorBinding {
+        /// The functor variable's spelling.
+        variable: String,
+    },
     /// A temporal endpoint remained unresolved after substitution.
     #[error("a temporal endpoint remained unresolved after grounding")]
     UnresolvedTemporal,
@@ -157,9 +164,19 @@ impl LiteralPattern {
         let grounded = apply_substitution_to_literal(&self.0, bindings);
         match groundness_error(&grounded) {
             None => Ok(GroundLiteral(grounded)),
-            Some(GroundnessError::VariableFunctor) => Err(GroundingError::MissingFunctorBinding {
-                variable: resolve(grounded.name_id()).to_string(),
-            }),
+            Some(GroundnessError::VariableFunctor) => {
+                let variable = resolve(grounded.name_id()).to_string();
+                // Substitution replaces a variable functor only with a symbol
+                // binding; a binding of any other term kind leaves the functor
+                // variable in place. Distinguish that invalid data from an
+                // omitted binding (SPEC-024 REQ-006).
+                match bindings.terms.get(&grounded.name_id()) {
+                    Some(term) if !matches!(term, crate::term::Term::Symbol(_)) => {
+                        Err(GroundingError::IncompatibleFunctorBinding { variable })
+                    }
+                    _ => Err(GroundingError::MissingFunctorBinding { variable }),
+                }
+            }
             Some(GroundnessError::VariableArgument { position }) => {
                 let variable = match grounded.predicate_args().get(position as usize) {
                     Some(crate::term::Term::Symbol(id)) => resolve(*id).to_string(),
@@ -280,6 +297,40 @@ mod tests {
         assert_eq!(
             ground.as_literal().predicate_args()[0],
             Term::Symbol(intern("a"))
+        );
+    }
+
+    #[test]
+    fn ground_distinguishes_incompatible_functor_binding() {
+        let make_pattern = || match Literal::from_ids(
+            intern("?P"),
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec![],
+        )
+        .classify()
+        {
+            ClassifiedLiteral::Pattern(p) => p,
+            _ => panic!("expected pattern"),
+        };
+
+        // A binding exists but has the wrong type: incompatible, not missing.
+        let mut bindings = Bindings::default();
+        bindings.terms.insert(intern("?P"), Term::Integer(1));
+        assert_eq!(
+            make_pattern().ground(&bindings).unwrap_err(),
+            GroundingError::IncompatibleFunctorBinding {
+                variable: "?P".to_string()
+            }
+        );
+
+        // No binding at all: missing.
+        assert_eq!(
+            make_pattern().ground(&Bindings::default()).unwrap_err(),
+            GroundingError::MissingFunctorBinding {
+                variable: "?P".to_string()
+            }
         );
     }
 

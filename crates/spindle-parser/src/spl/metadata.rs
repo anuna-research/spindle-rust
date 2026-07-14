@@ -312,6 +312,10 @@ pub(crate) fn process_meta_with_line(
 /// Shared by the `meta` statement and by inline predicate-declaration metadata,
 /// so both forms use identical parsing and the same `Theory` metadata store
 /// (SPEC-024 CON-008, ADR-008).
+///
+/// Every property must be exactly a `(key value)` list; a bare atom or a list
+/// of any other length is rejected rather than silently skipped, so typos in
+/// the recognized form surface as parse errors.
 pub(crate) fn apply_meta_properties(
     theory: &mut Theory,
     target: &spindle_core::vocabulary::MetaTarget,
@@ -319,42 +323,53 @@ pub(crate) fn apply_meta_properties(
     line: usize,
 ) -> Result<(), ParseError> {
     for prop in props {
-        if let Some(prop_list) = prop.as_list()
-            && prop_list.len() >= 2
-        {
-            let key = prop_list[0]
-                .as_atom()
-                .ok_or_else(|| ParseError::ParserError {
-                    line,
-                    message: "meta property key must be an atom".to_string(),
-                    format: ParserFormat::Spl,
-                    source_line: None,
-                })?;
-
-            // Check if value is a list or single value
-            let value = match &prop_list[1] {
-                SExpr::Atom { value: s, .. } => MetaValue::String(s.clone()),
-                SExpr::List { items, .. } => {
-                    // List of strings
-                    let strings: Result<Vec<String>, _> = items
-                        .iter()
-                        .map(|item| {
-                            item.as_atom().map(|s| s.to_string()).ok_or_else(|| {
-                                ParseError::ParserError {
-                                    line,
-                                    message: "meta list values must be atoms".to_string(),
-                                    format: ParserFormat::Spl,
-                                    source_line: None,
-                                }
-                            })
-                        })
-                        .collect();
-                    MetaValue::List(strings?)
-                }
-            };
-
-            theory.add_meta_target(target.clone(), key, value);
+        let prop_list = prop.as_list().ok_or_else(|| ParseError::ParserError {
+            line,
+            message: "each meta property must be a (key value) list".to_string(),
+            format: ParserFormat::Spl,
+            source_line: None,
+        })?;
+        if prop_list.len() != 2 {
+            return Err(ParseError::ParserError {
+                line,
+                message: "each meta property must be exactly (key value)".to_string(),
+                format: ParserFormat::Spl,
+                source_line: None,
+            });
         }
+
+        let key = prop_list[0]
+            .as_atom()
+            .ok_or_else(|| ParseError::ParserError {
+                line,
+                message: "meta property key must be an atom".to_string(),
+                format: ParserFormat::Spl,
+                source_line: None,
+            })?;
+
+        // Check if value is a list or single value
+        let value = match &prop_list[1] {
+            SExpr::Atom { value: s, .. } => MetaValue::String(s.clone()),
+            SExpr::List { items, .. } => {
+                // List of strings
+                let strings: Result<Vec<String>, _> = items
+                    .iter()
+                    .map(|item| {
+                        item.as_atom().map(|s| s.to_string()).ok_or_else(|| {
+                            ParseError::ParserError {
+                                line,
+                                message: "meta list values must be atoms".to_string(),
+                                format: ParserFormat::Spl,
+                                source_line: None,
+                            }
+                        })
+                    })
+                    .collect();
+                MetaValue::List(strings?)
+            }
+        };
+
+        theory.add_meta_target(target.clone(), key, value);
     }
 
     Ok(())

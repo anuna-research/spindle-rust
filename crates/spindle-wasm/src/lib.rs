@@ -444,8 +444,13 @@ impl Spindle {
     /// +d literal
     /// META label key "value"
     /// META label key2 ("v1" "v2")
+    /// META (predicate functor arity) key "value"
     /// DEPS task1:dep1,dep2|task2:dep3
     /// ```
+    ///
+    /// Predicate-metadata targets use the structured `(predicate functor arity)`
+    /// discriminator — the same form the SPL `meta` statement accepts — so they
+    /// can never collide with a rule label that happens to spell an indicator.
     #[wasm_bindgen(js_name = reasonSpl)]
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
         reject_dfl_input(input)?;
@@ -460,20 +465,30 @@ impl Spindle {
         }
 
         // Add metadata
-        for (target, meta) in self.theory.metadata() {
-            let label = match target {
-                spindle_core::MetaTarget::Label(l) => l.clone(),
-                spindle_core::MetaTarget::Predicate(sym) => sym.indicator().to_string(),
-            };
+        fn meta_value_str(value: &MetaValue) -> String {
+            match value {
+                MetaValue::String(s) => format!("\"{s}\""),
+                MetaValue::List(items) => {
+                    let quoted: Vec<_> = items.iter().map(|s| format!("\"{s}\"")).collect();
+                    format!("({})", quoted.join(" "))
+                }
+            }
+        }
+        for (label, meta) in self.theory.metadata() {
             for (key, value) in &meta.properties {
-                let value_str = match value {
-                    MetaValue::String(s) => format!("\"{s}\""),
-                    MetaValue::List(items) => {
-                        let quoted: Vec<_> = items.iter().map(|s| format!("\"{s}\"")).collect();
-                        format!("({})", quoted.join(" "))
-                    }
-                };
-                output.push(format!("META {label} {key} {value_str}"));
+                output.push(format!("META {label} {key} {}", meta_value_str(value)));
+            }
+        }
+        // Predicate targets keep an explicit structured discriminator so they
+        // stay distinct from any label spelled like an indicator.
+        for (symbol, meta) in self.theory.predicate_metadata() {
+            let target = format!(
+                "(predicate {} {})",
+                symbol.functor().resolve(),
+                symbol.arity()
+            );
+            for (key, value) in &meta.properties {
+                output.push(format!("META {target} {key} {}", meta_value_str(value)));
             }
         }
 

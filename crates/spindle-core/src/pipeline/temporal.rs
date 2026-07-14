@@ -77,9 +77,8 @@ pub(crate) fn filter_temporal(theory: &Theory, t: TimePoint) -> Theory {
         }
     }
 
-    // Copy metadata and trust policy
-    new_theory.copy_metadata_from(theory);
-    *new_theory.trust_policy_mut() = theory.trust_policy().clone();
+    // Copy metadata, declarations, and trust policy
+    new_theory.copy_declarative_state_from(theory);
 
     new_theory
 }

@@ -26,6 +26,15 @@ fn err(line: usize, message: impl Into<String>) -> ParseError {
     }
 }
 
+/// Maximum number of argument binders accepted in one predicate declaration
+/// (SPEC-024 NFR-004).
+///
+/// `parse_spl` handles untrusted input, and a declaration's binder list is both
+/// allocated in full and duplicate-scanned by [`PredicateSignature::try_new`];
+/// rejecting oversized declarations up front bounds that memory and CPU the same
+/// way [`crate::predicate_indicator`] bounds indicator input.
+pub const DECLARATION_ARGUMENT_LIMIT: usize = 255;
+
 /// Process a predicate declaration:
 /// `(predicate functor ((arg sort) ...) property*)` (SPEC-024 REQ-016).
 ///
@@ -55,6 +64,17 @@ pub(crate) fn process_predicate_declaration(
     let arg_list = args[1]
         .as_list()
         .ok_or_else(|| err(line, "predicate declaration argument list must be a list"))?;
+
+    // Reject oversized binder lists before materializing them (SPEC-024 NFR-004).
+    if arg_list.len() > DECLARATION_ARGUMENT_LIMIT {
+        return Err(err(
+            line,
+            format!(
+                "predicate declaration has {} arguments, exceeding the {DECLARATION_ARGUMENT_LIMIT}-argument limit",
+                arg_list.len()
+            ),
+        ));
+    }
 
     let mut declarations = Vec::with_capacity(arg_list.len());
     for entry in arg_list {

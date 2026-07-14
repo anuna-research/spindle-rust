@@ -266,3 +266,46 @@ fn spl_theory_signature_includes_declared_and_observed() {
     // Declared but unobserved symbol is present.
     assert!(signature.symbols.contains(&sym("unused", 1)));
 }
+
+// ---------------------------------------------------------------------------
+// Robustness: binder-list bounds and strict inline metadata (SPEC-024 NFR-004)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oversized_binder_list_rejected_before_materialization() {
+    use spindle_parser::spl::DECLARATION_ARGUMENT_LIMIT;
+
+    let binders: String = (0..=DECLARATION_ARGUMENT_LIMIT)
+        .map(|i| format!("(a{i} symbol)"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let input = format!("(predicate big ({binders}))");
+    let err = parse_spl(&input).unwrap_err();
+    assert!(
+        err.to_string().contains("limit"),
+        "expected a limit error, got: {err}"
+    );
+
+    // Exactly at the limit still parses.
+    let binders: String = (0..DECLARATION_ARGUMENT_LIMIT)
+        .map(|i| format!("(a{i} symbol)"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let input = format!("(predicate big ({binders}))");
+    assert!(parse_spl(&input).is_ok());
+}
+
+#[test]
+fn malformed_inline_metadata_properties_rejected() {
+    // A bare-atom property is not a (key value) list.
+    assert!(parse_spl("(predicate p () typo)").is_err());
+    // A one-element property list is missing its value.
+    assert!(parse_spl("(predicate p () (description))").is_err());
+    // A three-element property list is not exactly (key value).
+    assert!(parse_spl("(predicate p () (description \"a\" \"b\"))").is_err());
+    // The same strictness applies to the meta statement.
+    assert!(parse_spl("(given bird)\n(meta f1 typo)").is_err());
+    assert!(parse_spl("(given bird)\n(meta f1 (note))").is_err());
+    // Well-formed properties still parse.
+    assert!(parse_spl("(predicate p () (description \"ok\"))").is_ok());
+}

@@ -9,9 +9,9 @@
 use serde::{Deserialize, Serialize};
 
 use spindle_core::vocabulary::{
-    ArgumentDecl, DeclarationState, MetaTarget, ObservedArgumentKind, OccurrenceRole,
-    PredicateOrigin, PredicateSymbol, PredicateSymbolError, PrimitiveSort, VocabularyDiagnostic,
-    VocabularyEntry, VocabularyReport,
+    ArgumentDecl, DeclarationOrigin, DeclarationState, MetaTarget, ObservedArgumentKind,
+    OccurrenceRole, PredicateOrigin, PredicateSignature, PredicateSymbol, PredicateSymbolError,
+    PrimitiveSort, VocabularyDiagnostic, VocabularyEntry, VocabularyReport,
 };
 
 /// The schema identifier for a serialized vocabulary (SPEC-024 CON-007).
@@ -168,6 +168,44 @@ pub struct SignatureDto {
     pub arguments: Vec<ArgumentDeclDto>,
 }
 
+/// The origin of one predicate declaration in structured form (SPEC-024
+/// CON-007). Unknown kinds are rejected at deserialization by the serde tag.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum DeclarationOriginDto {
+    /// Parsed from source at the given location.
+    Parsed {
+        /// Byte offset of the declaration in the cleaned source.
+        byte_offset: usize,
+        /// One-based line number of the declaration.
+        line: usize,
+    },
+    /// Added programmatically with no source location.
+    Programmatic,
+}
+
+impl From<DeclarationOrigin> for DeclarationOriginDto {
+    fn from(origin: DeclarationOrigin) -> Self {
+        match origin {
+            DeclarationOrigin::Parsed(loc) => DeclarationOriginDto::Parsed {
+                byte_offset: loc.byte_offset,
+                line: loc.line,
+            },
+            DeclarationOrigin::Programmatic => DeclarationOriginDto::Programmatic,
+        }
+    }
+}
+
+/// One conflicting declaration, retaining its signature and origin so consumers
+/// can inspect why a symbol's declarations conflict (SPEC-024 CON-007).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ConflictingDeclarationDto {
+    /// The declared signature.
+    pub signature: SignatureDto,
+    /// Where the declaration came from.
+    pub origin: DeclarationOriginDto,
+}
+
 /// An occurrence origin in structured form.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OriginDto {
@@ -188,6 +226,10 @@ pub struct VocabularyEntryDto {
     /// declaration.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub signature: Option<SignatureDto>,
+    /// Every distinct conflicting declaration, present only when the symbol's
+    /// declarations conflict (SPEC-024 CON-007).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub conflict: Option<Vec<ConflictingDeclarationDto>>,
     /// Observed argument kinds, one lowercase-kebab list per position.
     pub profile: Vec<Vec<String>>,
     /// A joined description, if any.
@@ -311,20 +353,10 @@ impl VocabularyReportDto {
                 });
             }
             if let Some(sig) = &entry.signature {
-                if sig.arguments.len() as u64 != u64::from(arity) {
-                    return Err(VocabularyDtoError::InconsistentArity {
-                        functor: entry.symbol.functor.clone(),
-                        arity,
-                        found: sig.arguments.len(),
-                    });
-                }
-                for arg in &sig.arguments {
-                    PrimitiveSort::from_name(&arg.sort).ok_or_else(|| {
-                        VocabularyDtoError::UnknownSort {
-                            found: arg.sort.clone(),
-                        }
-                    })?;
-                }
+                validate_signature(sig, &entry.symbol)?;
+            }
+            for conflict in entry.conflict.iter().flatten() {
+                validate_signature(&conflict.signature, &entry.symbol)?;
             }
             for position in &entry.profile {
                 for kind in position {
@@ -335,16 +367,56 @@ impl VocabularyReportDto {
                     })?;
                 }
             }
-            for origin in &entry.origins {
-                if origin.role != "head" && origin.role != "body" {
-                    return Err(VocabularyDtoError::UnknownRole {
-                        found: origin.role.clone(),
-                    });
+            validate_origins(&entry.origins)?;
+        }
+        for diagnostic in &self.diagnostics {
+            match diagnostic {
+                VocabularyDiagnosticDto::ConflictingDeclaration { symbol }
+                | VocabularyDiagnosticDto::UndeclaredPredicate { symbol }
+                | VocabularyDiagnosticDto::UnresolvedPredicateMetadata { symbol } => {
+                    PredicateSymbol::validate_functor(&symbol.functor).map_err(map_symbol_error)?;
+                }
+                // A malformed-predicate functor is invalid by definition — that
+                // is the diagnostic's point — so only its origins are checked.
+                VocabularyDiagnosticDto::MalformedPredicate { origins, .. } => {
+                    validate_origins(origins)?;
                 }
             }
         }
         Ok(())
     }
+}
+
+/// Check a signature's arity consistency and sort names against its symbol.
+fn validate_signature(
+    sig: &SignatureDto,
+    symbol: &PredicateSymbolDto,
+) -> Result<(), VocabularyDtoError> {
+    if sig.arguments.len() as u64 != u64::from(symbol.arity) {
+        return Err(VocabularyDtoError::InconsistentArity {
+            functor: symbol.functor.clone(),
+            arity: symbol.arity,
+            found: sig.arguments.len(),
+        });
+    }
+    for arg in &sig.arguments {
+        PrimitiveSort::from_name(&arg.sort).ok_or_else(|| VocabularyDtoError::UnknownSort {
+            found: arg.sort.clone(),
+        })?;
+    }
+    Ok(())
+}
+
+/// Check that every occurrence origin carries a recognized role.
+fn validate_origins(origins: &[OriginDto]) -> Result<(), VocabularyDtoError> {
+    for origin in origins {
+        if origin.role != "head" && origin.role != "body" {
+            return Err(VocabularyDtoError::UnknownRole {
+                found: origin.role.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Convert one occurrence origin to its structured form.
@@ -360,16 +432,35 @@ fn origin_to_dto(origin: &PredicateOrigin) -> OriginDto {
     }
 }
 
+/// Convert a core signature to its structured form.
+fn signature_to_dto(signature: &PredicateSignature) -> SignatureDto {
+    SignatureDto {
+        arguments: signature
+            .arguments
+            .iter()
+            .map(ArgumentDeclDto::from)
+            .collect(),
+    }
+}
+
 fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
-    let signature = match &entry.declaration {
-        Some(DeclarationState::Declared { signature, .. }) => Some(SignatureDto {
-            arguments: signature
-                .arguments
-                .iter()
-                .map(ArgumentDeclDto::from)
-                .collect(),
-        }),
-        _ => None,
+    let (signature, conflict) = match &entry.declaration {
+        Some(DeclarationState::Declared { signature, .. }) => {
+            (Some(signature_to_dto(signature)), None)
+        }
+        Some(DeclarationState::Conflict(decls)) => (
+            None,
+            Some(
+                decls
+                    .iter()
+                    .map(|d| ConflictingDeclarationDto {
+                        signature: signature_to_dto(&d.signature),
+                        origin: d.origin.into(),
+                    })
+                    .collect(),
+            ),
+        ),
+        None => (None, None),
     };
     let profile = entry
         .profile
@@ -381,6 +472,7 @@ fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
     VocabularyEntryDto {
         symbol: entry.symbol.into(),
         signature,
+        conflict,
         profile,
         description: entry.description.clone(),
         origins,
@@ -553,6 +645,96 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&dto).unwrap()).unwrap();
         back.validate().unwrap();
         assert_eq!(dto, back);
+    }
+
+    #[test]
+    fn conflict_entries_retain_declarations_and_origins() {
+        let mut theory = Theory::new();
+        for sort in [PrimitiveSort::Symbol, PrimitiveSort::Integer] {
+            let sig = PredicateSignature::try_new(sym("p", 1), vec![ArgumentDecl::new("x", sort)])
+                .unwrap();
+            theory.add_predicate_declaration(PredicateDeclaration::new(
+                sig,
+                DeclarationOrigin::Programmatic,
+            ));
+        }
+        let dto = VocabularyReportDto::from(&Vocabulary::derive(&theory));
+        let entry = dto
+            .entries
+            .iter()
+            .find(|e| e.symbol.functor == "p" && e.symbol.arity == 1)
+            .unwrap();
+        // No agreed signature, but both conflicting declarations survive.
+        assert!(entry.signature.is_none());
+        let conflict = entry.conflict.as_ref().expect("conflict payload present");
+        assert_eq!(conflict.len(), 2);
+        let sorts: Vec<_> = conflict
+            .iter()
+            .map(|d| d.signature.arguments[0].sort.as_str())
+            .collect();
+        assert!(sorts.contains(&"symbol") && sorts.contains(&"integer"));
+        assert!(
+            conflict
+                .iter()
+                .all(|d| d.origin == DeclarationOriginDto::Programmatic)
+        );
+
+        // The conflict payload round-trips and validates.
+        let json = serde_json::to_string(&dto).unwrap();
+        let back: VocabularyReportDto = serde_json::from_str(&json).unwrap();
+        back.validate().unwrap();
+        assert_eq!(dto, back);
+    }
+
+    #[test]
+    fn validate_rejects_bad_sort_in_conflict_payload() {
+        let mut theory = Theory::new();
+        for sort in [PrimitiveSort::Symbol, PrimitiveSort::Integer] {
+            let sig = PredicateSignature::try_new(sym("p", 1), vec![ArgumentDecl::new("x", sort)])
+                .unwrap();
+            theory.add_predicate_declaration(PredicateDeclaration::new(
+                sig,
+                DeclarationOrigin::Programmatic,
+            ));
+        }
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&theory));
+        dto.entries[0].conflict.as_mut().unwrap()[0]
+            .signature
+            .arguments[0]
+            .sort = "widget".to_string();
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::UnknownSort { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_bogus_diagnostic_origin_role() {
+        let mut theory = Theory::new();
+        theory.add_fact(""); // produces a malformed-predicate diagnostic
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&theory));
+        let VocabularyDiagnosticDto::MalformedPredicate { origins, .. } = &mut dto.diagnostics[0]
+        else {
+            panic!("expected malformed-predicate diagnostic");
+        };
+        origins[0].role = "bogus".to_string();
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::UnknownRole { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_core_invalid_symbol_in_diagnostics() {
+        let mut theory = Theory::new();
+        theory.add_fact("undeclared");
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&theory));
+        let VocabularyDiagnosticDto::UndeclaredPredicate { symbol } = &mut dto.diagnostics[0]
+        else {
+            panic!("expected undeclared-predicate diagnostic");
+        };
+        symbol.functor = String::new();
+        assert_eq!(dto.validate(), Err(VocabularyDtoError::EmptyFunctor));
     }
 
     #[test]
