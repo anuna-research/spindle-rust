@@ -56,6 +56,42 @@ pub enum VocabularyDtoError {
         /// The offending array length.
         found: usize,
     },
+    /// An entry's declaration fields describe a state no core
+    /// [`DeclarationState`] can represent, such as both a coherent signature
+    /// and a conflict payload.
+    #[error("entry for {functor:?}/{arity} has contradictory declaration fields")]
+    ContradictoryDeclaration {
+        /// The entry's functor.
+        functor: String,
+        /// The declared arity.
+        arity: u32,
+    },
+    /// A signature argument name was empty.
+    #[error("entry for {functor:?}/{arity} has an empty argument name at position {position}")]
+    EmptyArgumentName {
+        /// The entry's functor.
+        functor: String,
+        /// The declared arity.
+        arity: u32,
+        /// The zero-based offending position.
+        position: usize,
+    },
+    /// Two signature arguments share a name.
+    #[error(
+        "entry for {functor:?}/{arity} duplicates argument name {name:?} at positions {first} and {second}"
+    )]
+    DuplicateArgumentName {
+        /// The entry's functor.
+        functor: String,
+        /// The declared arity.
+        arity: u32,
+        /// The duplicated name.
+        name: String,
+        /// The first position holding the name.
+        first: usize,
+        /// The second position holding the name.
+        second: usize,
+    },
     /// An arity could not be represented.
     #[error("arity {found} exceeds u32::MAX")]
     ArityOverflow {
@@ -226,6 +262,11 @@ pub struct VocabularyEntryDto {
     /// declaration.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub signature: Option<SignatureDto>,
+    /// Every distinct origin of the coherent declaration, present exactly when
+    /// `signature` is, so a coherent declaration keeps the same provenance a
+    /// conflicting one does (SPEC-024 CON-007).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub declaration_origins: Option<Vec<DeclarationOriginDto>>,
     /// Every distinct conflicting declaration, present only when the symbol's
     /// declarations conflict (SPEC-024 CON-007).
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -352,6 +393,17 @@ impl VocabularyReportDto {
                     found: entry.profile.len(),
                 });
             }
+            // No core `DeclarationState` is simultaneously coherent and
+            // conflicting, and declaration origins belong to a coherent
+            // signature; reject field combinations no core state represents.
+            if (entry.signature.is_some() && entry.conflict.is_some())
+                || (entry.declaration_origins.is_some() && entry.signature.is_none())
+            {
+                return Err(VocabularyDtoError::ContradictoryDeclaration {
+                    functor: entry.symbol.functor.clone(),
+                    arity,
+                });
+            }
             if let Some(sig) = &entry.signature {
                 validate_signature(sig, &entry.symbol)?;
             }
@@ -387,7 +439,12 @@ impl VocabularyReportDto {
     }
 }
 
-/// Check a signature's arity consistency and sort names against its symbol.
+/// Check a signature's arity consistency, sort names, and argument-name
+/// invariants against its symbol.
+///
+/// Argument names are checked exactly as [`PredicateSignature::try_new`] checks
+/// them — non-empty and unique — so a validated DTO never contains a signature
+/// the core model cannot represent (SPEC-024 REQ-008).
 fn validate_signature(
     sig: &SignatureDto,
     symbol: &PredicateSymbolDto,
@@ -399,10 +456,29 @@ fn validate_signature(
             found: sig.arguments.len(),
         });
     }
-    for arg in &sig.arguments {
+    for (position, arg) in sig.arguments.iter().enumerate() {
         PrimitiveSort::from_name(&arg.sort).ok_or_else(|| VocabularyDtoError::UnknownSort {
             found: arg.sort.clone(),
         })?;
+        if arg.name.is_empty() {
+            return Err(VocabularyDtoError::EmptyArgumentName {
+                functor: symbol.functor.clone(),
+                arity: symbol.arity,
+                position,
+            });
+        }
+        if let Some(first) = sig.arguments[..position]
+            .iter()
+            .position(|a| a.name == arg.name)
+        {
+            return Err(VocabularyDtoError::DuplicateArgumentName {
+                functor: symbol.functor.clone(),
+                arity: symbol.arity,
+                name: arg.name.clone(),
+                first,
+                second: position,
+            });
+        }
     }
     Ok(())
 }
@@ -444,11 +520,19 @@ fn signature_to_dto(signature: &PredicateSignature) -> SignatureDto {
 }
 
 fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
-    let (signature, conflict) = match &entry.declaration {
-        Some(DeclarationState::Declared { signature, .. }) => {
-            (Some(signature_to_dto(signature)), None)
-        }
+    let (signature, declaration_origins, conflict) = match &entry.declaration {
+        Some(DeclarationState::Declared { signature, origins }) => (
+            Some(signature_to_dto(signature)),
+            Some(
+                origins
+                    .iter()
+                    .map(|o| DeclarationOriginDto::from(*o))
+                    .collect(),
+            ),
+            None,
+        ),
         Some(DeclarationState::Conflict(decls)) => (
+            None,
             None,
             Some(
                 decls
@@ -460,7 +544,7 @@ fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
                     .collect(),
             ),
         ),
-        None => (None, None),
+        None => (None, None, None),
     };
     let profile = entry
         .profile
@@ -472,6 +556,7 @@ fn entry_to_dto(entry: &VocabularyEntry) -> VocabularyEntryDto {
     VocabularyEntryDto {
         symbol: entry.symbol.into(),
         signature,
+        declaration_origins,
         conflict,
         profile,
         description: entry.description.clone(),
@@ -645,6 +730,111 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&dto).unwrap()).unwrap();
         back.validate().unwrap();
         assert_eq!(dto, back);
+    }
+
+    #[test]
+    fn coherent_declaration_retains_origins() {
+        use spindle_core::vocabulary::SourceLocation;
+
+        let mut theory = Theory::new();
+        let sig = PredicateSignature::try_new(
+            sym("p", 1),
+            vec![ArgumentDecl::new("x", PrimitiveSort::Symbol)],
+        )
+        .unwrap();
+        theory.add_predicate_declaration(PredicateDeclaration::new(
+            sig,
+            DeclarationOrigin::Parsed(SourceLocation::new(42, 3)),
+        ));
+        let dto = VocabularyReportDto::from(&Vocabulary::derive(&theory));
+        let entry = dto
+            .entries
+            .iter()
+            .find(|e| e.symbol.functor == "p" && e.symbol.arity == 1)
+            .unwrap();
+        assert!(entry.signature.is_some());
+        // The coherent declaration keeps its source provenance, like the
+        // conflict path does.
+        assert_eq!(
+            entry.declaration_origins.as_deref(),
+            Some(
+                &[DeclarationOriginDto::Parsed {
+                    byte_offset: 42,
+                    line: 3,
+                }][..]
+            )
+        );
+
+        let json = serde_json::to_string(&dto).unwrap();
+        let back: VocabularyReportDto = serde_json::from_str(&json).unwrap();
+        back.validate().unwrap();
+        assert_eq!(dto, back);
+    }
+
+    #[test]
+    fn validate_rejects_signature_alongside_conflict() {
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
+        let entry = dto
+            .entries
+            .iter_mut()
+            .find(|e| e.symbol.functor == "assign-to" && e.symbol.arity == 2)
+            .unwrap();
+        assert!(entry.signature.is_some());
+        entry.conflict = Some(vec![]);
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::ContradictoryDeclaration { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_declaration_origins_without_signature() {
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
+        let entry = dto
+            .entries
+            .iter_mut()
+            .find(|e| e.symbol.functor == "assign-to" && e.symbol.arity == 2)
+            .unwrap();
+        assert!(entry.declaration_origins.is_some());
+        entry.signature = None;
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::ContradictoryDeclaration { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_empty_argument_name() {
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
+        let entry = dto
+            .entries
+            .iter_mut()
+            .find(|e| e.symbol.functor == "assign-to" && e.symbol.arity == 2)
+            .unwrap();
+        entry.signature.as_mut().unwrap().arguments[1].name = String::new();
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::EmptyArgumentName { position: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_argument_name() {
+        let mut dto = VocabularyReportDto::from(&Vocabulary::derive(&assign_theory()));
+        let entry = dto
+            .entries
+            .iter_mut()
+            .find(|e| e.symbol.functor == "assign-to" && e.symbol.arity == 2)
+            .unwrap();
+        entry.signature.as_mut().unwrap().arguments[1].name = "task".to_string();
+        assert!(matches!(
+            dto.validate(),
+            Err(VocabularyDtoError::DuplicateArgumentName {
+                first: 0,
+                second: 1,
+                ..
+            })
+        ));
     }
 
     #[test]
