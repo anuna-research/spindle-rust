@@ -613,3 +613,127 @@ fn main() -> Result<()> {
     Ok(())
 }
 ```
+
+## Predicate Vocabulary
+
+SPEC-024 adds a structural predicate model on top of the reasoning AST. It is
+entirely additive and **non-semantic**: constructing signatures, vocabularies,
+or shapes never changes conclusions. The types live in
+`spindle_core::vocabulary` and are re-exported from the prelude.
+
+### Predicate Symbols
+
+A `PredicateSymbol` is the pair `(functor, arity)` — the structural identity of
+a predicate, excluding arguments, polarity, mode, and temporal bounds. Any head
+literal or logical body literal projects to one:
+
+```rust
+use spindle_core::prelude::*;
+
+let lit = Literal::new("assign-to", false, Mode::empty(), Default::default(),
+    vec!["t1".into(), "alice".into()]);
+let sym = lit.predicate_symbol().unwrap();   // via HasPredicateSymbol
+assert_eq!(sym.arity(), 2);
+assert_eq!(sym.indicator().to_string(), "assign-to/2");
+```
+
+`p(a)` and `~p(b)` share `p/1`, but this identity is deliberately *not* a
+proof-state key — `FamilyId`, `LitId`, and `ExactLitId` remain authoritative for
+reasoning.
+
+### Declaring Predicates Programmatically
+
+```rust
+use spindle_core::prelude::*;
+
+let mut theory = Theory::new();
+let sig = PredicateSignature::try_new(
+    PredicateSymbol::try_new("assign-to".into(), 2).unwrap(),
+    vec![
+        ArgumentDecl::new("task", PrimitiveSort::Symbol),
+        ArgumentDecl::new("agent", PrimitiveSort::Symbol),
+    ],
+).unwrap();
+theory.add_predicate_declaration(
+    PredicateDeclaration::new(sig, DeclarationOrigin::Programmatic));
+
+// Predicate-targeted metadata (distinct from rule-label metadata):
+theory.add_meta_target(
+    MetaTarget::Predicate(PredicateSymbol::try_new("assign-to".into(), 2).unwrap()),
+    "description",
+    MetaValue::String("Assign a task to an agent.".into()),
+);
+```
+
+`PredicateSignature::try_new` enforces that the argument count equals the arity
+and that names are non-empty and unique.
+
+### Deriving the Theory Signature and Vocabulary
+
+`TheorySignature::derive` returns every predicate symbol the theory uses or
+declares, plus each symbol's declaration state (`Declared` or `Conflict`).
+`Vocabulary::derive` builds the fuller catalogue and its diagnostics:
+
+```rust
+use spindle_core::prelude::*;
+
+let report = Vocabulary::derive(&theory);
+for entry in &report.vocabulary.entries {
+    println!("{}", entry.symbol.indicator());
+    if let Some(desc) = &entry.description {
+        println!("  {desc}");
+    }
+    // entry.profile — observed argument kinds per position
+    // entry.origins — rule occurrences, sorted by (label, head-before-body, index)
+}
+
+// Deterministic summary counts (OBS-001):
+println!("{} symbols, {} occurrences, {} conflicts",
+    report.summary.distinct_symbols,
+    report.summary.observed_occurrences,
+    report.summary.declaration_conflicts);
+```
+
+Entries are ordered by `(functor, arity)` and the output is independent of
+`HashMap` iteration order.
+
+### Literal Phases
+
+`GroundLiteral` and `LiteralPattern` are checked wrappers that make illegal
+phase transitions unrepresentable. `Literal::classify` places every literal in
+exactly one:
+
+```rust
+use spindle_core::prelude::*;
+
+match Literal::simple("bird").classify() {
+    ClassifiedLiteral::Ground(g) => { /* g.as_literal() has no variables */ }
+    ClassifiedLiteral::Pattern(p) => { /* p.ground(&bindings) -> GroundLiteral */ }
+}
+```
+
+### Shape Validation
+
+A `Shape` compiled from a signature validates argument sorts at a boundary
+(e.g. before an effectful action). It is never consulted by the reasoner:
+
+```rust
+use spindle_core::prelude::*;
+
+let shape = Shape::from(&sig);
+let report = shape.validate(&lit).unwrap();
+// report.diagnostics: SortMismatch / PredicateMismatch / Deferred (for variables)
+```
+
+### Parsing Predicate Indicators
+
+The `spindle-parser` crate exposes a fully-consuming recognizer for the
+`functor/arity` notation (slash-bearing functors must be quoted):
+
+```rust
+use spindle_parser::parse_predicate_indicator;
+
+let sym = parse_predicate_indicator("assign-to/2").unwrap();
+assert!(parse_predicate_indicator("rate/limit/2").is_err());        // ambiguous
+let quoted = parse_predicate_indicator("\"rate/limit\"/2").unwrap(); // ok
+```

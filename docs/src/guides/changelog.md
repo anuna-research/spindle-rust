@@ -3,6 +3,21 @@
 All notable changes to Spindle-Rust are documented here.
 For the full changelog with migration notes, see [CHANGELOG.md](https://codeberg.org/anuna/spindle-rust/src/branch/main/CHANGELOG.md) in the repository root.
 
+## Unreleased
+
+### Added
+
+- **SPEC-024 Predicate Model & Vocabulary**: a structural predicate identity and
+  derived tooling projections, all additive and non-semantic.
+  - First-class SPL `(predicate name ((arg sort) ...))` declarations and
+    structured `(meta (predicate functor arity) ...)` metadata targets.
+    See the [SPL Format reference](../reference/spl.md#predicate-declarations).
+  - `PredicateSymbol`, `PredicateSignature`, `ArgumentProfile`, `TheorySignature`,
+    `Vocabulary`, `Shape`, and `GroundLiteral`/`LiteralPattern` phase wrappers.
+    See the [Rust Library guide](../integration/rust.md#predicate-vocabulary).
+  - `Theory::metadata()` now returns `&HashMap<MetaTarget, Meta>` (internal
+    breaking change); `add_meta`/`get_meta` remain label wrappers.
+
 ## v0.3.0 (2026-03-04)
 
 ### Added

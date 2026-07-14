@@ -34,6 +34,12 @@ This project is part of the SPINdle family:
   - Three numeric types: Integer, Decimal (arbitrary-precision), Float
   - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
 
+- **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
+  - First-class declarations: `(predicate assign-to ((task symbol) (agent symbol)))`
+  - Structured metadata targets: `(meta (predicate assign-to 2) (description "..."))`
+  - Derived, deterministic theory signatures and vocabularies (signatures, argument profiles, provenance)
+  - Non-semantic shape validation — never changes conclusions
+
 - **Input Format**:
   - SPL (Spindle Lisp) - Lisp-based DSL
 
@@ -96,6 +102,10 @@ spindle stats examples/penguin.spl
 ; Predicates with variables
 (given (parent alice bob))
 (normally r3 (parent ?x ?y) (ancestor ?x ?y))
+
+; Predicate declaration + structured metadata target (optional)
+(predicate ancestor ((descendant symbol) (forebear symbol)))
+(meta (predicate ancestor 2) (description "Transitive parent relation."))
 
 ; Arithmetic: bind and compare
 (given (item widget 25))
