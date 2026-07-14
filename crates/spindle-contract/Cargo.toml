@@ -10,4 +10,5 @@ description = "Shared transport types for Spindle CLI and WASM output"
 rust_decimal.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+thiserror.workspace = true
 spindle-core = { path = "../spindle-core", features = ["serde"] }

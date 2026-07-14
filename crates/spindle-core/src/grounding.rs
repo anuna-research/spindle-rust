@@ -958,8 +958,7 @@ pub fn ground_theory_with_limit(
         grounded.add_superiority(&sup.superior, &sup.inferior);
     }
 
-    grounded.copy_metadata_from(theory);
-    *grounded.trust_policy_mut() = theory.trust_policy().clone();
+    grounded.copy_declarative_state_from(theory);
 
     (grounded, limit_hit)
 }

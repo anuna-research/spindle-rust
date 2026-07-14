@@ -27,8 +27,7 @@ impl PipelineStage for WildcardRewrite {
 
 fn rewrite_wildcards(theory: &Theory) -> Theory {
     let mut new_theory = Theory::new();
-    new_theory.copy_metadata_from(theory);
-    *new_theory.trust_policy_mut() = theory.trust_policy().clone();
+    new_theory.copy_declarative_state_from(theory);
 
     // Copy superiorities
     for sup in theory.superiorities() {

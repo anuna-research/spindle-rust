@@ -19,7 +19,7 @@ Semicolon to end of line:
 
 ```ebnf
 theory      = statement*
-statement   = fact | rule | prefer | meta
+statement   = fact | rule | prefer | meta | predicate-decl
             | claims | trusts | decays | threshold
 
 ; Core
@@ -27,7 +27,16 @@ fact        = "(given" literal ")"
 rule        = "(" keyword label? body head ")"
 keyword     = "always" | "normally" | "except"
 prefer      = "(prefer" label+ ")"
-meta        = "(meta" label property* ")"
+meta        = "(meta" meta-target property* ")"
+meta-target = label | predicate-target
+
+; Predicate declarations (SPEC-024)
+predicate-decl   = "(predicate" functor argument-list ")"
+argument-list    = "(" argument-decl* ")"
+argument-decl    = "(" arg-name primitive-sort ")"
+primitive-sort   = "symbol" | "integer" | "decimal" | "float" | "number" | "any"
+predicate-target = "(predicate" functor arity ")"
+arity            = "0" | non-zero-digit digit*
 
 ; Trust
 claims      = "(claims" source claims-meta* statement* ")"
@@ -216,9 +225,72 @@ Expands to:
 (prefer safety-protocol standard-rule)
 ```
 
+## Predicate Declarations
+
+A predicate declaration records the *structure* of a predicate — its ordered
+argument names and primitive sorts — independently of how (or whether) it is
+used. Declarations are optional: undeclared predicates parse and reason exactly
+as before. A declaration adds **no fact or rule**; it only populates the
+theory's [vocabulary](#the-predicate-vocabulary).
+
+```spl
+(predicate assign-to
+  ((task  symbol)
+   (agent symbol)))
+
+(predicate emergency ())        ; zero-arity predicate emergency/0
+```
+
+The arity is derived from the number of argument declarations, so
+`assign-to/2` above has two positions and `emergency/0` has none.
+
+### Inline Metadata
+
+A declaration may carry trailing `meta` properties inline, so you don't have to
+write a separate `(meta (predicate ...) ...)` statement for the common case:
+
+```spl
+(predicate assign-to
+  ((task  symbol)
+   (agent symbol))
+  (description "Assign a task to an agent.")
+  (tags ("planning" "scheduling")))
+```
+
+Inline properties are exact sugar for the [separate metadata
+target](#predicate-metadata-targets) — they land in the same predicate metadata
+store — so the declaration above is equivalent to writing the declaration and a
+`(meta (predicate assign-to 2) ...)` statement with the same properties. Inline
+and separate metadata for the same predicate merge (later values win per key).
+
+### Primitive Sorts
+
+Each argument declares one primitive sort. Sorts describe the *value space*
+only; they carry no domain meaning and do not affect inference.
+
+| Sort | Accepts |
+|---|---|
+| `symbol` | an interned symbolic name |
+| `integer` | a 64-bit integer |
+| `decimal` | an arbitrary-precision decimal |
+| `float` | a finite IEEE-754 float |
+| `number` | any of `integer`, `decimal`, or `float` |
+| `any` | any ground term |
+
+Declarations are validated when parsed: the argument names must be non-empty
+and unique, and an unknown sort is a parse error.
+
+### Predicate Indicators
+
+For display and CLI interoperability, a predicate is written in Prolog-style
+`functor/arity` notation, e.g. `assign-to/2` or `emergency/0`. A functor that
+contains `/` is quoted: `"rate/limit"/2`. This notation is presentation only —
+the machine representation always keeps functor and arity as separate
+structured fields, never a parsed string.
+
 ## Metadata
 
-Attach metadata to rules:
+Attach metadata to a rule (by label) or to a predicate (by structured target):
 
 ```spl
 (meta birds-fly
@@ -234,6 +306,34 @@ Attach metadata to rules:
   (key "string value")
   (key2 ("list" "of" "values")))
 ```
+
+### Predicate Metadata Targets
+
+A `meta` target may be a structured `(predicate functor arity)` selector
+instead of a label. This attaches metadata to one predicate symbol without
+overloading a rule label or parsing a predicate-indicator string:
+
+```spl
+(predicate assign-to ((task symbol) (agent symbol)))
+
+(meta (predicate assign-to 2)
+  (description "Assign a task to an agent."))
+```
+
+The predicate target is kept distinct from label metadata and from other
+arities: metadata for `(predicate assign-to 2)` never collides with a rule
+labelled `assign-to`, nor with `assign-to/1`. Predicate descriptions do not
+have to be declared — they can annotate any predicate the theory uses.
+
+### The Predicate Vocabulary
+
+Declarations, predicate metadata, and observed rule usage together form a
+derived, read-only **vocabulary**: a catalogue keyed by predicate symbol that
+carries each predicate's signature, a description, observed argument kinds per
+position, and the rule occurrences that reference it. The vocabulary is a
+tooling projection — it never changes conclusions. See the
+[Rust Library guide](../integration/rust.md#predicate-vocabulary) for the API
+(`TheorySignature`, `Vocabulary`).
 
 ## Modal Operators
 
@@ -463,6 +563,10 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 
 ```spl
 ; The Penguin Example
+
+; Predicate declaration + metadata (optional structural documentation)
+(predicate flies ())
+(meta (predicate flies 0) (description "Capable of flight."))
 
 ; Facts
 (given bird)

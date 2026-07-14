@@ -444,8 +444,15 @@ impl Spindle {
     /// +d literal
     /// META label key "value"
     /// META label key2 ("v1" "v2")
+    /// META (predicate functor arity) key "value"
     /// DEPS task1:dep1,dep2|task2:dep3
     /// ```
+    ///
+    /// Predicate-metadata targets use the structured `(predicate functor arity)`
+    /// discriminator — the same form the SPL `meta` statement accepts — so they
+    /// can never collide with a rule label that happens to spell an indicator.
+    /// A functor outside the bare-atom grammar is rendered as a quoted, escaped
+    /// SPL atom (e.g. `(predicate "a b" 0)`), preserving the target's structure.
     #[wasm_bindgen(js_name = reasonSpl)]
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
         reject_dfl_input(input)?;
@@ -460,16 +467,30 @@ impl Spindle {
         }
 
         // Add metadata
+        fn meta_value_str(value: &MetaValue) -> String {
+            match value {
+                MetaValue::String(s) => format!("\"{s}\""),
+                MetaValue::List(items) => {
+                    let quoted: Vec<_> = items.iter().map(|s| format!("\"{s}\"")).collect();
+                    format!("({})", quoted.join(" "))
+                }
+            }
+        }
         for (label, meta) in self.theory.metadata() {
             for (key, value) in &meta.properties {
-                let value_str = match value {
-                    MetaValue::String(s) => format!("\"{s}\""),
-                    MetaValue::List(items) => {
-                        let quoted: Vec<_> = items.iter().map(|s| format!("\"{s}\"")).collect();
-                        format!("({})", quoted.join(" "))
-                    }
-                };
-                output.push(format!("META {label} {key} {value_str}"));
+                output.push(format!("META {label} {key} {}", meta_value_str(value)));
+            }
+        }
+        // Predicate targets keep an explicit structured discriminator so they
+        // stay distinct from any label spelled like an indicator.
+        for (symbol, meta) in self.theory.predicate_metadata() {
+            let target = format!(
+                "(predicate {} {})",
+                spl_atom(symbol.functor().resolve()),
+                symbol.arity()
+            );
+            for (key, value) in &meta.properties {
+                output.push(format!("META {target} {key} {}", meta_value_str(value)));
             }
         }
 
@@ -481,6 +502,32 @@ impl Default for Spindle {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Render a functor as an SPL atom so the `(predicate functor arity)` META
+/// target reparses to the same functor: bare when every character is in the
+/// SPL lexer's bare-atom set, otherwise quoted with `"` and `\` escaped.
+fn spl_atom(functor: &str) -> String {
+    let is_bare_char = |c: char| {
+        c.is_alphanumeric()
+            || matches!(
+                c,
+                '-' | '_' | '?' | '~' | ':' | '.' | '+' | '*' | '/' | '<' | '>' | '=' | '!'
+            )
+    };
+    if !functor.is_empty() && functor.chars().all(is_bare_char) {
+        return functor.to_string();
+    }
+    let mut out = String::with_capacity(functor.len() + 2);
+    out.push('"');
+    for c in functor.chars() {
+        if c == '"' || c == '\\' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    out
 }
 
 fn reject_dfl_input(input: &str) -> Result<(), JsError> {
@@ -625,6 +672,31 @@ mod tests {
             .parse_spl("(given bird)\n(normally bird flies)")
             .unwrap();
         assert_eq!(spindle.rule_count(), 2);
+    }
+
+    #[test]
+    fn test_spl_atom_rendering() {
+        assert_eq!(spl_atom("assign-to"), "assign-to");
+        assert_eq!(spl_atom("rate/limit"), "rate/limit");
+        assert_eq!(spl_atom("a b"), "\"a b\"");
+        assert_eq!(spl_atom("a(b)"), "\"a(b)\"");
+        assert_eq!(spl_atom("a\"b"), "\"a\\\"b\"");
+        assert_eq!(spl_atom("a\\b"), "\"a\\\\b\"");
+        assert_eq!(spl_atom(""), "\"\"");
+    }
+
+    #[test]
+    fn test_reason_spl_quotes_predicate_meta_functor() {
+        let mut spindle = Spindle::new();
+        let output = spindle
+            .reason_spl("(meta (predicate \"a b\" 0) (description \"spaced functor\"))")
+            .unwrap();
+        // The functor is re-quoted so the target keeps its three-part
+        // structure instead of degrading to (predicate a b 0).
+        assert!(
+            output.contains("META (predicate \"a b\" 0) description \"spaced functor\""),
+            "unexpected output: {output}"
+        );
     }
 
     #[test]

@@ -15,7 +15,11 @@
 #![warn(missing_docs)]
 
 pub mod error;
+pub mod predicate_indicator;
 pub mod spl;
 
 pub use error::{ParseError, ParserFormat};
+pub use predicate_indicator::{
+    PredicateIndicatorError, parse_predicate_indicator, parse_predicate_indicator_with_limit,
+};
 pub use spl::parse_spl;

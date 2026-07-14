@@ -65,6 +65,7 @@ pub mod temporal;
 pub mod term;
 pub mod theory;
 pub mod trust;
+pub mod vocabulary;
 pub mod worklist;
 
 /// Prelude module for convenient imports
@@ -103,6 +104,15 @@ pub mod prelude {
     };
     pub use crate::term::{FiniteFloat, NumericValue, Term};
     pub use crate::theory::{Meta, MetaValue, Theory};
+    pub use crate::vocabulary::{
+        ArgumentDecl, ArgumentProfile, Bindings, ClassifiedLiteral, DeclarationOrigin,
+        DeclarationState, DerivationSummary, GroundLiteral, GroundingError, GroundnessError,
+        HasPredicateSymbol, LiteralPattern, MetaTarget, ObservedArgumentKind, OccurrenceRole,
+        PredicateDeclaration, PredicateIndicatorDisplay, PredicateOrigin, PredicateSignature,
+        PredicateSignatureError, PredicateSymbol, PredicateSymbolError, PrimitiveSort, Shape,
+        ShapeDiagnostic, ShapeReport, SourceLocation, TheorySignature, Vocabulary,
+        VocabularyDiagnostic, VocabularyEntry, VocabularyReport,
+    };
 }
 
 pub use prelude::*;

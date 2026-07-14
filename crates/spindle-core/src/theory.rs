@@ -10,6 +10,8 @@ use crate::literal::Literal;
 use crate::rule::{Rule, RuleLabel, RuleType};
 use crate::superiority::{Superiority, SuperiorityIndex};
 use crate::trust::TrustPolicy;
+use crate::vocabulary::declaration::{MetaTarget, PredicateDeclaration};
+use crate::vocabulary::symbol::PredicateSymbol;
 
 /// Parse a string literal, handling negation prefix
 fn parse_literal_str(s: &str) -> Literal {
@@ -47,8 +49,17 @@ pub struct Theory {
     superiorities: Vec<Superiority>,
     /// Indexed superiority for O(1) lookup
     sup_index: SuperiorityIndex,
-    /// Metadata indexed by label
+    /// Metadata indexed by rule label (the historical store; its accessor shape
+    /// is part of the public API and stays label-keyed).
     metadata: HashMap<String, Meta>,
+    /// Metadata indexed by predicate symbol, kept distinct from rule-label
+    /// metadata (SPEC-024 CON-008).
+    predicate_metadata: HashMap<PredicateSymbol, Meta>,
+    /// First-class predicate declarations in source/insertion order.
+    ///
+    /// Raw declarations are stored in order so conflict diagnostics retain every
+    /// origin (SPEC-024 CON-008).
+    predicate_declarations: Vec<PredicateDeclaration>,
     /// Auto-generated label counter
     label_counter: usize,
     /// Trust policy parsed from trust directives
@@ -175,9 +186,21 @@ impl Theory {
         self.sup_index.is_superior(superior, inferior)
     }
 
-    /// Add metadata for a label
+    /// Add metadata for a label.
     pub fn add_meta(&mut self, label: &str, key: &str, value: MetaValue) {
         let meta = self.metadata.entry(label.to_string()).or_default();
+        meta.properties.insert(key.to_string(), value);
+    }
+
+    /// Add metadata for a structured target (SPEC-024 CON-008).
+    ///
+    /// Existing metadata property merge and overwrite semantics apply to
+    /// predicate targets exactly as they do to label targets.
+    pub fn add_meta_target(&mut self, target: MetaTarget, key: &str, value: MetaValue) {
+        let meta = match target {
+            MetaTarget::Label(label) => self.metadata.entry(label).or_default(),
+            MetaTarget::Predicate(symbol) => self.predicate_metadata.entry(symbol).or_default(),
+        };
         meta.properties.insert(key.to_string(), value);
     }
 
@@ -191,19 +214,56 @@ impl Theory {
         self.add_meta(label, key, MetaValue::List(values));
     }
 
-    /// Get metadata for a label
+    /// Get metadata for a label.
     pub fn get_meta(&self, label: &str) -> Option<&Meta> {
         self.metadata.get(label)
     }
 
-    /// Get all metadata
+    /// Get metadata for a structured target (SPEC-024 CON-008).
+    pub fn get_meta_target(&self, target: &MetaTarget) -> Option<&Meta> {
+        match target {
+            MetaTarget::Label(label) => self.metadata.get(label),
+            MetaTarget::Predicate(symbol) => self.predicate_metadata.get(symbol),
+        }
+    }
+
+    /// Get all label metadata, keyed by rule label.
     pub fn metadata(&self) -> &HashMap<String, Meta> {
         &self.metadata
     }
 
-    /// Copy metadata from another theory
+    /// Get all predicate metadata, keyed by predicate symbol (SPEC-024 CON-008).
+    pub fn predicate_metadata(&self) -> &HashMap<PredicateSymbol, Meta> {
+        &self.predicate_metadata
+    }
+
+    /// Add a predicate declaration, preserving source/insertion order (SPEC-024 CON-008).
+    pub fn add_predicate_declaration(&mut self, declaration: PredicateDeclaration) {
+        self.predicate_declarations.push(declaration);
+    }
+
+    /// Get all predicate declarations in source/insertion order.
+    pub fn predicate_declarations(&self) -> &[PredicateDeclaration] {
+        &self.predicate_declarations
+    }
+
+    /// Copy metadata (label and predicate) from another theory
     pub fn copy_metadata_from(&mut self, other: &Theory) {
         self.metadata = other.metadata.clone();
+        self.predicate_metadata = other.predicate_metadata.clone();
+    }
+
+    /// Copy all non-rule state — label and predicate metadata, predicate
+    /// declarations, and the trust policy — from another theory.
+    ///
+    /// Pipeline stages that rebuild a theory rule-by-rule (grounding, wildcard
+    /// rewriting, temporal filtering) use this so parsed declarations survive
+    /// preparation instead of silently degrading declared symbols to
+    /// `UndeclaredPredicate` (SPEC-024 CON-008).
+    pub fn copy_declarative_state_from(&mut self, other: &Theory) {
+        self.copy_metadata_from(other);
+        self.predicate_declarations = other.predicate_declarations.clone();
+        self.trust_policy = other.trust_policy.clone();
     }
 
     /// Get the trust policy
@@ -387,6 +447,65 @@ mod tests {
         theory.add_meta_string("r1", "key", "value");
         let all_meta = theory.metadata();
         assert!(all_meta.contains_key("r1"));
+    }
+
+    #[test]
+    fn test_predicate_metadata_kept_distinct_from_labels() {
+        use crate::vocabulary::PredicateSymbol;
+
+        let mut theory = Theory::new();
+        let symbol = PredicateSymbol::try_new("p".into(), 1).unwrap();
+        theory.add_meta_string("p/1", "description", "a label");
+        theory.add_meta_target(
+            MetaTarget::Predicate(symbol),
+            "description",
+            MetaValue::String("a predicate".to_string()),
+        );
+
+        assert_eq!(
+            theory
+                .get_meta("p/1")
+                .unwrap()
+                .properties
+                .get("description"),
+            Some(&MetaValue::String("a label".to_string()))
+        );
+        assert_eq!(
+            theory
+                .get_meta_target(&MetaTarget::Predicate(symbol))
+                .unwrap()
+                .properties
+                .get("description"),
+            Some(&MetaValue::String("a predicate".to_string()))
+        );
+        assert_eq!(theory.metadata().len(), 1);
+        assert_eq!(theory.predicate_metadata().len(), 1);
+    }
+
+    #[test]
+    fn test_copy_declarative_state_preserves_declarations() {
+        use crate::vocabulary::{
+            ArgumentDecl, DeclarationOrigin, PredicateDeclaration, PredicateSignature,
+            PredicateSymbol, PrimitiveSort,
+        };
+
+        let mut source = Theory::new();
+        let symbol = PredicateSymbol::try_new("p".into(), 1).unwrap();
+        let sig = PredicateSignature::try_new(
+            symbol,
+            vec![ArgumentDecl::new("x", PrimitiveSort::Symbol)],
+        )
+        .unwrap();
+        source.add_predicate_declaration(PredicateDeclaration::new(
+            sig,
+            DeclarationOrigin::Programmatic,
+        ));
+        source.add_meta_string("r1", "key", "value");
+
+        let mut rebuilt = Theory::new();
+        rebuilt.copy_declarative_state_from(&source);
+        assert_eq!(rebuilt.predicate_declarations().len(), 1);
+        assert!(rebuilt.get_meta("r1").is_some());
     }
 
     #[test]

@@ -8,6 +8,27 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- **Predicate model and vocabulary** (SPEC-024): a structural predicate identity
+  and derived tooling projections, all additive and non-semantic (reasoning is
+  unchanged).
+  - `PredicateSymbol` (functor + arity) with a `HasPredicateSymbol` projection
+    for `Literal` and `BodyLogicLiteral` (body arity retains arithmetic args).
+  - Primitive sorts, checked `PredicateSignature`, positional `ArgumentProfile`,
+    and non-semantic `Shape` validation.
+  - `GroundLiteral` / `LiteralPattern` phase wrappers and `Literal::classify`.
+  - `TheorySignature::derive` and `Vocabulary::derive` (deterministic symbol
+    sets, declaration conflict handling, descriptions, provenance, summary
+    counts).
+  - SPL: first-class `(predicate name ((arg sort) ...))` declarations and
+    structured `(meta (predicate functor arity) ...)` metadata targets, stored
+    in `Theory` with source provenance. Undeclared predicates remain valid.
+    Declarations may also carry inline `meta` properties
+    (`(predicate name (...) (description "..."))`) as sugar for the separate
+    metadata target.
+  - Predicate-indicator recognizer (`functor/arity`) in `spindle-parser`.
+  - Additive `spindle.vocabulary/1` JSON DTOs in `spindle-contract`.
+  - **Breaking (internal):** `Theory::metadata()` now returns
+    `&HashMap<MetaTarget, Meta>`; `add_meta`/`get_meta` remain label wrappers.
 - **Arithmetic module** (SPEC-017): full arithmetic expression support in SPL.
   - `Term` enum with `Symbol`, `Integer`, `Decimal`, `Float` variants.
   - `FiniteFloat` wrapper: rejects NaN/Inf, normalizes `-0.0`, safe for `Eq`/`Hash`.
