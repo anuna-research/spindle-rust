@@ -30,7 +30,8 @@ the annotated catalogue built from that table. Neither is the execution engine.
 - [[SPEC-024-predicate-model-and-vocabulary#Predicate Signature|`PredicateSignature`]] adds ordered argument names and
   primitive sorts; it does not change defeasible inference.
 - [[SPEC-024-predicate-model-and-vocabulary#Predicate Declaration|`PredicateDeclaration`]] is a first-class SPL and
-  `Theory` member; predicate descriptions use a structured [[SPEC-024-predicate-model-and-vocabulary#Predicate Metadata Target|metadata target]].
+  `Theory` member; predicate descriptions use a structured [[SPEC-024-predicate-model-and-vocabulary#Predicate Metadata Target|metadata target]],
+  written either as a separate `meta` statement or inline on the declaration.
 - [[SPEC-024-predicate-model-and-vocabulary#Literal Pattern|`LiteralPattern`]] and [[SPEC-024-predicate-model-and-vocabulary#Ground Literal|`GroundLiteral`]]
   are validated phase types around the compatibility [[SPEC-024-predicate-model-and-vocabulary#Literal|`Literal`]]
   model.
@@ -135,7 +136,7 @@ The distinctions are normative in [[SPEC-024-predicate-model-and-vocabulary#CON-
 - A public `PredicateSymbol` value composed of functor and arity.
 - A reversible Prolog-style predicate-indicator notation for humans.
 - Checked primitive argument declarations in `PredicateSignature`.
-- First-class `(predicate name ((argument sort) ...))` SPL declarations stored in `Theory`.
+- First-class `(predicate name ((argument sort) ...))` SPL declarations stored in `Theory`, with optional inline `meta` properties.
 - Structured predicate targets for existing SPL `meta` properties such as `description`.
 - Deterministic `TheorySignature` extraction from declarations, rule heads, and logical bodies.
 - `LiteralPattern` and `GroundLiteral` phase types compatible with the current AST.
@@ -184,12 +185,19 @@ A **PredicateDeclaration** is an origin-bearing theory statement containing
 a checked predicate signature. It declares structure, not a fact or rule, and
 therefore does not itself establish or derive any literal.
 
-The canonical SPL form is positional and Lisp-like:
+The canonical SPL form is positional and Lisp-like, and MAY carry optional
+trailing `meta` properties inline (see [[SPEC-024-predicate-model-and-vocabulary#ADR-008]]):
 
 ```spl
 (predicate assign-to
   ((task symbol)
    (agent symbol)))
+
+; With inline metadata (sugar for a separate meta statement)
+(predicate assign-to
+  ((task symbol)
+   (agent symbol))
+  (description "Assign a task to an agent."))
 ```
 
 ### 3.5 Predicate Metadata Target
@@ -527,6 +535,9 @@ SPL SHALL recognize the declaration grammar in
 **Acceptance criteria:** `(predicate assign-to ((task symbol) (agent symbol)))`
 produces `assign-to/2`; `(predicate emergency ())` produces `emergency/0`;
 arity is derived only from the argument list; and the form adds no fact or rule.
+A declaration MAY carry trailing `meta` properties inline, which desugar into
+the same `MetaTarget::Predicate` store as a separate `meta` statement (see
+[[SPEC-024-predicate-model-and-vocabulary#REQ-017]]) and likewise add no fact or rule.
 
 **Traces:** [[SPEC-024-predicate-model-and-vocabulary#CON-008]], [[SPEC-024-predicate-model-and-vocabulary#ADR-008]], [[SPEC-024-predicate-model-and-vocabulary#TEST-021]].
 
