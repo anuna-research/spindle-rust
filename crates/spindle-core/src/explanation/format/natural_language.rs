@@ -48,7 +48,11 @@ impl ExplanationFormatter for NaturalLanguageFormatter {
             output.push_str("Derivation:\n");
             output.push_str(&proof_node_to_natural_language(proof, 1, &self.indent));
         } else if explanation.conclusion_type.is_positive() {
-            output.push_str("No derivation found.\n");
+            // The conclusion IS proven (the summary above says so); a missing
+            // proof tree means the derivation could not be reconstructed, not
+            // that none exists. Saying "No derivation found." here contradicts
+            // the summary, so state the honest thing instead.
+            output.push_str("(Derivation details unavailable.)\n");
         }
 
         // Blocked alternatives
