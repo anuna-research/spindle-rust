@@ -13,6 +13,7 @@ use std::fmt;
 
 use crate::conclusion::Conclusion;
 use crate::error::Result;
+use crate::grounding::ground_theory;
 use crate::literal::Literal;
 use crate::reason::reason;
 use crate::rule::RuleType;
@@ -231,9 +232,22 @@ pub fn why_not_with_conclusions(
     let mut result = WhyNotResult::new(literal.clone());
     let mut found_rule = false;
 
+    // Reason over the GROUNDED rules, not the templates. `conclusions` are
+    // ground (the reasoner grounds internally), and the family matchers below
+    // compare argument values — so a ground query `(flies opus)` never matches
+    // a template head `(flies ?x)`, and a template body `(a ?x)` never matches
+    // the ground conclusion `(a opus)`. Iterating the ground instances (whose
+    // heads and bodies are ground, e.g. `flies(opus)` / `a(opus)`) makes the
+    // deriving-rule, missing-premise, and attacker checks all consistent with
+    // the conclusion set. `template_label()` still resolves to the template
+    // for superiority, which is declared on templates. Without this a query
+    // against a variable-headed rule finds no rule at all and reports the
+    // misleading "no rule concludes …" instead of the real ambiguity.
+    let grounded = ground_theory(theory);
+
     // Find rules that could derive this literal using the query literal's own
     // semantics: exact when bounded, family-aware when atemporal.
-    for rule in theory.rules() {
+    for rule in grounded.rules() {
         if semantic_literal_matches(literal, rule.head_literal())
             && rule.rule_type != RuleType::Defeater
         {
@@ -270,7 +284,7 @@ pub fn why_not_with_conclusions(
                 // against `~p` would miss a temporal complement fact/attacker.
                 let head_complement = rule.head_literal().complement();
                 let mut blocked = false;
-                for attacker in theory.rules() {
+                for attacker in grounded.rules() {
                     if exact_literal_match(&head_complement, attacker.head_literal()) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
@@ -352,11 +366,64 @@ pub fn why_not_with_conclusions(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::literal::Literal;
     use crate::rule::Rule;
     use crate::temporal::{Temporal, TimePoint};
     use crate::theory::Theory;
+
+    #[test]
+    fn why_not_finds_variable_headed_rules_in_ambiguity() {
+        use crate::intern::intern;
+        use crate::mode::Mode;
+        use crate::term::Term;
+
+        // Pure ambiguity: a→flies, b→~flies, no preference, so neither
+        // (flies opus) nor its complement is proven. why_not(flies opus) must
+        // find the deriving rule and report the CONTRADICTION — not fall
+        // through to an empty blocked_by (the misleading "no rule concludes").
+        let l = |n: &str, neg: bool, who: &str| {
+            Literal::from_ids(
+                intern(n),
+                neg,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern(who))],
+            )
+        };
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible(
+            "r1",
+            vec![l("a", false, "?x")],
+            l("flies", false, "?x"),
+        ));
+        th.add_rule(Rule::defeasible(
+            "r2",
+            vec![l("b", false, "?x")],
+            l("flies", true, "?x"),
+        ));
+        th.add_rule(Rule::fact("fa", l("a", false, "opus")));
+        th.add_rule(Rule::fact("fb", l("b", false, "opus")));
+
+        let result = why_not(&th, &l("flies", false, "opus")).unwrap();
+        assert!(
+            result.would_derive.is_some(),
+            "the variable-headed rule r1 must be recognised as deriving (flies opus)"
+        );
+        assert!(
+            !result.blocked_by.is_empty(),
+            "the ambiguity must be reported, not an empty blocked_by"
+        );
+        assert!(
+            result
+                .blocked_by
+                .iter()
+                .any(|b| b.blocking_type == BlockingType::Contradicted),
+            "the blocker must name the contradicting rule, got {:?}",
+            result.blocked_by
+        );
+    }
 
     // =========================================================================
     // 1. Display for provable literal (lines ~141-146)

@@ -75,6 +75,34 @@ pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Opti
     explain_inner(theory, literal, &mut visited)
 }
 
+/// Resolve a conclusion's `rule_label` to the rule that carries its body.
+/// A grounded instance is labelled `{template}_{instance_num}` (grounding),
+/// and only the template rule (with its body) lives in the theory, so when
+/// the direct lookup misses, strip trailing `_<digits>` segments to recover
+/// the template. Without this, a conclusion derived by a variable rule (whose
+/// instances are renamed) gets no proof tree, and the natural-language
+/// formatter then prints a contradictory "No derivation found." under a
+/// "This was proven…" summary.
+fn resolve_rule<'a>(
+    theory: &'a crate::theory::Theory,
+    label: &str,
+) -> Option<&'a crate::rule::Rule> {
+    if let Some(rule) = theory.get_rule(label) {
+        return Some(rule);
+    }
+    let mut cur = label;
+    while let Some((prefix, suffix)) = cur.rsplit_once('_') {
+        if suffix.is_empty() || !suffix.bytes().all(|b| b.is_ascii_digit()) {
+            break;
+        }
+        if let Some(rule) = theory.get_rule(prefix) {
+            return Some(rule);
+        }
+        cur = prefix;
+    }
+    None
+}
+
 /// Internal recursive helper with cycle detection via `visited` set.
 fn explain_inner(
     theory: &crate::theory::Theory,
@@ -109,7 +137,7 @@ fn explain_inner(
     let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
     if let Some(rule_label) = &conclusion.rule_label
-        && let Some(rule) = theory.get_rule(rule_label)
+        && let Some(rule) = resolve_rule(theory, rule_label)
     {
         let mut step = ProofStep::new(
             rule.label.clone(),
@@ -182,6 +210,59 @@ fn explain_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explain_builds_proof_tree_for_grounded_variable_rule() {
+        // A conclusion derived by a variable rule carries a grounded instance
+        // label (`pn_1`) absent from the template theory; explain must still
+        // resolve it to the template `pn` and build a proof tree — otherwise
+        // the formatter contradicts itself ("This was proven…" then
+        // "No derivation found.").
+        use crate::intern::intern;
+        use crate::mode::Mode;
+        use crate::rule::Rule;
+        use crate::temporal::Temporal;
+        use crate::term::Term;
+        use crate::theory::Theory;
+
+        let pen = |who: &str| {
+            Literal::from_ids(
+                intern("penguin"),
+                false,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern(who))],
+            )
+        };
+        let not_flies = |who: &str| {
+            Literal::from_ids(
+                intern("flies"),
+                true,
+                Mode::empty(),
+                Temporal::empty(),
+                vec![Term::Symbol(intern(who))],
+            )
+        };
+        let mut th = Theory::new();
+        th.add_rule(Rule::defeasible("pn", vec![pen("?x")], not_flies("?x")));
+        th.add_rule(Rule::fact("f1", pen("tweety")));
+
+        let e = explain(&th, &not_flies("tweety")).unwrap().unwrap();
+        assert_eq!(e.conclusion_type, ConclusionType::DefeasiblyProvable);
+        assert!(
+            e.proof_tree.is_some(),
+            "a proven defeasible conclusion must carry a proof tree"
+        );
+        let rendered = e.to_natural_language();
+        assert!(
+            !rendered.contains("No derivation found."),
+            "must not contradict the 'was proven' summary: {rendered}"
+        );
+        assert!(
+            rendered.contains("Derivation:"),
+            "should show the derivation: {rendered}"
+        );
+    }
 
     #[test]
     fn test_explain_simple_fact() {

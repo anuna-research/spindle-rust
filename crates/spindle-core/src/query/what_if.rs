@@ -194,13 +194,19 @@ pub fn what_if(
         }
     }
 
-    // Find new conclusions
+    // Find new conclusions. Deduplicate on the same injective canonical key
+    // used for the baseline: one literal can appear in `modified_conclusions`
+    // under several tags or via several rules, and `newly_provable` is a set
+    // of newly-provable literals — without this a consumer prints the same
+    // "now provable: X" line once per derivation path.
+    let mut emitted: HashSet<String> = HashSet::new();
     let new_conclusions: Vec<Literal> = modified_conclusions
         .iter()
         .filter(|c| {
             c.conclusion_type.is_positive()
                 && !baseline_provable.contains(&canonical_literal_key(&c.literal))
         })
+        .filter(|c| emitted.insert(canonical_literal_key(&c.literal)))
         .map(|c| c.literal.clone())
         .collect();
 
@@ -289,6 +295,40 @@ mod tests {
                 .any(|l| l.to_spl() == temporal_lit("p", 1, 10).to_spl()),
             "Baseline window p[1,10] must not appear among new conclusions"
         );
+    }
+
+    #[test]
+    fn what_if_deduplicates_new_conclusions() {
+        // `q` becomes provable under the hypothetical `a` both strictly (+D via
+        // r1) and defeasibly (+d via r2), so it appears at two positive tags in
+        // the modified conclusion set. `newly_provable` is a set of literals, so
+        // it must list `q` once — without dedup a consumer prints
+        // "now provable: q" once per tag/derivation path.
+        let mut th = Theory::new();
+        th.add_rule(Rule::strict(
+            "r1",
+            vec![Literal::simple("a")],
+            Literal::simple("q"),
+        ));
+        th.add_rule(Rule::defeasible(
+            "r2",
+            vec![Literal::simple("a")],
+            Literal::simple("q"),
+        ));
+
+        let result = what_if(
+            &th,
+            vec![HypotheticalClaim::new(Literal::simple("a"))],
+            &Literal::simple("q"),
+        )
+        .unwrap();
+
+        let q_count = result
+            .new_conclusions
+            .iter()
+            .filter(|l| l.name() == "q" && !l.negation)
+            .count();
+        assert_eq!(q_count, 1, "q must be reported once, not once per tag/rule");
     }
 
     #[test]
