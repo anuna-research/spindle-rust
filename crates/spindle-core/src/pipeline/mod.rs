@@ -37,7 +37,9 @@ use crate::error::Result;
 use crate::literal::Literal;
 use crate::temporal::TimePoint;
 use crate::theory::{MetaValue, Theory};
-use crate::trust::{Source, TrustDerivationNode, TrustPolicy, TrustValue, WeightedConclusion};
+use crate::trust::{
+    DiminisherInfo, Source, TrustDerivationNode, TrustPolicy, TrustValue, WeightedConclusion,
+};
 use std::collections::{HashMap, HashSet};
 
 // ---------------------------------------------------------------------------
@@ -554,6 +556,54 @@ fn collect_tree_sources(node: &TrustDerivationNode) -> HashSet<Source> {
     sources
 }
 
+/// Find defeaters that fired against a defeasible conclusion and were overruled.
+///
+/// A defeater diminishes a `+d` conclusion when its head is the complement of
+/// the conclusion's literal and its body is defeasibly provable (it *fired*).
+/// Because the conclusion is nonetheless positive, the proof theory guarantees
+/// the defeater was beaten by the superiority relation (*overruled*). A
+/// defeater whose antecedent is not provable mounts no challenge and does not
+/// diminish. The defeater's credibility is the weakest link of its own
+/// derivation, mirroring `build_trust_tree` on the conclusion side.
+fn defeater_diminishers(
+    conclusion_literal: &Literal,
+    positive_conclusions: &HashMap<String, Vec<&Conclusion>>,
+    theory: &Theory,
+    policy: &TrustPolicy,
+    reference_time: Option<TimePoint>,
+) -> Vec<(String, TrustValue)> {
+    let complement_key = conclusion_literal.complement().to_spl();
+    let mut out = Vec::new();
+
+    for rule in theory.rules() {
+        if !rule.rule_type.is_defeater() {
+            continue;
+        }
+        if rule.head.is_empty() || rule.head[0].to_spl() != complement_key {
+            continue;
+        }
+        // Fired: every logic body literal is positively provable.
+        let fired = rule.body.iter().all(|bl| match bl.as_logic() {
+            Some(lit) => positive_conclusions.contains_key(&lit.to_literal().to_spl()),
+            None => true,
+        });
+        if !fired {
+            continue;
+        }
+        let tree = build_trust_tree(
+            &rule.head[0],
+            Some(rule.label.as_str()),
+            positive_conclusions,
+            theory,
+            policy,
+            reference_time,
+            &mut HashSet::new(),
+        );
+        out.push((rule.label.clone(), tree.weakest_link_trust()));
+    }
+    out
+}
+
 /// Compute trust-weighted conclusions using weakest-link propagation through derivation chains.
 ///
 /// For each positive conclusion, traces the full derivation chain back through
@@ -583,7 +633,7 @@ pub fn compute_weighted_conclusions(
     conclusions
         .iter()
         .map(|c| {
-            let (degree, sources) = if c.is_positive() {
+            let (mut degree, sources) = if c.is_positive() {
                 let tree = build_trust_tree(
                     &c.literal,
                     c.rule_label.as_deref(),
@@ -600,8 +650,28 @@ pub fn compute_weighted_conclusions(
                 (policy.default_trust, HashSet::new())
             };
 
+            // Layer-2 diminishment: each defeater that fired and was
+            // overruled reduces the degree to degree * (1 - defeater_degree),
+            // folded in rule order. Applies to +d only; +D cannot be
+            // challenged by a defeater.
+            let mut diminishers = Vec::new();
+            if c.conclusion_type == ConclusionType::DefeasiblyProvable {
+                for (label, defeater_trust) in defeater_diminishers(
+                    &c.literal,
+                    &positive_conclusions,
+                    theory,
+                    policy,
+                    reference_time,
+                ) {
+                    let dim = DiminisherInfo::new(label, defeater_trust, degree);
+                    degree = dim.resulting_degree();
+                    diminishers.push(dim);
+                }
+            }
+
             let mut wc = WeightedConclusion::new(c.literal.clone(), c.conclusion_type, degree);
             wc.sources = sources;
+            wc.diminished_by = diminishers;
 
             // Evaluate all named thresholds
             for (name, &threshold_val) in &policy.thresholds {

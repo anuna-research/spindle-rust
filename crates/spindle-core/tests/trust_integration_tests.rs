@@ -428,3 +428,137 @@ fn test_multiple_derivations_picks_strongest_proof() {
     assert!(result.sources.contains(&Source::new("alice")));
     assert!(result.sources.contains(&Source::new("charlie")));
 }
+
+// ---------------------------------------------------------------------------
+// Diminishment: defeaters that fired and were overruled reduce +d degree
+// ---------------------------------------------------------------------------
+
+/// The COMMA 2026 paper's SLA dispute, one party per test case.
+/// Theory: contract (strict SLA), monitoring (breach rule), ops lead
+/// (maintenance defeater d1, overruled via (prefer r2 d1)), forensic
+/// (outage-unplanned feeds r2). Weakest link runs over {contract,
+/// monitoring, forensic}; d1 fired-and-overruled diminishes by (1 - t_ops).
+fn sla_spl(contract: f64, monitoring: f64, ops: f64, forensic: f64) -> String {
+    format!(
+        r#"
+        (trusts doc:contract {contract})
+        (trusts system:monitoring {monitoring})
+        (trusts witness:ops-lead {ops})
+        (trusts expert:forensic {forensic})
+        (claims doc:contract
+          (given sla-99-percent-uptime)
+          (always r1 sla-99-percent-uptime sla-in-force))
+        (claims system:monitoring
+          (given measured-uptime-97)
+          (normally r2
+            (and sla-in-force measured-uptime-97 outage-unplanned)
+            sla-breached))
+        (claims witness:ops-lead
+          (given planned-maintenance-window)
+          (except d1 planned-maintenance-window (not sla-breached)))
+        (claims expert:forensic
+          (given logs-show-unplanned-outage)
+          (normally r3 logs-show-unplanned-outage outage-unplanned))
+        (prefer r2 d1)
+    "#
+    )
+}
+
+fn sla_breached_degree(contract: f64, monitoring: f64, ops: f64, forensic: f64) -> f64 {
+    let wcs = weighted_from_spl(&sla_spl(contract, monitoring, ops, forensic), None);
+    let wc = find_wc(&wcs, "sla-breached", ConclusionType::DefeasiblyProvable)
+        .expect("+d sla-breached should exist");
+    assert!(
+        wc.was_diminished(),
+        "d1 fired and was overruled; conclusion should be diminished"
+    );
+    assert_eq!(wc.diminished_by.len(), 1);
+    assert_eq!(wc.diminished_by[0].defeater_label, "d1");
+    wc.degree
+}
+
+#[test]
+fn test_paper_example_plaintiff() {
+    // weakest link min(0.99, 0.9, 0.95) = 0.9; diminished 0.9 * (1 - 0.3) = 0.63
+    let degree = sla_breached_degree(0.99, 0.9, 0.3, 0.95);
+    assert!((degree - 0.63).abs() < 1e-10, "expected 0.63, got {degree}");
+}
+
+#[test]
+fn test_paper_example_defendant() {
+    // weakest link min(0.99, 0.5, 0.4) = 0.4; diminished 0.4 * (1 - 0.9) = 0.04
+    let degree = sla_breached_degree(0.99, 0.5, 0.9, 0.4);
+    assert!((degree - 0.04).abs() < 1e-10, "expected 0.04, got {degree}");
+}
+
+#[test]
+fn test_paper_example_court() {
+    // weakest link min(0.99, 0.8, 0.75) = 0.75; diminished 0.75 * (1 - 0.6) = 0.30
+    let degree = sla_breached_degree(0.99, 0.8, 0.6, 0.75);
+    assert!((degree - 0.30).abs() < 1e-10, "expected 0.30, got {degree}");
+}
+
+#[test]
+fn test_unfired_defeater_does_not_diminish() {
+    // d1's antecedent is not provable: no challenge was mounted, no diminishment.
+    let spl = r#"
+        (trusts alice 0.9)
+        (trusts bob 0.8)
+        (claims alice (given a) (normally r1 (a) (goal)))
+        (claims bob (except d1 (unproven-premise) (not goal)))
+        (prefer r1 d1)
+    "#;
+    let wcs = weighted_from_spl(spl, None);
+    let wc =
+        find_wc(&wcs, "goal", ConclusionType::DefeasiblyProvable).expect("+d goal should exist");
+    assert!(!wc.was_diminished(), "unfired defeater must not diminish");
+    assert!(
+        (wc.degree - 0.9).abs() < 1e-10,
+        "expected 0.9, got {}",
+        wc.degree
+    );
+}
+
+#[test]
+fn test_multiple_defeaters_fold_multiplicatively() {
+    // Two fired-and-overruled defeaters: 0.9 * (1 - 0.5) * (1 - 0.2) = 0.36
+    let spl = r#"
+        (trusts alice 0.9)
+        (trusts bob 0.5)
+        (trusts carol 0.2)
+        (claims alice (given a) (normally r1 (a) (goal)))
+        (claims bob (given b) (except d1 (b) (not goal)))
+        (claims carol (given c) (except d2 (c) (not goal)))
+        (prefer r1 d1)
+        (prefer r1 d2)
+    "#;
+    let wcs = weighted_from_spl(spl, None);
+    let wc =
+        find_wc(&wcs, "goal", ConclusionType::DefeasiblyProvable).expect("+d goal should exist");
+    assert_eq!(wc.diminished_by.len(), 2);
+    assert!(
+        (wc.degree - 0.36).abs() < 1e-10,
+        "expected 0.36, got {}",
+        wc.degree
+    );
+}
+
+#[test]
+fn test_strict_conclusion_not_diminished() {
+    // +D conclusions cannot be challenged by defeaters; no diminishment.
+    let spl = r#"
+        (trusts alice 0.9)
+        (trusts bob 0.8)
+        (claims alice (given a) (always r1 a goal))
+        (claims bob (given b) (except d1 (b) (not goal)))
+    "#;
+    let wcs = weighted_from_spl(spl, None);
+    let wc =
+        find_wc(&wcs, "goal", ConclusionType::DefinitelyProvable).expect("+D goal should exist");
+    assert!(!wc.was_diminished(), "+D must not be diminished");
+    assert!(
+        (wc.degree - 0.9).abs() < 1e-10,
+        "expected 0.9, got {}",
+        wc.degree
+    );
+}
