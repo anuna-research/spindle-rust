@@ -29,3 +29,7 @@ bench/compiled/
 
 # Paper build artifacts
 /docs/paper/
+
+# Lean / Lake build cache (never track — 150MB binaries were purged from history 2026-07-24)
+lean/.lake/
+**/.lake/
