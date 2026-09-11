@@ -65,7 +65,7 @@ to the papers as universal requirements.
 | --- | --- |
 | What does a fold read? | Final surviving ground rows from earlier strata, not grounding candidates or alternative derivation trees. |
 | How are duplicates treated? | Deduplicate complete rows, then extract values. Equal values from distinct rows retain multiplicity. |
-| What defines a group? | Already-bound outer variables restrict the matching relation. Implicit grouping inferred from syntax remains to be formalised. |
+| What defines a group? | Already-bound outer variables restrict the matching relation. The finite lowerer enumerates outer bindings and keeps fold-local matching variables separate. |
 | What does empty mean? | An explicit seed is returned on empty input; `required` fails. For nonempty input the seed participates once. |
 | Can aggregation be recursive? | The initial language rejects every dependency cycle containing a fold. Ordinary positive recursion remains permitted. |
 | Does strong negation add a strict dependency? | No. `not p` in Spindle is a complementary literal, not negation-as-failure. It uses an ordinary dependency; conflict resolution settles the competing heads together. |
@@ -89,6 +89,24 @@ aggregate input -----1------> rule
 Every edge requires `stage(source) + weight <= stage(target)`. A zero-weight
 edge in both directions fixes the rule and head domain to the same stage.
 
+## Additional boundary requirement from the implementation
+
+The local three-phase reasoner uses lambda support to decide whether an attack
+can reach its target (`Closure.attackReaches`). A lower literal can remain in
+lambda while conflict prevents its defeasible proof. Positive conclusion
+transport alone therefore does not preserve ordinary attack applicability.
+This is an observation about Spindle's implementation, not a new claim from
+the papers above. Kernel-checked examples in `GroundBackendTests.lean` show an
+ambiguous lower `p` keeping a later defeater against `q` applicable; dropping
+that potential support incorrectly permits `q`.
+
+The reference ground backend consequently retains the complete lower rule
+prefix, including priorities and defeaters, and recomputes all three closures.
+This preserves the information needed by the local computation without treating
+lambda-only rows as aggregate inputs. A more compact boundary representation
+will need a separate equivalence proof. The earlier transport theorem only
+establishes rule type preservation, not semantic equivalence.
+
 ## Questions still requiring an evaluator contract
 
 **Proof strength of a newly computed aggregate.** Preserving an existing `+d`
@@ -97,8 +115,13 @@ conclusion is not. In particular, an exact sum depends on the input relation's
 completeness, not merely on positive proofs for the included rows. Even if every
 included row has a definite proof, adding another input fact can change the sum.
 We must not claim ordinary SDL `+D` monotonicity for such results without defining
-how relation closure enters the proof theory. The next evaluator design must
-state this explicitly; the dependency extractor does not decide it.
+how relation closure enters the proof theory. The execution API now states this boundary explicitly: `foldAt` returns a
+snapshot-relative value without an SDL proof tag, and later checked stages
+cannot revise that snapshot. The finite lowerer now offers an explicit conservative policy: add a fresh
+defeasible closure premise while retaining the original rule kind. Alternatively,
+reject aggregate-bearing strict rules. The prefix-equivalence theorem compares
+execution with the final theory under the selected policy; it does not attribute
+this policy to the literature as a universal standard.
 
 **Arithmetic and errors.** The current reducer laws concern total mathematical
 operations. Machine overflow, finite-precision rounding, and expression failures
@@ -109,7 +132,9 @@ or proved one.
 
 **Termination.** Stratification orders aggregate computations; it does not by
 itself establish a finite value domain for ordinary recursive arithmetic rules.
-The complete evaluator still needs a finiteness argument or an explicit
-resource-limit result, separate from semantic rejection of an aggregate cycle.
+The executable lowerer now grounds over a declared finite domain and errors
+when an aggregate result lies outside it. All ground reasoning phases complete
+within their proved finite-literal bounds. Supporting unbounded generated values
+still needs a separate finiteness or resource-limit contract.
 
 The current scope and verified modules are described in [AGGREGATION.md](AGGREGATION.md).

@@ -37,3 +37,10 @@ import Spindle.Aggregation.Syntax
 import Spindle.Aggregation.Dependencies
 import Spindle.Aggregation.Inference
 import Spindle.Aggregation.DependencyTests
+import Spindle.Aggregation.Execution
+import Spindle.Aggregation.ExecutionTests
+import Spindle.Aggregation.GroundBackend
+import Spindle.Aggregation.GroundBackendTests
+import Spindle.Aggregation.PrefixEquivalence
+import Spindle.Aggregation.Lowering
+import Spindle.Aggregation.LoweringTests

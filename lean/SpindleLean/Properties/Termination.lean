@@ -434,4 +434,115 @@ theorem deltaClose_fuel_independent (t : Theory) (fuel₁ fuel₂ : Nat)
         deltaClose_go_fuel_add t init n hnd hsc (Nat.le_refl _) k2
     _ = Closure.deltaClose.go t init fuel₂ := by rw [← hk2]
 
+-- A convergence equality also certifies that applying the phase operator
+-- once more changes nothing. This is the boundary needed by staged execution.
+private theorem loop_fixedpoint
+    (step : List Literal → List Literal) (go : List Literal → Nat → List Literal)
+    (zero : ∀ c, go c 0 = c)
+    (succ : ∀ c n, go c (n + 1) =
+      if (step c).length == c.length then c else go (step c) n)
+    (nodup : ∀ c, (step c).Nodup)
+    (stable : ∀ c, c.Nodup → (step c).length = c.length → step c = c)
+    (c : List Literal) (fuel : Nat) (hnd : c.Nodup)
+    (settled : go c fuel = go c (fuel + 1)) : step (go c fuel) = go c fuel := by
+  induction fuel generalizing c with
+  | zero =>
+    rw [zero, succ, zero] at settled
+    rw [zero]
+    split at settled
+    next same => exact stable c hnd (by simpa using same)
+    · exact settled.symm
+  | succ fuel ih =>
+    by_cases same : ((step c).length == c.length) = true
+    · rw [succ, if_pos same]
+      exact stable c hnd (by simpa using same)
+    · rw [succ, if_neg same] at settled ⊢
+      rw [succ, if_neg same] at settled
+      exact ih (step c) (nodup c) settled
+
+private theorem delta_result_invariants (t : Theory) (c : List Literal) (fuel : Nat)
+    (hnd : c.Nodup) (hsub : ∀ x ∈ c, x ∈ t.allLiterals) :
+    (Closure.deltaClose.go t c fuel).Nodup ∧
+      ∀ x ∈ Closure.deltaClose.go t c fuel, x ∈ t.allLiterals := by
+  induction fuel generalizing c with
+  | zero => exact ⟨hnd, hsub⟩
+  | succ fuel ih =>
+    simp only [Closure.deltaClose.go]
+    split
+    · exact ⟨hnd, hsub⟩
+    · exact ih _ (deltaStep_nodup t c) (deltaStep_sub_all t c hnd hsub)
+
+private theorem lambda_result_invariants (t : Theory) (delta c : List Literal) (fuel : Nat)
+    (hnd : c.Nodup) (hsub : ∀ x ∈ c, x ∈ t.allLiterals) :
+    (Closure.lambdaClose.go t delta c fuel).Nodup ∧
+      ∀ x ∈ Closure.lambdaClose.go t delta c fuel, x ∈ t.allLiterals := by
+  induction fuel generalizing c with
+  | zero => exact ⟨hnd, hsub⟩
+  | succ fuel ih =>
+    simp only [Closure.lambdaClose.go]
+    split
+    · exact ⟨hnd, hsub⟩
+    · exact ih _ (lambdaStep_nodup t delta c) (lambdaStep_sub_all t delta c hnd hsub)
+
+/-- Default definite closure is an actual fixed point, with no size assumption. -/
+theorem deltaClose_fixedpoint (t : Theory) :
+    Closure.deltaStep t (Closure.deltaClose t) = Closure.deltaClose t := by
+  apply loop_fixedpoint (Closure.deltaStep t) (Closure.deltaClose.go t)
+    (fun _ => rfl) (fun _ _ => rfl) (deltaStep_nodup t) (fixpoint_stable_delta t)
+    _ _ (deltaClose_init_nodup t)
+  exact deltaClose_converges_bound t _ _ (by omega)
+    (deltaClose_init_nodup t) (deltaClose_init_sub_all t)
+
+/-- Lambda completion retains potential support even for defeated literals. -/
+theorem lambdaClose_fixedpoint (t : Theory) :
+    let delta := Closure.deltaClose t
+    Closure.lambdaStep t delta (Closure.lambdaClose t delta) = Closure.lambdaClose t delta := by
+  dsimp only
+  have inv := delta_result_invariants t _ (t.allLiterals.length + 1)
+    (deltaClose_init_nodup t) (deltaClose_init_sub_all t)
+  refine loop_fixedpoint (Closure.lambdaStep t (Closure.deltaClose t))
+    (Closure.lambdaClose.go t (Closure.deltaClose t))
+    (fun _ => rfl) (fun _ _ => rfl) (lambdaStep_nodup t _)
+    ?_ _ _ inv.1 ?_
+  · intro c hnd equal
+    rw [lambdaStep_structure t _ c hnd] at equal ⊢
+    simp only [List.length_append] at equal
+    have zero := @Nat.add_left_cancel c.length _ 0 equal
+    rw [List.eq_nil_of_length_eq_zero zero, List.append_nil]
+  · exact lambdaClose_converges_bound t _ _ _ (by omega) inv.1 inv.2
+
+/-- The final defeasible phase is complete after the finite default budget. -/
+theorem partialClose_fixedpoint (t : Theory) :
+    let delta := Closure.deltaClose t
+    let lambda := Closure.lambdaClose t delta
+    Closure.partialStep t delta lambda (Closure.partialClose t delta lambda) =
+      Closure.partialClose t delta lambda := by
+  dsimp only
+  have dinv := delta_result_invariants t _ (t.allLiterals.length + 1)
+    (deltaClose_init_nodup t) (deltaClose_init_sub_all t)
+  have linv := lambda_result_invariants t (Closure.deltaClose t) _
+    (t.allLiterals.length + 1) dinv.1 dinv.2
+  have seednd : (Closure.gatedDelta (Closure.deltaClose t)).Nodup := dinv.1.filter _
+  have seedsub : ∀ x ∈ Closure.gatedDelta (Closure.deltaClose t), x ∈ t.allLiterals :=
+    fun x hx => dinv.2 x (List.mem_filter.mp hx).1
+  refine loop_fixedpoint
+    (Closure.partialStep t (Closure.deltaClose t) (Closure.lambdaClose t (Closure.deltaClose t)))
+    (Closure.partialClose.go t (Closure.deltaClose t) (Closure.lambdaClose t (Closure.deltaClose t)))
+    (fun _ => rfl) (fun _ _ => rfl) (partialStep_nodup t _ _)
+    ?_ _ _ seednd ?_
+  · intro c hnd equal
+    rw [partialStep_structure t _ _ c hnd] at equal ⊢
+    simp only [List.length_append] at equal
+    have zero := @Nat.add_left_cancel c.length _ 0 equal
+    rw [List.eq_nil_of_length_eq_zero zero, List.append_nil]
+  · exact partialClose_converges_bound t _ _ _ _ (by omega) seednd seedsub linv.2
+
+/-- Every phase returned by the ordinary finite ground reasoner is finalized. -/
+theorem reason_fixedpoints (t : Theory) :
+    Closure.deltaStep t (reason t).delta = (reason t).delta ∧
+    Closure.lambdaStep t (reason t).delta (reason t).lambda = (reason t).lambda ∧
+    Closure.partialStep t (reason t).delta (reason t).lambda (reason t).partial_ =
+      (reason t).partial_ :=
+  ⟨deltaClose_fixedpoint t, lambdaClose_fixedpoint t, partialClose_fixedpoint t⟩
+
 end Properties
