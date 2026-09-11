@@ -323,10 +323,12 @@ pub(crate) fn resolve_defeasible(
             // family's live support, once per member (idempotent). Done once
             // per event rather than per rule so a defeated member with no body
             // occurrence still decrements its family's live count.
-            if !proved && lambda.contains(q_id) && counted_dead.insert(q_id) {
-                if let Some(c) = family_live.get_mut(&event_family) {
-                    *c = c.saturating_sub(1);
-                }
+            if !proved
+                && lambda.contains(q_id)
+                && counted_dead.insert(q_id)
+                && let Some(c) = family_live.get_mut(&event_family)
+            {
+                *c = c.saturating_sub(1);
             }
 
             for rule_label in &rules_with_q {
