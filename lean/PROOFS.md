@@ -21,6 +21,14 @@ This directory contains a complete formal verification of the Spindle defeasible
 
 ## What Is Proven
 
+### Aggregation contract
+
+The initial [aggregation formalisation](AGGREGATION.md) proves order independence
+for lawful reducers, finite-row selection and deduplication properties, stratum
+path bounds and aggregate-cycle exclusion, frozen-view stability, and preservation
+of proof strength when transporting conclusions. It does not yet formalise the
+complete stratified evaluator or establish conformance of the Rust fold code.
+
 ### Core Properties of DL(d) Reasoning
 
 These proofs establish that the three-phase closure algorithm (delta → lambda → partial) correctly implements the DL(d) defeasible logic framework from Billington, Antoniou, Governatori, and Maher.

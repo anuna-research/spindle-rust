@@ -53,3 +53,14 @@ import Spindle.Arith.WhyNot
 #print axioms Spindle.Arith.cross_operator_soundness
 #print axioms Spindle.Arith.pipeline_soundness
 #print axioms Spindle.Arith.semiNaive_terminates_theory
+
+-- Aggregation contract (finite finalized inputs; no Rust refinement claimed).
+#print axioms Spindle.Aggregation.Reducer.eval_permutation
+#print axioms Spindle.Aggregation.Reducer.required_fails_iff_empty
+#print axioms Spindle.Aggregation.aggregate_permutation
+#print axioms Spindle.Aggregation.path_bound
+#print axioms Spindle.Aggregation.no_aggregate_cycle
+#print axioms Spindle.Aggregation.aggregate_input_finalized
+#print axioms Spindle.Aggregation.aggregate_frozen
+#print axioms Spindle.Aggregation.unproved_excluded
+#print axioms Spindle.Aggregation.carry_fact_iff

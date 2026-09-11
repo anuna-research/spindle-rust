@@ -30,3 +30,6 @@ import Spindle.Spl.Grammar
 import Spindle.Trust.Diminish
 import Spindle.Trust.WeakestLink
 import Spindle.Trust.Decay
+import Spindle.Aggregation.Fold
+import Spindle.Aggregation.Stratification
+import Spindle.Aggregation.Snapshot
