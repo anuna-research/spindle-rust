@@ -10,15 +10,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://github.com/actions/checkout@v4
 
+      # Match the documented CI toolchain and keep Clippy reproducible.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: https://github.com/dtolnay/rust-toolchain@1.88.0
         with:
           components: rustfmt, clippy
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: https://github.com/actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -37,13 +38,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://github.com/actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: https://github.com/dtolnay/rust-toolchain@1.88.0
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: https://github.com/actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -59,10 +60,10 @@ jobs:
   wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: https://github.com/actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: https://github.com/dtolnay/rust-toolchain@1.88.0
         with:
           targets: wasm32-unknown-unknown
 
@@ -70,7 +71,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: https://github.com/actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -83,8 +84,9 @@ jobs:
       - name: Build WASM
         run: cd crates/spindle-wasm && wasm-pack build --target web --release
 
+      # Forgejo uses the v3 artifact protocol; upstream v4 requires GitHub.
       - name: Upload WASM artifact
-        uses: actions/upload-artifact@v4
+        uses: https://github.com/actions/upload-artifact@v3
         with:
           name: spindle-wasm
           path: crates/spindle-wasm/pkg/
