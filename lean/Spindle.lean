@@ -33,3 +33,7 @@ import Spindle.Trust.Decay
 import Spindle.Aggregation.Fold
 import Spindle.Aggregation.Stratification
 import Spindle.Aggregation.Snapshot
+import Spindle.Aggregation.Syntax
+import Spindle.Aggregation.Dependencies
+import Spindle.Aggregation.Inference
+import Spindle.Aggregation.DependencyTests

@@ -28,6 +28,14 @@ for lawful reducers, finite-row selection and deduplication properties, stratum
 path bounds and aggregate-cycle exclusion, frozen-view stability, and preservation
 of proof strength when transporting conclusions. It does not yet formalise the
 complete stratified evaluator or establish conformance of the Rust fold code.
+Typed schema dependency extraction is also proved equivalent to independent
+rule scheduling constraints, including all producers, defeaters, and multi-head
+alignment. The executable assignment checker is sound and complete for those
+constraints. Automatic inference is sound and complete, returns the pointwise
+least assignment independently of edge ordering, and rejects exactly when no
+valid assignment exists. Its finite iteration budget is derived from the graph
+and proved sufficient. Schema inference distinguishes unsupported syntax from
+unstratifiable dependencies.
 
 ### Core Properties of DL(d) Reasoning
 

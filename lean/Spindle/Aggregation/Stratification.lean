@@ -7,7 +7,7 @@ import Lean.Elab.Tactic.Omega
 A relation denotes the complete conflict domain, including complementary heads.
 Every producer of that domain is assigned the same stratum. Ordinary dependencies
 have weight zero; aggregate dependencies have weight one. This file checks a
-supplied assignment; it does not yet implement an SCC/stratum inference algorithm.
+supplied assignment; `Inference.lean` implements and verifies automatic inference.
 -/
 namespace Spindle.Aggregation
 
