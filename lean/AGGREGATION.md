@@ -23,9 +23,9 @@ stratum does not make it definitely provable.
 | `Spindle/Aggregation/DependencyTests.lean` | Kernel-checked examples exercise extraction and elementary inference. Runtime assertions also cover inferred chains, cycle rejection, defeaters, multiple heads, rule reordering, unrelated priorities, and unsupported schemas. |
 | `Spindle/Aggregation/Execution.lean` | A finite stage driver checks batch ownership and preserves tagged conclusions verbatim. `runStages_old_conclusion_iff` prevents later changes to evidence for earlier-owned literals; `runStages_preserves_fold` proves frozen aggregate observations survive subsequent execution. |
 | `Spindle/Aggregation/ExecutionTests.lean` | Kernel-checked examples cover multiple stages, reading prior results, deduplication, negative-row exclusion, wrong-owner rejection, backend errors, empty folds, and snapshot-relative exact sums. |
-| `Spindle/Aggregation/GroundBackend.lean` | Re-runs each retained finite ground rule prefix through the existing reasoner. `groundBackend_completed` proves each batch comes from finalized delta/lambda/partial closures; `groundBackend_runs` proves recognized inputs finish every requested finite stage count. |
+| `Spindle/Aggregation/GroundBackend.lean` | Re-runs each retained finite ground rule prefix through the traditional four-tag reasoner. `groundBackend_completed` proves each batch comes from the completed four-tag closure; `groundBackend_runs` proves recognized inputs finish every requested finite stage count. |
 | `Spindle/Aggregation/GroundBackendTests.lean` | Kernel-checked regressions cover ambiguous lower support, attack reachability, original priorities, proof strength, ordinary recursion, defeated aggregate rows, and rejected schedules. |
-| `Spindle/Aggregation/PrefixEquivalence.lean` | `reason_agrees_on_closed_domains` proves agreement of delta, lambda, and partial on dependency-closed domains. `reasonedStage_equivalent` proves exact tagged-batch equality; `executeGround_membership` covers accumulated execution. |
+| `Spindle/Aggregation/PrefixEquivalence.lean` | `reason_agrees_on_closed_domains` proves agreement of all four constructive tags on dependency-closed domains. `reasonedStage_equivalent` proves exact tagged-batch equality; `executeGround_membership` covers accumulated execution. |
 | `Spindle/Aggregation/Lowering.lean` | Grounds typed schemas over a finite domain and lowers folds stage by stage. Atom encoding is injective on the table and cannot collide with closure guards. `lowerStages_completed_agree` preserves completed reasoning during lowering. `evaluateProgram_correct` proves scheduled execution has exactly the full lowered theory's tagged conclusions. |
 | `Spindle/Aggregation/LoweringTests.lean` | Runtime integration assertions cover inference, grounding, grouping, duplicate rows, defeated rows, priorities, multiple heads, chained folds, evidence policies, empty inputs, and explicit scope/domain errors. |
 | `Spindle/Aggregation/Primitives.lean` | Shared variable scoping, integer expressions, and row matching; no aggregate evaluation or rule lowering. |
@@ -147,25 +147,26 @@ below. This introduces no ordinary SDL definite axiom for relation closure.
 
 `groundBackend` retains every original rule whose head belongs to the current or
 an earlier stage, together with the original superiority relation. It re-runs
-`reason` over this prefix and publishes only the current stage's conclusions.
-The new `Properties.reason_fixedpoints` theorem proves that all three returned
-closures are unchanged by a further step, using the existing finite-literal
-convergence bound. The backend therefore supplies an actual completed local
-reasoning result to the driver. No arbitrary fixed-point timeout is assumed.
+`Operational.reason` over this prefix and publishes only the current stage's
+conclusions. All four tags are derived constructively; no closure complement
+is reported as a negative proof.
+`Operational.close_fixedpoint` proves completion of the joint constructive
+positive/negative closure. Each round adds fresh tagged literals, so the finite
+bound is sufficient; no arbitrary fixed-point timeout is assumed.
 
-Replaying the lower rules preserves information absent from surviving rows:
+Replaying the lower rules preserves the support and attack structure, including
+constructive negative evidence:
 
 ```text
-stage 0:  => p       => not p      p is ambiguous: lambda p, but no +d p
-stage 1:  => q       p ~> not q    lambda p keeps the attack on q applicable
+stage 0:  => p       => not p      conflicting support establishes -d p
+stage 1:  => q       p ~> not q    -d p discards the attacker; +d q
 ```
 
-With no priorities, the completed prefix cannot defeasibly prove `q`. Replacing
-stage zero with positive conclusions alone drops the potential support for `p`
-and incorrectly permits `q`. `GroundBackendTests.lean` checks both outcomes.
-Thus `carry_fact_iff` remains a proof about emitted rule types, not a theorem
-that positive-only transport preserves reasoning. Folds still select surviving
-positive rows; ordinary attack analysis needs richer information.
+With no priorities, both Lean and Rust now prove `q`. Lambda membership alone
+does not keep a defeated premise alive. `GroundBackendTests.lean` checks this
+behavior. Folds select surviving positive rows from the completed result.
+Ordinary reasoning retains the original rules and priorities, rather than
+reconstructing a theory from positive conclusions alone.
 
 The backend checks ordinary body-to-head ordering, shared ownership of
 complements, and empty fact bodies. `groundScheduled_iff` proves that its Boolean
@@ -217,7 +218,7 @@ guards use a separate label namespace.
 
 The proofs distinguish three claims:
 
-1. Scheduled ordinary prefixes agree with full-theory delta, lambda, and partial
+1. Scheduled ordinary prefixes agree with all four full-theory constructive
    closures in every completed domain. Exact equality of the published batches
    includes all four proof tags, including negative tags for body-only literals.
 2. Successful later lowering preserves earlier rules and priorities, and therefore
@@ -319,8 +320,7 @@ multiple heads, defeated rows, source priorities, chained folds, residual logic,
 binds, comparisons, rejection, and duplicate proofs. Rust-only regressions run
 without Lean and check the snapshot policy and overflow rejection.
 
-There is a **known ordinary-backend discrepancy**, now demonstrated through an
-aggregate rather than merely documented for ordinary reasoning:
+The former ordinary-backend counterexample is now a mandatory agreement case:
 
 ```text
 => p       => not p       p ~> not q       => q
@@ -328,20 +328,32 @@ aggregate rather than merely documented for ordinary reasoning:
                                       v
                               total = count(q)
 
-Rust constructive defeat-discard:  +d q, total(1)
-Lean aggregate three-phase model:  -d q, total(0)
+Lean and Rust:                    +d q, total(1)
 ```
 
-`known_constructive_discard_changes_aggregate_snapshot` asserts the exact
-six-tag symmetric difference, separately from the agreement suite. It prints a
-known-gap diagnostic and fails if that difference changes. This is evidence of
-a remaining model gap, not a successful conformance case. The existing
-[backend analysis](DIVERGENCES.md) explains why Rust discards the attacker after
-its premise is defeated, whereas the three-phase model retains lambda support.
-The next proof obligation is to establish the aggregate prefix/completion results
-for the constructive two-sided Lean backend, then switch the aggregate oracle
-and remove this discrepancy assertion. Changing Rust to reproduce the older
-approximation would change its established ordinary semantics.
+`constructive_discard_agrees_with_lean_aggregate_snapshot` requires equality
+of all reported tags and explicitly checks the surviving row and count.
+`generated_constructive_conflicts_agree` adds 512 combinations of supports,
+cycles, attackers, and priorities. No expected-disagreement test remains.
+The aggregate completion, closed-domain prefix, and independent source-lowering
+proofs now use `Operational.reason`, the traditional nonmodal four-tag inference conditions. The older lambda-only reasoner remains available for its
+own core proofs, but is no longer the aggregate oracle's backend.
+
+### Which ordinary semantics?
+
+Traditional DL(∂) discards an attacker when a premise is constructively disproved.
+DL(∂∥) is a different published logic: it tests absence from the potential-support
+closure λ instead. Applying those conditions to the example above gives one
+surviving q row in DL(∂), and none in DL(∂∥). See
+[Maher et al., sections 2 and 4](https://doras.dcu.ie/24726/1/Scalable_Defeasible_Logic.pdf).
+
+The Rust default and aggregate Lean model now use traditional DL(∂): negative
+tags must be constructively derived, unseeded cycles remain undecided, and
++D unconditionally implies +d. The prior lambda-based negative seeding,
+strict-inconsistency gate, and complement-based negative reports have been removed.
+See the [formal semantics](../specs/DEFEASIBLE-LOGIC-SEMANTICS.md) for the four
+conditions and compatibility examples. The proofs establish completion and
+lowering for these conditions; the differential tests check the Rust implementation.
 
 Additional scope limits: the Rust API uses checked i64 arithmetic and rejects
 overflow, while the aggregate Lean model uses exact Int. Agreement generation
@@ -386,8 +398,8 @@ engine-controlled sum/min/max; registry overrides do not redefine them.
    Exact integer addition is lawful; checked or floating-point addition cannot
    inherit the same reducer laws without a refinement proof.
 4. Extend the implemented CLI/SPL differential coverage to temporal filtering
-   and richer provenance. Close the documented ordinary-backend
-   proof gap before claiming general Rust conformance.
+   and richer provenance. A formal refinement of the Rust implementation remains
+   separate from the Lean proofs and executable differential evidence.
 
 These are integration obligations, not claims already discharged by this model.
 The model makes no Rust conformance or whole-language termination claim.

@@ -1,4 +1,10 @@
-; Explicit universe for finite aggregate grounding, including possible results.
+; Run: cargo run -p spindle-cli -- reason examples/aggregation.spl
+;
+; Current finite-grounding restriction: list every value a variable can take.
+; This is a grounding universe, not the rows being summed:
+;   alice, bob = people; 1, 2 = payment IDs; 10 = cost; 0, 20 = totals.
+; In particular, 20 must be listed even though it is computed by the fold.
+; Omitting a possible total can prevent its rule instance from being generated.
 (aggregate-domain alice bob 0 1 2 10 20)
 
 (given (person alice))

@@ -188,7 +188,7 @@ ownership before extending that theory. -/
 def lowerBatch (policy : AggregatePolicy) (program : AggregateProgram)
     (domain : Arith.Domain) (table : List Pattern) (stages : DependencyNode → Nat)
     (stage : Nat) (theory : Theory) : Except String (List Rule) :=
-  let rows := survivingRows table (reason theory).conclusions
+  let rows := survivingRows table (Operational.reason theory).conclusions
   let schemas := program.rules.filter (fun r => decide (stages (.rule r.label) = stage))
   match schemas.mapM (fun r =>
       (Arith.allSubstitutions (outerVars r) domain).mapM (lowerInstance policy domain table stage rows r)) with
@@ -263,25 +263,20 @@ theorem lowerStages_preserves (policy : AggregatePolicy) (program : AggregatePro
 
 /-- The actual theories used during lowering agree with the final lowered theory
 on completed domains. Thus later lowering cannot change lower proof support or
-lambda evidence used to compute aggregate inputs. -/
+constructive negative evidence used to compute aggregate inputs. -/
 theorem lowerStages_completed_agree (policy : AggregatePolicy) (program : AggregateProgram)
     (domain : Arith.Domain) (table : List Pattern) (stages : DependencyNode → Nat)
     (count stage : Nat) (before after : Theory)
     (scheduled : groundScheduled (loweredOwner table stages) before = true)
     (returned : lowerStages policy program domain table stages count stage before = .ok after) :
-    Agree (fun l => loweredOwner table stages l < stage) (reason before).delta (reason after).delta ∧
-    Agree (fun l => loweredOwner table stages l < stage) (reason before).lambda (reason after).lambda ∧
-    Agree (fun l => loweredOwner table stages l < stage) (reason before).partial_ (reason after).partial_ := by
+    ResultAgree (fun l => loweredOwner table stages l < stage)
+      (Operational.reason before) (Operational.reason after) := by
   obtain ⟨finalScheduled, priorities, same⟩ :=
     lowerStages_preserves policy program domain table stages count stage before after scheduled returned
   have beforeOrdered := ((groundScheduled_iff _ _).mp scheduled).2.1
-  have afterOrdered := ((groundScheduled_iff _ _).mp finalScheduled).2.1
   apply reason_agrees_on_closed_domains
   · intro r hr owned l member
     have bound := beforeOrdered r hr l member
-    omega
-  · intro r hr owned l member
-    have bound := afterOrdered r hr l member
     omega
   · exact fun r hr => (same r hr).symm
   · exact priorities.symm
@@ -376,7 +371,7 @@ theorem lowerProgram_prefix_equivalent (policy : AggregatePolicy) (program : Agg
     (domain : Arith.Domain) (result : LoweredProgram)
     (returned : lowerProgram policy program domain = .ok result) (stage : Nat) :
     reasonedStage (loweredOwner result.table result.stages) result.theory stage =
-      (reason result.theory).conclusions.filter
+      (Operational.reason result.theory).conclusions.filter
         (fun c => decide (loweredOwner result.table result.stages c.literal = stage)) := by
   have scheduled := (groundScheduled_iff _ _).mp (lowerProgram_scheduled policy program domain result returned)
   exact reasonedStage_equivalent _ _ stage scheduled.2.1 (loweredOwner_complement _ _)
@@ -399,14 +394,8 @@ def evaluateProgram (policy : AggregatePolicy := .defeasibleEvidence)
     | .error (.backend message) => .error message
     | .error (.wrongOwner _) => .error "lowered execution rejected ownership"
 
-private theorem reportLiteral_owned (result : ReasonResult) (l : Literal) (c : Conclusion)
-    (member : c ∈ reportLiteral result l) : c.literal = l := by
-  unfold reportLiteral at member
-  split_ifs at member <;> simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  all_goals rcases member with rfl | rfl <;> rfl
-
 private theorem reported_in_theory (theory : Theory) (c : Conclusion)
-    (member : c ∈ (reason theory).conclusions) : c.literal ∈ theory.allLiterals := by
+    (member : c ∈ (Operational.reason theory).conclusions) : c.literal ∈ theory.allLiterals := by
   rw [← reason_reports] at member
   obtain ⟨l, present, reported⟩ := List.mem_flatMap.mp member
   rw [reportLiteral_owned _ l c reported]
@@ -418,7 +407,7 @@ theorem lowerProgram_execute_equivalent (policy : AggregatePolicy) (program : Ag
     (domain : Arith.Domain) (result : LoweredProgram) (after : StageState)
     (lowered : lowerProgram policy program domain = .ok result)
     (executed : evaluateLowered result = .ok after) (c : Conclusion) :
-    c ∈ after.conclusions ↔ c ∈ (reason result.theory).conclusions := by
+    c ∈ after.conclusions ↔ c ∈ (Operational.reason result.theory).conclusions := by
   rw [executeGround_membership _ _ (lowerProgram_scheduled policy program domain result lowered)
     (loweredOwner_complement _ _) result.stageCount after executed c]
   constructor
@@ -431,7 +420,7 @@ theorem evaluateProgram_correct (policy : AggregatePolicy) (program : AggregateP
     (domain : Arith.Domain) (result : LoweredProgram) (state : StageState)
     (returned : evaluateProgram policy program domain = .ok (result, state)) :
     lowerProgram policy program domain = .ok result ∧
-      ∀ c, c ∈ state.conclusions ↔ c ∈ (reason result.theory).conclusions := by
+      ∀ c, c ∈ state.conclusions ↔ c ∈ (Operational.reason result.theory).conclusions := by
   unfold evaluateProgram at returned
   split at returned
   · cases returned

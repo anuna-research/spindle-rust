@@ -1,5 +1,9 @@
 /-
   SpindleLean.FamilyTwoSided
+  HISTORICAL strengthened model: retained for its property proofs. The standard
+  and family conformance oracles now use traditional DL(partial) via
+  Spindle.Aggregation.Operational. The historical description below records the
+  earlier semantics and must not be read as the current default contract.
   The two-sided (proved / disproved) fixed point: constructive defeat
   discard for the family model.
 

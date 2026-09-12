@@ -2,22 +2,13 @@
 
 Lean models, proofs, and executable differential-test oracles for Spindle.
 
-There are two ordinary reasoning models. The three-phase delta/lambda/partial
-model carries the core property proofs and the aggregate lowering proofs. The
-constructive two-sided model captures Rust's defeat-discard behavior and is used
-by the SDL/family differential suites. These models have a documented difference
-that also affects aggregate snapshots; see [DIVERGENCES.md](DIVERGENCES.md) and
-[AGGREGATION.md](AGGREGATION.md). The proofs do not establish whole-language Rust
-conformance.
-
-## Requirements and verification
-
-- [elan](https://github.com/leanprover/elan), the Lean toolchain manager
-- Lean 4.27.0, pinned in `lean-toolchain`
-- Mathlib v4.27.0, pinned by Lake
-- A C toolchain for oracle executables
-
-From the repository root:
+The standard, SDL/family, and aggregate oracles use traditional ambiguity-blocking
+DL(∂), with four constructive tags. The aggregate backend has proved fixed-point
+completion and prefix equivalence for all four tags, and its lowering proofs use
+that backend. Every compared Lean/Rust result must agree. The older lambda-only
+and strengthened two-sided models remain for their historical property proofs;
+those theorems should not be mistaken for proofs about the new standard backend.
+These proofs do not establish whole-language Rust conformance.
 
 ```sh
 scripts/check-lean-verification.sh
@@ -46,7 +37,7 @@ lake exe spindlelean        # Default example
 | `SpindleLean/Basic.lean`, `Rule.lean`, `Theory.lean` | Ordinary literals, rules, priorities, and finite literal universe |
 | `SpindleLean/Closure/` | Three-phase delta, lambda, and partial closures |
 | `SpindleLean/Properties/` | Soundness, conditional consistency/containment, finite convergence, and related properties |
-| `SpindleLean/FamilyTwoSided.lean` | Constructive two-sided reasoning with family-aware defeat-discard |
+| `SpindleLean/FamilyTwoSided.lean` | Historical strengthened two-sided model and property proofs |
 | `Spindle/Arith/` | Grounding, arithmetic, temporal, and query models |
 | `Spindle/Aggregation/` | Source aggregate semantics, stratum inference, lowering correctness, and completed-prefix equivalence |
 | `AxiomAudit.lean` | Dependency audit of the principal results |
@@ -76,13 +67,12 @@ From the repository root:
 cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
 ```
 
-The suite contains 86 typed agreement cases, 26 parsed SPL pipeline agreement
-cases, and a separate regression
-that pins the exact known ordinary-backend discrepancy. In that counterexample,
-Rust derives `q` after discarding a defeated attacker and counts one row; the
-three-phase aggregate model counts zero. That regression is not counted as a
-conformance success. Rust uses checked i64 arithmetic; Lean aggregates use exact
-Int, so agreement cases stay within safe arithmetic bounds.
+The suite contains 86 typed cases, 26 parsed SPL pipeline cases, 512 generated
+conflict/cycle/priority cases, the constructive-discard regression, and three
+traditional cycle/strict-inconsistency cases. Every
+case requires agreement; the former expected discrepancy now requires both
+sides to derive `q` and count one row. Rust uses checked i64 arithmetic; Lean
+aggregates use exact Int, so agreement cases stay within safe arithmetic bounds.
 
 ## Other differential suites
 

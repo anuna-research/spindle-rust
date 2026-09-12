@@ -38,7 +38,7 @@ This project is part of the SPINdle family:
   - Distinct rows contribute once; equal values from different rows contribute separately
   - Stratification, grouping, source priorities, and multiple heads
   - Defeasible snapshot evidence prevents automatic `+D` from aggregate premises
-  - Lean proofs and differential tests, with a documented ordinary-backend discrepancy
+  - Lean aggregate lowering proofs and mandatory Lean/Rust differential agreement
   - Use `(bind ?total (fold + ?value :from (amount ?value) :initial 0))`
 
 - **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
@@ -187,11 +187,17 @@ finite-domain restrictions, and Rust integration. The
 [differential fixtures](crates/spindle-core/tests/lean_aggregation_oracle_difftest.rs)
 provide executable examples of grouping, chained folds, and priorities.
 
-**Verification boundary:** the aggregate Lean proofs use a three-phase ordinary
-reasoner, while Rust uses constructive defeat-discard. A pinned counterexample
-produces `count(q) = 0` in Lean and `count(q) = 1` in Rust. The agreement suite
-and this known discrepancy are tested separately; general Rust conformance is
-not yet proved. See [the backend analysis](lean/DIVERGENCES.md).
+The default reasoner uses traditional ambiguity-blocking **DL(∂)**. Negative
+tags require constructive proofs: an unsupported cycle can remain undecided.
+Every definite proof also gives a defeasible proof, including conflicting facts.
+See the [formal semantics](specs/DEFEASIBLE-LOGIC-SEMANTICS.md).
+
+**Verification boundary:** aggregate proofs and the oracle use the same four
+constructive DL(∂) proof conditions. The regression where a defeated
+premise disables an attacker now requires `count(q) = 1` in both Lean and Rust.
+Differential tests require equality of every reported tag. This is executable
+conformance evidence for the tested fragment, not a proof of the Rust implementation;
+checked integer overflow and host extension functions remain outside the Lean model.
 
 ## Extension Functions
 

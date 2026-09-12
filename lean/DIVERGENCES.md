@@ -1,3 +1,13 @@
+> **Current semantics: traditional DL(∂).** The default Rust reasoner and
+> standard/aggregate Lean oracles now derive all four tags constructively.
+> The historical choices below (lambda seeding, strict-inconsistency gating,
+> and totalized negative reports) have been removed. Cycles can remain undecided;
+> every +D proof also gives +d. Aggregate completion and prefix proofs use
+> `Spindle/Aggregation/Operational.lean`. See the
+> [current specification](../specs/DEFEASIBLE-LOGIC-SEMANTICS.md).
+>
+> The remainder of this file is a historical investigation, not the current contract.
+
 # Divergences: Rust Engine vs Verified Lean Model — RESOLVED
 
 > **Class 5 (2026-07-12, review finding — RESOLVED): defender-wait in

@@ -390,7 +390,7 @@ fn aggregate_source_to_rust_differential() {
     let inputs: Vec<_> = fixtures.iter().map(|(_, p, d)| case_json(p, d)).collect();
     let lean = oracle(&inputs);
     eprintln!(
-        "Aggregate agreement suite: {} deterministic cases (known backend gap tested separately)",
+        "Aggregate agreement suite: {} deterministic cases",
         fixtures.len()
     );
     for ((name, p, d), expected) in fixtures.iter().zip(lean) {
@@ -461,12 +461,10 @@ fn checked_integer_overflow_is_an_error() {
     );
 }
 
-// The aggregate proof currently uses the older three-phase Lean reasoner.
-// Rust uses constructive defeat-discard. Pin the *exact* known discrepancy;
-// do not silently drop this case or call it a conformance success.
+// Constructive -d must disable a dependent attacker in both backends.
 #[test]
-#[ignore = "requires AggregationOracle; records the documented ordinary-backend gap"]
-fn known_constructive_discard_changes_aggregate_snapshot() {
+#[ignore = "requires the Lean AggregationOracle binary"]
+fn constructive_discard_agrees_with_lean_aggregate_snapshot() {
     let p = atom("p", vec![]);
     let mut not_p = p.clone();
     not_p.negation = true;
@@ -502,26 +500,187 @@ fn known_constructive_discard_changes_aggregate_snapshot() {
             t.into(),
         )
     };
-    let only_rust: Tags = rust.difference(&lean).cloned().collect();
-    let only_lean: Tags = lean.difference(&rust).cloned().collect();
-    assert_eq!(
-        only_rust,
-        BTreeSet::from([
-            tag("q", vec![], "+d"),
-            tag("total", vec![int(1)], "+d"),
-            tag("total", vec![int(1)], "-D"),
-        ])
-    );
-    assert_eq!(
-        only_lean,
-        BTreeSet::from([
-            tag("q", vec![], "-d"),
-            tag("total", vec![int(0)], "+d"),
-            tag("total", vec![int(0)], "-D"),
-        ])
-    );
+    assert_eq!(lean, rust, "constructive discard must agree on every tag");
+    assert!(rust.contains(&tag("q", vec![], "+d")));
+    assert!(rust.contains(&tag("total", vec![int(1)], "+d")));
+    assert!(!rust.contains(&tag("total", vec![int(0)], "+d")));
+}
+
+#[test]
+#[ignore = "requires the Lean AggregationOracle binary; enforced in Lean CI"]
+fn traditional_cycles_and_strict_inconsistency_agree() {
+    let p = atom("p", vec![]);
+    let q = atom("q", vec![]);
+    let mut nq = q.clone();
+    nq.negation = true;
+    let mut fold = total_fold();
+    fold.pattern = q.clone();
+    fold.extract = expr(int(1));
+    let cases = [
+        (
+            vec![
+                rule(
+                    "loop",
+                    RuleType::Strict,
+                    vec![Condition::Logic(p.clone())],
+                    p.clone(),
+                ),
+                rule(
+                    "attacker",
+                    RuleType::Defeater,
+                    vec![Condition::Logic(p)],
+                    nq.clone(),
+                ),
+                rule("q", RuleType::Defeasible, vec![], q.clone()),
+            ],
+            0,
+            false,
+        ),
+        (
+            vec![
+                rule(
+                    "loop",
+                    RuleType::Strict,
+                    vec![Condition::Logic(nq.clone())],
+                    nq.clone(),
+                ),
+                rule("q", RuleType::Defeasible, vec![], q.clone()),
+            ],
+            0,
+            false,
+        ),
+        (
+            vec![
+                rule("q", RuleType::Fact, vec![], q.clone()),
+                rule("nq", RuleType::Fact, vec![], nq),
+            ],
+            1,
+            true,
+        ),
+    ];
+    let domain = vec![int(0), int(1)];
+    for (mut rules, count, proven_q) in cases {
+        rules.push(total(fold.clone()));
+        let program = Program {
+            rules,
+            priorities: vec![],
+        };
+        let lean = normalize(&oracle(&[case_json(&program, &domain)])[0]);
+        let result = aggregation::evaluate(&program, &domain).unwrap();
+        assert_eq!(
+            lean,
+            rust_tags(&result),
+            "input {}",
+            case_json(&program, &domain)
+        );
+        assert!(
+            result
+                .conclusions
+                .iter()
+                .any(|c| c.atom == atom("total", vec![int(count)])
+                    && c.tag == ConclusionType::DefeasiblyProvable)
+        );
+        assert_eq!(
+            result
+                .conclusions
+                .iter()
+                .any(|c| c.atom == q && c.tag == ConclusionType::DefeasiblyProvable),
+            proven_q
+        );
+        assert!(
+            !result
+                .conclusions
+                .iter()
+                .any(|c| c.atom == q && c.tag == ConclusionType::DefeasiblyNotProvable),
+            "neither an undecided cycle nor a definite proof licenses -d q"
+        );
+    }
+}
+
+// Enumerate interacting supports, cycles, attackers, and priorities. A fold
+// observes q only after ordinary reasoning has completed.
+#[test]
+#[ignore = "requires the Lean AggregationOracle binary; enforced in Lean CI"]
+fn generated_constructive_conflicts_agree() {
+    let p = atom("p", vec![]);
+    let q = atom("q", vec![]);
+    let mut np = p.clone();
+    np.negation = true;
+    let mut nq = q.clone();
+    nq.negation = true;
+    let candidates = [
+        rule("p", RuleType::Defeasible, vec![], p.clone()),
+        rule("np", RuleType::Defeasible, vec![], np),
+        rule(
+            "cycle",
+            RuleType::Defeasible,
+            vec![Condition::Logic(p.clone())],
+            p.clone(),
+        ),
+        rule("q", RuleType::Defeasible, vec![], q.clone()),
+        rule(
+            "attack",
+            RuleType::Defeater,
+            vec![Condition::Logic(p.clone())],
+            nq.clone(),
+        ),
+        rule("nq", RuleType::Defeasible, vec![], nq),
+        rule(
+            "defend",
+            RuleType::Defeasible,
+            vec![Condition::Logic(p)],
+            q.clone(),
+        ),
+        rule(
+            "back",
+            RuleType::Strict,
+            vec![Condition::Logic(q.clone())],
+            atom("p", vec![]),
+        ),
+    ];
+    let domain = vec![int(0), int(1)];
+    let mut programs = Vec::new();
+    for mask in 0..256 {
+        for prioritized in [false, true] {
+            let mut rules: Vec<_> = candidates
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| mask & (1 << i) != 0)
+                .map(|(_, r)| r.clone())
+                .collect();
+            let mut fold = total_fold();
+            fold.pattern = q.clone();
+            fold.extract = expr(int(1));
+            rules.push(total(fold));
+            let priorities = if prioritized {
+                [("p", "np"), ("defend", "attack"), ("defend", "nq")]
+                    .into_iter()
+                    .filter(|(a, b)| {
+                        rules.iter().any(|r| r.label == *a) && rules.iter().any(|r| r.label == *b)
+                    })
+                    .map(|(a, b)| (a.into(), b.into()))
+                    .collect()
+            } else {
+                vec![]
+            };
+            programs.push(Program { rules, priorities });
+        }
+    }
+    for batch in programs.chunks(32) {
+        let inputs: Vec<_> = batch.iter().map(|p| case_json(p, &domain)).collect();
+        for (program, lean) in batch.iter().zip(oracle(&inputs)) {
+            let rust = aggregation::evaluate(program, &domain).expect("valid generated theory");
+            assert_eq!(
+                normalize(&lean),
+                rust_tags(&rust),
+                "input {}",
+                case_json(program, &domain)
+            );
+        }
+    }
     eprintln!(
-        "KNOWN BACKEND GAP: Rust count(q)=1; verified three-phase aggregate model count(q)=0 (constructive defeat-discard)"
+        "{} constructive conflict/aggregate agreement cases passed",
+        programs.len()
     );
 }
 

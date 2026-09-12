@@ -124,3 +124,8 @@ import Spindle.Arith.WhyNot
 #print axioms Spindle.Aggregation.lowerStages_correct
 #print axioms Spindle.Aggregation.lowerProgram_source_correct
 #print axioms Spindle.Aggregation.evaluateProgram_source_correct
+
+-- Constructive aggregate closure and its dependency-closed prefix theorem.
+#print axioms Spindle.Aggregation.FiniteIteration.fixed
+#print axioms Spindle.Aggregation.Operational.close_fixedpoint
+#print axioms Spindle.Aggregation.operational_close_agrees

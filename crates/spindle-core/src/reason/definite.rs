@@ -67,6 +67,60 @@ pub(crate) fn forward_chain_strict(
     }
 }
 
+/// Derive -D constructively: every strict support must have a -D premise.
+/// In particular, an unseeded strict cycle remains undecided. Family matching
+/// extends the ordinary rule: every member that could satisfy a body slot must
+/// have a negative proof before the slot can discard a rule.
+pub(crate) fn derive_negative(indexed: &IndexedTheory<'_>, state: &mut ReasoningState<'_>) {
+    let ids: rustc_hash::FxHashSet<_> = indexed
+        .all_literal_ids()
+        .flat_map(|&id| [id, id.complement()])
+        .collect();
+    loop {
+        let mut changed = false;
+        for &id in &ids {
+            if state.definite_proven.contains(id) || state.definite_disproven.contains(id) {
+                continue;
+            }
+            let discarded =
+                indexed
+                    .rules_with_head_id(id)
+                    .iter()
+                    .all(|rule| match rule.rule_type {
+                        RuleType::Fact => false,
+                        RuleType::Strict => rule.body.iter().any(|slot| {
+                            let Some(logic) = slot.as_logic() else {
+                                return false;
+                            };
+                            let literal = logic.to_literal();
+                            if literal.is_temporal() {
+                                indexed
+                                    .get_lit_id(&literal)
+                                    .is_some_and(|body| state.definite_disproven.contains(body))
+                            } else {
+                                let family = crate::projection::FamilyId::from(&literal);
+                                ids.iter()
+                                    .filter(|&&body| {
+                                        crate::projection::FamilyId::from(
+                                            &indexed.resolve_literal(body),
+                                        ) == family
+                                    })
+                                    .all(|&body| state.definite_disproven.contains(body))
+                            }
+                        }),
+                        _ => true,
+                    });
+            if discarded {
+                state.definite_disproven.insert(id);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

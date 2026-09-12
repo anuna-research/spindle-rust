@@ -6,8 +6,8 @@ private def p := Literal.pos "p"
 private def q := Literal.pos "q"
 private def owner (literal : Literal) : Nat := if literal.name = "q" then 1 else 0
 
--- Ambiguous lower support is absent from +d, but still present in lambda.
--- The later defeater therefore remains applicable and blocks q.
+-- Conflicting lower support is constructively disproved.
+-- Constructive -d discards the dependent defeater, so q survives.
 private def ambiguous : Theory := ⟨[
   Rule.defeasible "p-support" [] p,
   Rule.defeasible "not-p-support" [] p.complement,
@@ -15,8 +15,8 @@ private def ambiguous : Theory := ⟨[
   Rule.defeater "attack-q" [p] q.complement], []⟩
 
 example : groundScheduled owner ambiguous = true := by decide
-example : (reason (groundPrefix owner ambiguous 0)).containsLambda "p" = true := by decide
-example : (reason (groundPrefix owner ambiguous 0)).containsPartial "p" = false := by decide
+example : (Operational.reason (groundPrefix owner ambiguous 0)).has .defeasiblyNotProvable p = true := by decide
+example : (Operational.reason (groundPrefix owner ambiguous 0)).has .defeasiblyProvable p = false := by decide
 
 private def hasTag (conclusions : List Conclusion) (literal : Literal)
     (tag : ConclusionType) : Bool :=
@@ -26,16 +26,8 @@ private def finalHas (theory : Theory) (literal : Literal) (tag : ConclusionType
   (executeStages owner (groundBackend owner theory) 2).toOption.map
     (fun state => hasTag state.conclusions literal tag)
 
-example : finalHas ambiguous q .defeasiblyProvable = some false := by decide
-example : finalHas ambiguous q .defeasiblyNotProvable = some true := by decide
-
--- Reconstructing just positive lower conclusions loses potential support.
--- This intentionally incorrect comparison backend demonstrates the hazard.
-private def lossy : Theory :=
-  ⟨(reason (groundPrefix owner ambiguous 0)).conclusions.filterMap (carry "carried") ++
-    ambiguous.rules.filter (fun rule => decide (owner rule.head = 1)), ambiguous.superiority⟩
-
-example : (reason lossy).containsPartial "q" = true := by decide
+example : finalHas ambiguous q .defeasiblyProvable = some true := by decide
+example : finalHas ambiguous q .defeasiblyNotProvable = some false := by decide
 
 -- Strict consumption of defeasible support cannot turn the result into +D.
 private def supported : Theory := ⟨[
@@ -77,5 +69,16 @@ example : ((executeStages owner (groundBackend owner ⟨[Rule.strict "backward" 
 private def bodyOnly : Theory := ⟨[Rule.strict "future-consumer" [p] q], []⟩
 example : hasTag (reasonedStage owner bodyOnly 0) p .definitelyNotProvable = true := by decide
 example : hasTag (reasonedStage owner bodyOnly 0) p .defeasiblyNotProvable = true := by decide
+
+-- Traditional proof conditions preserve undecided cycles.
+private def strictLoop : Theory := ⟨[Rule.strict "loop" [p] p], []⟩
+example : ((Operational.reason strictLoop).report p).isEmpty = true := by decide
+private def defeasibleLoop : Theory := ⟨[Rule.defeasible "loop" [p] p], []⟩
+example : (Operational.reason defeasibleLoop).has .definitelyNotProvable p = true := by decide
+example : (Operational.reason defeasibleLoop).has .defeasiblyNotProvable p = false := by decide
+private def strictConflict : Theory := ⟨[Rule.fact "p" p, Rule.fact "np" p.complement], []⟩
+example : (Operational.reason strictConflict).has .defeasiblyProvable p = true := by decide
+example : (Operational.reason strictConflict).has .defeasiblyProvable p.complement = true := by decide
+example : (Operational.reason strictConflict).has .defeasiblyNotProvable p = false := by decide
 
 end Spindle.Aggregation.GroundBackendTests
