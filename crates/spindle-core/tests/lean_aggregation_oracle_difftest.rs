@@ -95,7 +95,7 @@ fn pattern_json(p: &Pattern) -> Value {
 fn expression_json(e: &Expression) -> Value {
     match e {
         Expression::Term(t) => json!({"term":term_json(t)}),
-        Expression::Call(name, args) => {
+        Expression::Call(name, args) | Expression::ExternalCall(name, args) => {
             json!({"call":name,"args":args.iter().map(expression_json).collect::<Vec<_>>()})
         }
     }
@@ -103,7 +103,9 @@ fn expression_json(e: &Expression) -> Value {
 fn condition_json(c: &Condition) -> Value {
     match c {
         Condition::Logic(p) => json!({"logic":pattern_json(p)}),
-        Condition::Bind(v, e) => json!({"bind":v,"value":expression_json(e)}),
+        Condition::Bind(v, e) | Condition::BindValue(v, e) => {
+            json!({"bind":v,"value":expression_json(e)})
+        }
         Condition::Compare(op, a, b) => {
             json!({"compare":op,"left":expression_json(a),"right":expression_json(b)})
         }
@@ -521,4 +523,84 @@ fn known_constructive_discard_changes_aggregate_snapshot() {
     eprintln!(
         "KNOWN BACKEND GAP: Rust count(q)=1; verified three-phase aggregate model count(q)=0 (constructive defeat-discard)"
     );
+}
+
+/// Exercise parser -> aggregate preparation -> ordinary Rust reasoner, not just the typed API.
+#[test]
+#[ignore = "requires the Lean AggregationOracle binary"]
+fn spl_pipeline_agrees_with_lean_aggregate_oracle() {
+    let mut sources = Vec::new();
+    for reducer in ["+", "min", "max"] {
+        for n in 0..4 {
+            for required in [false, true] {
+                let rows = (1..=n)
+                    .map(|i| format!("(given (row {i}))"))
+                    .collect::<String>();
+                let policy = if required {
+                    ":require-nonempty"
+                } else {
+                    ":initial 0"
+                };
+                sources.push(format!("(aggregate-domain 0 1 2 3 4 5 6) {rows}
+                    (always total (bind ?n (fold {reducer} ?v :from (row ?v) {policy})) (total ?n))"));
+            }
+        }
+    }
+    sources.push(include_str!("../../../examples/aggregation.spl").into());
+    sources.push(
+        "(aggregate-domain 0 1 2 3 6) (given (row 1)) (given (row 2))
+        (normally first (bind ?n (fold + (* 2 ?v) :from (row ?v) :initial 0)) (subtotal ?n))
+        (always pass (subtotal ?n) (copy ?n))
+        (normally last (bind ?n (fold + ?v :from (copy ?v) :initial 0)) (total ?n))"
+            .into(),
+    );
+    let theories: Vec<_> = sources
+        .iter()
+        .map(|s| spindle_parser::parse_spl(s).unwrap())
+        .collect();
+    let cases: Vec<_> = theories
+        .iter()
+        .map(|t| {
+            case_json(
+                &aggregation::source::program(t).unwrap(),
+                t.aggregate_domain().unwrap(),
+            )
+        })
+        .collect();
+    let answers = oracle(&cases);
+    for ((source, theory), answer) in sources.iter().zip(theories).zip(answers) {
+        assert!(answer.get("error").is_none(), "{source}: {answer}");
+        let prepared = spindle_core::pipeline::prepare(&theory, Default::default()).unwrap();
+        let mentioned: BTreeSet<_> = prepared
+            .theory
+            .rules()
+            .flat_map(|r| {
+                r.head.iter().cloned().chain(
+                    r.body
+                        .iter()
+                        .filter_map(|b| b.as_logic().map(|b| b.to_literal())),
+                )
+            })
+            .map(|l| l.to_spl())
+            .collect();
+        let tags: Tags = spindle_core::reason::reason_prepared(&prepared.theory)
+            .unwrap()
+            .iter()
+            .filter(|c| mentioned.contains(&c.literal.to_spl()))
+            .map(|c| {
+                (
+                    c.literal.name().into(),
+                    c.literal.negation,
+                    c.literal
+                        .predicate_args()
+                        .iter()
+                        .map(|t| term_json(&aggregation::source::term(t).unwrap()).to_string())
+                        .collect(),
+                    c.conclusion_type.symbol().into(),
+                )
+            })
+            .collect();
+        assert_eq!(tags, normalize(&answer), "{source}");
+    }
+    eprintln!("26 SPL pipeline/Lean agreement cases passed");
 }

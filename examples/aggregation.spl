@@ -1,0 +1,19 @@
+; Explicit universe for finite aggregate grounding, including possible results.
+(aggregate-domain alice bob 0 1 2 10 20)
+
+(given (person alice))
+(given (person bob))
+(given (payment alice 1 10))
+(given (payment alice 2 10))
+
+; ?person is outer scope; ?id and ?cost are local to each matching row.
+(normally payment-total
+  (and
+    (person ?person)
+    (bind ?total
+      (fold + ?cost
+        :from (payment ?person ?id ?cost)
+        :initial 0)))
+  (total-payment ?person ?total))
+
+; alice has total 20; bob has total 0. Both use defeasible snapshot evidence.

@@ -69,6 +69,7 @@ pub(crate) fn process_expr_with_line(
     })?;
 
     let result = match keyword {
+        "aggregate-domain" => super::aggregate::parse_domain(theory, &list[1..], line),
         "given" => process_fact_with_line(theory, &list[1..], line),
         "always" => process_rule_with_line(theory, RuleType::Strict, &list[1..], line),
         "normally" => process_rule_with_line(theory, RuleType::Defeasible, &list[1..], line),

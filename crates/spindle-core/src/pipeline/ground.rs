@@ -6,6 +6,7 @@
 
 use super::{Diagnostic, MetadataVal, PipelineContext, PipelineStage, Severity};
 use crate::error::Result;
+use crate::function_registry::EvalContext;
 use crate::grounding::{ground_theory_with_limit, has_variables};
 use crate::theory::Theory;
 
@@ -51,8 +52,12 @@ impl PipelineStage for Ground {
             return Ok(theory);
         }
 
+        let eval_ctx = match ctx.function_registry.as_ref() {
+            Some(reg) => EvalContext::with_registry(reg),
+            None => EvalContext::empty(),
+        };
         let (grounded, limit_hit) =
-            ground_theory_with_limit(&theory, self.max_iterations, self.max_instances);
+            ground_theory_with_limit(&theory, self.max_iterations, self.max_instances, &eval_ctx);
 
         let instances = grounded.rule_count();
         ctx.metadata

@@ -34,6 +34,7 @@ pub use wildcard::WildcardRewrite;
 
 use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
+use crate::function_registry::FunctionRegistry;
 use crate::literal::Literal;
 use crate::temporal::TimePoint;
 use crate::theory::{MetaValue, Theory};
@@ -101,6 +102,8 @@ pub struct PipelineContext {
     pub diagnostics: Vec<Diagnostic>,
     /// Arbitrary key-value metadata that stages can read/write.
     pub metadata: HashMap<String, MetadataVal>,
+    /// Optional function registry for extension function dispatch.
+    pub function_registry: Option<FunctionRegistry>,
 }
 
 /// A single, self-contained transformation over a [`Theory`].
@@ -159,7 +162,21 @@ impl Pipeline {
 
     /// Run all stages in order, returning the final theory and context.
     pub fn run(&self, theory: Theory) -> Result<(Theory, PipelineContext)> {
-        let mut ctx = PipelineContext::default();
+        self.run_with_context(
+            theory,
+            PipelineContext {
+                function_registry: Some(FunctionRegistry::with_prelude()),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Run all stages with a pre-configured context.
+    pub fn run_with_context(
+        &self,
+        theory: Theory,
+        mut ctx: PipelineContext,
+    ) -> Result<(Theory, PipelineContext)> {
         let mut current = theory;
 
         for stage in &self.stages {
@@ -221,6 +238,10 @@ pub struct PrepareOptions {
     /// Optional trust policy for computing weighted conclusions.
     /// If None, the policy from the parsed theory is used.
     pub trust_policy: Option<TrustPolicy>,
+    /// Optional function registry for extension function dispatch.
+    /// If provided, extension functions referenced in `bind` expressions
+    /// are validated and can be called during grounding.
+    pub function_registry: Option<FunctionRegistry>,
 }
 
 /// Options for grounding
@@ -294,11 +315,35 @@ pub struct PipelineResult {
 /// - Validation
 /// - Wildcard rewrite
 /// - Grounding
+/// - Finite aggregate lowering over completed reasoning snapshots
 ///
 /// Internally delegates to a [`Pipeline`] built from the standard stages,
 /// configured according to `opts`. All existing callers continue to work
 /// without changes.
 pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> {
+    if crate::aggregation::source::has_folds(theory) {
+        if !opts.grounding.enabled || opts.reference_time.is_some() || opts.trust_policy.is_some() {
+            return Err(crate::SpindleError::Validation { message: "aggregate preparation requires grounding and currently excludes temporal/trust options".into() });
+        }
+        let mut registry = FunctionRegistry::with_prelude();
+        if let Some(user) = opts.function_registry {
+            registry.merge(user);
+        }
+        let lowered =
+            crate::aggregation::source::prepare(theory, &registry, opts.grounding.max_instances)
+                .map_err(|message| crate::SpindleError::Validation { message })?;
+        return Ok(PipelineResult {
+            grounding_report: GroundingReport {
+                performed: true,
+                had_variables: true,
+                instances: lowered.rule_count(),
+                limit_hit: false,
+            },
+            theory: lowered,
+            evaluated_at: None,
+            weighted_conclusions: vec![],
+        });
+    }
     let mut builder = Pipeline::builder();
 
     // 1. Temporal filter (optional)
@@ -333,7 +378,15 @@ pub fn prepare(theory: &Theory, opts: PrepareOptions) -> Result<PipelineResult> 
     }
 
     let pipeline = builder.build();
-    let (mut theory, ctx) = pipeline.run(theory.clone())?;
+    let mut prelude = FunctionRegistry::with_prelude();
+    if let Some(user_reg) = opts.function_registry {
+        prelude.merge(user_reg);
+    }
+    let init_ctx = PipelineContext {
+        function_registry: Some(prelude),
+        ..Default::default()
+    };
+    let (mut theory, ctx) = pipeline.run_with_context(theory.clone(), init_ctx)?;
 
     // Apply explicit trust policy from options, overriding the parsed one
     if let Some(tp) = opts.trust_policy {

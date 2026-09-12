@@ -347,14 +347,36 @@ Additional scope limits: the Rust API uses checked i64 arithmetic and rejects
 overflow, while the aggregate Lean model uses exact Int. Agreement generation
 stays within safe arithmetic bounds; no machine-arithmetic refinement is claimed.
 The JSON adapter accepts integer/symbol/variable terms and expressions nested at
-most 64 levels. SPL parsing, decimals, modes, temporal patterns, and resource-bound
-execution remain separate integrations. Error acceptance is compared; error
+most 64 levels. The SPL bridge now parses folds and enforces an enumeration budget; these Rust
+integrations are tested, not proved. Decimals, modes, and temporal patterns remain
+unsupported in aggregate programs. Error acceptance is compared; error
 message wording is not required to match.
+
+## SPL and extension integration
+
+The normal `prepare` path detects explicit `ArithExpr::Fold` nodes, translates
+source rules with `aggregation::source::program`, evaluates completed prefixes,
+and decodes the retained rules back to structured literals. It preserves source
+labels as `template_label`, metadata, predicate declarations, and expanded
+priorities. Fresh snapshot predicates are collision-checked and hidden from
+reasoning conclusions. Indexing an unprepared fold returns an error.
+
+The [syntax guide](../docs/aggregation-extensions.md) documents the fragment and
+limits. `spl_pipeline_agrees_with_lean_aggregate_oracle` exercises 26 parsed
+programs, including grouping, empty inputs, builtin extraction, and chained
+strata. CLI tests exercise reasoning and querying through the same preparation.
+
+Builtins and custom functions use Claire's registry architecture from PRs #26
+and #27. General symbol-valued bindings and arbitrary extension calls extend
+beyond the verified integer-expression fragment. The typed `Condition::Bind`
+retains its original integer/error semantics; the source bridge uses `BindValue`
+for general bindings. An extension's Rust implementation is trusted code, not a
+proof of purity or of its correspondence to a Lean function. Fold reducers remain
+engine-controlled sum/min/max; registry overrides do not redefine them.
 
 ## Remaining work
 
-1. Connect actual SPL/Rust parsing to this typed schema fragment and prove the
-   translation preserves constructs. Extend executable support for modes,
+1. Prove the implemented SPL-to-schema translation preserves constructs. Extend executable support for modes,
    temporal patterns, schematic predicates, and broader expression types.
 2. Extend the finite-domain grounding contract to generated values, with a
    termination or explicit resource-limit contract. The source assignment and
@@ -363,8 +385,8 @@ message wording is not required to match.
 3. Specify machine arithmetic, decimals, extension values, and richer failures.
    Exact integer addition is lawful; checked or floating-point addition cannot
    inherit the same reducer laws without a refinement proof.
-4. Extend the typed differential bridge to CLI/SPL entry points, execution limits,
-   temporal filtering, and provenance. Close the documented ordinary-backend
+4. Extend the implemented CLI/SPL differential coverage to temporal filtering
+   and richer provenance. Close the documented ordinary-backend
    proof gap before claiming general Rust conformance.
 
 These are integration obligations, not claims already discharged by this model.

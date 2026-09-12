@@ -28,18 +28,18 @@ This project is part of the SPINdle family:
 - **First-Order Variables**: Datalog-style grounding with `?x` variable syntax
 
 - **Arithmetic Expressions**: Numeric computation in rule bodies
-  - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`
+  - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`, `round`, `floor`, `ceil`
   - Variable binding: `(bind ?total (+ ?price ?tax))`
   - Comparison guards: `(> ?age 18)`, `(<= ?score 100)`
   - Three numeric types: Integer, Decimal (arbitrary-precision), Float
   - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
 
-- **Finite-Domain Aggregation (typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
+- **Finite-Domain Aggregation (SPL, CLI, and typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
   - Distinct rows contribute once; equal values from different rows contribute separately
   - Stratification, grouping, source priorities, and multiple heads
   - Defeasible snapshot evidence prevents automatic `+D` from aggregate premises
   - Lean proofs and differential tests, with a documented ordinary-backend discrepancy
-  - Available through `spindle_core::aggregation`; SPL/CLI aggregate syntax is not integrated
+  - Use `(bind ?total (fold + ?value :from (amount ?value) :initial 0))`
 
 - **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
   - First-class declarations: `(predicate assign-to ((task symbol) (agent symbol)))`
@@ -151,7 +151,27 @@ let conclusions = reason(&theory);
 
 ## Finite-Domain Aggregation
 
-Use [`spindle_core::aggregation::evaluate`](crates/spindle-core/src/aggregation.rs)
+```lisp
+(aggregate-domain 0 10 20 30)
+(given (amount 10))
+(given (amount 20))
+(normally total
+  (bind ?sum (fold + ?value :from (amount ?value) :initial 0))
+  (total ?sum))
+```
+
+Run `spindle reason examples/aggregation.spl --json` for a grouped example.
+Strata are inferred automatically; folds read completed earlier conclusions.
+Use `:initial value` for seeded reduction, or `:require-nonempty` to make an
+empty input unsatisfied. Reducers are `+`/`sum`, `min`, and `max`; count rows by
+extracting `1`. The fold must be the direct expression of `bind`.
+
+The SPL bridge supports finite integer/symbol domains. Modal, temporal,
+trust-weighted, wildcard, decimal, and floating-point aggregate programs are
+rejected. Aggregate enumeration uses the configured grounding instance budget
+and returns an error on exhaustion. See [the syntax and extension guide](docs/aggregation-extensions.md).
+
+For the typed reference API, use [`spindle_core::aggregation::evaluate`](crates/spindle-core/src/aggregation.rs)
 with a typed `Program` and an explicit domain of integer/symbol constants.
 `SchemaRule`, `Condition`, `Fold`, and `Pattern` describe the source program;
 the result contains structured user conclusions with all four proof tags.
@@ -172,6 +192,16 @@ reasoner, while Rust uses constructive defeat-discard. A pinned counterexample
 produces `count(q) = 0` in Lean and `count(q) = 1` in Rust. The agreement suite
 and this known discrepancy are tested separately; general Rust conformance is
 not yet proved. See [the backend analysis](lean/DIVERGENCES.md).
+
+## Extension Functions
+
+Builtins and host-registered pure functions use the same `FunctionRegistry`.
+Pass a registry through `PrepareOptions::function_registry` to use expressions
+such as `(bind ?day (day-of-week ?date))`. Calls receive and return `Term` values,
+including symbols; arithmetic functions enforce numeric argument types.
+Registered functions can also compute fold contributions. The CLI includes the
+builtin prelude; custom Rust functions are registered by embedding applications.
+See [registration and verification boundaries](docs/aggregation-extensions.md).
 
 ## WebAssembly Usage
 

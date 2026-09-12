@@ -76,7 +76,8 @@ From the repository root:
 cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
 ```
 
-The suite contains 86 deterministic agreement cases and a separate regression
+The suite contains 86 typed agreement cases, 26 parsed SPL pipeline agreement
+cases, and a separate regression
 that pins the exact known ordinary-backend discrepancy. In that counterexample,
 Rust derives `q` after discarding a defeated attacker and counts one row; the
 three-phase aggregate model counts zero. That regression is not counted as a

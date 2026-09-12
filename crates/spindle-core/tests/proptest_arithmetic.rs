@@ -8,10 +8,8 @@
 use proptest::prelude::*;
 use rust_decimal::Decimal;
 
-#[allow(unused_imports)]
-use spindle_core::arith::{
-    ArithConstraint, ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
-};
+use spindle_core::arith::{ArithConstraint, ArithExpr, CmpOp};
+use spindle_core::function_registry::{EvalContext, FunctionRegistry};
 use spindle_core::grounding::Substitution;
 use spindle_core::intern::intern;
 use spindle_core::term::{FiniteFloat, NumericValue, Term};
@@ -31,23 +29,21 @@ fn arb_numeric_value() -> impl Strategy<Value = NumericValue> {
     ]
 }
 
-fn arb_nary_op() -> impl Strategy<Value = NaryArithOp> {
+/// Generate a random operator name for Call nodes.
+fn arb_op_name() -> impl Strategy<Value = &'static str> {
     prop_oneof![
-        Just(NaryArithOp::Add),
-        Just(NaryArithOp::Sub),
-        Just(NaryArithOp::Mul),
-        Just(NaryArithOp::Div),
-        Just(NaryArithOp::Min),
-        Just(NaryArithOp::Max),
+        Just("+"),
+        Just("-"),
+        Just("*"),
+        Just("/"),
+        Just("min"),
+        Just("max"),
     ]
 }
 
-fn arb_bin_op() -> impl Strategy<Value = BinArithOp> {
-    prop_oneof![
-        Just(BinArithOp::IDiv),
-        Just(BinArithOp::Rem),
-        Just(BinArithOp::Pow),
-    ]
+/// Generate a random binary-only operator name.
+fn arb_bin_op_name() -> impl Strategy<Value = &'static str> {
+    prop_oneof![Just("div"), Just("rem"), Just("**"),]
 }
 
 /// Generate an ArithExpr of bounded depth.
@@ -55,24 +51,26 @@ fn arb_arith_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> {
     let leaf = arb_numeric_value().prop_map(ArithExpr::Lit);
     leaf.prop_recursive(max_depth, 64, 4, |inner| {
         prop_oneof![
-            // NaryOp with 1-3 args
+            // N-ary Call with 1-3 args
             (
-                arb_nary_op(),
+                arb_op_name(),
                 proptest::collection::vec(inner.clone(), 1..=3)
             )
-                .prop_map(|(op, args)| ArithExpr::NaryOp { op, args }),
-            // BinOp
-            (arb_bin_op(), inner.clone(), inner.clone()).prop_map(|(op, lhs, rhs)| {
-                ArithExpr::BinOp {
-                    op,
-                    lhs: Box::new(lhs),
-                    rhs: Box::new(rhs),
+                .prop_map(|(name, args)| ArithExpr::Call {
+                    name: intern(name),
+                    args,
+                }),
+            // Binary-only Call with exactly 2 args
+            (arb_bin_op_name(), inner.clone(), inner.clone()).prop_map(|(name, lhs, rhs)| {
+                ArithExpr::Call {
+                    name: intern(name),
+                    args: vec![lhs, rhs],
                 }
             }),
-            // UnaryOp
-            inner.clone().prop_map(|e| ArithExpr::UnaryOp {
-                op: UnaryArithOp::Abs,
-                expr: Box::new(e),
+            // abs Call with 1 arg
+            inner.clone().prop_map(|e| ArithExpr::Call {
+                name: intern("abs"),
+                args: vec![e],
             }),
         ]
     })
@@ -97,6 +95,16 @@ fn arb_substitution() -> impl Strategy<Value = Substitution> {
     })
 }
 
+/// Create an EvalContext with the prelude registry.
+#[allow(dead_code)]
+fn prelude_ctx() -> (
+    FunctionRegistry,
+    impl Fn(&FunctionRegistry) -> EvalContext<'_>,
+) {
+    let reg = FunctionRegistry::with_prelude();
+    (reg, |r: &FunctionRegistry| EvalContext::with_registry(r))
+}
+
 // ---------------------------------------------------------------------------
 // Properties
 // ---------------------------------------------------------------------------
@@ -110,8 +118,10 @@ proptest! {
         expr in arb_arith_expr(3),
         subst in arb_substitution(),
     ) {
-        let r1 = expr.eval(&subst);
-        let r2 = expr.eval(&subst);
+        let reg = FunctionRegistry::with_prelude();
+        let ctx = EvalContext::with_registry(&reg);
+        let r1 = expr.eval_with_context(&subst, &ctx);
+        let r2 = expr.eval_with_context(&subst, &ctx);
         match (&r1, &r2) {
             (Ok(v1), Ok(v2)) => prop_assert!(
                 v1.numeric_eq(v2),
@@ -129,8 +139,10 @@ proptest! {
         expr in arb_arith_expr(4),
         subst in arb_substitution(),
     ) {
+        let reg = FunctionRegistry::with_prelude();
+        let ctx = EvalContext::with_registry(&reg);
         // If this test runs without panic, the property holds.
-        let _ = expr.eval(&subst);
+        let _ = expr.eval_with_context(&subst, &ctx);
     }
 
     /// Property 3: Type promotion correctness — Integer op Decimal → Decimal,
@@ -142,14 +154,16 @@ proptest! {
     ) {
         let subst = Substitution::default();
         // Integer + Decimal should yield Decimal
-        let expr = ArithExpr::NaryOp {
-            op: NaryArithOp::Add,
+        let expr = ArithExpr::Call {
+            name: intern("+"),
             args: vec![
                 ArithExpr::Lit(NumericValue::Integer(a)),
                 ArithExpr::Lit(NumericValue::Decimal(Decimal::new(b_dec, 2))),
             ],
         };
-        if let Ok(result) = expr.eval(&subst) {
+        let reg = FunctionRegistry::with_prelude();
+        let ctx = EvalContext::with_registry(&reg);
+        if let Ok(result) = expr.eval_with_context(&subst, &ctx) {
             prop_assert!(
                 matches!(result, NumericValue::Decimal(_)),
                 "Integer + Decimal should produce Decimal, got {:?}",
@@ -166,19 +180,25 @@ proptest! {
         b in prop_oneof![-10_000i64..-1, 1..10_000i64],
     ) {
         let subst = Substitution::default();
-        let div_expr = ArithExpr::BinOp {
-            op: BinArithOp::IDiv,
-            lhs: Box::new(ArithExpr::Lit(NumericValue::Integer(a))),
-            rhs: Box::new(ArithExpr::Lit(NumericValue::Integer(b))),
+        let div_expr = ArithExpr::Call {
+            name: intern("div"),
+            args: vec![
+                ArithExpr::Lit(NumericValue::Integer(a)),
+                ArithExpr::Lit(NumericValue::Integer(b)),
+            ],
         };
-        let rem_expr = ArithExpr::BinOp {
-            op: BinArithOp::Rem,
-            lhs: Box::new(ArithExpr::Lit(NumericValue::Integer(a))),
-            rhs: Box::new(ArithExpr::Lit(NumericValue::Integer(b))),
+        let rem_expr = ArithExpr::Call {
+            name: intern("rem"),
+            args: vec![
+                ArithExpr::Lit(NumericValue::Integer(a)),
+                ArithExpr::Lit(NumericValue::Integer(b)),
+            ],
         };
 
+        let reg = FunctionRegistry::with_prelude();
+        let ctx = EvalContext::with_registry(&reg);
         if let (Ok(NumericValue::Integer(q)), Ok(NumericValue::Integer(r))) =
-            (div_expr.eval(&subst), rem_expr.eval(&subst))
+            (div_expr.eval_with_context(&subst, &ctx), rem_expr.eval_with_context(&subst, &ctx))
         {
             prop_assert_eq!(
                 a, b * q + r,
@@ -196,20 +216,23 @@ proptest! {
         b in prop_oneof![-10_000i64..-1, 1..10_000i64],
     ) {
         let subst = Substitution::default();
-        let rem_expr = ArithExpr::BinOp {
-            op: BinArithOp::Rem,
-            lhs: Box::new(ArithExpr::Lit(NumericValue::Integer(a))),
-            rhs: Box::new(ArithExpr::Lit(NumericValue::Integer(b))),
+        let rem_expr = ArithExpr::Call {
+            name: intern("rem"),
+            args: vec![
+                ArithExpr::Lit(NumericValue::Integer(a)),
+                ArithExpr::Lit(NumericValue::Integer(b)),
+            ],
         };
-        if let Ok(NumericValue::Integer(r)) = rem_expr.eval(&subst) {
-            if r != 0 {
+        let reg = FunctionRegistry::with_prelude();
+        let ctx = EvalContext::with_registry(&reg);
+        if let Ok(NumericValue::Integer(r)) = rem_expr.eval_with_context(&subst, &ctx)
+            && r != 0 {
                 prop_assert!(
                     (r > 0) == (b > 0),
                     "rem({}, {}) = {} should have same sign as divisor {}",
                     a, b, r, b
                 );
             }
-        }
     }
 
     /// Property 6: Comparison reflexivity — (= x x) always holds,
@@ -292,9 +315,9 @@ proptest! {
               (pass))
         "#
         );
-        if let Ok(theory) = spindle_parser::parse_spl(&spl_ok) {
-            if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
-                if let Ok(conclusions) = reason_prepared(&result.theory) {
+        if let Ok(theory) = spindle_parser::parse_spl(&spl_ok)
+            && let Ok(result) = prepare(&theory, PrepareOptions::default())
+                && let Ok(conclusions) = reason_prepared(&result.theory) {
                     let has_pass = conclusions.iter().any(|c| {
                         c.conclusion_type == spindle_core::conclusion::ConclusionType::DefeasiblyProvable
                             && c.literal.name() == "pass"
@@ -305,8 +328,6 @@ proptest! {
                         prop_assert!(!has_pass, "bind({}) > {} should not yield pass", val, threshold);
                     }
                 }
-            }
-        }
 
         // Order 2: compare before bind (should always fail — ?x unbound)
         let spl_bad = format!(
@@ -317,9 +338,9 @@ proptest! {
               (pass-bad))
         "#
         );
-        if let Ok(theory) = spindle_parser::parse_spl(&spl_bad) {
-            if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
-                if let Ok(conclusions) = reason_prepared(&result.theory) {
+        if let Ok(theory) = spindle_parser::parse_spl(&spl_bad)
+            && let Ok(result) = prepare(&theory, PrepareOptions::default())
+                && let Ok(conclusions) = reason_prepared(&result.theory) {
                     let has_pass_bad = conclusions.iter().any(|c| {
                         c.literal.name() == "pass-bad"
                     });
@@ -328,8 +349,6 @@ proptest! {
                         "reversed order (compare before bind) should never fire"
                     );
                 }
-            }
-        }
     }
 
     /// Property 9: Body-arg expression equivalence — a rule with (pred ?x (+ ?a ?b))
@@ -352,9 +371,9 @@ proptest! {
               (match))
         "#
         );
-        if let Ok(theory) = spindle_parser::parse_spl(&spl) {
-            if let Ok(result) = prepare(&theory, PrepareOptions::default()) {
-                if let Ok(conclusions) = reason_prepared(&result.theory) {
+        if let Ok(theory) = spindle_parser::parse_spl(&spl)
+            && let Ok(result) = prepare(&theory, PrepareOptions::default())
+                && let Ok(conclusions) = reason_prepared(&result.theory) {
                     let has_match = conclusions.iter().any(|c| {
                         c.conclusion_type == spindle_core::conclusion::ConclusionType::DefeasiblyProvable
                             && c.literal.name() == "match"
@@ -365,8 +384,6 @@ proptest! {
                         a, b, sum
                     );
                 }
-            }
-        }
     }
 
     /// Property 10: Parser round-trip stability — parsing an arithmetic SPL
