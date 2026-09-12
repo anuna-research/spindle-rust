@@ -1,4 +1,4 @@
-.PHONY: all build test test-quick test-full clippy fmt check wasm clean install bench bench-scaling bench-compare bench-memory release-tag
+.PHONY: all build test test-quick test-full clippy fmt check wasm clean install bench bench-aggregation bench-scaling bench-compare bench-memory release-tag
 
 # nextest does not execute rustdoc tests, so when it is used we run the
 # doctests separately with `cargo test --doc` to keep public doctests covered.
@@ -67,6 +67,10 @@ clean:
 # Run benchmarks (quick suite, ~1-2 min)
 bench:
 	cargo bench --package spindle-core
+
+# Aggregate row/group scaling and snapshot overhead
+bench-aggregation:
+	cargo bench --package spindle-core --bench aggregation
 
 # Run large-scale benchmarks (finds algorithm crossover points)
 bench-scaling:

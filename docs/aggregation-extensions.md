@@ -23,6 +23,63 @@ spindle reason examples/aggregation.spl --json
 spindle query '(total-payment alice 20)' examples/aggregation.spl
 ```
 
+## Performance benchmarks
+
+Run `make bench-aggregation` for the dedicated Criterion suite, or validate all
+fixtures without collecting timings:
+
+```sh
+cargo bench -p spindle-core --bench aggregation -- --test
+```
+
+The suite measures `prepare` (including aggregate snapshots and grounding) and
+`reason` (preparation plus final reasoning) separately. Parsing, fixture creation,
+and expected-result assertions run outside the timed loops. These are pipeline
+measurements, not isolated reducer timings; allocation and result destruction are
+included. Each fixture checks the complete set of positive aggregate outputs
+through both entry points.
+
+Coverage includes all four named reducers at 0, 100, 500, and 1,000 rows; 1, 10,
+and 100 groups sharing 500 rows; 0–1,000 unrelated facts with 100 matching rows;
+and 1, 2, and 4 aggregate stages with 100 rows and 10 groups. Unique row IDs
+preserve repeated equal contributions. Chained stages consume derived results.
+
+Defaults use 10 samples, 0.5 seconds of warmup, and a 1-second measurement target
+per case. Expensive cases may take longer. For more precise comparisons, increase
+the sampling budget on an otherwise idle machine:
+
+```sh
+cargo bench -p spindle-core --bench aggregation -- --save-baseline before
+# After a change:
+cargo bench -p spindle-core --bench aggregation -- --baseline before
+# Longer measurement of one family:
+cargo bench -p spindle-core --bench aggregation -- aggregation/groups --sample-size 30 --measurement-time 5
+```
+
+Criterion reports and local baselines are stored under `target/criterion/`.
+
+### Initial local baseline
+
+Measured on 2026-09-13 on an Apple M2 with rustc 1.95.0, optimized bench profile,
+using the defaults above and `--save-baseline initial`. All 50 timed cases passed
+their output checks. Selected Criterion mean estimates (milliseconds):
+
+| Fixture | Prepare | Full reasoning |
+|---|---:|---:|
+| Sum, 100 rows, 1 group | 4.37 | 7.35 |
+| Sum, 1,000 rows, 1 group | 207.51 | 360.25 |
+| Sum, 500 rows, 1 group | 59.40 | 102.28 |
+| Sum, 500 rows, 100 groups | 164.36 | 236.20 |
+| Sum, 100 rows, 1 group, 1,000 unrelated facts | 192.71 | 343.89 |
+| Sum, 100 rows, 10 groups, 1 stage | 6.17 | 9.88 |
+| Sum, 100 rows, 10 groups, 4 stages | 20.33 | 25.23 |
+
+These short local measurements are a starting point, not portable performance
+thresholds. Row and unrelated-fact scaling warrant profiling. The measurements
+include grounding and reasoning costs, so they do not establish that fold scans
+alone cause the growth. Increasing group count also adds group facts and outputs;
+increasing stage count adds rules and intermediate outputs.
+
 ## Syntax and scope
 
 ```lisp
