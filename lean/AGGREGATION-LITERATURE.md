@@ -117,9 +117,9 @@ included row has a definite proof, adding another input fact can change the sum.
 We must not claim ordinary SDL `+D` monotonicity for such results without defining
 how relation closure enters the proof theory. The execution API now states this boundary explicitly: `foldAt` returns a
 snapshot-relative value without an SDL proof tag, and later checked stages
-cannot revise that snapshot. The finite lowerer now offers an explicit conservative policy: add a fresh
-defeasible closure premise while retaining the original rule kind. Alternatively,
-reject aggregate-bearing strict rules. The prefix-equivalence theorem compares
+cannot revise that snapshot. The selected default for the finite lowerer is defeasible snapshot evidence:
+add a fresh defeasible closure premise while retaining the original rule kind.
+Rejecting aggregate-bearing strict rules remains an explicit opt-in restriction. The prefix-equivalence theorem compares
 execution with the final theory under the selected policy; it does not attribute
 this policy to the literature as a universal standard.
 

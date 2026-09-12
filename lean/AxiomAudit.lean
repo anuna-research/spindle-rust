@@ -111,3 +111,16 @@ import Spindle.Arith.WhyNot
 #print axioms Spindle.Aggregation.lowerProgram_prefix_equivalent
 #print axioms Spindle.Aggregation.lowerProgram_execute_equivalent
 #print axioms Spindle.Aggregation.evaluateProgram_correct
+
+-- Source aggregate semantics and compiler refinement.
+#print axioms Spindle.Aggregation.Source.Fold.rows_extensional
+#print axioms Spindle.Aggregation.evalSchemaFold_iff
+#print axioms Spindle.Aggregation.sourceFold_deterministic
+#print axioms Spindle.Aggregation.checkCondition_iff
+#print axioms Spindle.Aggregation.lowerInstance_correct
+#print axioms Spindle.Aggregation.lowerInstance_complete
+#print axioms Spindle.Aggregation.assignment_iff
+#print axioms Spindle.Aggregation.lowerBatch_correct
+#print axioms Spindle.Aggregation.lowerStages_correct
+#print axioms Spindle.Aggregation.lowerProgram_source_correct
+#print axioms Spindle.Aggregation.evaluateProgram_source_correct

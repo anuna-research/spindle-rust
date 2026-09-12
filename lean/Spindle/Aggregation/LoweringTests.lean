@@ -14,7 +14,7 @@ private def total : SchemaRule :=
 private def program : AggregateProgram := ⟨[shift "one" 1, shift "two" 2, shift "duplicate" 1, total], []⟩
 
 private def observed (p : AggregateProgram) (d : Arith.Domain) (query : Pattern) : Except String (Bool × Bool) := do
-  let (lowered, state) ← evaluateProgram .defeasibleEvidence p d
+  let (lowered, state) ← evaluateProgram (program := p) (domain := d)
   let literal := encodeAtom lowered.table query
   return (state.conclusions.any (fun c => c.literal == literal && c.conclusionType == .definitelyProvable),
     state.conclusions.any (fun c => c.literal == literal && c.conclusionType == .defeasiblyProvable))
@@ -69,7 +69,7 @@ private def observed (p : AggregateProgram) (d : Arith.Domain) (query : Pattern)
   match lowerProgram .rejectStrict program domain with
   | .error _ => pure ()
   | .ok _ => throw (IO.userError "strict aggregates escaped the rejection policy")
-  match lowerProgram .defeasibleEvidence program [.integer 0, .integer 1, .integer 2, .integer 25] with
+  match lowerProgram (program := program) (domain := [.integer 0, .integer 1, .integer 2, .integer 25]) with
   | .error _ => pure ()
   | .ok _ => throw (IO.userError "an out-of-domain aggregate result was silently lost")
   match observed ⟨[total], []⟩ domain (atom "total" [.integer 0]) with

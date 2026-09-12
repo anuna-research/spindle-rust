@@ -44,3 +44,6 @@ import Spindle.Aggregation.GroundBackendTests
 import Spindle.Aggregation.PrefixEquivalence
 import Spindle.Aggregation.Lowering
 import Spindle.Aggregation.LoweringTests
+import Spindle.Aggregation.SourceSemantics
+import Spindle.Aggregation.LoweringCorrectness
+import Spindle.Aggregation.LoweringCorrectnessTests

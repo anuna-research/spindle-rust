@@ -1,7 +1,7 @@
 import Spindle.Aggregation.Inference
 import Spindle.Aggregation.PrefixEquivalence
 import Spindle.Arith.GroundRule
-import Spindle.Arith.Matching
+import Spindle.Aggregation.Primitives
 
 /-!
 # Finite-domain aggregate-schema lowering
@@ -13,7 +13,8 @@ supported; unknown functions and non-integer arithmetic fail explicitly.
 A successful aggregate premise is backed by a fresh defeasible closure guard.
 Strict rules retain their kind but cannot acquire +D through that guard. This
 is an explicit conservative evidence policy, not a new ordinary SDL +D axiom.
-The alternative policy rejects aggregate-bearing strict rules.
+Defeasible snapshot evidence is the default policy. An explicit alternative
+rejects aggregate-bearing strict rules.
 -/
 namespace Spindle.Aggregation
 
@@ -22,7 +23,7 @@ inductive AggregatePolicy where
   | rejectStrict
   deriving DecidableEq, Repr
 
-private def base (p : Pattern) : Pattern := { p with atom := { p.atom with negation := false } }
+def base (p : Pattern) : Pattern := { p with atom := { p.atom with negation := false } }
 
 /-- A finite interner avoids collisions between structured predicate arguments.
 Unary names are intentionally simple reference identifiers, not an export format. -/
@@ -74,20 +75,6 @@ theorem encodeAtom_ne_guard (table : List Pattern) (p : Pattern) (stage : Nat) :
   have first := congrArg (fun l : Literal => l.name.toList.head?) equal
   simp [encodeAtom, closureGuard, Literal.pos] at first
 
-private def exprVars : Expression → List String
-  | .term (.variable v) => [v]
-  | .term _ => []
-  | .call _ args => args.flatMap exprVars
-
-private def outerVars (r : SchemaRule) : List String :=
-  (r.heads.flatMap (fun p => p.atom.vars) ++ r.body.flatMap (fun c => match c with
-    | .logic p => p.atom.vars
-    | .bind v e => v :: exprVars e
-    | .compare _ a b => exprVars a ++ exprVars b
-    | .fold f => f.resultVar :: f.groupingVars ++
-        (f.seed.toList.flatMap exprVars) ++
-        ((exprVars f.extract).filter (fun v => !f.pattern.atom.vars.contains v)))).dedup
-
 private def patterns (r : SchemaRule) : List Pattern :=
   r.heads ++ r.body.filterMap (fun c => c.input.map Prod.fst)
 
@@ -96,32 +83,6 @@ fold variables. Repeated proof paths do not create additional table rows. -/
 def atomTable (program : AggregateProgram) (domain : Arith.Domain) : List Pattern :=
   (program.rules.flatMap fun r => (patterns r).flatMap fun p =>
     (Arith.allSubstitutions p.atom.vars.dedup domain).map fun σ => base (p.applySubst σ)).dedup
-
-private def evalExpr (σ : Arith.Substitution) : Expression → Except String Int
-  | .term t => match σ.applyTerm t with
-    | .integer value => .ok value
-    | _ => .error "integer expression is unbound or has an unsupported type"
-  | .call name args => do
-    let values ← args.mapM (evalExpr σ)
-    match name, values with
-    | "+", values => return values.foldl (· + ·) 0
-    | "*", values => return values.foldl (· * ·) 1
-    | "-", [a, b] => return a - b
-    | "min", a :: rest => return rest.foldl min a
-    | "max", a :: rest => return rest.foldl max a
-    | _, _ => .error "unsupported expression function or arity"
-
-private def reducerNamed (name : String) : Except String (Reducer Int) :=
-  if name = "+" || name = "sum" then .ok sum
-  else if name = "min" then .ok minimum
-  else if name = "max" then .ok maximum
-  else .error "unsupported aggregate reducer"
-
-private def matchRow (σ : Arith.Substitution) (pattern row : Pattern) : Option Arith.Substitution :=
-  if pattern.atom.name = row.atom.name ∧ pattern.atom.negation = row.atom.negation ∧
-      pattern.modeName = row.modeName ∧ pattern.modeNegated = row.modeNegated then
-    Arith.matchTerms σ pattern.atom.args row.atom.args
-  else none
 
 /-- Matching extends an outer environment separately for each distinct row.
 Equal extracted values remain separate contributions. -/
@@ -138,12 +99,7 @@ def evalSchemaFold (domain : Arith.Domain) (σ : Arith.Substitution) (rows : Lis
     if domain.any (fun t => decide (t = .integer n)) then return some n
     else .error "aggregate result is outside the declared finite domain"
 
-private def compareInts (op : Arith.CmpOp) (a b : Int) : Bool :=
-  match op with
-  | .eq => a == b | .ne => a != b | .lt => a < b
-  | .le => a ≤ b | .gt => a > b | .ge => a ≥ b
-
-private def checkCondition (domain : Arith.Domain) (σ : Arith.Substitution)
+def checkCondition (domain : Arith.Domain) (σ : Arith.Substitution)
     (rows : List Pattern) (c : Condition) : Except String Bool := do
   match c with
   | .logic _ => return true
@@ -154,10 +110,10 @@ private def checkCondition (domain : Arith.Domain) (σ : Arith.Substitution)
     | none => return false
     | some value => return decide (σ.lookup fold.resultVar = some (.integer value))
 
-private def hasFold (r : SchemaRule) : Bool := r.body.any (fun c => match c with
+def hasFold (r : SchemaRule) : Bool := r.body.any (fun c => match c with
   | .fold _ => true | _ => false)
 
-private def checkedAtom (table : List Pattern) (σ : Arith.Substitution) (p : Pattern) :
+def checkedAtom (table : List Pattern) (σ : Arith.Substitution) (p : Pattern) :
     Except String Literal :=
   let grounded := p.applySubst σ
   if grounded.atom.isGround ∧ base grounded ∈ table then .ok (encodeAtom table grounded)
@@ -190,7 +146,7 @@ def lowerInstance (policy : AggregatePolicy) (domain : Arith.Domain) (table : Li
   let checks ← r.body.mapM (checkCondition domain σ rows)
   if !checks.all id then return []
   let heads ← r.heads.mapM (checkedAtom table σ)
-  let body ← (r.body.filterMap fun c => match c with | .logic p => some p | _ => none).mapM
+  let body ← r.premises.mapM
     (checkedAtom table σ)
   return emitLoweredRules r stage heads body
 
@@ -334,7 +290,8 @@ theorem lowerStages_completed_agree (policy : AggregatePolicy) (program : Aggreg
 
 /-- Infer a schedule, ground and lower each stage after completing its predecessors.
 Unsupported syntax and domain exhaustion are errors, not silently missing rules. -/
-def lowerProgram (policy : AggregatePolicy) (program : AggregateProgram) (domain : Arith.Domain) :
+def lowerProgram (policy : AggregatePolicy := .defeasibleEvidence)
+    (program : AggregateProgram) (domain : Arith.Domain) :
     Except String LoweredProgram :=
   if sourceSupported policy program domain then
     match inferProgram program with
@@ -430,8 +387,10 @@ def evaluateLowered (result : LoweredProgram) : Except ExecutionError StageState
   let owner := loweredOwner result.table result.stages
   executeStages owner (groundBackend owner result.theory) result.stageCount
 
-/-- Complete finite-domain entry point: inference, aggregate lowering, execution. -/
-def evaluateProgram (policy : AggregatePolicy) (program : AggregateProgram) (domain : Arith.Domain) :
+/-- Complete finite-domain entry point: inference, aggregate lowering, execution.
+Defaults to defeasible snapshot evidence, including for strict aggregate rules. -/
+def evaluateProgram (policy : AggregatePolicy := .defeasibleEvidence)
+    (program : AggregateProgram) (domain : Arith.Domain) :
     Except String (LoweredProgram × StageState) :=
   match lowerProgram policy program domain with
   | .error message => .error message

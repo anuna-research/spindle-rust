@@ -28,6 +28,10 @@ stratum does not make it definitely provable.
 | `Spindle/Aggregation/PrefixEquivalence.lean` | `reason_agrees_on_closed_domains` proves agreement of delta, lambda, and partial on dependency-closed domains. `reasonedStage_equivalent` proves exact tagged-batch equality; `executeGround_membership` covers accumulated execution. |
 | `Spindle/Aggregation/Lowering.lean` | Grounds typed schemas over a finite domain and lowers folds stage by stage. Atom encoding is injective on the table and cannot collide with closure guards. `lowerStages_completed_agree` preserves completed reasoning during lowering. `evaluateProgram_correct` proves scheduled execution has exactly the full lowered theory's tagged conclusions. |
 | `Spindle/Aggregation/LoweringTests.lean` | Runtime integration assertions cover inference, grounding, grouping, duplicate rows, defeated rows, priorities, multiple heads, chained folds, evidence policies, empty inputs, and explicit scope/domain errors. |
+| `Spindle/Aggregation/Primitives.lean` | Shared variable scoping, integer expressions, and row matching; no aggregate evaluation or rule lowering. |
+| `Spindle/Aggregation/SourceSemantics.lean` | Independent relational aggregate satisfaction over any enumeration of the row set and any reduction order. Includes seeds, required emptiness, finite assignments, static conditions, and structured source clauses. `Fold.rows_extensional` proves that row order and duplicate proofs are irrelevant. |
+| `Spindle/Aggregation/LoweringCorrectness.lean` | `evalSchemaFold_iff` proves aggregate evaluation sound and complete. `lowerInstance_correct` and `lowerBatch_correct` characterize exactly the emitted rules; `lowerInstance_complete` proves permitted, defined, covered source instances successfully lower. `lowerProgram_source_correct` gives a source-stage derivation for the final theory; `evaluateProgram_source_correct` composes this with tagged execution equivalence. |
+| `Spindle/Aggregation/LoweringCorrectnessTests.lean` | Kernel-checked source derivations cover duplicate rows, equal contributions, reordered enumeration, a non-identity seed, empty folds, domain exclusion, and a strict multi-head instance retaining an ordinary premise. |
 
 Concrete reducer instances cover exact integer sum, minimum, and maximum. Count
 uses sum with constant extraction of one. Kernel-checked examples exercise equal
@@ -200,11 +204,14 @@ outside it is an error. Unknown functions/reducers, nonground domains, malformed
 facts, aggregate cycles, and unsupported modes are rejected. This uses exact
 integer arithmetic, not machine overflow or floating-point behavior.
 
-The evidence policy is an explicit argument. `defeasibleEvidence` adds a fresh
+The selected default is defeasible snapshot evidence. Both `lowerProgram` and
+`evaluateProgram` default their policy argument to `defeasibleEvidence`; for
+example, `evaluateProgram (program := program) (domain := domain)`. This adds a fresh
 unconditional defeasible closure guard to an aggregate-bearing rule's premises;
 the original rule kind is preserved. Even a strict rule therefore cannot obtain
-a definite proof through this aggregate premise. `rejectStrict` instead rejects
-aggregate-bearing strict rules. Guard atoms cannot collide with encoded user
+a definite proof through this aggregate premise. An independent ordinary proof
+may still establish `+D` for the same head. `rejectStrict` remains an explicit
+opt-in restriction that rejects aggregate-bearing strict rules. Guard atoms cannot collide with encoded user
 atoms. Original schema priorities apply to their grounded instances; inserted
 guards use a separate label namespace.
 
@@ -223,20 +230,142 @@ The comparison theory in the last claim is the theory produced by the declared
 lowering policy. The theorem does not assign a universal semantics to every
 possible aggregate extension or prove conformance of the Rust implementation.
 
+## Independent source semantics and lowering correctness
+
+`SourceSemantics.lean` does not import the lowerer. Its `Source.Fold` judgment
+selects a duplicate-free enumeration with exactly the input relation's members,
+requires one extraction for every matching row, and derives the result by an
+unordered reduction relation. It does not call `evalSchemaFold`, `Reducer.eval`,
+or any rule-emission function. The source and compiler share the language's
+integer-expression evaluator, row matcher, and variable-scope definitions. This
+proof verifies aggregation and lowering relative to those primitives; it does
+not independently reverify expression arithmetic or parsing.
+
+```text
+source row set + outer assignment
+              |
+              v
+ one contribution per matching row
+              |
+              v
+ unordered reduction + seed + domain bound
+              |
+              v
+ enabled source clause, with ordinary premises retained
+              |
+              v
+ encoded rule(s) + explicit defeasible closure witness
+```
+
+`evalSchemaFold_iff` is a two-way equivalence, including empty required folds:
+`evalSchemaFold ... = ok result` iff `Source.Fold ... result`. An unknown reducer,
+failed extraction, or out-of-domain result has no successful source judgment.
+`sourceFold_deterministic` proves that the freedom in enumeration and reduction
+order cannot produce different results. Distinct rows with equal values still
+supply separate contributions; a seed need not be an identity and occurs once.
+
+`lowerInstance_correct` characterizes rule membership after successful lowering:
+a rule is emitted iff it encodes an enabled source clause or is that instance's
+required closure witness. All heads and the original rule kind are retained.
+An ordinary premise is residual: compiling a rule does not assert that its body
+is already proved. `lowerInstance_complete` additionally proves successful
+lowering from source satisfaction, provided the evidence policy permits the
+instance and its ground atoms are covered by the encoding table. This separate
+result does not assume compiler success.
+
+`assignment_iff` relates the executable Cartesian product to the source's finite
+assignment judgment. `lowerBatch_correct` lifts the instance equivalence to
+all assignments of all schemas in a stage. `SourceStages` specifies a sequence
+of theories, each extending its predecessor by exactly the source-justified
+rules read against that predecessor's completed SDL reasoning. It preserves
+priorities and does not invoke the lowering functions.
+
+`lowerProgram_source_correct` proves every successful program lowering has this
+source-stage derivation. `evaluateProgram_source_correct` combines that result
+with equality of all four tagged conclusion memberships against full replay.
+Program acceptance remains a premise: this is not a claim that every syntactically
+supported program fits a particular finite domain or passes all grounding checks.
+The existing inference and prefix theorems supply the completed-stratum ordering
+and preservation guarantees described above.
+
+## Rust differential bridge
+
+`spindle_core::aggregation::evaluate` accepts typed nonmodal schemas and an
+explicit finite domain. It implements its own grounding, stage inference, fold
+evaluation, and rule lowering, and calls the existing Rust reasoner on each
+completed prefix. Unique ground labels prevent Rust's label-indexed theory from
+overwriting instances; source superiority pairs expand across all corresponding
+instances. The selected policy is defeasible snapshot evidence.
+
+`AggregationOracle` parses the same typed schema wire format and invokes the
+verified Lean `evaluateProgram` entry point. It returns the inferred stage count
+and all four tagged conclusions decoded to structured user atoms. Internal guards
+are omitted. Both sides expose only atoms mentioned in their own lowered theory;
+Rust's extra synthesized complement negatives are outside this comparison.
+Neither side consumes the other side's lowered rules or expected fold values.
+
+Run the bridge explicitly (the external-oracle tests are ignored by ordinary
+Cargo runs and mandatory in the Lean CI step):
+
+```sh
+(cd lean && lake build AggregationOracle)
+cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
+```
+
+Missing binaries, truncated batches, malformed responses, and unexpected
+mismatches fail the tests. Deterministic generated cases cover small integer
+relations, seeds, reducers, and evidence strength; curated cases cover grouping,
+multiple heads, defeated rows, source priorities, chained folds, residual logic,
+binds, comparisons, rejection, and duplicate proofs. Rust-only regressions run
+without Lean and check the snapshot policy and overflow rejection.
+
+There is a **known ordinary-backend discrepancy**, now demonstrated through an
+aggregate rather than merely documented for ordinary reasoning:
+
+```text
+=> p       => not p       p ~> not q       => q
+                                      |
+                                      v
+                              total = count(q)
+
+Rust constructive defeat-discard:  +d q, total(1)
+Lean aggregate three-phase model:  -d q, total(0)
+```
+
+`known_constructive_discard_changes_aggregate_snapshot` asserts the exact
+six-tag symmetric difference, separately from the agreement suite. It prints a
+known-gap diagnostic and fails if that difference changes. This is evidence of
+a remaining model gap, not a successful conformance case. The existing
+[backend analysis](DIVERGENCES.md) explains why Rust discards the attacker after
+its premise is defeated, whereas the three-phase model retains lambda support.
+The next proof obligation is to establish the aggregate prefix/completion results
+for the constructive two-sided Lean backend, then switch the aggregate oracle
+and remove this discrepancy assertion. Changing Rust to reproduce the older
+approximation would change its established ordinary semantics.
+
+Additional scope limits: the Rust API uses checked i64 arithmetic and rejects
+overflow, while the aggregate Lean model uses exact Int. Agreement generation
+stays within safe arithmetic bounds; no machine-arithmetic refinement is claimed.
+The JSON adapter accepts integer/symbol/variable terms and expressions nested at
+most 64 levels. SPL parsing, decimals, modes, temporal patterns, and resource-bound
+execution remain separate integrations. Error acceptance is compared; error
+message wording is not required to match.
+
 ## Remaining work
 
 1. Connect actual SPL/Rust parsing to this typed schema fragment and prove the
    translation preserves constructs. Extend executable support for modes,
    temporal patterns, schematic predicates, and broader expression types.
 2. Extend the finite-domain grounding contract to generated values, with a
-   termination or explicit resource-limit contract. Prove broader declarative
-   grounding completeness for the aggregate language; the current proof starts
-   from successful execution of the defined finite lowerer.
+   termination or explicit resource-limit contract. The source assignment and
+   lowering proofs cover the declared finite variable scope. Broader active-domain
+   or value-generating semantics require a separate completeness argument.
 3. Specify machine arithmetic, decimals, extension values, and richer failures.
    Exact integer addition is lawful; checked or floating-point addition cannot
    inherit the same reducer laws without a refinement proof.
-4. Add a Lean oracle and Rust differential tests for the repaired implementation,
-   including CLI entry points, limits, temporal filtering, and provenance.
+4. Extend the typed differential bridge to CLI/SPL entry points, execution limits,
+   temporal filtering, and provenance. Close the documented ordinary-backend
+   proof gap before claiming general Rust conformance.
 
 These are integration obligations, not claims already discharged by this model.
 The model makes no Rust conformance or whole-language termination claim.

@@ -102,4 +102,8 @@ def SchemaRule.hasStaticNames (rule : SchemaRule) : Bool :=
     | none => true
     | some (p, _) => p.hasStaticName)
 
+/-- Ordinary logical premises retained by a ground schema instance. -/
+def SchemaRule.premises (r : SchemaRule) : List Pattern :=
+  r.body.filterMap fun c => match c with | .logic p => some p | _ => none
+
 end Spindle.Aggregation

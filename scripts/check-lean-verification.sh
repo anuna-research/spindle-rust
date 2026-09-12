@@ -11,7 +11,7 @@ echo "==> Building Lean libraries and oracle executables with warnings as errors
 build_output="$(mktemp)"
 trap 'rm -f "$build_output"' EXIT
 lake build --wfail 2>&1 | tee "$build_output"
-lake build --wfail spindlelean TrustOracle ArithOracle GroundingOracle EndToEndOracle 2>&1 | tee -a "$build_output"
+lake build --wfail spindlelean TrustOracle ArithOracle GroundingOracle EndToEndOracle AggregationOracle 2>&1 | tee -a "$build_output"
 
 if grep -nE "declaration uses 'sorry'|sorryAx" "$build_output"; then
   echo "error: Lean build contains admitted proofs" >&2
@@ -127,7 +127,9 @@ lint_output="$(lake env lean VacuityLint.lean 2>&1 || true)"
 # current file (zero declarations) and passes vacuously. Assert that both
 # packages were actually scanned before trusting a clean result.
 for pkg in Spindle SpindleLean; do
-  if ! printf '%s\n' "$lint_output" | grep -q "in $pkg with 2 linters"; then
+  # Consume the full input: grep -q can cause printf to fail with SIGPIPE under
+  # pipefail, falsely reporting that a successfully scanned package was absent.
+  if ! printf '%s\n' "$lint_output" | grep "in $pkg with 2 linters" >/dev/null; then
     printf '%s\n' "$lint_output" >&2
     echo "error: vacuity linter did not run over $pkg" >&2
     exit 1
