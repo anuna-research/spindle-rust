@@ -390,10 +390,10 @@ engine-controlled sum/min/max; registry overrides do not redefine them.
 
 1. Prove the implemented SPL-to-schema translation preserves constructs. Extend executable support for modes,
    temporal patterns, schematic predicates, and broader expression types.
-2. Extend the finite-domain grounding contract to generated values, with a
-   termination or explicit resource-limit contract. The source assignment and
-   lowering proofs cover the declared finite variable scope. Broader active-domain
-   or value-generating semantics require a separate completeness argument.
+2. Prove the Rust predicate grounder complete. It now binds computed values and
+   uses a grounding work budget, but the whole-program lowering proofs still
+   cover the finite reference model. The new domain-free aggregate operation
+   has its own soundness/completeness proof; this is not a proof of the grounder.
 3. Specify machine arithmetic, decimals, extension values, and richer failures.
    Exact integer addition is lawful; checked or floating-point addition cannot
    inherit the same reducer laws without a refinement proof.
@@ -417,3 +417,28 @@ their main results. They are included in the normal build and vacuity gate.
 
 See [the PR review](../docs/reviews/pr-26-27-29.md) for the observed Rust failures
 that motivated these obligations.
+
+## Predicate aggregate bindings
+
+SPL also accepts `(agg ?total sum ?amount (payment ?id ?amount))` as a direct
+rule premise. `sum`, `count`, `min-of`, and `max-of` resolve through the registry
+to the verified fold kernel with their own empty-input policies. The parsed
+builtin cases are differentially tested against this Lean model. Host-provided
+combining functions are an unproved extension. SPL reads ordinary predicates,
+including derived rows, and binds new totals without an `aggregate-domain`.
+Multi-condition aggregate subqueries still require a helper predicate.
+
+`Source.PredicateFold` removes the finite result-membership condition from the
+independent unordered source judgment. `evalPredicateFold_iff` (in the
+`Spindle.Aggregation` namespace) proves the executable domain-free fold sound and
+complete. `predicateFold_finite_iff` connects it to the existing finite model.
+Fresh output insertion and existing-output equality constraints are proved too.
+
+The Rust grounder joins potential predicate instances and conservatively retains
+ordinary cycles over source/computed constants. It repeats completed stages as
+that set grows and fails when its work budget is exhausted. This grounder is
+**tested, not proved**. Differential tests compare every positive conclusion and
+all four tags on retained atoms; the exhaustive finite oracle can additionally
+mention impossible ground instances with only negative tags. These extra atoms
+are checked to have no positive conclusions, rather than requiring the sparse
+SPL grounder to materialize them. See [the syntax guide](../docs/aggregation-extensions.md).

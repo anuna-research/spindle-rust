@@ -1,4 +1,4 @@
-//! Bridge from parsed SPL theories to the finite aggregate evaluator.
+//! Bridge from parsed SPL theories to predicate aggregate evaluation.
 use super::*;
 use crate::{
     arith::{ArithConstraint, ArithExpr},
@@ -87,7 +87,7 @@ pub fn has_folds(theory: &Theory) -> bool {
     })
 }
 
-fn condition(body: &BodyLiteral) -> Result<Condition> {
+fn condition(body: &BodyLiteral, registry: &FunctionRegistry) -> Result<Condition> {
     Ok(match body {
         BodyLiteral::Logic(lit) => {
             if lit.has_arith_args() {
@@ -100,14 +100,36 @@ fn condition(body: &BodyLiteral) -> Result<Condition> {
         BodyLiteral::Arithmetic(ArithConstraint::Bind {
             var,
             expr: ArithExpr::Fold(fold),
-        }) => Condition::Fold(Fold {
-            result_var: resolve(*var).into(),
-            seed: fold.initial.as_ref().map(expression).transpose()?,
-            reducer: fold.reducer.clone(),
-            extract: expression(&fold.extract)?,
-            pattern: pattern(&fold.pattern)?,
-            grouping_vars: vec![],
-        }),
+        }) => {
+            let (seed, reducer, extract) = if let Some(name) = &fold.aggregator {
+                let agg = registry
+                    .get_aggregator(name)
+                    .ok_or_else(|| format!("unknown aggregator '{name}'"))?;
+                (
+                    agg.identity.map(|n| Expression::Term(Term::Integer(n))),
+                    agg.reducer.clone(),
+                    if agg.count {
+                        Expression::Term(Term::Integer(1))
+                    } else {
+                        expression(&fold.extract)?
+                    },
+                )
+            } else {
+                (
+                    fold.initial.as_ref().map(expression).transpose()?,
+                    fold.reducer.clone(),
+                    expression(&fold.extract)?,
+                )
+            };
+            Condition::Fold(Fold {
+                result_var: resolve(*var).into(),
+                seed,
+                reducer,
+                extract,
+                pattern: pattern(&fold.pattern)?,
+                grouping_vars: vec![],
+            })
+        }
         BodyLiteral::Arithmetic(ArithConstraint::Bind { var, expr }) => {
             Condition::BindValue(resolve(*var).into(), expression(expr)?)
         }
@@ -117,7 +139,7 @@ fn condition(body: &BodyLiteral) -> Result<Condition> {
     })
 }
 
-fn schema_rule(rule: &Rule) -> Result<SchemaRule> {
+fn schema_rule(rule: &Rule, registry: &FunctionRegistry) -> Result<SchemaRule> {
     if !rule.mode.is_empty()
         || !rule.temporal.is_empty()
         || !rule.constraints.is_empty()
@@ -128,17 +150,28 @@ fn schema_rule(rule: &Rule) -> Result<SchemaRule> {
     Ok(SchemaRule {
         label: rule.label.clone(),
         kind: rule.rule_type,
-        body: rule.body.iter().map(condition).collect::<Result<_>>()?,
+        body: rule
+            .body
+            .iter()
+            .map(|b| condition(b, registry))
+            .collect::<Result<_>>()?,
         heads: rule.head.iter().map(pattern).collect::<Result<_>>()?,
     })
 }
 
 /// Translate parsed rules without grounding candidate heads or discarding attackers.
 pub fn program(theory: &Theory) -> Result<Program> {
+    program_registered(theory, &FunctionRegistry::with_prelude())
+}
+
+fn program_registered(theory: &Theory, registry: &FunctionRegistry) -> Result<Program> {
     let mut rules: Vec<_> = theory.rules().collect();
     rules.sort_by(|a, b| a.label.cmp(&b.label));
     Ok(Program {
-        rules: rules.into_iter().map(schema_rule).collect::<Result<_>>()?,
+        rules: rules
+            .into_iter()
+            .map(|r| schema_rule(r, registry))
+            .collect::<Result<_>>()?,
         priorities: theory
             .superiorities()
             .iter()
@@ -153,9 +186,6 @@ pub(crate) fn prepare(
     registry: &FunctionRegistry,
     limit: usize,
 ) -> Result<Theory> {
-    let domain = theory
-        .aggregate_domain()
-        .ok_or("fold requires an aggregate-domain declaration")?;
     let trust = theory.trust_policy();
     if !trust.trust_map.is_empty()
         || !trust.thresholds.is_empty()
@@ -168,8 +198,8 @@ pub(crate) fn prepare(
     {
         return Err("trust-weighted aggregate snapshots are not supported".into());
     }
-    let program = program(theory)?;
-    let result = evaluate_registered(&program, domain, Some(registry), limit)?;
+    let program = program_registered(theory, registry)?;
+    let result = binding::evaluate(&program, Some(registry), limit)?;
     let mut output = Theory::new();
     output.copy_declarative_state_from(theory);
     let names: BTreeSet<_> = program
@@ -231,6 +261,11 @@ pub(crate) fn prepare(
             decoded.template_label = Some(program.rules[index].label.clone());
         }
         output.add_rule(decoded);
+    }
+    // The ordinary reasoner resolves superiority through template labels.
+    // Decoding restores source template labels, so restore their priorities too.
+    for s in theory.superiorities() {
+        output.add_superiority(&s.superior, &s.inferior);
     }
     for s in result.theory.superiorities() {
         output.add_superiority(&s.superior, &s.inferior);

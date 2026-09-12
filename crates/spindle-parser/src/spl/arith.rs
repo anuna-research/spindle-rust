@@ -59,6 +59,7 @@ const RESERVED_KEYWORDS: &[&str] = &[
     ">=",
     "fold",
     "aggregate-domain",
+    "agg",
 ];
 
 /// Future-reserved keywords that cannot be used as predicate names or rule labels (REQ-008).
@@ -90,7 +91,7 @@ pub(crate) fn is_future_reserved_keyword(name: &str) -> bool {
 ///
 /// Used by guards that reject arithmetic predicates in head position (REQ-009).
 pub(crate) fn is_arith_predicate(name: &str) -> bool {
-    name == "bind" || name == "fold" || is_cmp_op(name)
+    name == "bind" || name == "fold" || name == "agg" || is_cmp_op(name)
 }
 
 /// Parse a comparison operator name into a [`CmpOp`].

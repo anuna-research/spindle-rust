@@ -1,22 +1,18 @@
 # Aggregation and extension functions
 
-SPL uses `bind` for computed values and an explicit `fold` expression for reduction
-over a completed relation. This implementation builds on the function registry
-from [PR #26](https://git.anuna.io/anuna-research/spindle-rust/pulls/26) and the
-builtin prelude from [PR #27](https://git.anuna.io/anuna-research/spindle-rust/pulls/27).
+SPL uses a direct output-binding aggregate premise, following Skein:
+`(agg ?total sum ?amount (payment ?id ?amount))`. A named aggregator defines its
+combining operation and empty-input behavior. Ordinary calculations still use
+`bind`. Both use the extension registry introduced by PRs #26 and #27.
 
 ```lisp
-(aggregate-domain alice bob 0 1 2 10 20)
 (given (person alice))
 (given (person bob))
 (given (payment alice 1 10))
 (given (payment alice 2 10))
 (normally total
   (and (person ?person)
-       (bind ?total
-         (fold + ?cost
-           :from (payment ?person ?id ?cost)
-           :initial 0)))
+       (agg ?total sum ?cost (payment ?person ?id ?cost)))
   (total-payment ?person ?total))
 ```
 
@@ -28,6 +24,27 @@ spindle query '(total-payment alice 20)' examples/aggregation.spl
 ```
 
 ## Syntax and scope
+
+```lisp
+(agg ?total sum ?amount (payment ?person ?id ?amount))
+(agg ?number count ?id (payment ?person ?id ?amount))
+(agg ?smallest min-of ?amount (payment ?person ?id ?amount))
+(agg ?largest max-of ?amount (payment ?person ?id ?amount))
+```
+
+| Name | Contribution | Empty input |
+|---|---|---|
+| `sum` | Selected integer value | Zero |
+| `count` | One per distinct matched row; the selected variable may be a symbol | Zero |
+| `min-of` | Selected integer value | Premise fails |
+| `max-of` | Selected integer value | Premise fails |
+
+The result and contribution must be variables. The contribution variable must
+occur in the row pattern. The current form accepts **one row pattern**; use a
+helper relation to express joins or filters. Aggregation is only valid as a rule
+premise, not as a fact, head, or negated premise.
+
+The explicit fold syntax remains supported:
 
 ```text
 (bind ?result (fold reducer extraction :from pattern empty-policy))
@@ -51,11 +68,25 @@ In the example, `?person` selects a group; `?id` and `?cost` are row-local.
 Distinct whole rows contribute separately even when their extracted values are
 equal. Multiple proofs of an identical row do not multiply its contribution.
 
-`bind` is a constraint, not assignment: an existing binding must agree with the
-computed value. In the aggregate fragment, all outer assignments are enumerated
-from the finite domain, and every static condition is checked. A false condition
-does not hide an error in another expression. Supply suitable domains: arithmetic
-on a symbol is an error even if another condition would reject that assignment.
+`agg` and `bind` introduce their result variable. If it is already bound, the
+computed value must agree. Bind grouping variables in earlier ordinary premises;
+row-local variables stay inside the aggregate. Head variables and expression
+inputs must have a binding source. Unsafe variables are preparation errors.
+
+Inputs can be derived predicates. For example:
+
+```lisp
+(given (purchase alice first 30))
+(given (purchase alice second 45))
+(normally eligible
+  (purchase ?person ?id ?cost)
+  (payment ?person ?id ?cost))
+(normally total
+  (agg ?total sum ?cost (payment ?person ?id ?cost))
+  (all-payments ?total))
+```
+
+This derives `(all-payments 75)`. No fact or declaration enumerates `75`.
 
 ## Execution and evidence
 
@@ -112,18 +143,34 @@ Unknown functions and invalid arities are validation errors. Ordinary grounding
 retains its existing behavior of discarding a substitution when a function fails;
 aggregate snapshot evaluation reports expression failures as errors.
 
-Reducer eligibility is separate from function registration. Arbitrary pure
-functions may be order-sensitive. Fold currently uses engine-controlled checked
-integer sum/min/max; registering or overriding `+` does not change the fold
-reducer. There is no `foldl`/`foldr` because relations supply no iteration order.
+`FunctionRegistry` also has a separate aggregator namespace. Register a named
+`AggregatorDefinition` with `register_aggregator(name, definition)`. Its fields
+are the binary `reducer` name, an optional integer `identity`, and whether to
+`count` rows rather than use their selected values. The identity is both the
+starting accumulator and the empty result; `None` requires a nonempty input.
+Host registries can override aggregator definitions without changing ordinary
+same-named functions.
+
+The reducer can be the engine-controlled +/sum, min or max, or a registered binary
+extension function returning an integer. Custom reducers must be pure,
+associative and commutative over accepted inputs; registration is a host contract,
+not a proof of those laws. Builtin reducer names retain their kernel meanings even
+if an ordinary arithmetic function with that name is overridden. There is no
+`foldl`/`foldr` because relations supply no user-defined iteration order.
 
 ## Limits and verification
 
-Aggregate programs require one explicit `aggregate-domain` containing ground
-integers and symbols, including possible aggregate results. Finite grounding is
-exponential in outer variable count. The configured `max_instances` budget bounds
-atom-table and assignment enumeration; exhaustion is an error, not a partial
-answer. Grounding cannot be disabled for folds.
+No `aggregate-domain` is needed. The old declaration is accepted for source
+compatibility but does not restrict SPL input rows or computed outputs. The typed
+finite-domain reference API retains its explicit domain contract.
+
+Grounding joins potential predicate instances; completed proofs determine the
+aggregate rows. Ordinary cyclic support and attackers are retained even when
+undecided. Cyclic predicates are conservatively instantiated over source and
+computed constants, and completed strata are replayed when new constants appear.
+This can be exponential. The configured `max_instances` budget bounds grounding
+work, including repeated passes. Exhaustion (including unbounded value-generating
+recursion) is an error, never a partial answer. Grounding cannot be disabled.
 
 The aggregate bridge currently rejects decimal/float values, modal or temporal
 constructs, trust-weighted snapshots, schematic predicates, wildcards, and
@@ -137,8 +184,15 @@ reduction order, so the implementation's deterministic row traversal is not a
 machine-arithmetic refinement proof. Custom extension implementations and general
 symbol bindings are also outside the current proof fragment.
 
-The differential suite covers 86 typed and 26 SPL pipeline agreement cases. A
-separate pinned counterexample records the existing difference between Rust's
-constructive defeat-discard backend and the older ordinary backend used by the
-aggregate Lean proof. See [the proof guide](../lean/AGGREGATION.md). Parsing and
-extension registration are tested integrations, not themselves verified Lean code.
+Builtin named aggregates lower to the existing typed fold model. Differential
+checks compare all tagged conclusions with the independent Lean evaluator,
+including grouping, empty inputs, duplicate contributions, conflicts and
+traditional DL(∂) cycle behavior. Every compared case must agree. Custom reducer
+functions remain outside the Lean proof fragment. Parsing and extension
+registration are tested integrations, not themselves verified Lean code.
+See [the proof guide](../lean/AGGREGATION.md).
+
+The domain-free aggregate operation is proved against independent unordered
+predicate semantics in `Spindle/Aggregation/Binding.lean`, including agreement
+with the finite reference model when its domain contains the result. The Rust
+predicate grounder itself is differentially tested, not formally verified.

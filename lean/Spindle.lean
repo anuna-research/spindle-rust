@@ -47,3 +47,5 @@ import Spindle.Aggregation.LoweringTests
 import Spindle.Aggregation.SourceSemantics
 import Spindle.Aggregation.LoweringCorrectness
 import Spindle.Aggregation.LoweringCorrectnessTests
+
+import Spindle.Aggregation.Binding

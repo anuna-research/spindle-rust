@@ -83,16 +83,16 @@ fn empty_input_policies_and_count() {
 fn rejects_invalid_semantics() {
     for (source, message) in [
         (
-            "(normally r (bind ?n (fold + 1 :from p :initial 0)) (n ?n))",
-            "aggregate-domain",
+            "(normally r (agg ?n sum ?v (p ?v)) (n ?missing ?n))",
+            "unsafe head",
         ),
         (
             "(aggregate-domain 0 1) (normally r (bind ?n (fold + 1 :from (p ?v) :initial 0)) (p ?n))",
             "cycle",
         ),
         (
-            "(aggregate-domain 0 1) (given p) (normally r (bind ?n (fold + 2 :from p :initial 0)) (n ?n))",
-            "outside domain",
+            "(normally r (and (> ?x 0) (agg ?n sum ?v (p ?v))) (n ?n))",
+            "unsafe variable",
         ),
         (
             "(aggregate-domain 0) (normally r (bind ?n (+ 1 (fold + 1 :from p :initial 0))) (n ?n))",
@@ -126,7 +126,7 @@ fn malformed_syntax_is_rejected() {
 fn explicit_grounding_limit_is_enforced() {
     let source = parse_spl("(aggregate-domain 0 1 2) (normally r (bind ?n (fold + 1 :from (p ?a ?b) :initial 0)) (n ?n))").unwrap();
     let mut opts = PrepareOptions::default();
-    opts.grounding.max_instances = 2;
+    opts.grounding.max_instances = 1;
     assert!(
         prepare(&source, opts)
             .err()
@@ -243,4 +243,205 @@ fn lowered_explanation_includes_defeasible_snapshot_evidence() {
         step.body_proofs[0].derivation_type,
         spindle_core::explanation::DerivationType::Defeasible
     );
+}
+
+#[test]
+fn named_aggregators_group_rows_and_define_empty_behavior() {
+    let source = "(aggregate-domain alice bob first second 0 1 2 10 20)
+        (given (person alice)) (given (person bob))
+        (given (payment alice first 10)) (given (payment alice second 10))
+        (normally totals (and (person ?p)
+          (agg ?n sum ?cost (payment ?p ?id ?cost))) (total ?p ?n))
+        (normally counts (and (person ?p)
+          (agg ?n count ?id (payment ?p ?id ?cost))) (number ?p ?n))
+        (normally minima (and (person ?p)
+          (agg ?n min-of ?cost (payment ?p ?id ?cost))) (smallest ?p ?n))
+        (normally maxima (and (person ?p)
+          (agg ?n max-of ?cost (payment ?p ?id ?cost))) (largest ?p ?n))";
+    let out = positive(source);
+    for expected in [
+        "+d (total alice 20)",
+        "+d (total bob 0)",
+        "+d (number alice 2)",
+        "+d (number bob 0)",
+        "+d (smallest alice 10)",
+        "+d (largest alice 10)",
+    ] {
+        assert!(out.contains(&expected.to_string()), "{out:?}");
+    }
+    assert!(
+        !out.iter()
+            .any(|s| s.contains("(smallest bob") || s.contains("(largest bob"))
+    );
+}
+
+#[test]
+fn named_aggregate_is_a_binding_constraint_with_snapshot_evidence() {
+    let source = "(aggregate-domain 0 10 20)
+        (given (amount 10)) (given (expected 10)) (given (expected 20))
+        (always total (and (expected ?n) (agg ?n sum ?v (amount ?v))) (total ?n))";
+    let out = positive(source);
+    assert!(out.contains(&"+d (total 10)".into()));
+    assert!(!out.contains(&"+D (total 10)".into()));
+    assert!(!out.contains(&"+d (total 20)".into()));
+}
+
+#[test]
+fn unknown_aggregator_is_a_preparation_error() {
+    let t =
+        parse_spl("(aggregate-domain 0) (normally r (agg ?n median ?v (amount ?v)) (total ?n))")
+            .unwrap();
+    let err = prepare(&t, PrepareOptions::default())
+        .err()
+        .expect("unknown aggregator must fail")
+        .to_string();
+    assert!(err.contains("unknown aggregator 'median'"), "{err}");
+}
+
+#[test]
+fn host_registered_aggregator_uses_its_combiner_and_identity() {
+    use spindle_core::function_registry::{
+        AggregatorDefinition, Arity, EvalError, ExtensionFunction, FunctionRegistry,
+        FunctionSignature,
+    };
+    use spindle_core::{intern::intern, term::Term};
+    struct BitOr(FunctionSignature);
+    impl ExtensionFunction for BitOr {
+        fn signature(&self) -> &FunctionSignature {
+            &self.0
+        }
+        fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+            match args {
+                [Term::Integer(a), Term::Integer(b)] => Ok(Term::Integer(a | b)),
+                _ => Err(EvalError::TypeError("bit-or requires integers".into())),
+            }
+        }
+    }
+    let mut registry = FunctionRegistry::new();
+    registry.register(Box::new(BitOr(FunctionSignature {
+        name: intern("bit-or"),
+        arity: Arity::Fixed(2),
+        description: "bitwise union".into(),
+    })));
+    registry.register_aggregator(
+        "bit-union",
+        AggregatorDefinition {
+            reducer: "bit-or".into(),
+            identity: Some(0),
+            count: false,
+        },
+    );
+    let t = parse_spl(
+        "(aggregate-domain 0 1 2 3)
+        (given (bits 1)) (given (bits 2))
+        (normally r (agg ?n bit-union ?b (bits ?b)) (result ?n))",
+    )
+    .unwrap();
+    let prepared = prepare(
+        &t,
+        PrepareOptions {
+            function_registry: Some(registry),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let out = reason_prepared(&prepared.theory).unwrap();
+    assert!(
+        out.iter()
+            .any(|c| c.conclusion_type.is_positive() && c.literal.to_spl() == "(result 3)")
+    );
+}
+
+#[test]
+fn predicates_supply_derived_rows_and_new_values_flow_to_later_aggregates() {
+    let out = positive(
+        "(given (person alice)) (given (person bob))
+      (given (purchase alice first 30)) (given (purchase alice second 45))
+      (normally eligible (purchase ?p ?id ?cost) (payment ?p ?id ?cost))
+      (always total (and (person ?p) (agg ?n sum ?v (payment ?p ?id ?v))) (total ?p ?n))
+      (normally copy (total ?p ?n) (copied ?p ?n))
+      (normally grand (agg ?n sum ?v (copied ?p ?v)) (grand ?n))",
+    );
+    for expected in [
+        "+d (total alice 75)",
+        "+d (total bob 0)",
+        "+d (copied alice 75)",
+        "+d (grand 75)",
+    ] {
+        assert!(out.contains(&expected.into()), "{out:?}");
+    }
+    assert!(!out.contains(&"+D (total alice 75)".into()));
+}
+
+#[test]
+fn generated_bind_values_do_not_require_enumeration() {
+    let out = positive(
+        "(given (payment 30)) (given (payment 45))
+      (normally total (agg ?n sum ?v (payment ?v)) (total ?n))
+      (normally fee (and (total ?n) (bind ?m (+ ?n 1))) (with-fee ?m))",
+    );
+    assert!(out.contains(&"+d (with-fee 76)".into()), "{out:?}");
+}
+
+#[test]
+fn predicate_grounding_retains_undecided_attackers() {
+    let out = positive(
+        "(given (person alice))
+      (always loop (undecided ?x) (undecided ?x))
+      (normally support (person ?x) (eligible ?x))
+      (normally attack (and (person ?x) (undecided ?y)) (not (eligible ?x)))
+      (normally count-eligible (agg ?n count ?x (eligible ?x)) (row-count ?n))",
+    );
+    assert!(!out.contains(&"+d (eligible alice)".into()), "{out:?}");
+    assert!(out.contains(&"+d (row-count 0)".into()), "{out:?}");
+}
+
+#[test]
+fn newly_computed_values_also_instantiate_earlier_cycles() {
+    let out = positive(
+        "(given (payment 30)) (given (payment 45))
+      (always loop (undecided ?x) (undecided ?x))
+      (normally total (agg ?n sum ?v (payment ?v)) (total ?n))
+      (normally support (total ?n) (eligible ?n))
+      (normally attack (and (total ?n) (undecided ?n)) (not (eligible ?n)))",
+    );
+    assert!(out.contains(&"+d (total 75)".into()), "{out:?}");
+    assert!(!out.contains(&"+d (eligible 75)".into()), "{out:?}");
+}
+
+#[test]
+fn obsolete_domain_does_not_constrain_predicates_or_outputs() {
+    let out = positive(
+        "(aggregate-domain 0)
+      (given (payment 30)) (given (payment 45))
+      (normally total (agg ?n sum ?v (payment ?v)) (total ?n))",
+    );
+    assert!(out.contains(&"+d (total 75)".into()), "{out:?}");
+}
+
+#[test]
+fn value_generating_recursion_exhausts_the_grounding_budget() {
+    let raw = parse_spl(
+        "(given (p 1))
+      (normally next (and (p ?x) (bind ?y (+ ?x 1))) (p ?y))
+      (normally count-eligible (agg ?n count ?x (p ?x)) (row-count ?n))",
+    )
+    .unwrap();
+    let mut opts = PrepareOptions::default();
+    opts.grounding.max_instances = 100;
+    let err = prepare(&raw, opts).err().unwrap().to_string();
+    assert!(err.contains("limit"), "{err}");
+}
+
+#[test]
+fn source_priority_survives_decoding_of_aggregate_instances() {
+    let out = positive(
+        "(given (payment 30)) (given (payment 45))
+      (always loop (undecided ?x) (undecided ?x))
+      (normally total (agg ?n sum ?v (payment ?v)) (total ?n))
+      (normally support (total ?n) (eligible ?n))
+      (always attack (and (total ?n) (undecided ?n)) (not (eligible ?n)))
+      (prefer support attack)",
+    );
+    assert!(out.contains(&"+d (eligible 75)".into()), "{out:?}");
 }

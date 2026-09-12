@@ -122,6 +122,22 @@ pub trait ExtensionFunction: Send + Sync {
 // FunctionRegistry
 // ---------------------------------------------------------------------------
 
+/// A named, order-independent integer aggregation.
+///
+/// `reducer` names +/sum, min, max, or a registered binary extension function.
+/// Custom reducers must be pure, associative and commutative on accepted values.
+/// An identity seeds the reduction and supplies the empty result; without one,
+/// empty input fails the rule premise. Count contributes one per matched row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AggregatorDefinition {
+    /// Binary combining function; built-in +/sum, min and max use the verified kernel.
+    pub reducer: String,
+    /// Initial accumulator and empty result; None requires nonempty input.
+    pub identity: Option<i64>,
+    /// Contribute one per row instead of the selected value.
+    pub count: bool,
+}
+
 /// Registry of named extension functions.
 ///
 /// Maps interned function names to their implementations. Used by the
@@ -130,6 +146,7 @@ pub trait ExtensionFunction: Send + Sync {
 #[derive(Clone)]
 pub struct FunctionRegistry {
     functions: HashMap<SymbolId, std::sync::Arc<dyn ExtensionFunction>>,
+    aggregators: HashMap<SymbolId, AggregatorDefinition>,
 }
 
 impl FunctionRegistry {
@@ -137,6 +154,7 @@ impl FunctionRegistry {
     pub fn new() -> Self {
         Self {
             functions: HashMap::new(),
+            aggregators: HashMap::new(),
         }
     }
 
@@ -152,15 +170,43 @@ impl FunctionRegistry {
     pub fn with_prelude() -> Self {
         let mut reg = Self::new();
         crate::builtins::register_builtins(&mut reg);
+        for (name, reducer, identity, count) in [
+            ("sum", "+", Some(0), false),
+            ("count", "+", Some(0), true),
+            ("min-of", "min", None, false),
+            ("max-of", "max", None, false),
+        ] {
+            reg.register_aggregator(
+                name,
+                AggregatorDefinition {
+                    reducer: reducer.into(),
+                    identity,
+                    count,
+                },
+            );
+        }
         reg
     }
 
     /// Merge another registry into this one. Entries from `other` override
     /// existing entries with the same name.
     pub fn merge(&mut self, other: FunctionRegistry) {
+        self.aggregators.extend(other.aggregators);
         for (name, func) in other.functions {
             self.functions.insert(name, func);
         }
+    }
+
+    /// Register an aggregator. A same-named aggregator is replaced; ordinary
+    /// functions live in a separate namespace and are unaffected.
+    pub fn register_aggregator(&mut self, name: &str, definition: AggregatorDefinition) {
+        self.aggregators
+            .insert(crate::intern::intern(name), definition);
+    }
+
+    /// Resolve the combining operation and empty behavior of an aggregator.
+    pub fn get_aggregator(&self, name: &str) -> Option<&AggregatorDefinition> {
+        self.aggregators.get(&crate::intern::intern(name))
     }
 
     /// Look up a function by its interned name.
@@ -190,6 +236,7 @@ impl fmt::Debug for FunctionRegistry {
         let names: Vec<&str> = self.functions.keys().map(|id| resolve(*id)).collect();
         f.debug_struct("FunctionRegistry")
             .field("functions", &names)
+            .field("aggregators", &self.aggregators)
             .finish()
     }
 }

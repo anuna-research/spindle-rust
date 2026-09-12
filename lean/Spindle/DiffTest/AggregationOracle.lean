@@ -1,4 +1,4 @@
-import Spindle.Aggregation.LoweringCorrectness
+import Spindle.Aggregation.Binding
 import Lean.Data.Json
 
 /-! JSON adapter for the verified finite-domain aggregate evaluator.
@@ -82,6 +82,11 @@ private def tagJson : ConclusionType → Json
   | .defeasiblyProvable => toJson "+d" | .defeasiblyNotProvable => toJson "-d"
 
 private def evaluateCase (j : Json) : Except String Json := do
+  if let .ok foldJson := j.getObjVal? "predicate_fold" then
+    let fold ← parseFold foldJson
+    let rows ← (← j.getObjValAs? (Array Json) "rows").toList.mapM parsePattern
+    let result ← evalPredicateFold Arith.Substitution.empty rows fold
+    return Json.mkObj [("value", toJson result)]
   let rules ← (← j.getObjValAs? (Array Json) "rules").toList.mapM parseRule
   let priorities ← j.getObjValAs? (List (String × String)) "priorities"
   let domain ← (← j.getObjValAs? (Array Json) "domain").toList.mapM parseTerm

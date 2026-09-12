@@ -39,7 +39,7 @@ This project is part of the SPINdle family:
   - Stratification, grouping, source priorities, and multiple heads
   - Defeasible snapshot evidence prevents automatic `+D` from aggregate premises
   - Lean aggregate lowering proofs and mandatory Lean/Rust differential agreement
-  - Use `(bind ?total (fold + ?value :from (amount ?value) :initial 0))`
+  - Use `(agg ?total sum ?value (amount ?value))`
 
 - **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
   - First-class declarations: `(predicate assign-to ((task symbol) (agent symbol)))`
@@ -149,24 +149,29 @@ use spindle_core::reason::reason;
 let conclusions = reason(&theory);
 ```
 
-## Finite-Domain Aggregation
+## Predicate Aggregation
 
 ```lisp
-(aggregate-domain 0 10 20 30)
 (given (amount 10))
 (given (amount 20))
 (normally total
-  (bind ?sum (fold + ?value :from (amount ?value) :initial 0))
+  (agg ?sum sum ?value (amount ?value))
   (total ?sum))
 ```
 
 Run `spindle reason examples/aggregation.spl --json` for a grouped example.
-Strata are inferred automatically; folds read completed earlier conclusions.
-Use `:initial value` for seeded reduction, or `:require-nonempty` to make an
-empty input unsatisfied. Reducers are `+`/`sum`, `min`, and `max`; count rows by
-extracting `1`. The fold must be the direct expression of `bind`.
+Strata are inferred automatically; aggregates read completed earlier conclusions.
+The named aggregators define their empty-input behavior: `sum` and `count` return
+zero, while `min-of` and `max-of` require at least one row. `agg` directly binds
+its output variable; no `bind` wrapper is needed. The explicit `fold` form remains
+available for custom extractions and seeds.
 
-The SPL bridge supports finite integer/symbol domains. Modal, temporal,
+Input rows are ordinary predicates in the theory, including derived conclusions.
+Computed results are bound directly: the example produces `(total 30)` without
+listing `30` anywhere. No `aggregate-domain` declaration is required. Each `agg`
+accepts one row pattern; use a helper relation for joins and filters.
+
+The SPL bridge supports integer/symbol predicate instances. Modal, temporal,
 trust-weighted, wildcard, decimal, and floating-point aggregate programs are
 rejected. Aggregate enumeration uses the configured grounding instance budget
 and returns an error on exhaustion. See [the syntax and extension guide](docs/aggregation-extensions.md).
@@ -183,7 +188,7 @@ snapshot evidence. It can therefore support `+d` without automatically granting
 `+D`. An independent definite proof of the same head can still grant `+D`.
 
 The [aggregation guide](lean/AGGREGATION.md) explains the semantics, proofs,
-finite-domain restrictions, and Rust integration. The
+verification boundaries, and Rust integration. The
 [differential fixtures](crates/spindle-core/tests/lean_aggregation_oracle_difftest.rs)
 provide executable examples of grouping, chained folds, and priorities.
 

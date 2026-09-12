@@ -31,17 +31,13 @@ fn cli_query_uses_the_same_aggregate_preparation() {
 }
 
 #[test]
-fn cli_reports_invalid_aggregate_domain() {
+fn cli_reports_unsafe_aggregate_variable() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("invalid.spl");
-    std::fs::write(
-        &file,
-        "(normally r (bind ?n (fold + 1 :from p :initial 0)) (n ?n))",
-    )
-    .unwrap();
+    std::fs::write(&file, "(normally r (agg ?n sum ?v (p ?v)) (n ?missing ?n))").unwrap();
     cargo_bin_cmd!("spindle")
         .args(["reason", file.to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("aggregate-domain"));
+        .stderr(predicates::str::contains("unsafe head variable"));
 }

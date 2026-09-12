@@ -84,6 +84,8 @@ pub enum ArithExpr {
 /// A relational fold expression with a separately scoped row pattern.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FoldExpr {
+    /// Named aggregate surface form; resolved through the registry during preparation.
+    pub aggregator: Option<String>,
     /// Lawful reducer name: +/sum, min, max.
     pub reducer: String,
     /// Per-row integer contribution.
@@ -171,6 +173,18 @@ impl fmt::Display for ArithConstraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ArithConstraint::Bind { var, expr } => {
+                if let ArithExpr::Fold(fold) = expr
+                    && let Some(name) = &fold.aggregator
+                {
+                    return write!(
+                        f,
+                        "(agg {} {} {} {})",
+                        resolve(*var),
+                        name,
+                        fold.extract,
+                        fold.pattern.to_spl()
+                    );
+                }
                 write!(f, "(bind {} {expr})", resolve(*var))
             }
             ArithConstraint::Compare { op, lhs, rhs } => {

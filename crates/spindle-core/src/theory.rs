@@ -43,7 +43,7 @@ pub struct Meta {
 /// A defeasible logic theory
 #[derive(Debug, Clone, Default)]
 pub struct Theory {
-    /// Explicit finite universe for aggregate schema grounding.
+    /// Legacy aggregate-domain declaration retained for source compatibility.
     aggregate_domain: Option<Vec<crate::aggregation::Term>>,
     /// Fresh internal closure predicates, hidden from user conclusions.
     pub(crate) aggregate_guards: std::collections::HashSet<String>,
@@ -76,7 +76,11 @@ impl Theory {
         Self::default()
     }
 
-    /// Set the explicit finite universe used by aggregate preparation.
+    /// Retain a legacy aggregate-domain declaration.
+    ///
+    /// Predicate-based aggregate preparation does not use this declaration to
+    /// constrain rows or outputs. The typed finite-domain evaluator takes its
+    /// domain as a separate argument.
     pub fn set_aggregate_domain(&mut self, domain: Vec<crate::aggregation::Term>) {
         self.aggregate_domain = Some(domain);
     }

@@ -684,6 +684,64 @@ fn generated_constructive_conflicts_agree() {
     );
 }
 
+// The finite oracle materializes dead Cartesian instances that sparse predicate
+// grounding need not emit. Compare every positive conclusion globally and all
+// four tags on every retained atom (including atoms with no provable tags).
+fn assert_sparse_agreement(theory: &spindle_core::Theory, answer: &Value) {
+    assert!(answer.get("error").is_none(), "Lean: {answer}");
+    let prepared = spindle_core::pipeline::prepare(theory, Default::default()).unwrap();
+    let atom_key = |l: &spindle_core::Literal| {
+        (
+            l.name().to_owned(),
+            l.negation,
+            l.predicate_args()
+                .iter()
+                .map(|t| term_json(&aggregation::source::term(t).unwrap()).to_string())
+                .collect::<Vec<_>>(),
+        )
+    };
+    let mentioned: BTreeSet<_> = prepared
+        .theory
+        .rules()
+        .flat_map(|r| {
+            r.head.iter().cloned().chain(
+                r.body
+                    .iter()
+                    .filter_map(|b| b.as_logic().map(|b| b.to_literal())),
+            )
+        })
+        .filter(|l| !l.name().starts_with("__aggregate_snapshot"))
+        .map(|l| atom_key(&l))
+        .collect();
+    let actual: Tags = spindle_core::reason::reason_prepared(&prepared.theory)
+        .unwrap()
+        .iter()
+        .filter(|c| mentioned.contains(&atom_key(&c.literal)))
+        .map(|c| {
+            let (name, neg, args) = atom_key(&c.literal);
+            (name, neg, args, c.conclusion_type.symbol().into())
+        })
+        .collect();
+    let expected = normalize(answer);
+    let retained: Tags = expected
+        .iter()
+        .filter(|(n, neg, args, _)| mentioned.contains(&(n.clone(), *neg, args.clone())))
+        .cloned()
+        .collect();
+    assert_eq!(actual, retained, "all four tags on retained atoms");
+    let positives = |tags: &Tags| {
+        tags.iter()
+            .filter(|(_, _, _, tag)| tag.starts_with('+'))
+            .cloned()
+            .collect::<Tags>()
+    };
+    assert_eq!(
+        positives(&actual),
+        positives(&expected),
+        "all positive conclusions"
+    );
+}
+
 /// Exercise parser -> aggregate preparation -> ordinary Rust reasoner, not just the typed API.
 #[test]
 #[ignore = "requires the Lean AggregationOracle binary"]
@@ -722,44 +780,169 @@ fn spl_pipeline_agrees_with_lean_aggregate_oracle() {
         .map(|t| {
             case_json(
                 &aggregation::source::program(t).unwrap(),
-                t.aggregate_domain().unwrap(),
+                &t.aggregate_domain()
+                    .map(<[Term]>::to_vec)
+                    .unwrap_or_else(|| {
+                        vec![
+                            Term::Symbol("alice".into()),
+                            Term::Symbol("bob".into()),
+                            int(0),
+                            int(1),
+                            int(2),
+                            int(10),
+                            int(20),
+                        ]
+                    }),
             )
         })
         .collect();
     let answers = oracle(&cases);
     for ((source, theory), answer) in sources.iter().zip(theories).zip(answers) {
-        assert!(answer.get("error").is_none(), "{source}: {answer}");
-        let prepared = spindle_core::pipeline::prepare(&theory, Default::default()).unwrap();
-        let mentioned: BTreeSet<_> = prepared
-            .theory
-            .rules()
-            .flat_map(|r| {
-                r.head.iter().cloned().chain(
-                    r.body
-                        .iter()
-                        .filter_map(|b| b.as_logic().map(|b| b.to_literal())),
-                )
-            })
-            .map(|l| l.to_spl())
-            .collect();
-        let tags: Tags = spindle_core::reason::reason_prepared(&prepared.theory)
-            .unwrap()
-            .iter()
-            .filter(|c| mentioned.contains(&c.literal.to_spl()))
-            .map(|c| {
-                (
-                    c.literal.name().into(),
-                    c.literal.negation,
-                    c.literal
-                        .predicate_args()
-                        .iter()
-                        .map(|t| term_json(&aggregation::source::term(t).unwrap()).to_string())
-                        .collect(),
-                    c.conclusion_type.symbol().into(),
-                )
-            })
-            .collect();
-        assert_eq!(tags, normalize(&answer), "{source}");
+        assert_sparse_agreement(&theory, &answer);
+        let _ = source;
     }
     eprintln!("26 SPL pipeline/Lean agreement cases passed");
+}
+
+/// Named public aggregates must lower to the same independently evaluated
+/// schemas as the verified fold kernel, including empty groups and equal values.
+#[test]
+#[ignore = "requires the Lean AggregationOracle binary; enforced in Lean CI"]
+fn named_aggregate_syntax_agrees_with_lean() {
+    use spindle_parser::parse_spl;
+    for name in ["sum", "count", "min-of", "max-of"] {
+        for n in 0..4 {
+            let mut source = String::from(
+                "(aggregate-domain alice bob 0 1 2 3 10 20 30)
+                (given (person alice)) (given (person bob))",
+            );
+            for i in 0..n {
+                source.push_str(&format!(" (given (payment alice {i} 10))"));
+            }
+            source.push_str(&format!(
+                " (normally r (and (person ?p)
+                (agg ?total {name} ?cost (payment ?p ?id ?cost))) (total ?p ?total))"
+            ));
+            let parsed = parse_spl(&source).unwrap();
+            let program = aggregation::source::program(&parsed).unwrap();
+            let domain = parsed.aggregate_domain().unwrap();
+            let answer = &oracle(&[case_json(&program, domain)])[0];
+            assert_sparse_agreement(&parsed, answer);
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires the Lean AggregationOracle binary; enforced in Lean CI"]
+fn predicate_binding_and_cyclic_attackers_agree_with_lean() {
+    // Domains belong only to the independent exhaustive oracle, never to SPL.
+    let mut cases = Vec::new();
+    for loop_kind in ["always", "normally"] {
+        for attacker_kind in ["always", "normally", "defeater"] {
+            // Use the parser's actual defeater spelling below.
+            for priority in [false, true] {
+                let attack = if attacker_kind == "defeater" {
+                    "(except attack (and (total ?n) (undecided ?n)) (not (eligible ?n)))"
+                        .to_string()
+                } else {
+                    format!(
+                        "({attacker_kind} attack (and (total ?n) (undecided ?n)) (not (eligible ?n)))"
+                    )
+                };
+                let source = format!(
+                    "(given (payment 30)) (given (payment 45))
+                    ({loop_kind} loop (undecided ?x) (undecided ?x))
+                    (normally total (agg ?n sum ?v (payment ?v)) (total ?n))
+                    (normally support (total ?n) (eligible ?n)) {attack}
+                    {}",
+                    if priority {
+                        "(prefer support attack)"
+                    } else {
+                        ""
+                    }
+                );
+                cases.push(source);
+            }
+        }
+    }
+    cases.push(
+        "(given (person alice)) (given (person bob))
+        (given (purchase alice first 30)) (given (purchase alice second 45))
+        (normally eligible (purchase ?p ?id ?cost) (payment ?p ?id ?cost))
+        (always total (and (person ?p) (agg ?n sum ?v (payment ?p ?id ?v))) (total ?p ?n))
+        (normally copy (total ?p ?n) (copied ?p ?n))
+        (normally grand (agg ?n sum ?v (copied ?p ?v)) (grand ?n))"
+            .into(),
+    );
+    cases.push(
+        "(given (person alice))
+        (always loop (undecided ?x) (undecided ?x))
+        (normally support (person ?x) (eligible ?x))
+        (normally attack (and (person ?x) (undecided ?y)) (not (eligible ?x)))
+        (normally count-eligible (agg ?n count ?x (eligible ?x)) (row-count ?n))"
+            .into(),
+    );
+    for source in cases {
+        let (source, domain) = if source.contains("purchase") {
+            (
+                source
+                    .replace("alice", "1")
+                    .replace("bob", "2")
+                    .replace("first", "1")
+                    .replace("second", "2")
+                    .replace("30", "1")
+                    .replace("45", "2"),
+                vec![int(0), int(1), int(2), int(3)],
+            )
+        } else if source.contains("alice") {
+            (source, vec![int(0), int(1), Term::Symbol("alice".into())])
+        } else {
+            (source, vec![int(0), int(30), int(45), int(75)])
+        };
+        let parsed = spindle_parser::parse_spl(&source).unwrap_or_else(|e| panic!("{source}: {e}"));
+        let program = aggregation::source::program(&parsed).unwrap();
+        let answer = &oracle(&[case_json(&program, &domain)])[0];
+        assert_sparse_agreement(&parsed, answer);
+    }
+}
+
+#[test]
+#[ignore = "requires the Lean AggregationOracle binary; enforced in Lean CI"]
+fn domain_free_fold_kernel_agrees_with_spl_bindings() {
+    for name in ["sum", "count", "min-of", "max-of"] {
+        for n in 0..4 {
+            let facts = (0..n)
+                .map(|id| format!("(given (payment {id} 10))"))
+                .collect::<String>();
+            let source =
+                format!("{facts} (normally total (agg ?n {name} ?v (payment ?id ?v)) (total ?n))");
+            let parsed = spindle_parser::parse_spl(&source).unwrap();
+            let p = aggregation::source::program(&parsed).unwrap();
+            let c = p
+                .rules
+                .iter()
+                .flat_map(|r| &r.body)
+                .find(|c| matches!(c, Condition::Fold(_)))
+                .unwrap();
+            let rows: Vec<_> = (0..n)
+                .map(|id| pattern_json(&atom("payment", vec![int(id), int(10)])))
+                .collect();
+            // Neither the SPL input nor this Lean oracle request has a domain.
+            let answer =
+                &oracle(&[json!({"predicate_fold": condition_json(c)["fold"], "rows": rows})])[0];
+            assert!(answer.get("error").is_none(), "{answer}");
+            let out = spindle_core::reason::reason(&parsed).unwrap();
+            let totals: BTreeSet<_> = out
+                .iter()
+                .filter(|c| c.is_positive() && c.literal.name() == "total")
+                .map(|c| c.literal.to_spl())
+                .collect();
+            let expected: BTreeSet<_> = answer["value"]
+                .as_i64()
+                .map(|v| format!("(total {v})"))
+                .into_iter()
+                .collect();
+            assert_eq!(totals, expected, "{source}: {answer}");
+        }
+    }
 }

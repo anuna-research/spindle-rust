@@ -1,17 +1,18 @@
 //! Finite-domain aggregate evaluation over completed Rust reasoning snapshots.
 //!
-//! This typed reference API implements the fragment compared with the Lean
-//! aggregate oracle. The `source` bridge lowers parsed SPL through this evaluator.
+//! The typed reference API uses an explicit finite domain. The `source` bridge
+//! binds results directly and grounds parsed SPL from predicate instances. Both
+//! paths are compared with the Lean aggregate oracle.
 //! Modal/temporal aggregation is not supported.
 //! Integer operations are checked i64 operations; overflow is an explicit error.
 //! Strict aggregate rules retain their kind and receive a defeasible closure
 //! premise. Every stage replays the complete retained theory, including attackers.
 //!
-//! The Rust ordinary backend uses constructive defeat-discard; the aggregate
-//! Lean proofs currently use a three-phase approximation. Differential tests
-//! record that known snapshot discrepancy separately (see lean/AGGREGATION.md).
+//! Rust and Lean use traditional ambiguity-blocking, team-defeat DL(partial).
+//! The finite-domain API and SPL binding evaluator are compared with Lean.
 //! This API is tested against the model, not formally proved to refine it.
 
+mod binding;
 pub mod source;
 
 use crate::function_registry::FunctionRegistry;
@@ -271,7 +272,10 @@ fn validate(p: &Program, domain: &[Term], registry: Option<&FunctionRegistry>) -
                         && supported(b, registry)
                 }
                 Condition::Fold(f) => {
-                    ["+", "sum", "min", "max"].contains(&f.reducer.as_str())
+                    (["+", "sum", "min", "max"].contains(&f.reducer.as_str())
+                        || registry
+                            .and_then(|r| r.get(crate::intern::intern(&f.reducer)))
+                            .is_some_and(|f| f.signature().arity.accepts(2)))
                         && supported(&f.extract, registry)
                         && f.seed.as_ref().is_none_or(|e| supported(e, registry))
                 }
@@ -383,7 +387,7 @@ fn fold(
     f: &Fold,
     env: &Env,
     rows: &[Pattern],
-    domain: &[Term],
+    domain: Option<&[Term]>,
     registry: Option<&FunctionRegistry>,
 ) -> Result<Option<i64>> {
     let mut value = f
@@ -426,11 +430,25 @@ fn fold(
                 "+" | "sum" => a.checked_add(n).ok_or("integer overflow")?,
                 "min" => a.min(n),
                 "max" => a.max(n),
-                _ => return Err("unsupported reducer".into()),
+                name => {
+                    let fun = registry
+                        .and_then(|r| r.get(crate::intern::intern(name)))
+                        .ok_or("unsupported reducer")?;
+                    if !fun.signature().arity.accepts(2) {
+                        return Err("aggregate reducer must accept two arguments".into());
+                    }
+                    match fun
+                        .eval(&[crate::term::Term::Integer(a), crate::term::Term::Integer(n)])
+                        .map_err(|e| e.to_string())?
+                    {
+                        crate::term::Term::Integer(n) => n,
+                        _ => return Err("aggregate reducer must return an integer".into()),
+                    }
+                }
             },
         });
     }
-    if value.is_some_and(|n| !domain.contains(&Term::Integer(n))) {
+    if value.is_some_and(|n| domain.is_some_and(|d| !d.contains(&Term::Integer(n)))) {
         return Err("aggregate result outside domain".into());
     }
     Ok(value)
@@ -458,7 +476,7 @@ fn check(
                 _ => return Err("unsupported comparison".into()),
             }
         }
-        Condition::Fold(f) => fold(f, env, rows, domain, registry)?
+        Condition::Fold(f) => fold(f, env, rows, Some(domain), registry)?
             .is_some_and(|n| env.get(&f.result_var) == Some(&Term::Integer(n))),
     })
 }

@@ -129,3 +129,8 @@ import Spindle.Arith.WhyNot
 #print axioms Spindle.Aggregation.FiniteIteration.fixed
 #print axioms Spindle.Aggregation.Operational.close_fixedpoint
 #print axioms Spindle.Aggregation.operational_close_agrees
+
+#print axioms Spindle.Aggregation.evalPredicateFold_iff
+#print axioms Spindle.Aggregation.predicateFold_finite_iff
+#print axioms Spindle.Aggregation.bindPredicateResult_fresh
+#print axioms Spindle.Aggregation.bindPredicateResult_existing

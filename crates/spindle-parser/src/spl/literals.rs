@@ -114,6 +114,10 @@ fn try_parse_arith_constraint(
         None => return Ok(None),
     };
 
+    if keyword == "agg" {
+        return super::aggregate::parse_agg(&items[1..], line).map(Some);
+    }
+
     if keyword == "bind" {
         return try_parse_bind(items, line).map(Some);
     }
