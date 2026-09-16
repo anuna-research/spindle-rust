@@ -287,7 +287,9 @@ fn validate(p: &Program, domain: &[Term], registry: Option<&FunctionRegistry>) -
     }
     Ok(())
 }
-fn schedule(p: &Program) -> Result<Vec<usize>> {
+/// Infer source-rule strata, rejecting cycles through aggregate dependencies.
+/// Predicate polarity is deliberately ignored so attackers share the same stage.
+pub fn infer_stages(p: &Program) -> Result<Vec<usize>> {
     let mut keys = BTreeMap::new();
     for pat in p.rules.iter().flat_map(patterns) {
         let next = keys.len() + p.rules.len();
@@ -550,7 +552,7 @@ fn evaluate_registered(
 ) -> Result<Evaluation> {
     validate(program, domain, registry)?;
     let mut budget = limit;
-    let stages = schedule(program)?;
+    let stages = infer_stages(program)?;
     let stage_count = stages.iter().copied().max().unwrap_or(0) + 1;
     let mut table = BTreeSet::new();
     for p in program.rules.iter().flat_map(patterns) {

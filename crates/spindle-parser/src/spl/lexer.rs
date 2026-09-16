@@ -121,7 +121,10 @@ pub(crate) fn remove_comments(input: &str) -> String {
 }
 
 /// Parse multiple top-level S-expressions, tracking byte offsets for each.
-pub(crate) fn parse_expressions_with_positions(input: &str) -> IResult<&str, Vec<(SExpr, usize)>> {
+pub(crate) fn parse_expressions_with_positions(
+    input: &str,
+    max_depth: usize,
+) -> IResult<&str, Vec<(SExpr, usize)>> {
     let mut results = Vec::new();
     let mut remaining = input;
 
@@ -135,7 +138,7 @@ pub(crate) fn parse_expressions_with_positions(input: &str) -> IResult<&str, Vec
         // Record offset before parsing the expression
         let offset = input.len() - after_ws.len();
 
-        match parse_sexpr(input, after_ws) {
+        match parse_sexpr_inner(input, after_ws, max_depth) {
             Ok((rest, expr)) => {
                 results.push((expr, offset));
                 remaining = rest;
@@ -150,16 +153,17 @@ pub(crate) fn parse_expressions_with_positions(input: &str) -> IResult<&str, Vec
     Ok((final_remaining, results))
 }
 
-/// Parse a single S-expression. `full_input` is the entire cleaned string
-/// (used to compute byte offsets); `input` is the current parse position.
-fn parse_sexpr<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
-    parse_sexpr_inner(full_input, input)
-}
-
 /// Dispatch to list, string, or atom parsing.
-fn parse_sexpr_inner<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+fn parse_sexpr_inner<'a>(
+    full_input: &'a str,
+    input: &'a str,
+    remaining_depth: usize,
+) -> IResult<&'a str, SExpr> {
     if input.starts_with('(') {
-        parse_list(full_input, input)
+        if remaining_depth == 0 {
+            return Err(nom::Err::Failure(Error::new(input, ErrorKind::TooLarge)));
+        }
+        parse_list(full_input, input, remaining_depth - 1)
     } else if input.starts_with('"') {
         parse_string(full_input, input)
     } else {
@@ -168,7 +172,11 @@ fn parse_sexpr_inner<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str
 }
 
 /// Parse a parenthesised list: `( ... )`
-fn parse_list<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr> {
+fn parse_list<'a>(
+    full_input: &'a str,
+    input: &'a str,
+    remaining_depth: usize,
+) -> IResult<&'a str, SExpr> {
     let offset = full_input.len() - input.len();
     let mut remaining = &input[1..]; // skip '('
     let mut items = Vec::new();
@@ -181,7 +189,7 @@ fn parse_list<'a>(full_input: &'a str, input: &'a str) -> IResult<&'a str, SExpr
             return Ok((rest, SExpr::List { items, offset }));
         }
 
-        let (rest, expr) = parse_sexpr_inner(full_input, remaining)?;
+        let (rest, expr) = parse_sexpr_inner(full_input, remaining, remaining_depth)?;
         items.push(expr);
         remaining = rest;
     }

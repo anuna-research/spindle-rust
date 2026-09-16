@@ -33,6 +33,12 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
+    /// Compile, prove, and verify zero-knowledge policy claims
+    #[cfg(feature = "zk")]
+    Zk {
+        #[command(subcommand)]
+        command: crate::cli::commands::zk::ZkCommand,
+    },
     /// Explain a stable error code
     ExplainCode {
         /// The error code to explain (e.g. RULE_NOT_FOUND)

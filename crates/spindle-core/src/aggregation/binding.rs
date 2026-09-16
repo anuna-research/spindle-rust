@@ -205,7 +205,7 @@ pub(super) fn evaluate(
         validate_bindings(rule)?;
     }
     let recursive = recursive_keys(program);
-    let stages = schedule(program)?;
+    let stages = infer_stages(program)?;
     let stage_count = stages.iter().copied().max().unwrap_or(0) + 1;
     let mut domain = BTreeSet::new();
     for rule in &program.rules {

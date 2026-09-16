@@ -53,6 +53,8 @@ fn main() {
 
     // Determine schema version and json flag based on the command before we move out of cli.command
     let (schema_version, json_flag) = match &cli.command {
+        #[cfg(feature = "zk")]
+        Commands::Zk { .. } => (Some("spindle.zk.v1"), cli.json),
         Commands::Reason { json, v2, .. } => {
             let ver = if *v2 {
                 "spindle.reason.v2"
@@ -91,6 +93,17 @@ fn main() {
     };
 
     let result = match cli.command {
+        #[cfg(feature = "zk")]
+        Commands::Zk { command } => {
+            if cli.stdin || reference_time.is_some() {
+                Err(CliError::validation(
+                    "ZK_UNSUPPORTED_OPTION",
+                    "ZK commands do not support --stdin or --at",
+                ))
+            } else {
+                cli::commands::zk::run(command, json_flag)
+            }
+        }
         Commands::Reason {
             file,
             positive,

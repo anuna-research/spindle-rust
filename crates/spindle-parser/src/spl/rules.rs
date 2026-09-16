@@ -67,6 +67,14 @@ pub(crate) fn process_rule_with_line(
     };
 
     let (body, constraints, state_queries) = parse_body_with_line(body_expr, line)?;
+    if args.len() != if label.is_some() { 3 } else { 2 } {
+        return Err(ParseError::ParserError {
+            line,
+            message: "Rule has unexpected trailing arguments".to_string(),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
     let head = parse_literal_with_line(head_expr, line)?;
 
     let prefix = match rule_type {

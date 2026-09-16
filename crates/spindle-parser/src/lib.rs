@@ -22,4 +22,4 @@ pub use error::{ParseError, ParserFormat};
 pub use predicate_indicator::{
     PredicateIndicatorError, parse_predicate_indicator, parse_predicate_indicator_with_limit,
 };
-pub use spl::parse_spl;
+pub use spl::{parse_spl, parse_spl_bounded};

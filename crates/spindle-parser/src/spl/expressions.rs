@@ -111,6 +111,20 @@ fn process_fact_with_line(
         });
     }
 
+    if args.len() > 1
+        && (args[0].as_list().is_some()
+            || matches!(
+                args[0].as_atom(),
+                Some("during" | "must" | "may" | "forbidden" | "not")
+            ))
+    {
+        return Err(ParseError::ParserError {
+            line,
+            message: "A compound fact requires exactly one literal".to_string(),
+            format: ParserFormat::Spl,
+            source_line: None,
+        });
+    }
     let lit = parse_literal_with_line(&args[0], line)?;
 
     // Handle flat predicate: (given pred arg1 arg2 ...)

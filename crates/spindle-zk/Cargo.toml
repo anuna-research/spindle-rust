@@ -1,0 +1,21 @@
+[package]
+name = "spindle-zk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Zero-knowledge proof compiler for bounded Spindle policies"
+
+[dependencies]
+spindle-core = { path = "../spindle-core" }
+spindle-parser = { path = "../spindle-parser" }
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+halo2_proofs.workspace = true
+halo2_gadgets.workspace = true
+ff.workspace = true
+rand_core.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+proptest = "1"

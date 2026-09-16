@@ -54,21 +54,34 @@ use lexer::{
 
 /// Parse an SPL string into a Theory
 pub fn parse_spl(input: &str) -> Result<Theory, ParseError> {
+    parse_spl_with_depth(input, usize::MAX)
+}
+
+/// Parse SPL with an explicit nesting limit, capped at 128 lists for stack safety.
+///
+/// This uses the same recognizer as [`parse_spl`]. Parentheses inside strings
+/// and comments do not consume nesting depth. A zero limit rejects every list.
+pub fn parse_spl_bounded(input: &str, max_depth: usize) -> Result<Theory, ParseError> {
+    parse_spl_with_depth(input, max_depth.min(128))
+}
+
+fn parse_spl_with_depth(input: &str, max_depth: usize) -> Result<Theory, ParseError> {
     // Remove comments
     let cleaned = remove_comments(input);
 
     let mut theory = Theory::new();
 
     // Parse all top-level expressions, tracking positions for line numbers
-    let (remaining, expr_positions) = parse_expressions_with_positions(&cleaned).map_err(|e| {
-        let line = line_of_from_error(&cleaned, &e);
-        ParseError::ParserError {
-            line,
-            message: format!("SPL parse error: {e:?}"),
-            format: ParserFormat::Spl,
-            source_line: source_line_text(&cleaned, line),
-        }
-    })?;
+    let (remaining, expr_positions) = parse_expressions_with_positions(&cleaned, max_depth)
+        .map_err(|e| {
+            let line = line_of_from_error(&cleaned, &e);
+            ParseError::ParserError {
+                line,
+                message: format!("SPL parse error: {e:?}"),
+                format: ParserFormat::Spl,
+                source_line: source_line_text(&cleaned, line),
+            }
+        })?;
 
     if !remaining.trim().is_empty() {
         let line = line_of_offset(&cleaned, cleaned.len() - remaining.len());
@@ -1166,13 +1179,10 @@ mod tests {
 
     #[test]
     fn test_rule_label_reserved_keyword_and() {
-        // (always and body head) - "and" looks like label but is reserved
-        // Should be treated as body, not as a label
-        let theory = parse_spl("(always and body head)").unwrap();
-        let rule = theory.rules().next().unwrap();
-        // "and" is treated specially: label=None, body_expr=and, head_expr=body
-        // But "and" as a bare atom in body position becomes a simple literal
-        assert_eq!(rule.body[0].name(), "and");
+        // "and" cannot be a label. Treating it as the body must not silently
+        // discard the third argument and change the requested rule's head.
+        let err = parse_spl("(always and body head)").unwrap_err();
+        assert!(err.to_string().contains("trailing arguments"));
     }
 
     // =========================================================================
