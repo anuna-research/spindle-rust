@@ -135,6 +135,11 @@ impl<'a> IndexedTheory<'a> {
     /// Build an indexed theory from a theory reference, returning an error if
     /// exact-literal interning exhausts the available ID space.
     pub fn try_build(theory: &'a Theory) -> Result<Self> {
+        if crate::aggregation::source::has_folds(theory) {
+            return Err(crate::SpindleError::Validation {
+                message: "fold requires prepare() before indexing or prepared reasoning".into(),
+            });
+        }
         let mut idx = Self {
             theory,
             atom_map: FxHashMap::default(),

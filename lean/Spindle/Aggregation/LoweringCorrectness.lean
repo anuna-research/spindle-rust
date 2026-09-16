@@ -408,7 +408,7 @@ def SourceBatch (program : AggregateProgram) (domain : Arith.Domain) (table : Li
     (stages : DependencyNode → Nat) (stage : Nat) (before : Theory) (rule : Rule) : Prop :=
   ∃ r ∈ program.rules, stages (.rule r.label) = stage ∧
     ∃ σ, Source.Assignment domain (outerVars r) σ ∧
-      SourceRule domain table stage (survivingRows table (reason before).conclusions) r σ rule
+      SourceRule domain table stage (survivingRows table (Operational.reason before).conclusions) r σ rule
 
 /-- Every emitted rule has a source justification, and every source-justified rule
 at this stage is emitted. Includes every finite outer assignment and every head. -/
@@ -502,7 +502,7 @@ theorem evaluateProgram_source_correct (policy : AggregatePolicy) (program : Agg
     (returned : evaluateProgram policy program domain = .ok (result, state)) :
     SourceStages program domain result.table result.stages result.stageCount 0
       ⟨[], program.priorities.map (fun (a, b) => ("u:" ++ a, "u:" ++ b))⟩ result.theory ∧
-    (∀ c, c ∈ state.conclusions ↔ c ∈ (reason result.theory).conclusions) := by
+    (∀ c, c ∈ state.conclusions ↔ c ∈ (Operational.reason result.theory).conclusions) := by
   obtain ⟨lowered, agrees⟩ := evaluateProgram_correct policy program domain result state returned
   exact ⟨(lowerProgram_source_correct policy program domain result lowered).2, agrees⟩
 

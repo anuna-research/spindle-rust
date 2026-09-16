@@ -43,6 +43,10 @@ pub struct Meta {
 /// A defeasible logic theory
 #[derive(Debug, Clone, Default)]
 pub struct Theory {
+    /// Legacy aggregate-domain declaration retained for source compatibility.
+    aggregate_domain: Option<Vec<crate::aggregation::Term>>,
+    /// Fresh internal closure predicates, hidden from user conclusions.
+    pub(crate) aggregate_guards: std::collections::HashSet<String>,
     /// Rules indexed by label
     rules: HashMap<RuleLabel, Rule>,
     /// Superiority relations
@@ -70,6 +74,20 @@ impl Theory {
     /// Create a new empty theory
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Retain a legacy aggregate-domain declaration.
+    ///
+    /// Predicate-based aggregate preparation does not use this declaration to
+    /// constrain rows or outputs. The typed finite-domain evaluator takes its
+    /// domain as a separate argument.
+    pub fn set_aggregate_domain(&mut self, domain: Vec<crate::aggregation::Term>) {
+        self.aggregate_domain = Some(domain);
+    }
+
+    /// The explicitly declared aggregate universe, if any.
+    pub fn aggregate_domain(&self) -> Option<&[crate::aggregation::Term]> {
+        self.aggregate_domain.as_deref()
     }
 
     /// Add a rule to the theory
@@ -261,6 +279,8 @@ impl Theory {
     /// preparation instead of silently degrading declared symbols to
     /// `UndeclaredPredicate` (SPEC-024 CON-008).
     pub fn copy_declarative_state_from(&mut self, other: &Theory) {
+        self.aggregate_domain = other.aggregate_domain.clone();
+        self.aggregate_guards = other.aggregate_guards.clone();
         self.copy_metadata_from(other);
         self.predicate_declarations = other.predicate_declarations.clone();
         self.trust_policy = other.trust_policy.clone();

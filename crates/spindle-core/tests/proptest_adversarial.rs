@@ -551,16 +551,15 @@ proptest! {
 }
 
 // =============================================================================
-// 9. Conflicting facts: both +D p and +D ~p should block defeasible level
+// 9. Conflicting facts: both definite proofs also have defeasible proofs
 // =============================================================================
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(200))]
 
-    /// When both `p` and `~p` are facts, neither should be defeasibly provable
-    /// (condition 2 of +d fails for both).
+    /// Traditional DL subsumes definite proofs even under strict inconsistency.
     #[test]
-    fn conflicting_facts_block_defeasible(
+    fn conflicting_facts_subsume_defeasible(
         atom in proptest::sample::select(ATOMS).prop_map(String::from),
     ) {
         let mut theory = Theory::new();
@@ -576,17 +575,8 @@ proptest! {
         prop_assert!(definite.contains(&atom), "+D {} expected", atom);
         prop_assert!(definite.contains(&neg), "+D ~{} expected", atom);
 
-        // With +D p AND +D ~p, condition (2) of +d fails for both
-        prop_assert!(
-            !defeasible.contains(&atom),
-            "{} should NOT be +d when +D ~{0}",
-            atom
-        );
-        prop_assert!(
-            !defeasible.contains(&neg),
-            "~{} should NOT be +d when +D {}",
-            atom, atom
-        );
+        prop_assert!(defeasible.contains(&atom), "+D must imply +d");
+        prop_assert!(defeasible.contains(&neg), "+D must imply +d for the complement too");
     }
 }
 
@@ -1324,9 +1314,8 @@ fn conflicting_strict_chains() {
     assert!(definite.contains("q"), "+D q expected from strict rule");
     assert!(definite.contains("~q"), "+D ~q expected from strict rule");
 
-    // Neither should be +d (condition 2 fails when complement is +D)
-    assert!(!defeasible.contains("q"), "q should NOT be +d when +D ~q");
-    assert!(!defeasible.contains("~q"), "~q should NOT be +d when +D q");
+    assert!(defeasible.contains("q"), "+D q implies +d q");
+    assert!(defeasible.contains("~q"), "+D ~q implies +d ~q");
 }
 
 /// Rule with body literal equal to head (self-loop) should not cause infinite loop

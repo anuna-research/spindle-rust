@@ -4,18 +4,14 @@
 //! runs a fixed-point loop that propagates both positive (+d) and negative
 //! (-d) defeasible conclusions.
 //!
-//! Also contains Phase 3: emit `-D` and `-d` for all unproven literals.
+//! Phase 3 reports only constructively derived negative tags.
 //!
 //! # Algorithm
 //!
-//! 1. **Seed +d from +D** (subsumption with condition 2): `+D q` yields
-//!    `+d q` only if `-D ~q`.
-//! 2. **Seed -d** for literals with no Rsd support, and for +D literals
-//!    that fail condition (2).
-//! 3. **Seed empty-body defeasible rules** via `try_prove_defeasible`.
-//! 4. **Fixed-point loop**: process `(LitId, proved)` tuples from a worklist,
-//!    updating body counters, trying to prove/disprove heads and complements.
-//! 5. **Emit negatives**: `-D` and `-d` for all remaining unproven literals.
+//! 1. Derive definite negative proofs from discarded strict rules.
+//! 2. Seed +d unconditionally from +D.
+//! 3. Compute constructive +d/-d until no further proof can be added.
+//! 4. Emit derived tags; undecided cycles receive no synthetic negative tag.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -29,110 +25,6 @@ use crate::theory::Theory;
 
 use super::state::{LiteralBitSet, ReasoningState};
 
-/// Compute the lambda over-approximation: everything that COULD be
-/// defeasibly provable, ignoring attacks and superiority. Mirrors
-/// `lean/SpindleLean/Closure/Lambda.lean` (`lambdaClose`).
-///
-/// Seeds from the definite conclusions (+D), then repeatedly fires
-/// productive rules (fact/strict/defeasible — not defeaters) whose logic
-/// body literals are all already in lambda, excluding heads whose
-/// complement is definite. Arithmetic body constraints and un-interned
-/// body literals are treated as satisfiable, keeping this a genuine
-/// over-approximation.
-///
-/// Literals OUTSIDE lambda can never be defeasibly proved — in particular,
-/// rules with circular, unfounded bodies (e.g. `p => p`) never place their
-/// head in lambda. Seeding such literals as -d lets the worklist discard
-/// unfounded attackers instead of letting a rule that can never fire block
-/// conclusions forever (well-founded reading; see lean/DIVERGENCES.md
-/// class 2).
-fn compute_lambda<'t>(
-    theory: &'t Theory,
-    indexed: &IndexedTheory<'t>,
-    definite_proven: &LiteralBitSet,
-    body_remaining_init: &FxHashMap<&'t str, usize>,
-) -> LiteralBitSet {
-    let mut lambda = definite_proven.clone();
-    // Mirror the main worklist's counter mechanics — including family-aware
-    // body matching and per-slot idempotent satisfaction — with all attack
-    // and superiority checks ignored. Starting from a pristine clone of the
-    // body counters keeps lambda's notion of "body satisfiable" identical to
-    // the fixed point's notion of "body satisfied".
-    let mut remaining = body_remaining_init.clone();
-    let mut satisfied: FxHashMap<&'t str, fixedbitset::FixedBitSet> = theory
-        .rules()
-        .map(|r| {
-            (
-                r.label.as_str(),
-                fixedbitset::FixedBitSet::with_capacity(r.body.len()),
-            )
-        })
-        .collect();
-    let mut queue: VecDeque<LitId> = VecDeque::new();
-
-    // Seed with all definite literals.
-    for &id in indexed.all_literal_ids() {
-        if definite_proven.contains(id) {
-            queue.push_back(id);
-        }
-    }
-
-    // Fire rules whose bodies are already fully satisfied (e.g. empty bodies).
-    for rule in theory.rules() {
-        if !matches!(
-            rule.rule_type,
-            RuleType::Fact | RuleType::Strict | RuleType::Defeasible
-        ) {
-            continue;
-        }
-        if remaining.get(rule.label.as_str()).copied().unwrap_or(0) == 0 {
-            for head in &rule.head {
-                if let Some(head_id) = indexed.get_lit_id(head)
-                    && !lambda.contains(head_id)
-                    && !definite_proven.contains(head_id.complement())
-                {
-                    lambda.insert(head_id);
-                    queue.push_back(head_id);
-                }
-            }
-        }
-    }
-
-    // Propagate to fixpoint.
-    while let Some(id) = queue.pop_front() {
-        let event_lit = indexed.resolve_literal(id);
-        for rule in indexed.rules_with_body_id(id) {
-            if !matches!(
-                rule.rule_type,
-                RuleType::Fact | RuleType::Strict | RuleType::Defeasible
-            ) {
-                continue;
-            }
-            let (Some(rem), Some(sat)) = (
-                remaining.get_mut(rule.label.as_str()),
-                satisfied.get_mut(rule.label.as_str()),
-            ) else {
-                continue;
-            };
-            let was_unsatisfied = *rem > 0;
-            super::cover_body_slots(rule, &event_lit, sat, rem);
-            if was_unsatisfied && *rem == 0 {
-                for head in &rule.head {
-                    if let Some(head_id) = indexed.get_lit_id(head)
-                        && !lambda.contains(head_id)
-                        && !definite_proven.contains(head_id.complement())
-                    {
-                        lambda.insert(head_id);
-                        queue.push_back(head_id);
-                    }
-                }
-            }
-        }
-    }
-
-    lambda
-}
-
 /// Run Phase 2 (defeasible fixed-point) and Phase 3 (negative emission).
 pub(crate) fn resolve_defeasible(
     theory: &Theory,
@@ -144,95 +36,39 @@ pub(crate) fn resolve_defeasible(
     let estimated_size = rule_count * 2;
     let mut worklist: VecDeque<(LitId, bool)> = VecDeque::with_capacity(estimated_size);
 
-    // --- Seed +d from +D (subsumption), but respect condition (2) ---
-    // Sort by SPL string for deterministic iteration order. This is
-    // lexicographic (not temporal), which is intentional: we only need a
-    // stable, reproducible ordering here, not temporal precedence.
+    // Definite failure is a proof, not the complement of definite success.
+    super::definite::derive_negative(indexed, state);
     let mut all_ids: Vec<LitId> = indexed.all_literal_ids().cloned().collect();
     all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
     for &lit_id in &all_ids {
         if state.definite_proven.contains(lit_id) {
-            let comp_id = lit_id.complement();
-            if !state.definite_proven.contains(comp_id) {
-                // Normal case: +D q and -D ~q → +d q
-                state.defeasible_proven.insert(lit_id);
-                // Reuse the +D conclusion's literal (preserves temporal) and rule label
-                let (lit, definite_label) = state
-                    .conclusions
-                    .iter()
-                    .find_map(|c| {
-                        if c.conclusion_type == ConclusionType::DefinitelyProvable
-                            && indexed.get_lit_id(&c.literal) == Some(lit_id)
-                        {
-                            Some((c.literal.clone(), c.rule_label.as_deref().map(String::from)))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| (indexed.resolve_literal(lit_id), None));
-                let mut conclusion = Conclusion::defeasibly_provable(lit);
-                if let Some(label) = definite_label {
-                    conclusion = conclusion.with_rule(&label);
-                }
-                state.conclusions.push(conclusion);
-                worklist.push_back((lit_id, true));
-            }
-            // If +D q AND +D ~q: don't seed +d (condition 2 fails).
+            // Traditional DL(partial): +D q implies +d q unconditionally.
+            state.defeasible_proven.insert(lit_id);
+            let (lit, label) = state
+                .conclusions
+                .iter()
+                .find_map(|c| {
+                    (c.conclusion_type == ConclusionType::DefinitelyProvable
+                        && indexed.get_lit_id(&c.literal) == Some(lit_id))
+                    .then(|| (c.literal.clone(), c.rule_label.clone()))
+                })
+                .unwrap_or_else(|| (indexed.resolve_literal(lit_id), None));
+            let mut conclusion = Conclusion::defeasibly_provable(lit);
+            conclusion.rule_label = label;
+            state.conclusions.push(conclusion);
+            worklist.push_back((lit_id, true));
         }
     }
-
-    // --- Seed -d for literals that can never be defeasibly proved ---
-    // Lambda over-approximation: literals outside it are unfounded (no
-    // non-circular support path exists), so they seed -d and the worklist
-    // discards any attacker that depends on them (well-founded reading,
-    // mirrors the Lean model's lambda-based attack discard).
-    let lambda = compute_lambda(
-        theory,
-        indexed,
-        &state.definite_proven,
-        &state.defeasible_body_remaining,
-    );
-    // Live family support: how many members of each family are still
-    // possibly provable — in the lambda over-approximation AND not yet
-    // disproven. An atemporal body literal is satisfiable (famSat) while
-    // its family has live members, so -d events must not discard its
-    // rules until the LAST live member is dead. Defeat events (a -d for
-    // a lambda-alive member, e.g. a superiority loss) decrement the
-    // count, so a family whose every candidate has been defeated does
-    // discard its dependents — the spec's condition (3) inductive
-    // discard (see the reviewer-reported regression fixed here).
+    // All family members remain possible until constructively disproved.
+    // Cyclic support is not a negative proof.
     let mut family_live: FxHashMap<FamilyId, usize> = FxHashMap::default();
-    for &id in indexed.all_literal_ids() {
-        if lambda.contains(id) {
-            *family_live
-                .entry(FamilyId::from(&indexed.resolve_literal(id)))
-                .or_insert(0) += 1;
-        }
+    for &id in &all_ids {
+        *family_live
+            .entry(FamilyId::from(&indexed.resolve_literal(id)))
+            .or_insert(0) += 1;
     }
-    // Idempotence guard: a literal's death is counted at most once even if
-    // multiple -d events are queued for it.
+    let family_members: FxHashSet<LitId> = all_ids.iter().copied().collect();
     let mut counted_dead: FxHashSet<LitId> = FxHashSet::default();
-    for &lit_id in &all_ids {
-        if state.defeasible_proven.contains(lit_id) || state.defeasible_disproven.contains(lit_id) {
-            continue;
-        }
-
-        if state.definite_proven.contains(lit_id) {
-            // +D q but condition (2) failed (+D ~q too) → -d q
-            state.defeasible_disproven.insert(lit_id);
-            worklist.push_back((lit_id, false));
-            continue;
-        }
-
-        // -D q and unfounded: q is outside the lambda over-approximation,
-        // so no chain of productive rules can ever establish it. This
-        // subsumes the "Rsd[q] is empty" check (a literal with no
-        // productive rules never enters lambda unless definite).
-        if !lambda.contains(lit_id) {
-            state.defeasible_disproven.insert(lit_id);
-            worklist.push_back((lit_id, false));
-        }
-    }
 
     // --- Seed empty-body defeasible/strict rules not yet decided ---
     let mut empty_body_rules: Vec<_> = theory
@@ -266,6 +102,7 @@ pub(crate) fn resolve_defeasible(
                 indexed,
                 theory,
                 &state.definite_proven,
+                &state.definite_disproven,
                 &mut state.defeasible_proven,
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
@@ -319,12 +156,12 @@ pub(crate) fn resolve_defeasible(
 
             let event_lit = indexed.resolve_literal(q_id);
             let event_family = FamilyId::from(&event_lit);
-            // A -d event that defeats a lambda-alive member shrinks its
+            // A constructive -d event shrinks its
             // family's live support, once per member (idempotent). Done once
             // per event rather than per rule so a defeated member with no body
             // occurrence still decrements its family's live count.
             if !proved
-                && lambda.contains(q_id)
+                && family_members.contains(&q_id)
                 && counted_dead.insert(q_id)
                 && let Some(c) = family_live.get_mut(&event_family)
             {
@@ -359,8 +196,7 @@ pub(crate) fn resolve_defeasible(
                     //    family AND same window), so an exact match discards;
                     //  - an ATEMPORAL body literal is family-satisfiable, so it
                     //    is dead only when its family has no LIVE member left —
-                    //    members outside lambda never counted (unfounded), and
-                    //    lambda-alive members stop counting when defeated. A
+                    //    members stop counting only when constructively defeated. A
                     //    family with a live member may still fire the rule
                     //    later, and as an attacker it keeps blocking meanwhile.
                     let should_discard = rule.body.iter().any(|bl| match bl.as_logic() {
@@ -412,6 +248,7 @@ pub(crate) fn resolve_defeasible(
                             indexed,
                             theory,
                             &state.definite_proven,
+                            &state.definite_disproven,
                             &mut state.defeasible_proven,
                             &mut state.defeasible_disproven,
                             &state.defeasible_body_remaining,
@@ -427,6 +264,7 @@ pub(crate) fn resolve_defeasible(
                             indexed,
                             theory,
                             &state.definite_proven,
+                            &state.definite_disproven,
                             &mut state.defeasible_proven,
                             &mut state.defeasible_disproven,
                             &state.defeasible_body_remaining,
@@ -440,6 +278,7 @@ pub(crate) fn resolve_defeasible(
                             indexed,
                             theory,
                             &state.definite_proven,
+                            &state.definite_disproven,
                             &mut state.defeasible_proven,
                             &mut state.defeasible_disproven,
                             &state.defeasible_body_remaining,
@@ -467,6 +306,7 @@ pub(crate) fn resolve_defeasible(
                             indexed,
                             theory,
                             &state.definite_proven,
+                            &state.definite_disproven,
                             &mut state.defeasible_proven,
                             &mut state.defeasible_disproven,
                             &state.defeasible_body_remaining,
@@ -480,6 +320,7 @@ pub(crate) fn resolve_defeasible(
                             indexed,
                             theory,
                             &state.definite_proven,
+                            &state.definite_disproven,
                             &mut state.defeasible_proven,
                             &mut state.defeasible_disproven,
                             &state.defeasible_body_remaining,
@@ -496,6 +337,7 @@ pub(crate) fn resolve_defeasible(
                     indexed,
                     theory,
                     &state.definite_proven,
+                    &state.definite_disproven,
                     &mut state.defeasible_proven,
                     &mut state.defeasible_disproven,
                     &state.defeasible_body_remaining,
@@ -521,6 +363,7 @@ pub(crate) fn resolve_defeasible(
                             indexed,
                             theory,
                             &state.definite_proven,
+                            &state.definite_disproven,
                             &mut state.defeasible_proven,
                             &mut state.defeasible_disproven,
                             &state.defeasible_body_remaining,
@@ -536,6 +379,7 @@ pub(crate) fn resolve_defeasible(
                         indexed,
                         theory,
                         &state.definite_proven,
+                        &state.definite_disproven,
                         &mut state.defeasible_proven,
                         &mut state.defeasible_disproven,
                         &state.defeasible_body_remaining,
@@ -554,6 +398,7 @@ pub(crate) fn resolve_defeasible(
                     indexed,
                     theory,
                     &state.definite_proven,
+                    &state.definite_disproven,
                     &mut state.defeasible_proven,
                     &mut state.defeasible_disproven,
                     &state.defeasible_body_remaining,
@@ -572,6 +417,7 @@ pub(crate) fn resolve_defeasible(
                 indexed,
                 theory,
                 &state.definite_proven,
+                &state.definite_disproven,
                 &mut state.defeasible_proven,
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
@@ -585,6 +431,7 @@ pub(crate) fn resolve_defeasible(
                 indexed,
                 theory,
                 &state.definite_proven,
+                &state.definite_disproven,
                 &mut state.defeasible_proven,
                 &mut state.defeasible_disproven,
                 &state.defeasible_body_remaining,
@@ -604,18 +451,14 @@ pub(crate) fn resolve_defeasible(
     all_ids.sort_by_key(|id| indexed.resolve_literal(*id).to_spl());
 
     for lit_id in all_ids {
-        if !state.definite_proven.contains(lit_id) {
+        if state.definite_disproven.contains(lit_id) {
             let lit = indexed.resolve_literal(lit_id);
             state
                 .conclusions
                 .push(Conclusion::new(ConclusionType::DefinitelyNotProvable, lit));
         }
 
-        if !state.defeasible_proven.contains(lit_id) {
-            if !state.defeasible_disproven.contains(lit_id) {
-                // Safety net: anything still undecided is -d
-                state.defeasible_disproven.insert(lit_id);
-            }
+        if state.defeasible_disproven.contains(lit_id) {
             let lit = indexed.resolve_literal(lit_id);
             state
                 .conclusions
@@ -633,6 +476,7 @@ fn try_prove_defeasible(
     indexed: &IndexedTheory<'_>,
     theory: &Theory,
     definite_proven: &LiteralBitSet,
+    definite_disproven: &LiteralBitSet,
     defeasible_proven: &mut LiteralBitSet,
     defeasible_disproven: &mut LiteralBitSet,
     body_remaining: &FxHashMap<&str, usize>,
@@ -667,7 +511,7 @@ fn try_prove_defeasible(
     }
 
     // Condition (2): -D ~q (complement is not definitely proved)
-    if definite_proven.contains(nq) {
+    if !definite_proven.contains(q) && !definite_disproven.contains(nq) {
         return;
     }
 
@@ -801,6 +645,7 @@ fn try_disprove_defeasible(
     indexed: &IndexedTheory<'_>,
     theory: &Theory,
     definite_proven: &LiteralBitSet,
+    definite_disproven: &LiteralBitSet,
     defeasible_proven: &mut LiteralBitSet,
     defeasible_disproven: &mut LiteralBitSet,
     body_remaining: &FxHashMap<&str, usize>,
@@ -812,7 +657,7 @@ fn try_disprove_defeasible(
     }
 
     // Precondition: must be -D q (if +D q, it would already be +d or -d)
-    if definite_proven.contains(q) {
+    if !definite_disproven.contains(q) {
         return;
     }
 

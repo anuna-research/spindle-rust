@@ -27,6 +27,7 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
+use crate::function_registry::EvalContext;
 use crate::intern::{SymbolId, resolve};
 
 #[cfg(test)]
@@ -334,13 +335,18 @@ fn resolve_time_expr(
 /// grounded rule because they have already been evaluated during the grounding phase.
 /// The reasoner only understands logic body literals; keeping arithmetic constraints
 /// would prevent the rule from firing.
-fn apply_substitution_to_rule(rule: &Rule, subst: &Substitution, instance_num: usize) -> Rule {
+fn apply_substitution_to_rule(
+    rule: &Rule,
+    subst: &Substitution,
+    instance_num: usize,
+    ctx: &EvalContext<'_>,
+) -> Rule {
     let new_label = format!("{}_{}", rule.label, instance_num);
     let new_body: RuleBody = rule
         .body
         .iter()
         .filter(|bl| bl.as_logic().is_some())
-        .map(|bl| apply_substitution_to_body_literal(bl, subst))
+        .map(|bl| apply_substitution_to_body_literal(bl, subst, ctx))
         .collect();
     let new_head: Vec<Literal> = rule
         .head
@@ -474,12 +480,16 @@ fn normalize_body_against_facts(
 /// substitution and replaced with concrete `Term` values.  This ensures the
 /// grounded rule's body literal has the correct arity and can be matched by
 /// the reasoner.
-fn apply_substitution_to_body_literal(bl: &BodyLiteral, subst: &Substitution) -> BodyLiteral {
+fn apply_substitution_to_body_literal(
+    bl: &BodyLiteral,
+    subst: &Substitution,
+    ctx: &EvalContext<'_>,
+) -> BodyLiteral {
     match bl {
         BodyLiteral::Logic(lit) => {
             // Use resolve_body_logic to evaluate any BodyArg::Arith arguments,
             // then apply substitution to produce a fully ground literal.
-            match resolve_body_logic(lit, subst) {
+            match resolve_body_logic(lit, subst, ctx) {
                 Some(resolved) => {
                     BodyLiteral::from(apply_substitution_to_literal(&resolved, subst))
                 }
@@ -505,7 +515,11 @@ fn apply_substitution_to_body_literal(bl: &BodyLiteral, subst: &Substitution) ->
 ///
 /// Returns `None` if any arithmetic evaluation fails, signalling that this
 /// substitution path should be discarded.
-fn resolve_body_logic(lit: &BodyLogicLiteral, subst: &Substitution) -> Option<Literal> {
+fn resolve_body_logic(
+    lit: &BodyLogicLiteral,
+    subst: &Substitution,
+    ctx: &EvalContext<'_>,
+) -> Option<Literal> {
     let mut terms = Vec::with_capacity(lit.predicate_args().len());
     for arg in lit.predicate_args() {
         match arg {
@@ -519,8 +533,7 @@ fn resolve_body_logic(lit: &BodyLogicLiteral, subst: &Substitution) -> Option<Li
                 terms.push(t.clone());
             }
             BodyArg::Arith(expr) => {
-                let val = expr.eval(subst).ok()?;
-                terms.push(Term::try_from(val).ok()?);
+                terms.push(expr.eval_value(subst, ctx).ok()?);
             }
         }
     }
@@ -585,6 +598,19 @@ fn match_body_against_facts(
     all_facts: &[Literal],
     current_subst: &Substitution,
 ) -> Vec<Substitution> {
+    let prelude = crate::function_registry::FunctionRegistry::with_prelude();
+    let ctx = EvalContext::with_registry(&prelude);
+    match_body_against_facts_ctx(body, fact_index, all_facts, current_subst, &ctx)
+}
+
+#[cfg(test)]
+fn match_body_against_facts_ctx(
+    body: &[BodyLiteral],
+    fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
+    all_facts: &[Literal],
+    current_subst: &Substitution,
+    ctx: &EvalContext<'_>,
+) -> Vec<Substitution> {
     if body.is_empty() {
         return vec![current_subst.clone()];
     }
@@ -595,7 +621,7 @@ fn match_body_against_facts(
     match first {
         BodyLiteral::Logic(logic_lit) => {
             // Resolve BodyArg::Arith arguments and variable terms under current_subst
-            let first_lit = match resolve_body_logic(logic_lit, current_subst) {
+            let first_lit = match resolve_body_logic(logic_lit, current_subst, ctx) {
                 Some(lit) => lit,
                 None => return Vec::new(), // arith eval failed — discard path
             };
@@ -613,12 +639,12 @@ fn match_body_against_facts(
             let mut results = Vec::new();
 
             for fact in candidates {
-                if let Some(new_bindings) = match_literal(&first_lit, fact) {
-                    if let Some(merged) = merge_substitutions(current_subst, &new_bindings) {
-                        results.extend(match_body_against_facts(
-                            rest, fact_index, all_facts, &merged,
-                        ));
-                    }
+                if let Some(new_bindings) = match_literal(&first_lit, fact)
+                    && let Some(merged) = merge_substitutions(current_subst, &new_bindings)
+                {
+                    results.extend(match_body_against_facts_ctx(
+                        rest, fact_index, all_facts, &merged, ctx,
+                    ));
                 }
             }
 
@@ -628,8 +654,8 @@ fn match_body_against_facts(
             // Evaluate the constraint under the current substitution.
             // Bind extends the substitution; Compare filters it.
             let mut sub_copy = current_subst.clone();
-            if constraint.eval(&mut sub_copy).is_ok() {
-                match_body_against_facts(rest, fact_index, all_facts, &sub_copy)
+            if constraint.eval_with_context(&mut sub_copy, ctx).is_ok() {
+                match_body_against_facts_ctx(rest, fact_index, all_facts, &sub_copy, ctx)
             } else {
                 Vec::new() // evaluation failed — discard path
             }
@@ -651,6 +677,7 @@ fn match_body_with_delta(
     fact_index: &FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>>,
     all_facts: &[Literal],
     delta_facts: &[Literal],
+    ctx: &EvalContext<'_>,
 ) -> Vec<Substitution> {
     if body.is_empty() {
         return vec![Substitution::default()];
@@ -673,6 +700,7 @@ fn match_body_with_delta(
         &delta_keys,
         &Substitution::default(),
         false,
+        ctx,
     ) {
         if used_delta || !has_logic_literals {
             let key = substitution_key(&subst);
@@ -697,6 +725,7 @@ fn match_body_ordered_delta(
     delta_keys: &FxHashSet<(SymbolId, bool, Vec<Term>, Mode, Temporal)>,
     current_subst: &Substitution,
     used_delta: bool,
+    ctx: &EvalContext<'_>,
 ) -> Vec<(Substitution, bool)> {
     if body.is_empty() {
         return vec![(current_subst.clone(), used_delta)];
@@ -707,7 +736,7 @@ fn match_body_ordered_delta(
 
     match first {
         BodyLiteral::Logic(logic_lit) => {
-            let first_lit = match resolve_body_logic(logic_lit, current_subst) {
+            let first_lit = match resolve_body_logic(logic_lit, current_subst, ctx) {
                 Some(lit) => lit,
                 None => return Vec::new(),
             };
@@ -735,6 +764,7 @@ fn match_body_ordered_delta(
                         delta_keys,
                         &merged,
                         used_delta || is_delta,
+                        ctx,
                     ));
                 }
             }
@@ -743,9 +773,9 @@ fn match_body_ordered_delta(
         }
         BodyLiteral::Arithmetic(constraint) => {
             let mut sub_copy = current_subst.clone();
-            if constraint.eval(&mut sub_copy).is_ok() {
+            if constraint.eval_with_context(&mut sub_copy, ctx).is_ok() {
                 match_body_ordered_delta(
-                    rest, fact_index, all_facts, delta_keys, &sub_copy, used_delta,
+                    rest, fact_index, all_facts, delta_keys, &sub_copy, used_delta, ctx,
                 )
             } else {
                 Vec::new()
@@ -821,7 +851,9 @@ fn evaluate_state_queries(queries: &[TemporalStateQuery], subst: &Substitution) 
 
 /// Ground a theory by instantiating rules with variables
 pub fn ground_theory(theory: &Theory) -> Theory {
-    ground_theory_with_limit(theory, 100, usize::MAX).0
+    let prelude = crate::function_registry::FunctionRegistry::with_prelude();
+    let ctx = EvalContext::with_registry(&prelude);
+    ground_theory_with_limit(theory, 100, usize::MAX, &ctx).0
 }
 
 /// Ground a theory with a maximum iteration limit and instance limit
@@ -830,6 +862,7 @@ pub fn ground_theory_with_limit(
     theory: &Theory,
     max_iterations: usize,
     max_instances: usize,
+    ctx: &EvalContext<'_>,
 ) -> (Theory, bool) {
     // Separate ground rules from rules with variables
     let (ground_rules, var_rules): (Vec<_>, Vec<_>) =
@@ -887,7 +920,7 @@ pub fn ground_theory_with_limit(
             }
 
             let substitutions =
-                match_body_with_delta(&rule.body, &fact_index, &facts_list, &facts_new);
+                match_body_with_delta(&rule.body, &fact_index, &facts_list, &facts_new, ctx);
 
             for subst in substitutions {
                 if instance_counter >= max_instances {
@@ -915,7 +948,7 @@ pub fn ground_theory_with_limit(
                     instance_counter += 1;
 
                     let mut ground_rule =
-                        apply_substitution_to_rule(rule, &subst, instance_counter);
+                        apply_substitution_to_rule(rule, &subst, instance_counter, ctx);
                     normalize_body_against_facts(&mut ground_rule, &fact_index);
 
                     // Add head literals as new facts (for non-defeaters)
@@ -1504,7 +1537,7 @@ mod tests {
         theory.add_rule(r1);
 
         // Ground with limit of 1
-        let (grounded, _) = ground_theory_with_limit(&theory, 1, 1000);
+        let (grounded, _) = ground_theory_with_limit(&theory, 1, 1000, &EvalContext::empty());
         // Should still produce results
         assert!(grounded.rule_count() >= 1);
     }
@@ -1862,7 +1895,8 @@ mod tests {
         let fact_index: FxHashMap<(SymbolId, bool, usize, Mode), Vec<Literal>> =
             FxHashMap::default();
 
-        let substitutions = match_body_with_delta(&[], &fact_index, &[], &[]);
+        let substitutions =
+            match_body_with_delta(&[], &fact_index, &[], &[], &EvalContext::empty());
         assert_eq!(
             substitutions.len(),
             1,
@@ -2735,7 +2769,7 @@ mod tests {
         // Body: (val ?x ?n), (result ?x (+ ?n 1))
         // Facts: val(a, 5), result(a, 6)
         // Expected: one substitution {?x=a, ?n=5}
-        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::arith::ArithExpr;
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -2760,8 +2794,8 @@ mod tests {
             Temporal::empty(),
             vec![
                 BodyArg::Term(Term::Symbol(x_id)),
-                BodyArg::Arith(ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
+                BodyArg::Arith(ArithExpr::Call {
+                    name: intern("+"),
                     args: vec![
                         ArithExpr::Var(n_id),
                         ArithExpr::Lit(NumericValue::Integer(1)),
@@ -2804,7 +2838,7 @@ mod tests {
         // Body: (result ?x (+ ?unbound 1))
         // Facts: result(a, 6)
         // Expected: no substitutions (arith eval fails due to unbound ?unbound)
-        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::arith::ArithExpr;
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -2818,8 +2852,8 @@ mod tests {
             Temporal::empty(),
             vec![
                 BodyArg::Term(Term::Symbol(x_id)),
-                BodyArg::Arith(ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
+                BodyArg::Arith(ArithExpr::Call {
+                    name: intern("+"),
                     args: vec![
                         ArithExpr::Var(unbound_id),
                         ArithExpr::Lit(NumericValue::Integer(1)),
@@ -2853,7 +2887,7 @@ mod tests {
         // Body: (val ?x ?n), (bind ?total (+ ?n 100)), (budget ?x ?total)
         // Facts: val(a, 5), budget(a, 105)
         // Tests that bind result threads into subsequent arith arg
-        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::arith::{ArithConstraint, ArithExpr};
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -2874,8 +2908,8 @@ mod tests {
 
         let bind_total = BodyLiteral::Arithmetic(ArithConstraint::Bind {
             var: total_id,
-            expr: ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
+            expr: ArithExpr::Call {
+                name: intern("+"),
                 args: vec![
                     ArithExpr::Var(n_id),
                     ArithExpr::Lit(NumericValue::Integer(100)),
@@ -2967,7 +3001,13 @@ mod tests {
         let delta_facts = vec![fact];
         let fact_index = build_fact_index(&facts);
 
-        let results = match_body_with_delta(&body, &fact_index, &facts, &delta_facts);
+        let results = match_body_with_delta(
+            &body,
+            &fact_index,
+            &facts,
+            &delta_facts,
+            &EvalContext::empty(),
+        );
         assert_eq!(results.len(), 1);
         assert_eq!(
             results[0].terms.get(&x_id),
@@ -2982,7 +3022,7 @@ mod tests {
         // cost(widget, 10) >>
         // cost(?item, ?price), (bind ?tax (* ?price 2)), (> ?tax 15)
         //   => expensive(?item)
-        use crate::arith::{ArithConstraint, ArithExpr, CmpOp, NaryArithOp};
+        use crate::arith::{ArithConstraint, ArithExpr, CmpOp};
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
@@ -3031,8 +3071,8 @@ mod tests {
             )),
             BodyLiteral::Arithmetic(ArithConstraint::Bind {
                 var: tax_id,
-                expr: ArithExpr::NaryOp {
-                    op: NaryArithOp::Mul,
+                expr: ArithExpr::Call {
+                    name: intern("*"),
                     args: vec![
                         ArithExpr::Var(price_id),
                         ArithExpr::Lit(NumericValue::Integer(2)),
@@ -3229,7 +3269,7 @@ mod tests {
             .insert(intern("?x"), Term::Symbol(intern("sensor")));
         subst.terms.insert(intern("?n"), Term::Integer(42));
 
-        let ground = apply_substitution_to_rule(&rule, &subst, 1);
+        let ground = apply_substitution_to_rule(&rule, &subst, 1, &EvalContext::empty());
         assert_eq!(
             ground.head[0].predicate_args(),
             &[Term::Symbol(intern("sensor")), Term::Integer(42)]
@@ -3499,7 +3539,7 @@ mod tests {
         // Fact: base(item, 10)
         // Rule: base(?x, ?n), (bind ?total (+ ?n 5)) => total(?x, ?total)
         // After grounding: total(item, 15) with Term::Integer(15)
-        use crate::arith::{ArithConstraint, ArithExpr, NaryArithOp};
+        use crate::arith::{ArithConstraint, ArithExpr};
         use crate::term::NumericValue;
 
         let x_id = intern("?x");
@@ -3532,8 +3572,8 @@ mod tests {
             )),
             BodyLiteral::Arithmetic(ArithConstraint::Bind {
                 var: total_id,
-                expr: ArithExpr::NaryOp {
-                    op: NaryArithOp::Add,
+                expr: ArithExpr::Call {
+                    name: intern("+"),
                     args: vec![
                         ArithExpr::Var(n_id),
                         ArithExpr::Lit(NumericValue::Integer(5)),
@@ -3642,13 +3682,13 @@ mod tests {
 
     #[test]
     fn has_variables_true_for_constant_arith_body_arg() {
-        use crate::arith::{ArithExpr, NaryArithOp};
+        use crate::arith::ArithExpr;
         use crate::body::{BodyArg, BodyLogicLiteral};
         use crate::term::NumericValue;
 
         // Build a body literal: target((+ 1 2))
-        let arith = ArithExpr::NaryOp {
-            op: NaryArithOp::Add,
+        let arith = ArithExpr::Call {
+            name: intern("+"),
             args: vec![
                 ArithExpr::Lit(NumericValue::Integer(1)),
                 ArithExpr::Lit(NumericValue::Integer(2)),

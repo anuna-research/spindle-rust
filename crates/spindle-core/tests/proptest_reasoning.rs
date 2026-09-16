@@ -100,16 +100,15 @@ proptest! {
 }
 
 // =============================================================================
-// Conclusion coverage: every literal gets exactly one D-verdict and one d-verdict
+// Constructive coherence: positive and negative proofs cannot coexist
 // =============================================================================
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(200))]
 
-    /// Every literal that appears in conclusions should have exactly one
-    /// definite verdict (+D or -D) and exactly one defeasible verdict (+d or -d).
+    /// A level may be undecided, but cannot contain both signs for one literal.
     #[test]
-    fn conclusion_coverage(theory in arb_theory()) {
+    fn constructive_tag_coherence(theory in arb_theory()) {
         let conclusions = reason(&theory).unwrap();
 
         // Count verdicts per literal per level
@@ -137,28 +136,18 @@ proptest! {
             .collect();
 
         for name in &all_literals {
-            // Exactly one definite verdict: +D xor -D
+            // At most one definite verdict
             let has_def_pos = definite_pos.contains(name);
             let has_def_neg = definite_neg.contains(name);
-            prop_assert!(
-                has_def_pos || has_def_neg,
-                "Literal '{}' has no definite verdict (+D or -D)",
-                name
-            );
             prop_assert!(
                 !(has_def_pos && has_def_neg),
                 "Literal '{}' has both +D and -D (contradictory definite verdicts)",
                 name
             );
 
-            // Exactly one defeasible verdict: +d xor -d
+            // At most one defeasible verdict
             let has_dfs_pos = defeasible_pos.contains(name);
             let has_dfs_neg = defeasible_neg.contains(name);
-            prop_assert!(
-                has_dfs_pos || has_dfs_neg,
-                "Literal '{}' has no defeasible verdict (+d or -d)",
-                name
-            );
             prop_assert!(
                 !(has_dfs_pos && has_dfs_neg),
                 "Literal '{}' has both +d and -d (contradictory defeasible verdicts)",
@@ -166,13 +155,11 @@ proptest! {
             );
         }
 
-        // Every literal with a definite verdict should also have a defeasible verdict
-        for name in definite_pos.iter().chain(definite_neg.iter()) {
-            prop_assert!(
-                defeasible_pos.contains(name) || defeasible_neg.contains(name),
-                "Literal '{}' has definite verdict but no defeasible verdict",
-                name
-            );
+        for name in &definite_pos {
+            prop_assert!(defeasible_pos.contains(name), "+D implies +d for {}", name);
+        }
+        for name in &defeasible_neg {
+            prop_assert!(definite_neg.contains(name), "-d requires -D for {}", name);
         }
     }
 }

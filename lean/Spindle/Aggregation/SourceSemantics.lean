@@ -50,6 +50,13 @@ def Contributions (σ : Arith.Substitution) (rows : List Pattern) (f : FoldExpre
     List.Forall₂ (fun env n => evalExpr env f.extract = .ok n)
       (relation.filterMap (matchRow σ f.pattern)) values
 
+/-- Predicate aggregate semantics: computed results have no predeclared domain.
+The relation and unordered reduction determine the value independently. -/
+def PredicateFold (σ : Arith.Substitution) (rows : List Pattern)
+    (f : FoldExpression) (result : Option Int) : Prop :=
+  ∃ r seed values, Names f.reducer r ∧ Seed σ f.seed seed ∧
+    Contributions σ rows f values ∧ Reduces r seed values result
+
 /-- Finite-domain source satisfaction, including the empty required outcome. -/
 def Fold (domain : Arith.Domain) (σ : Arith.Substitution) (rows : List Pattern)
     (f : FoldExpression) (result : Option Int) : Prop :=

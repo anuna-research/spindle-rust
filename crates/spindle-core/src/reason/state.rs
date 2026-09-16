@@ -106,6 +106,9 @@ pub(crate) struct ReasoningState<'a> {
     /// Literals proven via facts or strict rules (+D).
     pub(crate) definite_proven: LiteralBitSet,
 
+    /// Constructively disproven at the definite level (-D).
+    pub(crate) definite_disproven: LiteralBitSet,
+
     /// Literals proven defeasibly (+d). Populated in Phase 2.
     pub(crate) defeasible_proven: LiteralBitSet,
 
@@ -147,6 +150,7 @@ impl<'a> ReasoningState<'a> {
             worklist: VecDeque::with_capacity(rule_count),
             enqueued: LiteralBitSet::new(atom_count),
             definite_proven: LiteralBitSet::new(atom_count),
+            definite_disproven: LiteralBitSet::new(atom_count),
             defeasible_proven: LiteralBitSet::new(atom_count),
             defeasible_disproven: LiteralBitSet::new(atom_count),
             definite_body_remaining: FxHashMap::with_capacity_and_hasher(

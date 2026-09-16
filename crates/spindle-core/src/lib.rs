@@ -46,10 +46,12 @@ pub mod aggregation;
 pub mod analysis;
 pub mod arith;
 pub mod body;
+pub(crate) mod builtins;
 pub mod claims;
 pub mod conclusion;
 pub mod error;
 pub mod explanation;
+pub mod function_registry;
 pub mod grounding;
 pub mod index;
 pub mod intern;
@@ -71,13 +73,14 @@ pub mod worklist;
 
 /// Prelude module for convenient imports
 pub mod prelude {
-    pub use crate::arith::{
-        ArithConstraint, ArithError, ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp,
-    };
+    pub use crate::arith::{ArithConstraint, ArithError, ArithExpr, CmpOp};
     pub use crate::body::{BodyArg, BodyLiteral, BodyLogicLiteral};
     pub use crate::claims::ClaimsBlock;
     pub use crate::conclusion::{Conclusion, ConclusionType};
     pub use crate::error::{ErrorCategory, Result, SpindleError};
+    pub use crate::function_registry::{
+        Arity, EvalContext, EvalError, ExtensionFunction, FunctionRegistry, FunctionSignature,
+    };
     pub use crate::intern::{
         LiteralId, SymbolId, intern, intern_literal, resolve, resolve_literal,
     };

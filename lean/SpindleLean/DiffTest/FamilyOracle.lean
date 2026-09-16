@@ -17,7 +17,8 @@
                      "type":"+D"}, ...]}
 -/
 import Lean.Data.Json
-import SpindleLean.FamilyTwoSided
+import SpindleLean.Family
+import Spindle.Aggregation.Operational
 
 namespace Family.Oracle
 
@@ -93,15 +94,35 @@ def flitJson (l : FLit) : String :=
 def conclusionJson (l : FLit) (tag : String) : String :=
   s!"\{\"literal\":{flitJson l},\"type\":\"{tag}\"}"
 
-/-- Run the two-sided family model (constructive defeat discard;
-    FamilyTwoSided.lean) and produce all four conclusion tags over the
-    theory's exact-literal universe. Final -d = universe \ proven,
-    mirroring the engine's Phase-3 sweep. -/
+/-- Encode exact identities while preserving complementation. -/
+def encode (l : FLit) : Literal :=
+  ⟨reprStr { l with negated := false }, l.negated, none⟩
+
+/-- Expand family alternatives independently of the Rust worklist. Each
+atemporal body slot denotes a disjunction of exact members. Distributing these
+alternatives gives ordinary rules with the original priority labels. -/
+def expandBody (univ : List FLit) : List FLit → List (List Literal)
+  | [] => [[]]
+  | l :: rest =>
+      let choices := if l.window == none then univ.filter (FLit.sameFamily · l) else [l]
+      choices.flatMap fun m => (expandBody univ rest).map (encode m :: ·)
+
+def traditionalTheory (t : FTheory) : Theory :=
+  ⟨t.rules.flatMap (fun r =>
+    let kind : RuleType := match r.ruleType with
+      | .fact => .fact | .strict => .strict | .defeasible => .defeasible | .defeater => .defeater
+    (expandBody t.allLiterals r.body).map fun body =>
+      ⟨r.label, kind, body, encode r.head⟩), t.superiority⟩
+
+/-- Four constructive tags; undecided cycles have no synthetic negative report. -/
 def runTheory (t : FTheory) : String :=
-  let (delta, partial_) := famReason2 t
+  let result := Spindle.Aggregation.Operational.reason (traditionalTheory t)
+  let tags : List (ConclusionType × String) :=
+    [(.definitelyProvable, "+D"), (.definitelyNotProvable, "-D"),
+     (.defeasiblyProvable, "+d"), (.defeasiblyNotProvable, "-d")]
   let entries := t.allLiterals.flatMap fun lit =>
-    [conclusionJson lit (if delta.contains lit then "+D" else "-D"),
-     conclusionJson lit (if partial_.contains lit then "+d" else "-d")]
+    tags.filterMap fun (tag, name) =>
+      if result.has tag (encode lit) then some (conclusionJson lit name) else none
   s!"\{\"conclusions\":[{String.intercalate "," entries}]}"
 
 def processLine (line : String) : String :=

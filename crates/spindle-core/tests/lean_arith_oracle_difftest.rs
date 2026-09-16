@@ -17,8 +17,9 @@ use proptest::strategy::ValueTree;
 use rust_decimal::Decimal;
 use serde_json::{Value as JValue, json};
 
-use spindle_core::arith::{ArithExpr, BinArithOp, CmpOp, NaryArithOp, UnaryArithOp};
+use spindle_core::arith::{ArithExpr, CmpOp};
 use spindle_core::grounding::Substitution;
+use spindle_core::intern::{intern, resolve};
 use spindle_core::term::NumericValue;
 
 // ---------------------------------------------------------------------------
@@ -40,28 +41,6 @@ fn numeric_value_to_json(v: &NumericValue) -> JValue {
     }
 }
 
-fn nary_op_to_lean(op: &NaryArithOp) -> Option<&'static str> {
-    match op {
-        NaryArithOp::Add => Some("sum"),
-        NaryArithOp::Mul => Some("product"),
-        NaryArithOp::Min => Some("min"),
-        NaryArithOp::Max => Some("max"),
-        // True division maps directly: Lean models rust_decimal division
-        // (int/int → decimal, half-even rounding at the max fitting scale).
-        NaryArithOp::Div => Some("div"),
-        // Sub is modeled in Lean as binary sub / unary neg (see expr_to_json).
-        NaryArithOp::Sub => None,
-    }
-}
-
-fn bin_op_to_lean(op: &BinArithOp) -> &'static str {
-    match op {
-        BinArithOp::IDiv => "div",
-        BinArithOp::Rem => "mod",
-        BinArithOp::Pow => "pow",
-    }
-}
-
 fn cmp_op_to_lean(op: &CmpOp) -> &'static str {
     match op {
         CmpOp::Eq => "eq",
@@ -78,38 +57,32 @@ fn cmp_op_to_lean(op: &CmpOp) -> &'static str {
 fn expr_to_json(expr: &ArithExpr) -> Option<JValue> {
     match expr {
         ArithExpr::Lit(v) => Some(json!({"lit": numeric_value_to_json(v)})),
-        ArithExpr::Var(_) => None, // Variables require substitution mapping
-        ArithExpr::NaryOp { op, args } => {
-            // Handle Sub/Div specially: map 2-arg Sub to Lean binOp sub
-            match op {
-                NaryArithOp::Sub if args.len() == 2 => {
-                    let lhs = expr_to_json(&args[0])?;
-                    let rhs = expr_to_json(&args[1])?;
-                    Some(json!({"binOp": {"op": "sub", "lhs": lhs, "rhs": rhs}}))
+        ArithExpr::Var(_) | ArithExpr::Value(_) | ArithExpr::Fold(_) => None,
+        ArithExpr::Call { name, args } => {
+            let args = args.iter().map(expr_to_json).collect::<Option<Vec<_>>>()?;
+            match (resolve(*name), args.as_slice()) {
+                ("-", [lhs, rhs]) => Some(json!({"binOp":{"op":"sub", "lhs":lhs, "rhs":rhs}})),
+                ("-", [arg]) => Some(json!({"unaryOp":{"op":"neg", "arg":arg}})),
+                ("abs", [arg]) => Some(json!({"unaryOp":{"op":"abs", "arg":arg}})),
+                (name @ ("div" | "rem" | "**"), [lhs, rhs]) => {
+                    let op = match name {
+                        "div" => "div",
+                        "rem" => "mod",
+                        _ => "pow",
+                    };
+                    Some(json!({"binOp":{"op":op, "lhs":lhs, "rhs":rhs}}))
                 }
-                NaryArithOp::Sub if args.len() == 1 => {
-                    let arg = expr_to_json(&args[0])?;
-                    Some(json!({"unaryOp": {"op": "neg", "arg": arg}}))
+                (name @ ("+" | "*" | "min" | "max" | "/"), _) => {
+                    let op = match name {
+                        "+" => "sum",
+                        "*" => "product",
+                        "/" => "div",
+                        _ => name,
+                    };
+                    Some(json!({"naryOp":{"op":op, "args":args}}))
                 }
-                _ => {
-                    let lean_op = nary_op_to_lean(op)?;
-                    let json_args: Option<Vec<JValue>> = args.iter().map(expr_to_json).collect();
-                    Some(json!({"naryOp": {"op": lean_op, "args": json_args?}}))
-                }
+                _ => None,
             }
-        }
-        ArithExpr::BinOp { op, lhs, rhs } => {
-            // IDiv and Rem require integer operands in both Rust and Lean
-            let l = expr_to_json(lhs)?;
-            let r = expr_to_json(rhs)?;
-            Some(json!({"binOp": {"op": bin_op_to_lean(op), "lhs": l, "rhs": r}}))
-        }
-        ArithExpr::UnaryOp { op, expr } => {
-            let arg = expr_to_json(expr)?;
-            let lean_op = match op {
-                UnaryArithOp::Abs => "abs",
-            };
-            Some(json!({"unaryOp": {"op": lean_op, "arg": arg}}))
         }
     }
 }
@@ -310,70 +283,24 @@ fn arb_lean_compatible_expr(max_depth: u32) -> impl Strategy<Value = ArithExpr> 
     let leaf = arb_numeric_value_no_float().prop_map(ArithExpr::Lit);
     leaf.prop_recursive(max_depth, 32, 3, |inner| {
         prop_oneof![
-            // N-ary sum with 1-3 args
-            proptest::collection::vec(inner.clone(), 1..=3).prop_map(|args| ArithExpr::NaryOp {
-                op: NaryArithOp::Add,
-                args,
-            }),
-            // N-ary product with 1-3 args
-            proptest::collection::vec(inner.clone(), 1..=3).prop_map(|args| ArithExpr::NaryOp {
-                op: NaryArithOp::Mul,
-                args,
-            }),
-            // N-ary min/max with 1-3 args
             (
-                prop_oneof![Just(NaryArithOp::Min), Just(NaryArithOp::Max)],
+                prop_oneof![Just("+"), Just("*"), Just("min"), Just("max")],
                 proptest::collection::vec(inner.clone(), 1..=3)
             )
-                .prop_map(|(op, args)| ArithExpr::NaryOp { op, args }),
-            // Binary sub (2 args mapped to Lean binOp sub)
-            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::NaryOp {
-                op: NaryArithOp::Sub,
-                args: vec![a, b],
-            }),
-            // Unary negation (1-arg sub)
-            inner.clone().prop_map(|a| ArithExpr::NaryOp {
-                op: NaryArithOp::Sub,
-                args: vec![a],
-            }),
-            // Unary abs
-            inner.clone().prop_map(|e| ArithExpr::UnaryOp {
-                op: UnaryArithOp::Abs,
-                expr: Box::new(e),
-            }),
-            // True division (2 args; the model handles div-by-zero and
-            // decimal promotion, so operands are unconstrained)
-            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::NaryOp {
-                op: NaryArithOp::Div,
-                args: vec![a, b],
-            }),
-            // Reciprocal (1-arg division)
-            inner.clone().prop_map(|a| ArithExpr::NaryOp {
-                op: NaryArithOp::Div,
-                args: vec![a],
-            }),
-            // Integer floor division / remainder (type errors on decimals
-            // agree between both sides, so operands are unconstrained)
-            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::BinOp {
-                op: BinArithOp::IDiv,
-                lhs: Box::new(a),
-                rhs: Box::new(b),
-            }),
-            (inner.clone(), inner.clone()).prop_map(|(a, b)| ArithExpr::BinOp {
-                op: BinArithOp::Rem,
-                lhs: Box::new(a),
-                rhs: Box::new(b),
-            }),
-            // BinOp pow (integer only, small exponents)
+                .prop_map(|(name, args)| call(name, args)),
+            (
+                prop_oneof![Just("-"), Just("/"), Just("div"), Just("rem")],
+                inner.clone(),
+                inner.clone()
+            )
+                .prop_map(|(name, a, b)| call(name, vec![a, b])),
+            (prop_oneof![Just("-"), Just("abs"), Just("/")], inner)
+                .prop_map(|(name, a)| call(name, vec![a])),
             (
                 arb_int_value().prop_map(ArithExpr::Lit),
                 (0i64..5).prop_map(|n| ArithExpr::Lit(NumericValue::Integer(n)))
             )
-                .prop_map(|(base, exp)| ArithExpr::BinOp {
-                    op: BinArithOp::Pow,
-                    lhs: Box::new(base),
-                    rhs: Box::new(exp),
-                }),
+                .prop_map(|(a, b)| call("**", vec![a, b])),
         ]
     })
 }
@@ -586,8 +513,8 @@ fn proptest_rust_lean_division_agreement() {
     let mut rust_results = Vec::new();
 
     for (a, b) in &pairs {
-        let expr = ArithExpr::NaryOp {
-            op: NaryArithOp::Div,
+        let expr = ArithExpr::Call {
+            name: intern("/"),
             args: vec![ArithExpr::Lit(a.clone()), ArithExpr::Lit(b.clone())],
         };
         let json_expr = expr_to_json(&expr).expect("division maps to Lean");
@@ -705,5 +632,12 @@ fn proptest_rust_lean_comparison_agreement() {
 
     if disagreements > 0 {
         panic!("{disagreements} comparison disagreements found");
+    }
+}
+
+fn call(name: &str, args: Vec<ArithExpr>) -> ArithExpr {
+    ArithExpr::Call {
+        name: intern(name),
+        args,
     }
 }

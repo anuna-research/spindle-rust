@@ -1,12 +1,13 @@
 import Spindle.Aggregation.Execution
-import SpindleLean.Properties.Termination
+import Spindle.Aggregation.Operational
 
 /-!
 # Reference backend for finite ground rule prefixes
 
-Re-run the complete rule prefix through delta, lambda, and partial, then publish
+Re-run the complete rule prefix through all four constructive closures, then publish
 only the current stage's conclusions. Retaining lower rules is essential:
-positive conclusion transport alone loses lambda support used by attackers.
+positive conclusion transport alone loses the distinction between discarded
+and undecided attackers.
 
 This backend handles ordinary finite ground theories. It does not lower fold
 schemas to rules. The ownership map is supplied. `PrefixEquivalence.lean` proves agreement with
@@ -48,26 +49,32 @@ def groundPrefix (owner : Literal → Nat) (theory : Theory) (stage : Nat) : The
 
 /-- Report both proof levels over a fixed literal set. A literal mentioned only in
 future rule bodies still receives its negative tags at its own stage. -/
-def reportLiteral (result : ReasonResult) (literal : Literal) : List Conclusion :=
-  [if result.delta.contains literal then ⟨literal, .definitelyProvable⟩
-   else ⟨literal, .definitelyNotProvable⟩,
-   if result.partial_.contains literal then ⟨literal, .defeasiblyProvable⟩
-   else ⟨literal, .defeasiblyNotProvable⟩]
+def reportLiteral (result : Operational.Result) (literal : Literal) : List Conclusion :=
+  result.report literal
 
-def reportConclusions (literals : List Literal) (result : ReasonResult) : List Conclusion :=
+theorem reportLiteral_owned (result : Operational.Result) (l : Literal) (c : Conclusion)
+    (member : c ∈ reportLiteral result l) : c.literal = l := by
+  obtain ⟨tag, _, h⟩ := List.mem_filterMap.mp member
+  split at h
+  · cases h
+    rfl
+  · cases h
+
+
+def reportConclusions (literals : List Literal) (result : Operational.Result) : List Conclusion :=
   literals.flatMap (reportLiteral result)
 
 theorem reason_reports (theory : Theory) :
-    reportConclusions theory.allLiterals (reason theory) = (reason theory).conclusions := rfl
+    reportConclusions theory.allLiterals (Operational.reason theory) = (Operational.reason theory).conclusions := rfl
 
 /-- Project a completed prefix's tagged conclusions onto its current domain. -/
 def reasonedStage (owner : Literal → Nat) (theory : Theory) (stage : Nat) : List Conclusion :=
-  (reportConclusions theory.allLiterals (reason (groundPrefix owner theory stage))).filter
+  (reportConclusions theory.allLiterals (Operational.reason (groundPrefix owner theory stage))).filter
     (fun c => decide (owner c.literal = stage))
 
 theorem mem_reasonedStage (owner : Literal → Nat) (theory : Theory) (stage : Nat)
     (c : Conclusion) : c ∈ reasonedStage owner theory stage ↔
-      c ∈ reportConclusions theory.allLiterals (reason (groundPrefix owner theory stage)) ∧ owner c.literal = stage := by
+      c ∈ reportConclusions theory.allLiterals (Operational.reason (groundPrefix owner theory stage)) ∧ owner c.literal = stage := by
   simp [reasonedStage]
 
 /-- Replay uses retained rules rather than reconstructing them from prior tags. -/
@@ -76,22 +83,19 @@ def groundBackend (owner : Literal → Nat) (theory : Theory) : StageBackend :=
     if groundScheduled owner theory then .ok (reasonedStage owner theory stage)
     else .error "ground theory has invalid stage dependencies or fact bodies"
 
-/-- Each published batch comes from an actual completed three-phase run. -/
+/-- Each published batch comes from an actual completed four-tag run. -/
 theorem groundBackend_completed (owner : Literal → Nat) (theory : Theory)
     (stage : Nat) (prior batch : List Conclusion)
     (returned : groundBackend owner theory stage prior = .ok batch) :
     let localTheory := groundPrefix owner theory stage
-    let result := reason localTheory
-    Closure.deltaStep localTheory result.delta = result.delta ∧
-    Closure.lambdaStep localTheory result.delta result.lambda = result.lambda ∧
-    Closure.partialStep localTheory result.delta result.lambda result.partial_ = result.partial_ ∧
+    let result := Operational.reason localTheory
+    Operational.step localTheory result.state = result.state ∧
     (∀ c, c ∈ batch ↔ c ∈ reportConclusions theory.allLiterals result ∧ owner c.literal = stage) := by
   unfold groundBackend at returned
   split at returned
   · simp only [Except.ok.injEq] at returned
     subst batch
-    have completed := Properties.reason_fixedpoints (groundPrefix owner theory stage)
-    exact ⟨completed.1, completed.2.1, completed.2.2, mem_reasonedStage owner theory stage⟩
+    exact ⟨Operational.close_fixedpoint _, mem_reasonedStage owner theory stage⟩
   · simp at returned
 
 /-- Recognized finite ground theories always finish the requested stage count;

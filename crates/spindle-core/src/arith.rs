@@ -19,52 +19,24 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::sync::LazyLock;
 
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
+use crate::function_registry::{EvalContext, FunctionRegistry};
 use crate::grounding::Substitution;
 use crate::intern::{SymbolId, resolve};
-use crate::term::{FiniteFloat, NumericValue, Term};
+#[cfg(test)]
+use crate::term::FiniteFloat;
+use crate::term::{NumericValue, Term};
+
+/// Cached prelude registry for convenience `eval()` methods.
+static PRELUDE: LazyLock<FunctionRegistry> = LazyLock::new(FunctionRegistry::with_prelude);
 
 // ---------------------------------------------------------------------------
 // Operator enums
 // ---------------------------------------------------------------------------
-
-/// N-ary arithmetic operators that accept variable numbers of arguments.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum NaryArithOp {
-    /// Addition (+). Identity: 0. Supports 0+ args.
-    Add,
-    /// Subtraction (-). 1 arg: negation. 2+ args: left-fold.
-    Sub,
-    /// Multiplication (*). Identity: 1. Supports 0+ args.
-    Mul,
-    /// Division (/). 1 arg: reciprocal. 2+ args: left-fold.
-    Div,
-    /// Minimum value. Requires 1+ args.
-    Min,
-    /// Maximum value. Requires 1+ args.
-    Max,
-}
-
-/// Binary-only arithmetic operators.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BinArithOp {
-    /// Integer floor division (rounds toward −∞). Requires integer operands.
-    IDiv,
-    /// Floor remainder: a − (a div b) × b. Requires integer operands.
-    Rem,
-    /// Exponentiation (base ** exponent).
-    Pow,
-}
-
-/// Unary-only arithmetic operators.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum UnaryArithOp {
-    /// Absolute value.
-    Abs,
-}
 
 /// Comparison operators for arithmetic guards.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -87,36 +59,41 @@ pub enum CmpOp {
 // ArithExpr
 // ---------------------------------------------------------------------------
 
-/// An arithmetic expression tree.
+/// Value expression tree for bindings and numeric guards.
+///
+/// Builtins and extensions share `Call`; folds have an explicit snapshot-aware node.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArithExpr {
+    /// A general value for extension arguments and bindings.
+    Value(Term),
+    /// Relational fold evaluated against a completed earlier stratum.
+    Fold(Box<FoldExpr>),
     /// A literal numeric value.
     Lit(NumericValue),
     /// A variable reference, resolved from the substitution.
     Var(SymbolId),
-    /// An n-ary operation (variadic).
-    NaryOp {
-        /// The operator.
-        op: NaryArithOp,
-        /// The arguments.
+    /// A call to a named function (builtins and extensions).
+    Call {
+        /// The interned function name.
+        name: SymbolId,
+        /// The argument expressions.
         args: Vec<ArithExpr>,
     },
-    /// A binary-only operation.
-    BinOp {
-        /// The operator.
-        op: BinArithOp,
-        /// Left-hand side.
-        lhs: Box<ArithExpr>,
-        /// Right-hand side.
-        rhs: Box<ArithExpr>,
-    },
-    /// A unary-only operation.
-    UnaryOp {
-        /// The operator.
-        op: UnaryArithOp,
-        /// The operand.
-        expr: Box<ArithExpr>,
-    },
+}
+
+/// A relational fold expression with a separately scoped row pattern.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FoldExpr {
+    /// Named aggregate surface form; resolved through the registry during preparation.
+    pub aggregator: Option<String>,
+    /// Lawful reducer name: +/sum, min, max.
+    pub reducer: String,
+    /// Per-row integer contribution.
+    pub extract: ArithExpr,
+    /// Relation read from a completed earlier stratum.
+    pub pattern: crate::Literal,
+    /// Initial value, or None for required nonempty input.
+    pub initial: Option<ArithExpr>,
 }
 
 // ---------------------------------------------------------------------------
@@ -148,37 +125,6 @@ pub enum ArithConstraint {
 // Display impls
 // ---------------------------------------------------------------------------
 
-impl fmt::Display for NaryArithOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            NaryArithOp::Add => write!(f, "+"),
-            NaryArithOp::Sub => write!(f, "-"),
-            NaryArithOp::Mul => write!(f, "*"),
-            NaryArithOp::Div => write!(f, "/"),
-            NaryArithOp::Min => write!(f, "min"),
-            NaryArithOp::Max => write!(f, "max"),
-        }
-    }
-}
-
-impl fmt::Display for BinArithOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BinArithOp::IDiv => write!(f, "div"),
-            BinArithOp::Rem => write!(f, "rem"),
-            BinArithOp::Pow => write!(f, "**"),
-        }
-    }
-}
-
-impl fmt::Display for UnaryArithOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UnaryArithOp::Abs => write!(f, "abs"),
-        }
-    }
-}
-
 impl fmt::Display for CmpOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -195,20 +141,29 @@ impl fmt::Display for CmpOp {
 impl fmt::Display for ArithExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ArithExpr::Value(v) => write!(f, "{}", crate::literal::render_spl_atom(&v.to_string())),
+            ArithExpr::Fold(fold) => {
+                write!(
+                    f,
+                    "(fold {} {} :from {}",
+                    fold.reducer,
+                    fold.extract,
+                    fold.pattern.to_spl()
+                )?;
+                if let Some(initial) = &fold.initial {
+                    write!(f, " :initial {initial})")
+                } else {
+                    write!(f, " :require-nonempty)")
+                }
+            }
             ArithExpr::Lit(v) => write!(f, "{v}"),
             ArithExpr::Var(id) => write!(f, "{}", resolve(*id)),
-            ArithExpr::NaryOp { op, args } => {
-                write!(f, "({op}")?;
+            ArithExpr::Call { name, args } => {
+                write!(f, "({}", resolve(*name))?;
                 for arg in args {
                     write!(f, " {arg}")?;
                 }
                 write!(f, ")")
-            }
-            ArithExpr::BinOp { op, lhs, rhs } => {
-                write!(f, "({op} {lhs} {rhs})")
-            }
-            ArithExpr::UnaryOp { op, expr } => {
-                write!(f, "({op} {expr})")
             }
         }
     }
@@ -218,6 +173,18 @@ impl fmt::Display for ArithConstraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ArithConstraint::Bind { var, expr } => {
+                if let ArithExpr::Fold(fold) = expr
+                    && let Some(name) = &fold.aggregator
+                {
+                    return write!(
+                        f,
+                        "(agg {} {} {} {})",
+                        resolve(*var),
+                        name,
+                        fold.extract,
+                        fold.pattern.to_spl()
+                    );
+                }
                 write!(f, "(bind {} {expr})", resolve(*var))
             }
             ArithConstraint::Compare { op, lhs, rhs } => {
@@ -263,6 +230,22 @@ pub enum ArithError {
     ReciprocalOfZero,
     /// Comparison predicate did not hold.
     ComparisonFailed,
+    /// Extension function not found in registry.
+    UnknownFunction {
+        /// The function name.
+        name: SymbolId,
+    },
+    /// Extension function called with wrong number of arguments.
+    ArityMismatch {
+        /// The function name.
+        name: SymbolId,
+        /// The expected arity (as display string, e.g. "2" or "1..3").
+        expected: String,
+        /// The actual argument count.
+        got: usize,
+    },
+    /// Extension function returned an error.
+    FunctionError(String),
 }
 
 impl fmt::Display for ArithError {
@@ -280,6 +263,21 @@ impl fmt::Display for ArithError {
             Self::NonFiniteFloat => write!(f, "non-finite float result"),
             Self::ReciprocalOfZero => write!(f, "reciprocal of zero"),
             Self::ComparisonFailed => write!(f, "comparison failed"),
+            Self::UnknownFunction { name } => {
+                write!(f, "unknown function: {}", resolve(*name))
+            }
+            Self::ArityMismatch {
+                name,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "arity mismatch for {}: expected {expected}, got {got}",
+                    resolve(*name)
+                )
+            }
+            Self::FunctionError(msg) => write!(f, "function error: {msg}"),
         }
     }
 }
@@ -291,7 +289,7 @@ impl std::error::Error for ArithError {}
 // ---------------------------------------------------------------------------
 
 /// Name of a numeric value's type, for error messages.
-fn type_name(v: &NumericValue) -> &'static str {
+pub(crate) fn type_name(v: &NumericValue) -> &'static str {
     match v {
         NumericValue::Integer(_) => "Integer",
         NumericValue::Decimal(_) => "Decimal",
@@ -300,7 +298,7 @@ fn type_name(v: &NumericValue) -> &'static str {
 }
 
 /// Convert a numeric value to f64.
-fn to_f64_value(v: &NumericValue) -> f64 {
+pub(crate) fn to_f64_value(v: &NumericValue) -> f64 {
     match v {
         NumericValue::Integer(n) => *n as f64,
         NumericValue::Decimal(d) => d.to_f64().unwrap_or(f64::NAN),
@@ -309,7 +307,7 @@ fn to_f64_value(v: &NumericValue) -> f64 {
 }
 
 /// Validate that an f64 result is finite.
-fn check_finite(v: f64) -> Result<NumericValue, ArithError> {
+pub(crate) fn check_finite(v: f64) -> Result<NumericValue, ArithError> {
     if v.is_finite() {
         Ok(NumericValue::Float(v))
     } else {
@@ -320,7 +318,7 @@ fn check_finite(v: f64) -> Result<NumericValue, ArithError> {
 /// Promote two values to a common type for binary arithmetic.
 ///
 /// Promotion follows the widening chain: Integer → Decimal → Float.
-fn promote_pair(a: NumericValue, b: NumericValue) -> (NumericValue, NumericValue) {
+pub(crate) fn promote_pair(a: NumericValue, b: NumericValue) -> (NumericValue, NumericValue) {
     match (&a, &b) {
         // Same type — no promotion
         (NumericValue::Integer(_), NumericValue::Integer(_))
@@ -341,7 +339,7 @@ fn promote_pair(a: NumericValue, b: NumericValue) -> (NumericValue, NumericValue
 
 /// Compare two numeric values after promotion, returning the ordering
 /// and the promoted values.
-fn numeric_cmp(
+pub(crate) fn numeric_cmp(
     a: NumericValue,
     b: NumericValue,
 ) -> Result<(Ordering, NumericValue, NumericValue), ArithError> {
@@ -361,7 +359,7 @@ fn numeric_cmp(
 // Pairwise arithmetic operations
 // ---------------------------------------------------------------------------
 
-fn add_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn add_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     let (a, b) = promote_pair(a, b);
     match (a, b) {
         (NumericValue::Integer(x), NumericValue::Integer(y)) => x
@@ -377,7 +375,7 @@ fn add_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
     }
 }
 
-fn sub_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn sub_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     let (a, b) = promote_pair(a, b);
     match (a, b) {
         (NumericValue::Integer(x), NumericValue::Integer(y)) => x
@@ -393,7 +391,7 @@ fn sub_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
     }
 }
 
-fn mul_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn mul_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     let (a, b) = promote_pair(a, b);
     match (a, b) {
         (NumericValue::Integer(x), NumericValue::Integer(y)) => x
@@ -410,7 +408,7 @@ fn mul_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
 }
 
 /// Division with REQ-005 promotion: Integer / Integer → Decimal.
-fn div_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn div_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithError> {
     // Special case: Integer / Integer → Decimal
     if let (NumericValue::Integer(x), NumericValue::Integer(y)) = (&a, &b) {
         if *y == 0 {
@@ -446,7 +444,7 @@ fn div_values(a: NumericValue, b: NumericValue) -> Result<NumericValue, ArithErr
     }
 }
 
-fn negate(v: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn negate(v: NumericValue) -> Result<NumericValue, ArithError> {
     match v {
         NumericValue::Integer(n) => n
             .checked_neg()
@@ -458,7 +456,7 @@ fn negate(v: NumericValue) -> Result<NumericValue, ArithError> {
 }
 
 /// Reciprocal (1/x). For Integer/Decimal inputs, produces Decimal.
-fn reciprocal(v: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn reciprocal(v: NumericValue) -> Result<NumericValue, ArithError> {
     match v {
         NumericValue::Integer(n) => {
             if n == 0 {
@@ -488,7 +486,7 @@ fn reciprocal(v: NumericValue) -> Result<NumericValue, ArithError> {
     }
 }
 
-fn abs_value(v: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn abs_value(v: NumericValue) -> Result<NumericValue, ArithError> {
     match v {
         NumericValue::Integer(n) => n
             .checked_abs()
@@ -504,7 +502,7 @@ fn abs_value(v: NumericValue) -> Result<NumericValue, ArithError> {
 // ---------------------------------------------------------------------------
 
 /// Floor division: rounds toward negative infinity.
-fn floor_div_i64(a: i64, b: i64) -> Result<i64, ArithError> {
+pub(crate) fn floor_div_i64(a: i64, b: i64) -> Result<i64, ArithError> {
     // Handle overflow: i64::MIN / -1 overflows
     let d = a.checked_div(b).ok_or(ArithError::IntegerOverflow)?;
     let r = a % b;
@@ -517,7 +515,7 @@ fn floor_div_i64(a: i64, b: i64) -> Result<i64, ArithError> {
 }
 
 /// Floor remainder: a − (a div b) × b, matching floor division.
-fn floor_rem_i64(a: i64, b: i64) -> Result<i64, ArithError> {
+pub(crate) fn floor_rem_i64(a: i64, b: i64) -> Result<i64, ArithError> {
     // Check for overflow: i64::MIN % -1 can panic/overflow
     let _d = a.checked_div(b).ok_or(ArithError::IntegerOverflow)?;
     let r = a % b;
@@ -613,7 +611,7 @@ fn decimal_pow(base: Decimal, exp: Decimal) -> Result<NumericValue, ArithError> 
 }
 
 /// Full exponentiation dispatch with type promotion.
-fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericValue, ArithError> {
+pub(crate) fn eval_pow(base: NumericValue, exp: NumericValue) -> Result<NumericValue, ArithError> {
     // Float contagion
     if matches!(
         (&base, &exp),
@@ -710,11 +708,67 @@ impl ArithExpr {
     /// Returns `true` if the expression tree contains any variable references.
     pub fn has_variables(&self) -> bool {
         match self {
+            ArithExpr::Fold(_) => true,
+            ArithExpr::Value(_) => false,
             ArithExpr::Var(_) => true,
             ArithExpr::Lit(_) => false,
-            ArithExpr::NaryOp { args, .. } => args.iter().any(|a| a.has_variables()),
-            ArithExpr::BinOp { lhs, rhs, .. } => lhs.has_variables() || rhs.has_variables(),
-            ArithExpr::UnaryOp { expr, .. } => expr.has_variables(),
+            ArithExpr::Call { args, .. } => args.iter().any(|a| a.has_variables()),
+        }
+    }
+
+    /// Evaluate a general value. Arithmetic functions enforce numeric types themselves.
+    pub fn eval_value(
+        &self,
+        subst: &Substitution,
+        ctx: &EvalContext<'_>,
+    ) -> Result<Term, ArithError> {
+        match self {
+            Self::Lit(v) => Term::try_from(v.clone()).map_err(|_| ArithError::NonFiniteFloat),
+            Self::Value(t) => Ok(t.clone()),
+            Self::Var(name) => subst.terms.get(name).cloned().ok_or_else(|| {
+                if subst.temporal.contains_key(name) || subst.intervals.contains_key(name) {
+                    ArithError::TypeMismatch {
+                        op: "var",
+                        expected: "value",
+                        got: "temporal",
+                    }
+                } else {
+                    ArithError::UnboundVariable { name: *name }
+                }
+            }),
+            Self::Fold(_) => Err(ArithError::FunctionError(
+                "fold requires aggregate preparation".into(),
+            )),
+            Self::Call { name, args } => {
+                let function = ctx
+                    .registry
+                    .and_then(|r| r.get(*name))
+                    .ok_or(ArithError::UnknownFunction { name: *name })?;
+                if !function.signature().arity.accepts(args.len()) {
+                    return Err(ArithError::ArityMismatch {
+                        name: *name,
+                        expected: function.signature().arity.to_string(),
+                        got: args.len(),
+                    });
+                }
+                let values = args
+                    .iter()
+                    .map(|a| a.eval_value(subst, ctx))
+                    .collect::<Result<Vec<_>, _>>()?;
+                function.eval(&values).map_err(|e| match e {
+                    crate::function_registry::EvalError::ArithError(ae) => ae,
+                    other => ArithError::FunctionError(other.to_string()),
+                })
+            }
+        }
+    }
+
+    /// Whether an expression contains a relational fold at any depth.
+    pub fn contains_fold(&self) -> bool {
+        match self {
+            Self::Fold(_) => true,
+            Self::Call { args, .. } => args.iter().any(Self::contains_fold),
+            _ => false,
         }
     }
 
@@ -722,166 +776,36 @@ impl ArithExpr {
     ///
     /// Returns the resulting numeric value, or an error if evaluation fails
     /// (overflow, unbound variable, type mismatch, etc.).
+    ///
+    /// Uses a cached prelude registry for builtin function dispatch.
+    /// Prefer `eval_with_context` on hot paths where you already have
+    /// a registry.
     pub fn eval(&self, subst: &Substitution) -> Result<NumericValue, ArithError> {
+        let ctx = EvalContext::with_registry(&PRELUDE);
+        self.eval_with_context(subst, &ctx)
+    }
+
+    /// Evaluate this expression under the given substitution and context.
+    ///
+    /// The context provides access to functions registered in
+    /// a [`FunctionRegistry`](crate::function_registry::FunctionRegistry).
+    pub fn eval_with_context(
+        &self,
+        subst: &Substitution,
+        ctx: &EvalContext<'_>,
+    ) -> Result<NumericValue, ArithError> {
         match self {
             ArithExpr::Lit(v) => Ok(v.clone()),
             ArithExpr::Var(name) => resolve_var(subst, *name),
-            ArithExpr::NaryOp { op, args } => eval_nary(op, args, subst),
-            ArithExpr::BinOp { op, lhs, rhs } => {
-                let l = lhs.eval(subst)?;
-                let r = rhs.eval(subst)?;
-                eval_bin(op, l, r)
-            }
-            ArithExpr::UnaryOp { op, expr } => {
-                let v = expr.eval(subst)?;
-                match op {
-                    UnaryArithOp::Abs => abs_value(v),
-                }
-            }
-        }
-    }
-}
-
-fn eval_nary(
-    op: &NaryArithOp,
-    args: &[ArithExpr],
-    subst: &Substitution,
-) -> Result<NumericValue, ArithError> {
-    match op {
-        NaryArithOp::Add => {
-            if args.is_empty() {
-                return Ok(NumericValue::Integer(0));
-            }
-            let mut acc = args[0].eval(subst)?;
-            for arg in &args[1..] {
-                acc = add_values(acc, arg.eval(subst)?)?;
-            }
-            Ok(acc)
-        }
-        NaryArithOp::Sub => {
-            if args.is_empty() {
-                return Err(ArithError::TypeMismatch {
-                    op: "-",
-                    expected: "1+ arguments",
-                    got: "0 arguments",
-                });
-            }
-            let first = args[0].eval(subst)?;
-            if args.len() == 1 {
-                return negate(first);
-            }
-            let mut acc = first;
-            for arg in &args[1..] {
-                acc = sub_values(acc, arg.eval(subst)?)?;
-            }
-            Ok(acc)
-        }
-        NaryArithOp::Mul => {
-            if args.is_empty() {
-                return Ok(NumericValue::Integer(1));
-            }
-            let mut acc = args[0].eval(subst)?;
-            for arg in &args[1..] {
-                acc = mul_values(acc, arg.eval(subst)?)?;
-            }
-            Ok(acc)
-        }
-        NaryArithOp::Div => {
-            if args.is_empty() {
-                return Err(ArithError::TypeMismatch {
-                    op: "/",
-                    expected: "1+ arguments",
-                    got: "0 arguments",
-                });
-            }
-            let first = args[0].eval(subst)?;
-            if args.len() == 1 {
-                return reciprocal(first);
-            }
-            let mut acc = first;
-            for arg in &args[1..] {
-                acc = div_values(acc, arg.eval(subst)?)?;
-            }
-            Ok(acc)
-        }
-        NaryArithOp::Min => {
-            if args.is_empty() {
-                return Err(ArithError::TypeMismatch {
-                    op: "min",
-                    expected: "1+ arguments",
-                    got: "0 arguments",
-                });
-            }
-            let mut acc = args[0].eval(subst)?;
-            for arg in &args[1..] {
-                let val = arg.eval(subst)?;
-                let (ord, pa, pb) = numeric_cmp(acc, val)?;
-                acc = if ord.is_le() { pa } else { pb };
-            }
-            Ok(acc)
-        }
-        NaryArithOp::Max => {
-            if args.is_empty() {
-                return Err(ArithError::TypeMismatch {
-                    op: "max",
-                    expected: "1+ arguments",
-                    got: "0 arguments",
-                });
-            }
-            let mut acc = args[0].eval(subst)?;
-            for arg in &args[1..] {
-                let val = arg.eval(subst)?;
-                let (ord, pa, pb) = numeric_cmp(acc, val)?;
-                acc = if ord.is_ge() { pa } else { pb };
-            }
-            Ok(acc)
-        }
-    }
-}
-
-fn eval_bin(
-    op: &BinArithOp,
-    lhs: NumericValue,
-    rhs: NumericValue,
-) -> Result<NumericValue, ArithError> {
-    match op {
-        BinArithOp::IDiv => match (&lhs, &rhs) {
-            (NumericValue::Integer(a), NumericValue::Integer(b)) => {
-                if *b == 0 {
-                    Err(ArithError::DivisionByZero)
-                } else {
-                    floor_div_i64(*a, *b).map(NumericValue::Integer)
-                }
-            }
-            _ => Err(ArithError::TypeMismatch {
-                op: "div",
-                expected: "Integer",
-                got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
-                    &lhs
-                } else {
-                    &rhs
+            ArithExpr::Call { .. } | ArithExpr::Value(_) | ArithExpr::Fold(_) => self
+                .eval_value(subst, ctx)?
+                .to_numeric_value()
+                .ok_or(ArithError::TypeMismatch {
+                    op: "expression",
+                    expected: "numeric",
+                    got: "symbol",
                 }),
-            }),
-        },
-        BinArithOp::Rem => match (&lhs, &rhs) {
-            (NumericValue::Integer(a), NumericValue::Integer(b)) => {
-                if *b == 0 {
-                    Err(ArithError::DivisionByZero)
-                } else {
-                    floor_rem_i64(*a, *b).map(NumericValue::Integer)
-                }
-            }
-            _ => Err(ArithError::TypeMismatch {
-                op: "rem",
-                expected: "Integer",
-                got: type_name(if !matches!(lhs, NumericValue::Integer(_)) {
-                    &lhs
-                } else {
-                    &rhs
-                }),
-            }),
-        },
-        BinArithOp::Pow => eval_pow(lhs, rhs),
+        }
     }
 }
 
@@ -892,22 +816,28 @@ fn eval_bin(
 impl ArithConstraint {
     /// Evaluate this constraint under the given substitution.
     ///
+    /// Uses a cached prelude registry for builtin function dispatch.
+    /// Prefer `eval_with_context` on hot paths where you already have
+    /// a registry.
+    pub fn eval(&self, subst: &mut Substitution) -> Result<(), ArithError> {
+        let ctx = EvalContext::with_registry(&PRELUDE);
+        self.eval_with_context(subst, &ctx)
+    }
+
+    /// Evaluate this constraint under the given substitution and context.
+    ///
     /// - `Bind`: evaluates the expression and binds the variable in the substitution.
     /// - `Compare`: evaluates both sides and checks the comparison.
     ///
     /// Returns `Ok(())` on success, or an appropriate `ArithError` on failure.
-    pub fn eval(&self, subst: &mut Substitution) -> Result<(), ArithError> {
+    pub fn eval_with_context(
+        &self,
+        subst: &mut Substitution,
+        ctx: &EvalContext<'_>,
+    ) -> Result<(), ArithError> {
         match self {
             ArithConstraint::Bind { var, expr } => {
-                let val = expr.eval(subst)?;
-                // Bind the variable directly as a typed Term value.
-                let term = match val {
-                    NumericValue::Integer(n) => Term::Integer(n),
-                    NumericValue::Decimal(d) => Term::Decimal(d),
-                    NumericValue::Float(f) => {
-                        Term::Float(FiniteFloat::new(f).ok_or(ArithError::NonFiniteFloat)?)
-                    }
-                };
+                let term = expr.eval_value(subst, ctx)?;
                 // If the variable is already bound, verify consistency
                 // instead of silently overwriting. This prevents rules like
                 // `(and (val ?x) (bind ?x (+ ?x 1)))` from producing
@@ -922,8 +852,8 @@ impl ArithConstraint {
                 Ok(())
             }
             ArithConstraint::Compare { op, lhs, rhs } => {
-                let l = lhs.eval(subst)?;
-                let r = rhs.eval(subst)?;
+                let l = lhs.eval_with_context(subst, ctx)?;
+                let r = rhs.eval_with_context(subst, ctx)?;
                 let (ord, _, _) = numeric_cmp(l, r)?;
                 let holds = match op {
                     CmpOp::Eq => ord == Ordering::Equal,
@@ -993,22 +923,10 @@ mod tests {
         ArithExpr::Var(intern(name))
     }
 
-    fn nary(op: NaryArithOp, args: Vec<ArithExpr>) -> ArithExpr {
-        ArithExpr::NaryOp { op, args }
-    }
-
-    fn bin(op: BinArithOp, lhs: ArithExpr, rhs: ArithExpr) -> ArithExpr {
-        ArithExpr::BinOp {
-            op,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
-
-    fn unary(op: UnaryArithOp, expr: ArithExpr) -> ArithExpr {
-        ArithExpr::UnaryOp {
-            op,
-            expr: Box::new(expr),
+    fn call(name: &str, args: Vec<ArithExpr>) -> ArithExpr {
+        ArithExpr::Call {
+            name: intern(name),
+            args,
         }
     }
 
@@ -1105,7 +1023,7 @@ mod tests {
             .temporal
             .insert(intern("?end"), TimePoint::Moment(200));
         // (+ 1 ?end) should fail because ?end is temporal
-        let expr = nary(NaryArithOp::Add, vec![lit_int(1), var("?end")]);
+        let expr = call("+", vec![lit_int(1), var("?end")]);
         let err = expr.eval(&subst).unwrap_err();
         assert!(matches!(
             err,
@@ -1121,28 +1039,28 @@ mod tests {
     #[test]
     fn add_identity() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![]);
+        let expr = call("+", vec![]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(0));
     }
 
     #[test]
     fn add_single() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(5)]);
+        let expr = call("+", vec![lit_int(5)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
     }
 
     #[test]
     fn add_multiple() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(1), lit_int(2), lit_int(3)]);
+        let expr = call("+", vec![lit_int(1), lit_int(2), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(6));
     }
 
     #[test]
     fn add_integer_overflow() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(i64::MAX), lit_int(1)]);
+        let expr = call("+", vec![lit_int(i64::MAX), lit_int(1)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
     }
 
@@ -1151,7 +1069,7 @@ mod tests {
     #[test]
     fn sub_unary_negation() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Sub, vec![lit_int(5)]);
+        let expr = call("-", vec![lit_int(5)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-5));
     }
 
@@ -1159,18 +1077,15 @@ mod tests {
     fn sub_left_fold() {
         let subst = Substitution::default();
         // (- 10 3 2) = 10 - 3 - 2 = 5
-        let expr = nary(NaryArithOp::Sub, vec![lit_int(10), lit_int(3), lit_int(2)]);
+        let expr = call("-", vec![lit_int(10), lit_int(3), lit_int(2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
     }
 
     #[test]
     fn sub_zero_args_error() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Sub, vec![]);
-        assert!(matches!(
-            expr.eval(&subst).unwrap_err(),
-            ArithError::TypeMismatch { .. }
-        ));
+        let expr = call("-", vec![]);
+        assert!(expr.eval(&subst).is_err());
     }
 
     // -- Multiplication ----------------------------------------------------
@@ -1178,14 +1093,14 @@ mod tests {
     #[test]
     fn mul_identity() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Mul, vec![]);
+        let expr = call("*", vec![]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
     #[test]
     fn mul_multiple() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Mul, vec![lit_int(2), lit_int(3), lit_int(4)]);
+        let expr = call("*", vec![lit_int(2), lit_int(3), lit_int(4)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(24));
     }
 
@@ -1195,7 +1110,7 @@ mod tests {
     fn div_reciprocal_integer() {
         let subst = Substitution::default();
         // (/ 2) = 0.5 as Decimal
-        let expr = nary(NaryArithOp::Div, vec![lit_int(2)]);
+        let expr = call("/", vec![lit_int(2)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Decimal(Decimal::new(5, 1)));
     }
@@ -1203,7 +1118,7 @@ mod tests {
     #[test]
     fn div_reciprocal_of_zero() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Div, vec![lit_int(0)]);
+        let expr = call("/", vec![lit_int(0)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::ReciprocalOfZero);
     }
 
@@ -1211,7 +1126,7 @@ mod tests {
     fn div_integer_produces_decimal() {
         let subst = Substitution::default();
         // (/ 10 3) produces Decimal
-        let expr = nary(NaryArithOp::Div, vec![lit_int(10), lit_int(3)]);
+        let expr = call("/", vec![lit_int(10), lit_int(3)]);
         let result = expr.eval(&subst).unwrap();
         assert!(matches!(result, NumericValue::Decimal(_)));
     }
@@ -1219,7 +1134,7 @@ mod tests {
     #[test]
     fn div_by_zero() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Div, vec![lit_int(10), lit_int(0)]);
+        let expr = call("/", vec![lit_int(10), lit_int(0)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::DivisionByZero);
     }
 
@@ -1227,7 +1142,7 @@ mod tests {
     fn div_left_fold() {
         let subst = Substitution::default();
         // (/ 100 2 5) = 100/2/5 = 10
-        let expr = nary(NaryArithOp::Div, vec![lit_int(100), lit_int(2), lit_int(5)]);
+        let expr = call("/", vec![lit_int(100), lit_int(2), lit_int(5)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Decimal(Decimal::from(10)));
     }
@@ -1237,28 +1152,28 @@ mod tests {
     #[test]
     fn min_single() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Min, vec![lit_int(5)]);
+        let expr = call("min", vec![lit_int(5)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
     }
 
     #[test]
     fn min_multiple() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Min, vec![lit_int(5), lit_int(2), lit_int(8)]);
+        let expr = call("min", vec![lit_int(5), lit_int(2), lit_int(8)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(2));
     }
 
     #[test]
     fn max_multiple() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Max, vec![lit_int(5), lit_int(2), lit_int(8)]);
+        let expr = call("max", vec![lit_int(5), lit_int(2), lit_int(8)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(8));
     }
 
     #[test]
     fn min_zero_args_error() {
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Min, vec![]);
+        let expr = call("min", vec![]);
         assert!(expr.eval(&subst).is_err());
     }
 
@@ -1267,7 +1182,7 @@ mod tests {
     #[test]
     fn idiv_basic() {
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
+        let expr = call("div", vec![lit_int(10), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(3));
     }
 
@@ -1275,14 +1190,14 @@ mod tests {
     fn idiv_negative_rounds_toward_neg_inf() {
         let subst = Substitution::default();
         // (div -7 2) → -4
-        let expr = bin(BinArithOp::IDiv, lit_int(-7), lit_int(2));
+        let expr = call("div", vec![lit_int(-7), lit_int(2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-4));
     }
 
     #[test]
     fn idiv_non_integer_error() {
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::IDiv, lit_dec(100, 1), lit_int(3));
+        let expr = call("div", vec![lit_dec(100, 1), lit_int(3)]);
         assert!(matches!(
             expr.eval(&subst).unwrap_err(),
             ArithError::TypeMismatch { op: "div", .. }
@@ -1292,7 +1207,7 @@ mod tests {
     #[test]
     fn idiv_by_zero() {
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(0));
+        let expr = call("div", vec![lit_int(10), lit_int(0)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::DivisionByZero);
     }
 
@@ -1302,7 +1217,7 @@ mod tests {
     fn rem_basic() {
         let subst = Substitution::default();
         // (rem 10 3) → 1
-        let expr = bin(BinArithOp::Rem, lit_int(10), lit_int(3));
+        let expr = call("rem", vec![lit_int(10), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
@@ -1310,7 +1225,7 @@ mod tests {
     fn rem_negative_dividend() {
         let subst = Substitution::default();
         // (rem -7 2) → 1
-        let expr = bin(BinArithOp::Rem, lit_int(-7), lit_int(2));
+        let expr = call("rem", vec![lit_int(-7), lit_int(2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
@@ -1318,7 +1233,7 @@ mod tests {
     fn rem_negative_divisor() {
         let subst = Substitution::default();
         // (rem 7 -2) → -1
-        let expr = bin(BinArithOp::Rem, lit_int(7), lit_int(-2));
+        let expr = call("rem", vec![lit_int(7), lit_int(-2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-1));
     }
 
@@ -1328,7 +1243,7 @@ mod tests {
     fn pow_integer_positive_exp() {
         let subst = Substitution::default();
         // 2^10 = 1024
-        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(10));
+        let expr = call("**", vec![lit_int(2), lit_int(10)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1024));
     }
 
@@ -1336,7 +1251,7 @@ mod tests {
     fn pow_zero_to_zero() {
         let subst = Substitution::default();
         // 0^0 = 1
-        let expr = bin(BinArithOp::Pow, lit_int(0), lit_int(0));
+        let expr = call("**", vec![lit_int(0), lit_int(0)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
@@ -1344,7 +1259,7 @@ mod tests {
     fn pow_integer_negative_exp_gives_decimal() {
         let subst = Substitution::default();
         // 2^(-1) = 0.5 (Decimal)
-        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(-1));
+        let expr = call("**", vec![lit_int(2), lit_int(-1)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Decimal(Decimal::new(5, 1)));
     }
@@ -1353,14 +1268,14 @@ mod tests {
     fn pow_zero_negative_exp_is_div_by_zero() {
         let subst = Substitution::default();
         // 0^(-1) → DivisionByZero
-        let expr = bin(BinArithOp::Pow, lit_int(0), lit_int(-1));
+        let expr = call("**", vec![lit_int(0), lit_int(-1)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::DivisionByZero);
     }
 
     #[test]
     fn pow_integer_overflow() {
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(63));
+        let expr = call("**", vec![lit_int(2), lit_int(63)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
     }
 
@@ -1368,7 +1283,7 @@ mod tests {
     fn pow_float_contagion() {
         let subst = Substitution::default();
         // Float base → Float result
-        let expr = bin(BinArithOp::Pow, lit_float(2.0), lit_int(3));
+        let expr = call("**", vec![lit_float(2.0), lit_int(3)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Float(8.0));
     }
@@ -1378,21 +1293,21 @@ mod tests {
     #[test]
     fn abs_positive() {
         let subst = Substitution::default();
-        let expr = unary(UnaryArithOp::Abs, lit_int(5));
+        let expr = call("abs", vec![lit_int(5)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
     }
 
     #[test]
     fn abs_negative() {
         let subst = Substitution::default();
-        let expr = unary(UnaryArithOp::Abs, lit_int(-5));
+        let expr = call("abs", vec![lit_int(-5)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(5));
     }
 
     #[test]
     fn abs_i64_min_overflow() {
         let subst = Substitution::default();
-        let expr = unary(UnaryArithOp::Abs, lit_int(i64::MIN));
+        let expr = call("abs", vec![lit_int(i64::MIN)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
     }
 
@@ -1402,10 +1317,7 @@ mod tests {
     fn promotion_integer_decimal() {
         let subst = Substitution::default();
         // Integer + Decimal → Decimal
-        let expr = nary(
-            NaryArithOp::Add,
-            vec![lit_int(1), lit_dec(25, 1)], // 1 + 2.5
-        );
+        let expr = call("+", vec![lit_int(1), lit_dec(25, 1)]); // 1 + 2.5
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Decimal(Decimal::new(35, 1)));
     }
@@ -1414,7 +1326,7 @@ mod tests {
     fn promotion_integer_float() {
         let subst = Substitution::default();
         // Integer + Float → Float
-        let expr = nary(NaryArithOp::Add, vec![lit_int(1), lit_float(2.5)]);
+        let expr = call("+", vec![lit_int(1), lit_float(2.5)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Float(3.5));
     }
@@ -1423,7 +1335,7 @@ mod tests {
     fn promotion_decimal_float() {
         let subst = Substitution::default();
         // Decimal + Float → Float
-        let expr = nary(NaryArithOp::Add, vec![lit_dec(25, 1), lit_float(1.0)]);
+        let expr = call("+", vec![lit_dec(25, 1), lit_float(1.0)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Float(3.5));
     }
@@ -1432,7 +1344,7 @@ mod tests {
     fn promotion_min_mixed_types() {
         let subst = Substitution::default();
         // min(Integer(5), Float(3.0)) → Float(3.0) (float contagion)
-        let expr = nary(NaryArithOp::Min, vec![lit_int(5), lit_float(3.0)]);
+        let expr = call("min", vec![lit_int(5), lit_float(3.0)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Float(3.0));
     }
@@ -1444,7 +1356,7 @@ mod tests {
         let mut subst = make_subst(&[("?x", "10"), ("?y", "3")]);
         let constraint = ArithConstraint::Bind {
             var: intern("?result"),
-            expr: nary(NaryArithOp::Add, vec![var("?x"), var("?y")]),
+            expr: call("+", vec![var("?x"), var("?y")]),
         };
         constraint.eval(&mut subst).unwrap();
 
@@ -1520,13 +1432,7 @@ mod tests {
     fn nested_expression() {
         let subst = make_subst(&[("?a", "10"), ("?b", "3")]);
         // (/ (- ?a ?b) 2) = (10 - 3) / 2 = 3.5
-        let expr = nary(
-            NaryArithOp::Div,
-            vec![
-                nary(NaryArithOp::Sub, vec![var("?a"), var("?b")]),
-                lit_int(2),
-            ],
-        );
+        let expr = call("/", vec![call("-", vec![var("?a"), var("?b")]), lit_int(2)]);
         let result = expr.eval(&subst).unwrap();
         assert_eq!(result, NumericValue::Decimal(Decimal::new(35, 1)));
     }
@@ -1535,10 +1441,7 @@ mod tests {
     fn abs_difference() {
         let subst = make_subst(&[("?x", "3"), ("?y", "7")]);
         // (abs (- ?x ?y)) = abs(3 - 7) = abs(-4) = 4
-        let expr = unary(
-            UnaryArithOp::Abs,
-            nary(NaryArithOp::Sub, vec![var("?x"), var("?y")]),
-        );
+        let expr = call("abs", vec![call("-", vec![var("?x"), var("?y")])]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(4));
     }
 
@@ -1562,7 +1465,7 @@ mod tests {
     fn test_002_01_add_two_integers() {
         // (+ 3 4) evaluates to Integer(7).
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_int(4)]);
+        let expr = call("+", vec![lit_int(3), lit_int(4)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(7));
     }
 
@@ -1570,13 +1473,7 @@ mod tests {
     fn test_002_02_nested_mul_add() {
         // (* (+ ?a ?b) 2) with ?a=3, ?b=4 → 14.
         let subst = make_subst(&[("?a", "3"), ("?b", "4")]);
-        let expr = nary(
-            NaryArithOp::Mul,
-            vec![
-                nary(NaryArithOp::Add, vec![var("?a"), var("?b")]),
-                lit_int(2),
-            ],
-        );
+        let expr = call("*", vec![call("+", vec![var("?a"), var("?b")]), lit_int(2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(14));
     }
 
@@ -1584,7 +1481,7 @@ mod tests {
     fn test_002_03_variadic_add_three() {
         // (+ 1 2 3) evaluates to 6.
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(1), lit_int(2), lit_int(3)]);
+        let expr = call("+", vec![lit_int(1), lit_int(2), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(6));
     }
 
@@ -1593,11 +1490,11 @@ mod tests {
         // (+) → Integer(0); (*) → Integer(1).
         let subst = Substitution::default();
         assert_eq!(
-            nary(NaryArithOp::Add, vec![]).eval(&subst).unwrap(),
+            call("+", vec![]).eval(&subst).unwrap(),
             NumericValue::Integer(0),
         );
         assert_eq!(
-            nary(NaryArithOp::Mul, vec![]).eval(&subst).unwrap(),
+            call("*", vec![]).eval(&subst).unwrap(),
             NumericValue::Integer(1),
         );
     }
@@ -1606,10 +1503,10 @@ mod tests {
     fn test_002_05_unary_negation_and_reciprocal() {
         // (- ?x) → negation; (/ ?x) → reciprocal (Decimal).
         let subst = make_subst(&[("?x", "4")]);
-        let neg = nary(NaryArithOp::Sub, vec![var("?x")]);
+        let neg = call("-", vec![var("?x")]);
         assert_eq!(neg.eval(&subst).unwrap(), NumericValue::Integer(-4));
 
-        let recip = nary(NaryArithOp::Div, vec![var("?x")]);
+        let recip = call("/", vec![var("?x")]);
         assert_eq!(
             recip.eval(&subst).unwrap(),
             NumericValue::Decimal(Decimal::new(25, 2)), // 0.25
@@ -1620,11 +1517,11 @@ mod tests {
     fn test_002_06_left_fold_sub_and_div() {
         let subst = Substitution::default();
         // (- 10 3 2) = 10 - 3 - 2 = 5
-        let sub_expr = nary(NaryArithOp::Sub, vec![lit_int(10), lit_int(3), lit_int(2)]);
+        let sub_expr = call("-", vec![lit_int(10), lit_int(3), lit_int(2)]);
         assert_eq!(sub_expr.eval(&subst).unwrap(), NumericValue::Integer(5));
 
         // (/ 12 3 2) = 12 / 3 / 2 = 2 (as Decimal, since int/int → Decimal)
-        let div_expr = nary(NaryArithOp::Div, vec![lit_int(12), lit_int(3), lit_int(2)]);
+        let div_expr = call("/", vec![lit_int(12), lit_int(3), lit_int(2)]);
         assert_eq!(
             div_expr.eval(&subst).unwrap(),
             NumericValue::Decimal(Decimal::from(2)),
@@ -1635,13 +1532,13 @@ mod tests {
     fn test_002_07_binary_operators_evaluate() {
         let subst = Substitution::default();
         // div evaluates correctly
-        let idiv = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
+        let idiv = call("div", vec![lit_int(10), lit_int(3)]);
         assert_eq!(idiv.eval(&subst).unwrap(), NumericValue::Integer(3));
         // rem evaluates correctly
-        let rem = bin(BinArithOp::Rem, lit_int(10), lit_int(3));
+        let rem = call("rem", vec![lit_int(10), lit_int(3)]);
         assert_eq!(rem.eval(&subst).unwrap(), NumericValue::Integer(1));
         // ** evaluates correctly
-        let pow = bin(BinArithOp::Pow, lit_int(2), lit_int(10));
+        let pow = call("**", vec![lit_int(2), lit_int(10)]);
         assert_eq!(pow.eval(&subst).unwrap(), NumericValue::Integer(1024));
     }
 
@@ -1649,10 +1546,7 @@ mod tests {
     fn test_002_08_abs_of_difference() {
         // (abs (- ?a ?b)) = abs(3 - 7) = 4.
         let subst = make_subst(&[("?a", "3"), ("?b", "7")]);
-        let expr = unary(
-            UnaryArithOp::Abs,
-            nary(NaryArithOp::Sub, vec![var("?a"), var("?b")]),
-        );
+        let expr = call("abs", vec![call("-", vec![var("?a"), var("?b")])]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(4));
     }
 
@@ -1660,25 +1554,18 @@ mod tests {
     fn test_002_09_variadic_min_max() {
         let subst = make_subst(&[("?a", "5"), ("?b", "2"), ("?c", "8")]);
         // (min ?a ?b ?c) → 2
-        let min_expr = nary(NaryArithOp::Min, vec![var("?a"), var("?b"), var("?c")]);
+        let min_expr = call("min", vec![var("?a"), var("?b"), var("?c")]);
         assert_eq!(min_expr.eval(&subst).unwrap(), NumericValue::Integer(2));
         // (max 0 ?a) → 5
-        let max_expr = nary(NaryArithOp::Max, vec![lit_int(0), var("?a")]);
+        let max_expr = call("max", vec![lit_int(0), var("?a")]);
         assert_eq!(max_expr.eval(&subst).unwrap(), NumericValue::Integer(5));
     }
 
     #[test]
     fn test_002_10_binary_ops_structurally_binary() {
-        // div, rem, ** are BinOp in the AST — structurally enforce 2 operands.
-        // A 3-arg div cannot be represented; the parser rejects it.
-        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
-        assert!(matches!(
-            expr,
-            ArithExpr::BinOp {
-                op: BinArithOp::IDiv,
-                ..
-            }
-        ));
+        // div, rem, ** are Call nodes with exactly 2 args — the parser enforces arity.
+        let expr = call("div", vec![lit_int(10), lit_int(3)]);
+        assert!(matches!(expr, ArithExpr::Call { .. }));
     }
 
     // TEST-002 scenarios 11–12 are parse-time checks (operator at predicate
@@ -1692,7 +1579,7 @@ mod tests {
     fn test_005_01_add_int_int_stays_integer() {
         // (+ 3 4) → Integer(7)
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_int(4)]);
+        let expr = call("+", vec![lit_int(3), lit_int(4)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(7));
     }
 
@@ -1700,7 +1587,7 @@ mod tests {
     fn test_005_02_add_int_decimal_promotes() {
         // (+ 3 4.0) → Decimal(7.0)
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_dec(40, 1)]); // 4.0
+        let expr = call("+", vec![lit_int(3), lit_dec(40, 1)]); // 4.0
         let result = expr.eval(&subst).unwrap();
         assert!(matches!(result, NumericValue::Decimal(_)));
         assert_eq!(result, NumericValue::Decimal(Decimal::new(70, 1)));
@@ -1710,7 +1597,7 @@ mod tests {
     fn test_005_03_add_int_float_promotes() {
         // (+ 3 4.0e0) → Float(7.0) — scientific notation means float, contagious.
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_int(3), lit_float(4.0)]);
+        let expr = call("+", vec![lit_int(3), lit_float(4.0)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Float(7.0));
     }
 
@@ -1718,7 +1605,7 @@ mod tests {
     fn test_005_04_add_decimal_decimal_exact() {
         // (+ 0.1 0.2) → Decimal(0.3) — exact, no float drift.
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Add, vec![lit_dec(1, 1), lit_dec(2, 1)]);
+        let expr = call("+", vec![lit_dec(1, 1), lit_dec(2, 1)]);
         assert_eq!(
             expr.eval(&subst).unwrap(),
             NumericValue::Decimal(Decimal::new(3, 1)),
@@ -1729,7 +1616,7 @@ mod tests {
     fn test_005_05_div_int_int_decimal_28_digits() {
         // (/ 10 3) → Decimal(3.3333333333333333333333333333)
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Div, vec![lit_int(10), lit_int(3)]);
+        let expr = call("/", vec![lit_int(10), lit_int(3)]);
         let result = expr.eval(&subst).unwrap();
         match &result {
             NumericValue::Decimal(d) => {
@@ -1755,7 +1642,7 @@ mod tests {
     fn test_005_06_div_int_float_produces_float() {
         // (/ 10 3.0e0) → Float(3.333...)
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Div, vec![lit_int(10), lit_float(3.0)]);
+        let expr = call("/", vec![lit_int(10), lit_float(3.0)]);
         let result = expr.eval(&subst).unwrap();
         match &result {
             NumericValue::Float(f) => {
@@ -1769,7 +1656,7 @@ mod tests {
     fn test_005_07_mul_int_decimal_exact() {
         // (* 100 0.08) → Decimal(8.00) — exact.
         let subst = Substitution::default();
-        let expr = nary(NaryArithOp::Mul, vec![lit_int(100), lit_dec(8, 2)]);
+        let expr = call("*", vec![lit_int(100), lit_dec(8, 2)]);
         let result = expr.eval(&subst).unwrap();
         assert!(matches!(result, NumericValue::Decimal(_)));
         assert_eq!(result, NumericValue::Decimal(Decimal::from(8)));
@@ -1779,7 +1666,7 @@ mod tests {
     fn test_005_08_idiv_floor() {
         // (div 10 3) → Integer(3)
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_int(3));
+        let expr = call("div", vec![lit_int(10), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(3));
     }
 
@@ -1787,7 +1674,7 @@ mod tests {
     fn test_005_09_idiv_negative_floor() {
         // (div -7 2) → Integer(-4) — floor toward −∞, not truncation toward 0.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::IDiv, lit_int(-7), lit_int(2));
+        let expr = call("div", vec![lit_int(-7), lit_int(2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-4));
     }
 
@@ -1795,7 +1682,7 @@ mod tests {
     fn test_005_10_rem_positive() {
         // (rem 10 3) → Integer(1)
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Rem, lit_int(10), lit_int(3));
+        let expr = call("rem", vec![lit_int(10), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
@@ -1803,7 +1690,7 @@ mod tests {
     fn test_005_11_rem_negative_dividend() {
         // (rem -7 2) → Integer(1) — floor remainder.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Rem, lit_int(-7), lit_int(2));
+        let expr = call("rem", vec![lit_int(-7), lit_int(2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
@@ -1811,7 +1698,7 @@ mod tests {
     fn test_005_12_rem_negative_divisor() {
         // (rem 7 -2) → Integer(-1) — floor remainder.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Rem, lit_int(7), lit_int(-2));
+        let expr = call("rem", vec![lit_int(7), lit_int(-2)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-1));
     }
 
@@ -1819,7 +1706,7 @@ mod tests {
     fn test_005_13_idiv_decimal_operand_fails() {
         // (div 10 3.0) → type mismatch error (div requires integers).
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::IDiv, lit_int(10), lit_dec(30, 1));
+        let expr = call("div", vec![lit_int(10), lit_dec(30, 1)]);
         assert!(matches!(
             expr.eval(&subst).unwrap_err(),
             ArithError::TypeMismatch { op: "div", .. },
@@ -1830,7 +1717,7 @@ mod tests {
     fn test_005_14_rem_decimal_operand_fails() {
         // (rem 10 3.0) → type mismatch error (rem requires integers).
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Rem, lit_int(10), lit_dec(30, 1));
+        let expr = call("rem", vec![lit_int(10), lit_dec(30, 1)]);
         assert!(matches!(
             expr.eval(&subst).unwrap_err(),
             ArithError::TypeMismatch { op: "rem", .. },
@@ -1841,7 +1728,7 @@ mod tests {
     fn test_005_15_pow_int_positive_exp() {
         // (** 2 10) → Integer(1024)
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(10));
+        let expr = call("**", vec![lit_int(2), lit_int(10)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1024));
     }
 
@@ -1849,7 +1736,7 @@ mod tests {
     fn test_005_16_pow_zero_zero() {
         // (** 0 0) → Integer(1)
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(0), lit_int(0));
+        let expr = call("**", vec![lit_int(0), lit_int(0)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(1));
     }
 
@@ -1857,7 +1744,7 @@ mod tests {
     fn test_005_17_pow_int_negative_exp_decimal() {
         // (** 2 -1) → Decimal(0.5)
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(-1));
+        let expr = call("**", vec![lit_int(2), lit_int(-1)]);
         assert_eq!(
             expr.eval(&subst).unwrap(),
             NumericValue::Decimal(Decimal::new(5, 1)),
@@ -1868,7 +1755,7 @@ mod tests {
     fn test_005_18_pow_zero_negative_exp_fails() {
         // (** 0 -1) → DivisionByZero
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(0), lit_int(-1));
+        let expr = call("**", vec![lit_int(0), lit_int(-1)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::DivisionByZero);
     }
 
@@ -1876,7 +1763,7 @@ mod tests {
     fn test_005_19_pow_decimal_base() {
         // (** 2.0 3) → Decimal(8) — decimal base stays Decimal.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_dec(20, 1), lit_int(3)); // 2.0 ^ 3
+        let expr = call("**", vec![lit_dec(20, 1), lit_int(3)]); // 2.0 ^ 3
         let result = expr.eval(&subst).unwrap();
         assert!(matches!(result, NumericValue::Decimal(_)));
         assert_eq!(result, NumericValue::Decimal(Decimal::from(8)));
@@ -1886,7 +1773,7 @@ mod tests {
     fn test_005_20_pow_float_contagion() {
         // (** 2.0e0 3) → Float(8.0) — float is contagious.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_float(2.0), lit_int(3));
+        let expr = call("**", vec![lit_float(2.0), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Float(8.0));
     }
 
@@ -1895,7 +1782,7 @@ mod tests {
         // (** -1 0.5) → error: negative base with non-integer exponent
         // (result would be imaginary).
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(-1), lit_dec(5, 1)); // -1 ^ 0.5
+        let expr = call("**", vec![lit_int(-1), lit_dec(5, 1)]); // -1 ^ 0.5
         assert!(expr.eval(&subst).is_err());
     }
 
@@ -1903,7 +1790,7 @@ mod tests {
     fn pow_negative_decimal_base_fractional_exp_rejected() {
         // Regression: (** -4.0 0.5) must fail, not return a bogus value.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_dec(-40, 1), lit_dec(5, 1)); // -4.0 ^ 0.5
+        let expr = call("**", vec![lit_dec(-40, 1), lit_dec(5, 1)]); // -4.0 ^ 0.5
         assert!(expr.eval(&subst).is_err());
     }
 
@@ -1911,7 +1798,7 @@ mod tests {
     fn pow_negative_base_integer_exp_still_works() {
         // (** -2 3) → Integer(-8) — integer exponents on negative bases are fine.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(-2), lit_int(3));
+        let expr = call("**", vec![lit_int(-2), lit_int(3)]);
         assert_eq!(expr.eval(&subst).unwrap(), NumericValue::Integer(-8));
     }
 
@@ -1919,7 +1806,7 @@ mod tests {
     fn pow_positive_base_fractional_exp_works() {
         // (** 4.0 0.5) → Decimal(2.0) — positive base with fractional exp is valid.
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_dec(40, 1), lit_dec(5, 1)); // 4.0 ^ 0.5
+        let expr = call("**", vec![lit_dec(40, 1), lit_dec(5, 1)]); // 4.0 ^ 0.5
         let result = expr.eval(&subst).unwrap();
         // rust_decimal's checked_powd should give us approximately 2.0
         if let NumericValue::Decimal(d) = result {
@@ -1933,7 +1820,7 @@ mod tests {
     fn test_005_22_pow_integer_overflow() {
         // (** 2 63) → IntegerOverflow
         let subst = Substitution::default();
-        let expr = bin(BinArithOp::Pow, lit_int(2), lit_int(63));
+        let expr = call("**", vec![lit_int(2), lit_int(63)]);
         assert_eq!(expr.eval(&subst).unwrap_err(), ArithError::IntegerOverflow);
     }
 
@@ -2008,11 +1895,161 @@ mod tests {
         let mut subst = make_subst(&[("?x", "10")]);
         let constraint = ArithConstraint::Bind {
             var: intern("?x"),
-            expr: nary(NaryArithOp::Add, vec![var("?x"), lit_int(1)]),
+            expr: call("+", vec![var("?x"), lit_int(1)]),
         };
         assert_eq!(
             constraint.eval(&mut subst).unwrap_err(),
             ArithError::ComparisonFailed
         );
+    }
+
+    // -- ArithExpr::Call unit tests -----------------------------------------
+
+    mod call_tests {
+        use super::*;
+        use crate::function_registry::{
+            Arity, EvalContext, EvalError, ExtensionFunction, FunctionRegistry, FunctionSignature,
+        };
+
+        struct DoubleFunction(FunctionSignature);
+
+        impl DoubleFunction {
+            fn new() -> Self {
+                Self(FunctionSignature {
+                    name: intern("double"),
+                    arity: Arity::Fixed(1),
+                    description: "doubles an integer",
+                })
+            }
+        }
+
+        impl ExtensionFunction for DoubleFunction {
+            fn signature(&self) -> &FunctionSignature {
+                &self.0
+            }
+
+            fn eval(&self, args: &[Term]) -> Result<Term, EvalError> {
+                match &args[0] {
+                    Term::Integer(n) => Ok(Term::Integer(n * 2)),
+                    other => Err(EvalError::TypeError(format!(
+                        "double: expected integer, got {other:?}"
+                    ))),
+                }
+            }
+        }
+
+        struct FailingFunction(FunctionSignature);
+
+        impl FailingFunction {
+            fn new() -> Self {
+                Self(FunctionSignature {
+                    name: intern("fail_fn"),
+                    arity: Arity::Fixed(1),
+                    description: "always fails",
+                })
+            }
+        }
+
+        impl ExtensionFunction for FailingFunction {
+            fn signature(&self) -> &FunctionSignature {
+                &self.0
+            }
+
+            fn eval(&self, _args: &[Term]) -> Result<Term, EvalError> {
+                Err(EvalError::EvalFailed("intentional failure".into()))
+            }
+        }
+
+        #[test]
+        fn call_success_with_registry() {
+            let mut reg = FunctionRegistry::new();
+            reg.register(Box::new(DoubleFunction::new()));
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let expr = ArithExpr::Call {
+                name: intern("double"),
+                args: vec![lit_int(5)],
+            };
+            let result = expr.eval_with_context(&subst, &ctx).unwrap();
+            assert_eq!(result, NumericValue::Integer(10));
+        }
+
+        #[test]
+        fn call_no_registry_returns_unknown_function() {
+            let ctx = EvalContext::empty();
+            let subst = Substitution::default();
+
+            let name = intern("double");
+            let expr = ArithExpr::Call {
+                name,
+                args: vec![lit_int(5)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert_eq!(err, ArithError::UnknownFunction { name });
+        }
+
+        #[test]
+        fn call_unknown_name_returns_unknown_function() {
+            let reg = FunctionRegistry::new(); // empty registry
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let name = intern("nonexistent");
+            let expr = ArithExpr::Call {
+                name,
+                args: vec![lit_int(5)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert_eq!(err, ArithError::UnknownFunction { name });
+        }
+
+        #[test]
+        fn call_function_error_returns_function_error() {
+            let mut reg = FunctionRegistry::new();
+            reg.register(Box::new(FailingFunction::new()));
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let expr = ArithExpr::Call {
+                name: intern("fail_fn"),
+                args: vec![lit_int(5)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ArithError::FunctionError(_)),
+                "expected FunctionError, got: {err:?}"
+            );
+        }
+
+        #[test]
+        fn call_arity_mismatch_returns_error() {
+            // DoubleFunction has Fixed(1) arity — call with 0 and 2 args
+            let mut reg = FunctionRegistry::new();
+            reg.register(Box::new(DoubleFunction::new()));
+            let ctx = EvalContext::with_registry(&reg);
+            let subst = Substitution::default();
+
+            let name = intern("double");
+
+            // 0 args
+            let expr = ArithExpr::Call { name, args: vec![] };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ArithError::ArityMismatch { got: 0, .. }),
+                "expected ArityMismatch with got=0, got: {err:?}"
+            );
+
+            // 2 args
+            let expr = ArithExpr::Call {
+                name,
+                args: vec![lit_int(1), lit_int(2)],
+            };
+            let err = expr.eval_with_context(&subst, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ArithError::ArityMismatch { got: 2, .. }),
+                "expected ArityMismatch with got=2, got: {err:?}"
+            );
+        }
     }
 }

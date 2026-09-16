@@ -26,7 +26,7 @@
     ]
   }
 -/
-import SpindleLean.Reason
+import Spindle.Aggregation.Operational
 
 set_option linter.deprecated false
 
@@ -286,7 +286,11 @@ def runOracle (input : String) : String :=
   match parseTheory input with
   | none => "{\"error\":\"Failed to parse theory JSON\"}"
   | some theory =>
-    let result := reason theory
-    resultToJson result
+    let computed := Spindle.Aggregation.Operational.reason theory
+    let delta := theory.allLiterals.filter (computed.has .definitelyProvable)
+    -- Retained wire field for diagnostics only; lambda never drives inference.
+    let lambda := Closure.lambdaClose theory delta
+    let partial_ := theory.allLiterals.filter (computed.has .defeasiblyProvable)
+    resultToJson ⟨delta, lambda, partial_, computed.conclusions⟩
 
 end DiffTest

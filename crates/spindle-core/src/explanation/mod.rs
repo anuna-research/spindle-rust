@@ -72,6 +72,13 @@ impl Explanation {
 /// Explain why a conclusion holds (returns Proof Tree)
 pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Option<Explanation>> {
     let mut visited = HashSet::new();
+    if !theory.aggregate_guards.is_empty() {
+        // Snapshot premises are hidden from user conclusion lists, but their
+        // defeasible proofs must remain visible when auditing a lowered rule.
+        let mut audit_theory = theory.clone();
+        audit_theory.aggregate_guards.clear();
+        return explain_inner(&audit_theory, literal, &mut visited);
+    }
     explain_inner(theory, literal, &mut visited)
 }
 

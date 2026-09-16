@@ -15,7 +15,7 @@ inductive ConclusionType where
   | definitelyNotProvable -- -D
   | defeasiblyProvable    -- +d
   | defeasiblyNotProvable -- -d
-  deriving DecidableEq, Repr, BEq
+  deriving DecidableEq, Repr, BEq, ReflBEq, LawfulBEq
 
 /-- A conclusion: a literal tagged with its provability status -/
 structure Conclusion where

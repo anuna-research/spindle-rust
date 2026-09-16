@@ -401,7 +401,17 @@ pub(crate) fn reason_indexed_trace(indexed: &mut IndexedTheory<'_>) -> Result<Re
     // Phase 2: Defeasible fixed-point loop + Phase 3: Negative conclusions
     defeasible::resolve_defeasible(theory, indexed, &mut state);
 
-    let projection_labels = collect_projection_labels(&state, theory);
+    let mut projection_labels = collect_projection_labels(&state, theory);
+    state
+        .conclusions
+        .retain(|c| !theory.aggregate_guards.contains(c.literal.name()));
+    projection_labels.retain(|label| {
+        theory.get_rule(label).is_none_or(|r| {
+            !r.head
+                .iter()
+                .any(|h| theory.aggregate_guards.contains(h.name()))
+        })
+    });
 
     Ok(ReasoningTrace {
         conclusions: state.conclusions,

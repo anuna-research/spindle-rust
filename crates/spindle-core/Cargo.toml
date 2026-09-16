@@ -33,3 +33,7 @@ spindle-parser = { path = "../spindle-parser" }
 [[bench]]
 name = "reasoning"
 harness = false
+
+[[bench]]
+name = "aggregation"
+harness = false

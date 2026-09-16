@@ -1,16 +1,21 @@
 //! Finite-domain aggregate evaluation over completed Rust reasoning snapshots.
 //!
-//! This typed reference API implements the fragment compared with the Lean
-//! aggregate oracle. It does not parse SPL or add modal/temporal aggregation.
+//! The typed reference API uses an explicit finite domain. The `source` bridge
+//! binds results directly and grounds parsed SPL from predicate instances. Both
+//! paths are compared with the Lean aggregate oracle.
+//! Modal/temporal aggregation is not supported.
 //! Integer operations are checked i64 operations; overflow is an explicit error.
 //! Strict aggregate rules retain their kind and receive a defeasible closure
 //! premise. Every stage replays the complete retained theory, including attackers.
 //!
-//! The Rust ordinary backend uses constructive defeat-discard; the aggregate
-//! Lean proofs currently use a three-phase approximation. Differential tests
-//! record that known snapshot discrepancy separately (see lean/AGGREGATION.md).
+//! Rust and Lean use traditional ambiguity-blocking, team-defeat DL(partial).
+//! The finite-domain API and SPL binding evaluator are compared with Lean.
 //! This API is tested against the model, not formally proved to refine it.
 
+mod binding;
+pub mod source;
+
+use crate::function_registry::FunctionRegistry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{ConclusionType, Literal, Rule, RuleType, Theory};
@@ -44,6 +49,8 @@ pub enum Expression {
     Term(Term),
     /// Named arithmetic operation: +, *, binary -, nonempty min/max.
     Call(String, Vec<Expression>),
+    /// Registered pure function; outside the currently verified expression fragment.
+    ExternalCall(String, Vec<Expression>),
 }
 
 /// A fold over distinct surviving rows.
@@ -70,6 +77,8 @@ pub enum Condition {
     Logic(Pattern),
     /// Integer binding constraint.
     Bind(String, Expression),
+    /// General value binding for SPL extensions; outside the verified integer-bind fragment.
+    BindValue(String, Expression),
     /// Comparison using =, !=, <, <=, >, or >=.
     Compare(String, Expression, Expression),
     /// Aggregate condition.
@@ -116,6 +125,7 @@ pub struct Evaluation {
     pub stage_count: usize,
     /// Ordinary lowered theory (internal atom names are opaque).
     pub theory: Theory,
+    table: Vec<Pattern>,
 }
 
 type Env = BTreeMap<String, Term>;
@@ -135,7 +145,9 @@ fn expression_vars(e: &Expression) -> BTreeSet<String> {
     match e {
         Expression::Term(Term::Variable(v)) => BTreeSet::from([v.clone()]),
         Expression::Term(_) => BTreeSet::new(),
-        Expression::Call(_, args) => args.iter().flat_map(expression_vars).collect(),
+        Expression::Call(_, args) | Expression::ExternalCall(_, args) => {
+            args.iter().flat_map(expression_vars).collect()
+        }
     }
 }
 fn scope(r: &SchemaRule) -> Vec<String> {
@@ -143,7 +155,7 @@ fn scope(r: &SchemaRule) -> Vec<String> {
     for c in &r.body {
         match c {
             Condition::Logic(p) => out.extend(vars(p)),
-            Condition::Bind(v, e) => {
+            Condition::Bind(v, e) | Condition::BindValue(v, e) => {
                 out.insert(v.clone());
                 out.extend(expression_vars(e));
             }
@@ -167,7 +179,14 @@ fn scope(r: &SchemaRule) -> Vec<String> {
     }
     out.into_iter().collect()
 }
-fn assignments(names: &[String], domain: &[Term]) -> Vec<Env> {
+fn assignments(names: &[String], domain: &[Term], budget: &mut usize) -> Result<Vec<Env>> {
+    let count = names
+        .iter()
+        .try_fold(1usize, |n, _| n.checked_mul(domain.len()))
+        .ok_or("aggregate grounding limit exceeded")?;
+    *budget = budget
+        .checked_sub(count)
+        .ok_or("aggregate grounding limit exceeded")?;
     let mut envs = vec![Env::new()];
     for name in names {
         envs = envs
@@ -181,7 +200,7 @@ fn assignments(names: &[String], domain: &[Term]) -> Vec<Env> {
             })
             .collect();
     }
-    envs
+    Ok(envs)
 }
 fn apply(p: &Pattern, env: &Env) -> Pattern {
     let mut p = p.clone();
@@ -204,11 +223,17 @@ fn patterns(r: &SchemaRule) -> impl Iterator<Item = &Pattern> {
         _ => None,
     }))
 }
-fn supported(e: &Expression) -> bool {
+fn supported(e: &Expression, registry: Option<&FunctionRegistry>) -> bool {
     match e {
         Expression::Term(_) => true,
+        Expression::ExternalCall(name, args) => {
+            registry
+                .and_then(|r| r.get(crate::intern::intern(name)))
+                .is_some_and(|f| f.signature().arity.accepts(args.len()))
+                && args.iter().all(|a| supported(a, registry))
+        }
         Expression::Call(name, args) => {
-            args.iter().all(supported)
+            args.iter().all(|a| supported(a, registry))
                 && match name.as_str() {
                     "+" | "*" => true,
                     "-" => args.len() == 2,
@@ -218,7 +243,7 @@ fn supported(e: &Expression) -> bool {
         }
     }
 }
-fn validate(p: &Program, domain: &[Term]) -> Result<()> {
+fn validate(p: &Program, domain: &[Term], registry: Option<&FunctionRegistry>) -> Result<()> {
     if domain.iter().any(|t| matches!(t, Term::Variable(_))) {
         return Err("nonground domain".into());
     }
@@ -240,16 +265,19 @@ fn validate(p: &Program, domain: &[Term]) -> Result<()> {
         for c in &r.body {
             let valid = match c {
                 Condition::Logic(_) => true,
-                Condition::Bind(_, e) => supported(e),
+                Condition::Bind(_, e) | Condition::BindValue(_, e) => supported(e, registry),
                 Condition::Compare(op, a, b) => {
                     ["=", "!=", "<", "<=", ">", ">="].contains(&op.as_str())
-                        && supported(a)
-                        && supported(b)
+                        && supported(a, registry)
+                        && supported(b, registry)
                 }
                 Condition::Fold(f) => {
-                    ["+", "sum", "min", "max"].contains(&f.reducer.as_str())
-                        && supported(&f.extract)
-                        && f.seed.as_ref().is_none_or(supported)
+                    (["+", "sum", "min", "max"].contains(&f.reducer.as_str())
+                        || registry
+                            .and_then(|r| r.get(crate::intern::intern(&f.reducer)))
+                            .is_some_and(|f| f.signature().arity.accepts(2)))
+                        && supported(&f.extract, registry)
+                        && f.seed.as_ref().is_none_or(|e| supported(e, registry))
                 }
             };
             if !valid {
@@ -295,7 +323,7 @@ fn schedule(p: &Program) -> Result<Vec<usize>> {
     }
     Err("aggregate dependency cycle".into())
 }
-fn expression(e: &Expression, env: &Env) -> Result<i64> {
+fn expression(e: &Expression, env: &Env, registry: Option<&FunctionRegistry>) -> Result<i64> {
     match e {
         Expression::Term(t) => match t {
             Term::Integer(n) => Ok(*n),
@@ -305,10 +333,14 @@ fn expression(e: &Expression, env: &Env) -> Result<i64> {
             },
             _ => Err("noninteger expression".into()),
         },
+        Expression::ExternalCall(_, _) => match value(e, env, registry)? {
+            Term::Integer(n) => Ok(n),
+            _ => Err("noninteger aggregate expression".into()),
+        },
         Expression::Call(name, args) => {
             let values = args
                 .iter()
-                .map(|a| expression(a, env))
+                .map(|a| expression(a, env, registry))
                 .collect::<Result<Vec<_>>>()?;
             let value = match (name.as_str(), values.as_slice()) {
                 ("+", _) => values.iter().try_fold(0_i64, |a, b| a.checked_add(*b)),
@@ -322,8 +354,47 @@ fn expression(e: &Expression, env: &Env) -> Result<i64> {
         }
     }
 }
-fn fold(f: &Fold, env: &Env, rows: &[Pattern], domain: &[Term]) -> Result<Option<i64>> {
-    let mut value = f.seed.as_ref().map(|e| expression(e, env)).transpose()?;
+fn value(e: &Expression, env: &Env, registry: Option<&FunctionRegistry>) -> Result<Term> {
+    match e {
+        Expression::Term(Term::Variable(v)) => env
+            .get(v)
+            .cloned()
+            .ok_or_else(|| "unbound expression".into()),
+        Expression::Term(t) => Ok(t.clone()),
+        Expression::ExternalCall(name, args) => {
+            let f = registry
+                .and_then(|r| r.get(crate::intern::intern(name)))
+                .ok_or("unknown extension function")?;
+            if !f.signature().arity.accepts(args.len()) {
+                return Err("extension argument count mismatch".into());
+            }
+            let args = args
+                .iter()
+                .map(|a| value(a, env, registry).map(|v| source::runtime_term(&v)))
+                .collect::<Result<Vec<_>>>()?;
+            let result = f.eval(&args).map_err(|e| e.to_string())?;
+            let value = source::term(&result)?;
+            if matches!(value, Term::Variable(_)) {
+                return Err("extension returned a nonground aggregate value".into());
+            }
+            Ok(value)
+        }
+        Expression::Call(_, _) => expression(e, env, registry).map(Term::Integer),
+    }
+}
+
+fn fold(
+    f: &Fold,
+    env: &Env,
+    rows: &[Pattern],
+    domain: Option<&[Term]>,
+    registry: Option<&FunctionRegistry>,
+) -> Result<Option<i64>> {
+    let mut value = f
+        .seed
+        .as_ref()
+        .map(|e| expression(e, env, registry))
+        .transpose()?;
     for row in rows.iter().collect::<BTreeSet<_>>() {
         if key(row) != key(&f.pattern) || row.negation != f.pattern.negation {
             continue;
@@ -352,28 +423,49 @@ fn fold(f: &Fold, env: &Env, rows: &[Pattern], domain: &[Term]) -> Result<Option
         if !matched {
             continue;
         }
-        let n = expression(&f.extract, &local)?;
+        let n = expression(&f.extract, &local, registry)?;
         value = Some(match value {
             None => n,
             Some(a) => match f.reducer.as_str() {
                 "+" | "sum" => a.checked_add(n).ok_or("integer overflow")?,
                 "min" => a.min(n),
                 "max" => a.max(n),
-                _ => return Err("unsupported reducer".into()),
+                name => {
+                    let fun = registry
+                        .and_then(|r| r.get(crate::intern::intern(name)))
+                        .ok_or("unsupported reducer")?;
+                    if !fun.signature().arity.accepts(2) {
+                        return Err("aggregate reducer must accept two arguments".into());
+                    }
+                    match fun
+                        .eval(&[crate::term::Term::Integer(a), crate::term::Term::Integer(n)])
+                        .map_err(|e| e.to_string())?
+                    {
+                        crate::term::Term::Integer(n) => n,
+                        _ => return Err("aggregate reducer must return an integer".into()),
+                    }
+                }
             },
         });
     }
-    if value.is_some_and(|n| !domain.contains(&Term::Integer(n))) {
+    if value.is_some_and(|n| domain.is_some_and(|d| !d.contains(&Term::Integer(n)))) {
         return Err("aggregate result outside domain".into());
     }
     Ok(value)
 }
-fn check(c: &Condition, env: &Env, rows: &[Pattern], domain: &[Term]) -> Result<bool> {
+fn check(
+    c: &Condition,
+    env: &Env,
+    rows: &[Pattern],
+    domain: &[Term],
+    registry: Option<&FunctionRegistry>,
+) -> Result<bool> {
     Ok(match c {
         Condition::Logic(_) => true,
-        Condition::Bind(v, e) => env.get(v) == Some(&Term::Integer(expression(e, env)?)),
+        Condition::Bind(v, e) => env.get(v) == Some(&Term::Integer(expression(e, env, registry)?)),
+        Condition::BindValue(v, e) => env.get(v) == Some(&value(e, env, registry)?),
         Condition::Compare(op, a, b) => {
-            let (a, b) = (expression(a, env)?, expression(b, env)?);
+            let (a, b) = (expression(a, env, registry)?, expression(b, env, registry)?);
             match op.as_str() {
                 "=" => a == b,
                 "!=" => a != b,
@@ -384,7 +476,7 @@ fn check(c: &Condition, env: &Env, rows: &[Pattern], domain: &[Term]) -> Result<
                 _ => return Err("unsupported comparison".into()),
             }
         }
-        Condition::Fold(f) => fold(f, env, rows, domain)?
+        Condition::Fold(f) => fold(f, env, rows, Some(domain), registry)?
             .is_some_and(|n| env.get(&f.result_var) == Some(&Term::Integer(n))),
     })
 }
@@ -443,14 +535,30 @@ fn observations(table: &[Pattern], theory: &Theory) -> Result<Vec<Observation>> 
 /// Uses defeasible snapshot evidence for aggregate premises. Errors are returned
 /// for unsupported syntax, cycles, integer overflow, or values outside the domain.
 /// Domain enumeration is exponential in the number of outer variables; callers
-/// should use small finite inputs. No parser, modal, or temporal semantics are implied.
+/// should use small finite inputs. Use normal `pipeline::prepare` for SPL input.
+/// Registered functions and general value binds require the source bridge; this
+/// reference entry point retains the verified integer-expression restrictions.
 pub fn evaluate(program: &Program, domain: &[Term]) -> Result<Evaluation> {
-    validate(program, domain)?;
+    evaluate_registered(program, domain, None, usize::MAX)
+}
+
+fn evaluate_registered(
+    program: &Program,
+    domain: &[Term],
+    registry: Option<&FunctionRegistry>,
+    limit: usize,
+) -> Result<Evaluation> {
+    validate(program, domain, registry)?;
+    let mut budget = limit;
     let stages = schedule(program)?;
     let stage_count = stages.iter().copied().max().unwrap_or(0) + 1;
     let mut table = BTreeSet::new();
     for p in program.rules.iter().flat_map(patterns) {
-        for env in assignments(&vars(p).into_iter().collect::<Vec<_>>(), domain) {
+        for env in assignments(
+            &vars(p).into_iter().collect::<Vec<_>>(),
+            domain,
+            &mut budget,
+        )? {
             let mut atom = apply(p, &env);
             atom.negation = false;
             table.insert(atom);
@@ -471,12 +579,15 @@ pub fn evaluate(program: &Program, domain: &[Term]) -> Result<Evaluation> {
             .enumerate()
             .filter(|(i, _)| stages[*i] == stage)
         {
-            for (j, env) in assignments(&scope(r), domain).into_iter().enumerate() {
+            for (j, env) in assignments(&scope(r), domain, &mut budget)?
+                .into_iter()
+                .enumerate()
+            {
                 // Evaluate every condition: a false guard cannot hide a later error.
                 let checks = r
                     .body
                     .iter()
-                    .map(|c| check(c, &env, &rows, domain))
+                    .map(|c| check(c, &env, &rows, domain, registry))
                     .collect::<Result<Vec<_>>>()?;
                 if !checks.into_iter().all(|b| b) {
                     continue;
@@ -525,5 +636,6 @@ pub fn evaluate(program: &Program, domain: &[Term]) -> Result<Evaluation> {
         conclusions: observations(&table, &theory)?,
         stage_count,
         theory,
+        table,
     })
 }

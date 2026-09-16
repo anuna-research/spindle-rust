@@ -28,18 +28,18 @@ This project is part of the SPINdle family:
 - **First-Order Variables**: Datalog-style grounding with `?x` variable syntax
 
 - **Arithmetic Expressions**: Numeric computation in rule bodies
-  - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`
+  - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`, `round`, `floor`, `ceil`
   - Variable binding: `(bind ?total (+ ?price ?tax))`
   - Comparison guards: `(> ?age 18)`, `(<= ?score 100)`
   - Three numeric types: Integer, Decimal (arbitrary-precision), Float
   - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
 
-- **Finite-Domain Aggregation (typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
+- **Finite-Domain Aggregation (SPL, CLI, and typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
   - Distinct rows contribute once; equal values from different rows contribute separately
   - Stratification, grouping, source priorities, and multiple heads
   - Defeasible snapshot evidence prevents automatic `+D` from aggregate premises
-  - Lean proofs and differential tests, with a documented ordinary-backend discrepancy
-  - Available through `spindle_core::aggregation`; SPL/CLI aggregate syntax is not integrated
+  - Lean aggregate lowering proofs and mandatory Lean/Rust differential agreement
+  - Use `(agg ?total sum ?value (amount ?value))`
 
 - **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
   - First-class declarations: `(predicate assign-to ((task symbol) (agent symbol)))`
@@ -149,9 +149,34 @@ use spindle_core::reason::reason;
 let conclusions = reason(&theory);
 ```
 
-## Finite-Domain Aggregation
+## Predicate Aggregation
 
-Use [`spindle_core::aggregation::evaluate`](crates/spindle-core/src/aggregation.rs)
+```lisp
+(given (amount 10))
+(given (amount 20))
+(normally total
+  (agg ?sum sum ?value (amount ?value))
+  (total ?sum))
+```
+
+Run `spindle reason examples/aggregation.spl --json` for a grouped example.
+Strata are inferred automatically; aggregates read completed earlier conclusions.
+The named aggregators define their empty-input behavior: `sum` and `count` return
+zero, while `min-of` and `max-of` require at least one row. `agg` directly binds
+its output variable; no `bind` wrapper is needed. The explicit `fold` form remains
+available for custom extractions and seeds.
+
+Input rows are ordinary predicates in the theory, including derived conclusions.
+Computed results are bound directly: the example produces `(total 30)` without
+listing `30` anywhere. No `aggregate-domain` declaration is required. Each `agg`
+accepts one row pattern; use a helper relation for joins and filters.
+
+The SPL bridge supports integer/symbol predicate instances. Modal, temporal,
+trust-weighted, wildcard, decimal, and floating-point aggregate programs are
+rejected. Aggregate enumeration uses the configured grounding instance budget
+and returns an error on exhaustion. See [the syntax and extension guide](docs/aggregation-extensions.md).
+
+For the typed reference API, use [`spindle_core::aggregation::evaluate`](crates/spindle-core/src/aggregation.rs)
 with a typed `Program` and an explicit domain of integer/symbol constants.
 `SchemaRule`, `Condition`, `Fold`, and `Pattern` describe the source program;
 the result contains structured user conclusions with all four proof tags.
@@ -163,15 +188,31 @@ snapshot evidence. It can therefore support `+d` without automatically granting
 `+D`. An independent definite proof of the same head can still grant `+D`.
 
 The [aggregation guide](lean/AGGREGATION.md) explains the semantics, proofs,
-finite-domain restrictions, and Rust integration. The
+verification boundaries, and Rust integration. The
 [differential fixtures](crates/spindle-core/tests/lean_aggregation_oracle_difftest.rs)
 provide executable examples of grouping, chained folds, and priorities.
 
-**Verification boundary:** the aggregate Lean proofs use a three-phase ordinary
-reasoner, while Rust uses constructive defeat-discard. A pinned counterexample
-produces `count(q) = 0` in Lean and `count(q) = 1` in Rust. The agreement suite
-and this known discrepancy are tested separately; general Rust conformance is
-not yet proved. See [the backend analysis](lean/DIVERGENCES.md).
+The default reasoner uses traditional ambiguity-blocking **DL(∂)**. Negative
+tags require constructive proofs: an unsupported cycle can remain undecided.
+Every definite proof also gives a defeasible proof, including conflicting facts.
+See the [formal semantics](specs/DEFEASIBLE-LOGIC-SEMANTICS.md).
+
+**Verification boundary:** aggregate proofs and the oracle use the same four
+constructive DL(∂) proof conditions. The regression where a defeated
+premise disables an attacker now requires `count(q) = 1` in both Lean and Rust.
+Differential tests require equality of every reported tag. This is executable
+conformance evidence for the tested fragment, not a proof of the Rust implementation;
+checked integer overflow and host extension functions remain outside the Lean model.
+
+## Extension Functions
+
+Builtins and host-registered pure functions use the same `FunctionRegistry`.
+Pass a registry through `PrepareOptions::function_registry` to use expressions
+such as `(bind ?day (day-of-week ?date))`. Calls receive and return `Term` values,
+including symbols; arithmetic functions enforce numeric argument types.
+Registered functions can also compute fold contributions. The CLI includes the
+builtin prelude; custom Rust functions are registered by embedding applications.
+See [registration and verification boundaries](docs/aggregation-extensions.md).
 
 ## WebAssembly Usage
 

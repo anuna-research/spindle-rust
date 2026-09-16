@@ -1,0 +1,37 @@
+; Run: cargo run -p spindle-cli -- reason examples/aggregation.spl
+;
+; Aggregates read predicate instances, including conclusions of earlier rules.
+; Computed totals are bound directly; no domain declaration is needed.
+
+(given (person alice))
+(given (person bob))
+(given (purchase alice 1 10))
+(given (purchase alice 2 10))
+
+(normally eligible-payment
+  (purchase ?person ?id ?cost)
+  (payment ?person ?id ?cost))
+
+; ?person is outer scope; ?id and ?cost are local to each matching row.
+(normally payment-total
+  (and
+    (person ?person)
+    (agg ?total sum ?cost
+      (payment ?person ?id ?cost)))
+  (total-payment ?person ?total))
+
+; alice has total 20; bob has total 0. Both use defeasible snapshot evidence.
+
+; Named aggregators also supply their own empty-input behavior.
+(normally payment-count
+  (and
+    (person ?person)
+    (agg ?count count ?id (payment ?person ?id ?cost)))
+  (number-of-payments ?person ?count))
+
+; No minimum is derived for bob: min-of requires at least one row.
+(normally smallest-payment
+  (and
+    (person ?person)
+    (agg ?smallest min-of ?cost (payment ?person ?id ?cost)))
+  (smallest-payment ?person ?smallest))
