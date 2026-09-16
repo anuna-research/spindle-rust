@@ -42,6 +42,7 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod aggregation;
 pub mod analysis;
 pub mod arith;
 pub mod body;

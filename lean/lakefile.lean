@@ -50,3 +50,7 @@ lean_exe EndToEndOracle where
 lean_exe TrustOracle where
   root := `Spindle.DiffTest.TrustOracle
   supportInterpreter := true
+
+lean_exe AggregationOracle where
+  root := `Spindle.DiffTest.AggregationOracle
+  supportInterpreter := true

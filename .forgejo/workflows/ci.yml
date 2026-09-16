@@ -90,3 +90,38 @@ jobs:
         with:
           name: spindle-wasm
           path: crates/spindle-wasm/pkg/
+
+  lean-oracle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+
+      - name: Install Rust
+        uses: https://github.com/dtolnay/rust-toolchain@1.88.0
+
+      - name: Install Lean build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends clang lld libgmp-dev unzip zstd
+
+      - name: Install elan
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Lean artifacts
+        uses: https://github.com/actions/cache@v4
+        with:
+          path: lean/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json', 'lean/**/*.lean') }}
+          restore-keys: ${{ runner.os }}-lean-
+
+      - name: Fetch Mathlib artifacts
+        working-directory: lean
+        run: lake exe cache get
+
+      - name: Verify Lean proofs and build oracles
+        run: scripts/check-lean-verification.sh
+
+      - name: Compare Rust aggregation with Lean
+        run: cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture

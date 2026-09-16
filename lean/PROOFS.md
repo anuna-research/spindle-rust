@@ -21,6 +21,27 @@ This directory contains a complete formal verification of the Spindle defeasible
 
 ## What Is Proven
 
+### Aggregation contract
+
+The [aggregation formalisation](AGGREGATION.md) proves order independence for
+lawful reducers, whole-row deduplication, stratum path bounds, aggregate-cycle
+exclusion, and frozen-view stability. Schema dependency extraction and automatic
+inference are sound and complete for the defined scheduling constraints; inference
+returns the least assignment independently of edge ordering.
+
+The checked driver preserves earlier tagged conclusions. The finite ground
+backend supplies actual fixed points for all three reasoning phases. Scheduled
+prefixes are proved equivalent to full-theory delta/lambda/partial reasoning,
+and published batches agree exactly, including negative tags for body-only
+literals. Later lowering preserves completed lower-domain reasoning.
+
+The executable finite-domain schema lowerer connects inference, grounding,
+integer folds, and scheduled execution. `evaluateProgram_correct` proves that
+its accumulated conclusions have exactly the same tagged membership as a full
+run over its final lowered theory. Aggregate evidence is an explicit policy:
+a fresh defeasible guard, or rejection of aggregate-bearing strict rules.
+Rust conformance and broader aggregate grounding completeness remain open.
+
 ### Core Properties of DL(d) Reasoning
 
 These proofs establish that the three-phase closure algorithm (delta → lambda → partial) correctly implements the DL(d) defeasible logic framework from Billington, Antoniou, Governatori, and Maher.
@@ -465,7 +486,7 @@ Spindle/DiffTest/
 The proofs make the following explicit assumptions (as theorem hypotheses, not axioms):
 
 - **`Theory.WellFormed`**: Fact rules have empty bodies (enforced by the `Rule.fact` constructor in practice).
-- **`t.allLiterals.length ≤ 1000`**: Theories have at most 1000 distinct literals (the hardcoded fuel bound). This is a practical bound, not a fundamental limitation.
+- **Finite ground theory**: closure fuel is derived from `t.allLiterals.length + 1`; convergence and fixed-point results need no hardcoded theory-size bound.
 - **`w ≠ l`** in `addSuperiority_preserves_acyclic`: Self-loops are excluded (they trivially create cycles).
 - **`0 < dom.length`** in `herbrandBase_finite`: The domain is nonempty (empty domains make the bound vacuously wrong due to 0^0 = 1).
 

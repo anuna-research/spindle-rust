@@ -1,122 +1,101 @@
 # SpindleLean
 
-Formal verification of the Spindle defeasible logic reasoning engine in Lean 4.
+Lean models, proofs, and executable differential-test oracles for Spindle.
 
-This project provides a Lean 4 model of the DL(d||) three-phase closure algorithm
-implemented in `spindle-core`, along with correctness proofs and a JSON oracle
-for differential testing against the Rust implementation.
+There are two ordinary reasoning models. The three-phase delta/lambda/partial
+model carries the core property proofs and the aggregate lowering proofs. The
+constructive two-sided model captures Rust's defeat-discard behavior and is used
+by the SDL/family differential suites. These models have a documented difference
+that also affects aggregate snapshots; see [DIVERGENCES.md](DIVERGENCES.md) and
+[AGGREGATION.md](AGGREGATION.md). The proofs do not establish whole-language Rust
+conformance.
 
-## Requirements
+## Requirements and verification
 
-- [elan](https://github.com/leanprover/elan) (Lean toolchain manager)
-- Lean 4.27.0 (installed automatically via `lean-toolchain`)
-- Mathlib 4.27.0 (fetched by Lake)
+- [elan](https://github.com/leanprover/elan), the Lean toolchain manager
+- Lean 4.27.0, pinned in `lean-toolchain`
+- Mathlib v4.27.0, pinned by Lake
+- A C toolchain for oracle executables
 
-## Building
+From the repository root:
 
-```bash
-lake build          # Build library + executable (~480 jobs, first build fetches Mathlib)
-lake exe spindlelean           # Run Tweety Triangle test
-echo '...' | lake exe spindlelean --oracle  # Run JSON oracle mode
+```sh
+scripts/check-lean-verification.sh
 ```
 
-## Module Structure
+The gate builds the default libraries and all oracle executables with warnings
+as errors, rejects admitted proofs and local axioms, runs the vacuity checks,
+and audits theorem dependencies against Lean's standard axiom whitelist.
+The checked sources contain no admitted proofs. See [PROOFS.md](PROOFS.md) for
+individual theorem statements and their hypotheses.
 
-### Core Types
+For development, from `lean/`:
 
-| Module | Description |
-|--------|-------------|
-| `Basic.lean` | `Literal`, `Mode`, complement, `BEq`/`DecidableEq`/`LawfulBEq` instances |
-| `Rule.lean` | `RuleType` (fact/strict/defeasible/defeater), `Rule`, `isDefinite`, `isProductive`, `bodySatisfied` |
-| `Theory.lean` | `Theory` (rules + superiority), `addRule`, `addSuperiority`, `isSuperior`, `allLiterals` |
-
-### Closures
-
-| Module | Description |
-|--------|-------------|
-| `Closure/Delta.lean` | Delta closure: definite provability via facts and strict rules (+D) |
-| `Closure/Lambda.lean` | Lambda closure: over-approximation including defeasible rules |
-| `Closure/Partial.lean` | Partial closure: defeasible provability with conflict resolution (+d) |
-
-All closures use fuel-based iteration (default 1000) with fixpoint detection via length check.
-Step functions use `List.dedup` (from Mathlib) to maintain set semantics.
-
-### Reasoning
-
-| Module | Description |
-|--------|-------------|
-| `Reason.lean` | Top-level `reason` function: computes delta, lambda, partial closures and derives `+D`, `-D`, `+d`, `-d` conclusions |
-
-### Properties (Proofs)
-
-| Module | Sorry Count | Description |
-|--------|-------------|-------------|
-| `Soundness.lean` | 0 | Delta soundness: every `+D` literal has a supporting definite rule. Ambiguity blocking: conflicting rules with no superiority block both conclusions. |
-| `Subset.lean` | 0 | Closure containment chain: delta ⊆ partial ⊆ lambda |
-| `Acyclicity.lean` | 1 | Superiority acyclicity preserved through `addSuperiority` |
-| `Termination.lean` | 5 | Step functions stay within theory universe; convergence bounds |
-| `Confluence.lean` | 6 | Step function monotonicity and extensiveness; fixpoint stability and uniqueness |
-| `Equivalence.lean` | 1 | Three-phase decomposition faithfully computes DL(d) semantics; soundness of `+D` and `+d` |
-| `Faithfulness.lean` | 4 | Correspondence to paper DL(d) inference conditions; ambiguity blocking faithfulness (proven) |
-
-### Differential Testing
-
-| Module | Description |
-|--------|-------------|
-| `DiffTest/Oracle.lean` | JSON oracle: parses theory from stdin, runs reasoning, outputs conclusions as JSON |
-| `Main.lean` | Executable entry point: `--oracle` flag for oracle mode, default runs Tweety Triangle test |
-
-## Oracle Protocol
-
-The oracle reads a JSON theory from stdin and writes JSON conclusions to stdout.
-
-**Input format:**
-
-```json
-{
-  "rules": [
-    {"label": "f1", "type": "fact", "body": [], "head": {"name": "p", "negated": false}},
-    {"label": "r1", "type": "defeasible",
-     "body": [{"name": "p", "negated": false}],
-     "head": {"name": "q", "negated": false}}
-  ],
-  "superiority": [["r2", "r1"]]
-}
+```sh
+lake build                  # Libraries and axiom audit
+lake build AggregationOracle
+lake exe spindlelean        # Default example
 ```
 
-**Output format:**
+`lake exe cache get` fetches Mathlib build artifacts on a fresh checkout.
 
-```json
-{
-  "delta": [{"name": "p", "negated": false, "mode": null}],
-  "lambda": [...],
-  "partial": [...],
-  "conclusions": [
-    {"literal": {"name": "p", "negated": false, "mode": null}, "type": "+D"},
-    {"literal": {"name": "p", "negated": false, "mode": null}, "type": "+d"}
-  ]
-}
+## Models and proof modules
+
+| Location | Purpose |
+| --- | --- |
+| `SpindleLean/Basic.lean`, `Rule.lean`, `Theory.lean` | Ordinary literals, rules, priorities, and finite literal universe |
+| `SpindleLean/Closure/` | Three-phase delta, lambda, and partial closures |
+| `SpindleLean/Properties/` | Soundness, conditional consistency/containment, finite convergence, and related properties |
+| `SpindleLean/FamilyTwoSided.lean` | Constructive two-sided reasoning with family-aware defeat-discard |
+| `Spindle/Arith/` | Grounding, arithmetic, temporal, and query models |
+| `Spindle/Aggregation/` | Source aggregate semantics, stratum inference, lowering correctness, and completed-prefix equivalence |
+| `AxiomAudit.lean` | Dependency audit of the principal results |
+
+The ordinary closure iteration budget is derived from the finite literal
+universe (`allLiterals.length + 1`); it is not a fixed 1,000-step limit.
+Containment and faithfulness results carry their stated consistency or other
+hypotheses. The aggregation guide describes the supported fragment in detail.
+
+## Aggregation oracle
+
+`AggregationOracle` invokes the verified `evaluateProgram` entry point with
+**defeasible snapshot evidence** as the default policy. It accepts typed JSON
+schemas and an explicit finite domain, then returns the inferred stage count
+and all four proof tags for structured user atoms. Internal closure guards are
+omitted; errors remain per-case results in a batch.
+
+The wire format and executable inputs are defined by
+[AggregationOracle.lean](Spindle/DiffTest/AggregationOracle.lean) and the
+[Rust differential fixtures](../crates/spindle-core/tests/lean_aggregation_oracle_difftest.rs).
+This adapter is test infrastructure, not a verified SPL parser.
+
+From the repository root:
+
+```sh
+(cd lean && lake build AggregationOracle)
+cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
 ```
 
-## Rust Integration
+The suite contains 86 deterministic agreement cases and a separate regression
+that pins the exact known ordinary-backend discrepancy. In that counterexample,
+Rust derives `q` after discarding a defeated attacker and counts one row; the
+three-phase aggregate model counts zero. That regression is not counted as a
+conformance success. Rust uses checked i64 arithmetic; Lean aggregates use exact
+Int, so agreement cases stay within safe arithmetic bounds.
 
-The Lean oracle is tested against the Rust `reason_scalable()` implementation:
+## Other differential suites
 
-```bash
-# From the workspace root
-cargo test --package spindle-core --test difftest              # proptest (500 random theories)
-cargo test --package spindle-core --test lean_oracle_difftest -- --ignored  # Lean oracle comparison
+Build their executables through the full verification script, then run the
+external-oracle tests explicitly:
+
+```sh
+cargo test -p spindle-core --test lean_sdl_exhaustive_difftest -- --ignored
+cargo test -p spindle-core --test lean_family_exhaustive_difftest -- --ignored
+cargo test -p spindle-core --test lean_arith_oracle_difftest -- --ignored
+cargo test -p spindle-core --test lean_grounding_oracle_difftest -- --ignored
+cargo test -p spindle-core --test lean_trust_oracle_difftest -- --ignored
 ```
 
-CI is configured in `.github/workflows/diff-test.yml`.
-
-## Proof Status
-
-**Fully proven (0 sorry):** Soundness, Subset chain
-
-**Partially proven:** Acyclicity (1), Termination (5), Confluence (6), Equivalence (1), Faithfulness (4)
-
-The remaining `sorry` placeholders are primarily in:
-- Convergence bounds (requiring finiteness arguments over `allLiterals`)
-- Monotonicity of `bodySatisfied` (requiring `List.contains` / `Bool` manipulation)
-- Completeness directions (requiring fixpoint characterization)
+[Forgejo CI](../.forgejo/workflows/ci.yml) runs the proof gate and aggregate
+comparison. [Woodpecker CI](../.woodpecker/ci.yaml) additionally lists the other
+oracle suites.

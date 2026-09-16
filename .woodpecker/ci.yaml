@@ -64,6 +64,7 @@ steps:
       - cargo test --package spindle-core --test lean_sdl_exhaustive_difftest -- --ignored
       - cargo test --package spindle-core --test lean_family_exhaustive_difftest -- --ignored
       - cargo test --package spindle-core --test lean_trust_oracle_difftest -- --ignored
+      - cargo test --package spindle-core --test lean_aggregation_oracle_difftest -- --ignored
       - cargo test --package spindle-core --test spl_parser_difftest -- --ignored
     # Conformance compares the RUST engine against the Lean model, so it must
     # run when EITHER side changes — not just on lean/** edits. The parser

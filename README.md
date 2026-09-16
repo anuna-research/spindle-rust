@@ -34,6 +34,13 @@ This project is part of the SPINdle family:
   - Three numeric types: Integer, Decimal (arbitrary-precision), Float
   - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
 
+- **Finite-Domain Aggregation (typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
+  - Distinct rows contribute once; equal values from different rows contribute separately
+  - Stratification, grouping, source priorities, and multiple heads
+  - Defeasible snapshot evidence prevents automatic `+D` from aggregate premises
+  - Lean proofs and differential tests, with a documented ordinary-backend discrepancy
+  - Available through `spindle_core::aggregation`; SPL/CLI aggregate syntax is not integrated
+
 - **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
   - First-class declarations: `(predicate assign-to ((task symbol) (agent symbol)))`
   - Structured metadata targets: `(meta (predicate assign-to 2) (description "..."))`
@@ -142,6 +149,30 @@ use spindle_core::reason::reason;
 let conclusions = reason(&theory);
 ```
 
+## Finite-Domain Aggregation
+
+Use [`spindle_core::aggregation::evaluate`](crates/spindle-core/src/aggregation.rs)
+with a typed `Program` and an explicit domain of integer/symbol constants.
+`SchemaRule`, `Condition`, `Fold`, and `Pattern` describe the source program;
+the result contains structured user conclusions with all four proof tags.
+The domain must include aggregate results. Rust integer arithmetic is checked
+and reports overflow as an error.
+
+A strict aggregate rule remains strict, but its aggregate premise uses defeasible
+snapshot evidence. It can therefore support `+d` without automatically granting
+`+D`. An independent definite proof of the same head can still grant `+D`.
+
+The [aggregation guide](lean/AGGREGATION.md) explains the semantics, proofs,
+finite-domain restrictions, and Rust integration. The
+[differential fixtures](crates/spindle-core/tests/lean_aggregation_oracle_difftest.rs)
+provide executable examples of grouping, chained folds, and priorities.
+
+**Verification boundary:** the aggregate Lean proofs use a three-phase ordinary
+reasoner, while Rust uses constructive defeat-discard. A pinned counterexample
+produces `count(q) = 0` in Lean and `count(q) = 1` in Rust. The agreement suite
+and this known discrepancy are tested separately; general Rust conformance is
+not yet proved. See [the backend analysis](lean/DIVERGENCES.md).
+
 ## WebAssembly Usage
 
 Build the WASM package:
@@ -205,6 +236,7 @@ const abduce = spindle.abduce("flies", 3);
   - `query/` - Query operators with `QueryOperator` trait (what-if, why-not, abduction)
   - `explanation/` - Proof trees with `ExplanationFormatter` trait (natural language, JSON, JSON-LD, DOT)
   - `analysis/` - Theory analysis (conflicts, validation, superiority suggestions)
+  - `aggregation` - Typed finite-domain aggregate lowering and snapshot evaluation
   - `arith` - Arithmetic expression AST, evaluation, and type promotion
   - `body` - Body literals with arithmetic constraints (`BodyLiteral`, `BodyArg`)
   - `term` - Typed term values (`Symbol`, `Integer`, `Decimal`, `Float`)
@@ -219,7 +251,7 @@ const abduce = spindle.abduce("flies", 3);
 
 ## Testing
 
-1,500+ tests covering:
+The workspace test suite covers:
 - Core reasoning (facts, rules, conflicts, superiority)
 - Arithmetic expressions, type promotion, and numeric evaluation
 - Edge cases (cycles, empty theories, defeaters)
@@ -231,8 +263,22 @@ const abduce = spindle.abduce("flies", 3);
 - Golden explanation tests
 
 ```bash
-cargo test
+make test
+make check
 ```
+
+To check the Lean proofs and run the aggregate differential suite (requires
+[elan](https://github.com/leanprover/elan)):
+
+```bash
+scripts/check-lean-verification.sh
+cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
+```
+
+The verification script builds `AggregationOracle`. Missing oracle binaries fail
+the explicit differential run; ordinary Cargo runs skip the external-oracle tests.
+Forgejo CI runs the proof gate and aggregate differential suite in its `lean-oracle`
+job. See [lean/README.md](lean/README.md) for the other oracles.
 
 ## Documentation
 
