@@ -146,8 +146,12 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Documentation examples now use complementary defeater heads and defeasible
   defaults correctly. Temporal documentation describes current interval variables,
   Allen constraints, and family matching instead of the removed bridge stage.
-- Explanations resolve grounded rule labels to source templates, and `why_not`
-  inspects grounded rules so variable-headed rules report actual blockers.
+- **Explanation witnesses**: explanations on original quantified theories now
+  use actual grounded rule instances, preserving consistent variable bindings
+  across the conclusion and every premise. Incomplete derivations return no
+  proof tree instead of a partial justification
+  ([#37](https://git.anuna.io/anuna-research/spindle-rust/issues/37)).
+- `why_not` inspects grounded rules so variable-headed rules report actual blockers.
   Superiority checks use template labels, and defeated rules are no longer
   projected as supporting proofs.
 - `what_if` deduplicates new conclusions proven at both positive tags while
