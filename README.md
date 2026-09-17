@@ -323,11 +323,23 @@ job. See [lean/README.md](lean/README.md) for the other oracles.
 
 ## Documentation
 
-Full documentation is available at [docs/](docs/) or build locally:
+Full documentation is available at [docs/](docs/).
+Local documentation builds use the mdBook version pinned in `.forgejo/workflows/docs.yml`.
+From the repository root, serve the book locally:
 
 ```bash
 cd docs && mdbook serve
 ```
+
+Forgejo builds the book for pull requests that change its sources, configuration,
+theme, included `CHANGELOG.md`, or documentation workflow.
+After those changes reach `main`, it deploys to [spindle-rust.anuna.io](https://spindle-rust.anuna.io)
+through the Cloudflare Pages project `spindle-docs`.
+Generated `docs/book/` files and review notes do not trigger deployment.
+
+The workflow uses Actions secrets `CF_API_TOKEN` (Cloudflare Pages write access)
+and `CF_ACCOUNT_ID`. The token needs access to the account containing `spindle-docs`.
+A manual run on `main` can retry deployment without a content change.
 
 ## References
 
