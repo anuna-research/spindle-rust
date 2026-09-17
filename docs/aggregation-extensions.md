@@ -5,7 +5,7 @@ SPL uses a direct output-binding aggregate premise, following Skein:
 combining operation and empty-input behavior. Ordinary calculations still use
 `bind`. Both use the extension registry introduced by PRs #26 and #27.
 
-```lisp
+```spl
 (given (person alice))
 (given (person bob))
 (given (payment alice 1 10))
@@ -82,7 +82,7 @@ increasing stage count adds rules and intermediate outputs.
 
 ## Syntax and scope
 
-```lisp
+```spl
 (agg ?total sum ?amount (payment ?person ?id ?amount))
 (agg ?number count ?id (payment ?person ?id ?amount))
 (agg ?smallest min-of ?amount (payment ?person ?id ?amount))
@@ -132,7 +132,7 @@ inputs must have a binding source. Unsafe variables are preparation errors.
 
 Inputs can be derived predicates. For example:
 
-```lisp
+```spl
 (given (purchase alice first 30))
 (given (purchase alice second 45))
 (normally eligible
@@ -187,7 +187,7 @@ including symbols, and must be pure and deterministic. They have no theory-query
 argument. The CLI ships the builtin prelude; this is an embedding API, not a
 runtime plugin loader.
 
-```lisp
+```spl
 (bind ?day (day-of-week ?date))
 (bind ?total
   (fold + (adjust-cost ?cost)
