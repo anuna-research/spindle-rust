@@ -315,6 +315,12 @@ impl Literal {
         self.name_id.symbol_id()
     }
 
+    /// Return functor and arity, excluding argument values, negation, mode,
+    /// and temporal bounds.
+    pub fn predicate_key(&self) -> crate::predicate::PredicateKey {
+        crate::predicate::PredicateKey::new(self.name_id(), self.predicate_args().len())
+    }
+
     /// Get predicates as strings (for display/serialization).
     ///
     /// Symbol terms are resolved to their interned string; non-symbol terms
