@@ -8,6 +8,11 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- **Predicate identity**: public `PredicateKey` and `predicate_key()` accessors
+  on `Literal` and `BodyLogicLiteral` expose functor plus arity, with diagnostic
+  `functor/arity` formatting. Argument values, negation, modality, and temporal
+  bounds are excluded; arithmetic body argument positions are counted. Arity
+  uses `usize` so construction and extraction are infallible (#33).
 - **Aggregation in SPL**: named `agg` premises (`sum`, `count`, `min-of`,
   `max-of`) and explicit `(bind ?result (fold ...))` expressions.
   - Aggregate over completed, positively proved predicates, including derived

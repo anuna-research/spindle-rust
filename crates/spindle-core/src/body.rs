@@ -191,6 +191,12 @@ impl BodyLogicLiteral {
         self.name_id.symbol_id()
     }
 
+    /// Return functor and arity, excluding argument values, negation, mode,
+    /// and temporal bounds. Arithmetic argument positions count toward arity.
+    pub fn predicate_key(&self) -> crate::predicate::PredicateKey {
+        crate::predicate::PredicateKey::new(self.name_id(), self.predicate_args().len())
+    }
+
     /// Get predicate arguments.
     #[inline]
     pub fn predicate_args(&self) -> &[BodyArg] {
