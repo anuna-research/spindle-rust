@@ -8,8 +8,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spindle-core = { git = "https://codeberg.org/anuna/spindle-rust", package = "spindle-core" }
-spindle-parser = { git = "https://codeberg.org/anuna/spindle-rust", package = "spindle-parser" }
+spindle-core = { git = "https://git.anuna.io/anuna-research/spindle-rust", package = "spindle-core" }
+spindle-parser = { git = "https://git.anuna.io/anuna-research/spindle-rust", package = "spindle-parser" }
 ```
 
 ## Basic Usage
@@ -65,7 +65,7 @@ let r1 = theory.add_defeasible_rule(&["bird"], "flies");
 let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
 
 // Defeaters
-theory.add_defeater(&["broken_wing"], "flies");
+theory.add_defeater(&["broken_wing"], "~flies");
 
 // Superiority
 theory.add_superiority(&r2, &r1);
@@ -177,7 +177,7 @@ let sym = Term::Symbol(intern("alice"));
 // Integer — a 64-bit signed integer
 let int = Term::Integer(42);
 
-// Decimal — an arbitrary-precision decimal (exact representation)
+// Decimal — an fixed-precision decimal (exact representation)
 let dec = Term::Decimal(Decimal::new(314, 2)); // 3.14
 
 // Float — a canonicalized finite IEEE 754 f64
@@ -737,3 +737,24 @@ let sym = parse_predicate_indicator("assign-to/2").unwrap();
 assert!(parse_predicate_indicator("rate/limit/2").is_err());        // ambiguous
 let quoted = parse_predicate_indicator("\"rate/limit\"/2").unwrap(); // ok
 ```
+
+## Extension registry and aggregate preparation
+
+`prepare()` supplies `FunctionRegistry::with_prelude()` and merges a host registry
+from `PrepareOptions::function_registry`. Implement `ExtensionFunction` with a
+`FunctionSignature` and `eval(&[Term]) -> Result<Term, EvalError>`, then register it
+using `registry.register(Box::new(function))`. Functions must be pure,
+deterministic, `Send + Sync`; they receive values, not theory access.
+
+`ArithExpr::Call { name, args }` represents both builtin and extension calls;
+`Value` supports general terms and `Fold` represents snapshot-aware aggregation.
+The former operator-specific AST variants are no longer the dispatch interface.
+
+Named aggregators live in a separate registry namespace. Use
+`register_aggregator(name, AggregatorDefinition { reducer, identity, count })`
+for custom definitions. The [aggregation guide](../guides/aggregation.md) describes
+reducer laws, preparation limits, and the Lean proof boundary.
+
+`Theory::metadata()` remains label-keyed. Use `predicate_metadata()` for the
+separate predicate store. Vocabulary DTOs preserve conflicting declarations and
+provenance; declaration origins are optional enrichment on coherent signatures.

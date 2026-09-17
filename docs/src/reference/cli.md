@@ -437,3 +437,18 @@ done
 ```bash
 SPINDLE_LOG=debug spindle reason theory.spl
 ```
+
+## Aggregate programs and query matching
+
+```sh
+spindle reason examples/aggregation.spl --json --v2
+spindle query '(total-payment alice 20)' examples/aggregation.spl
+```
+
+Aggregation uses the normal `reason` and `query` commands; no extra flag is
+required. The CLI supplies the builtin function prelude. Registering custom
+functions is a Rust embedding API, not a CLI plugin-loading facility.
+
+Bounded temporal goals match identical windows, including in `requires`.
+A containing window is not an exact match. Atemporal goals match any family
+member. See [Query Operators](../guides/queries.md).

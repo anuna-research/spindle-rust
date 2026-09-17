@@ -1,0 +1,616 @@
+{
+  "conclusions": [
+    {
+      "level": "defeasible",
+      "literal": "(not (verified allen-spl-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified defeater-direction-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified fact-default-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified interval-vars-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified stratified-negation-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified strict-head-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified temporal-base-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified temporal-bridge-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "(not (verified unknown-tags-old))",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted allen-spl-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted defeater-direction-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted fact-default-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted interval-vars-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted stratified-negation-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted strict-head-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted temporal-base-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted temporal-bridge-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "contradicted unknown-tags-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected allen-spl-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected defeater-direction-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected fact-default-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected interval-vars-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected stratified-negation-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected strict-head-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected temporal-base-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected temporal-bridge-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "corrected unknown-tags-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction allen-spl-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction defeater-direction-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction fact-default-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction interval-vars-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction stratified-negation-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction strict-head-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction temporal-base-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction temporal-bridge-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "needs-correction unknown-tags-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced aggregate-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced ambiguity-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced cycles-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced defeasible-default-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced defeater-direction-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced inconsistency-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "reproduced strong-negation-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved allen-spl-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved defeater-direction-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved fact-default-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved interval-vars-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved stratified-negation-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved strict-head-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved temporal-base-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved temporal-bridge-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "resolved unknown-tags-old",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported csiro-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported extension-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported lean-boundary-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported metadata-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported requires-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported trust-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "source-supported wasm-output-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported aggregate-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported ambiguity-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported csiro-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported cycles-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported defeasible-default-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported defeater-direction-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported extension-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported inconsistency-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported lean-boundary-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported metadata-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported requires-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported strong-negation-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported trust-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "definite",
+      "literal": "supported wasm-output-current",
+      "positive": true,
+      "proof_state": "definitely_provable",
+      "tag": "+D"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified aggregate-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified ambiguity-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified csiro-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified cycles-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified defeasible-default-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified defeater-direction-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified extension-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified inconsistency-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified lean-boundary-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified metadata-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified requires-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified strong-negation-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified trust-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    },
+    {
+      "level": "defeasible",
+      "literal": "verified wasm-output-current",
+      "positive": true,
+      "proof_state": "defeasibly_provable",
+      "tag": "+d"
+    }
+  ],
+  "proof_state_map": 1,
+  "theory": "848b38787eef85104e29905f63d65e97833c558aa9b6cf3851840617c399969e",
+  "v": 1
+}

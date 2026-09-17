@@ -304,3 +304,15 @@ When any of these occur during grounding, the substitution is discarded — the 
 | Invalid operand | Non-numeric, non-variable atom | `(+ bird 1)` |
 
 Parse-time errors halt processing and report the line number and a description of the problem.
+
+## Rounding, value bindings, and aggregates
+
+The builtin prelude includes `(round value decimal-places)` with half-to-even
+rounding, `(floor value)`, and `(ceil value)`. Host applications can register
+additional pure functions. `bind` can carry integer or symbol results from these
+functions; builtin numeric guards still require numeric operands.
+
+For reductions across predicates, use `agg` or an explicit `fold` in `bind`.
+The aggregate bridge currently uses checked integer arithmetic, even though
+ordinary arithmetic supports decimals and floats. See
+[Aggregation and Extension Functions](aggregation.md).

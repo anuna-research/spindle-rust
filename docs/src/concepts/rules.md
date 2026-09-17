@@ -23,7 +23,11 @@ Strict rules express necessary implications. If the body is true, the head **mus
 (always r2 (and human mortal) dies)   ; All mortal humans die
 ```
 
-Strict rules produce **definite conclusions** (`+D`). They cannot be defeated by defeasible rules.
+Strict rules produce **definite conclusions** (`+D`) when every premise is
+definitely proved. With only defeasible support, a strict rule may instead
+contribute `+d`, subject to conflict checks. Aggregate snapshot premises also
+carry defeasible evidence. A definite conclusion cannot be defeated by a
+defeasible rule.
 
 ### When to Use Strict Rules
 
@@ -55,10 +59,12 @@ Use defeasible rules for:
 
 ## Defeaters (`except`)
 
-Defeaters are special rules that **block** conclusions without proving anything themselves.
+Defeaters are special rules that attack the **complement of their head** without
+proving the head. To block `flies`, use a defeater whose head is `(not flies)`.
+An applicable defeater can itself be overcome by superiority.
 
 ```spl
-(except d1 broken-wing flies)    ; A broken wing blocks "flies"
+(except d1 broken-wing (not flies))    ; A broken wing blocks "flies"
 ```
 
 ### Defeater vs. Defeasible Rule
@@ -68,7 +74,7 @@ Defeaters are special rules that **block** conclusions without proving anything 
 (normally r1 penguin (not flies))
 
 ; Defeater: only blocks flies, doesn't prove (not flies)
-(except d1 sick flies)
+(except d1 sick (not flies))
 ```
 
 The difference:
@@ -134,6 +140,6 @@ Labels are optional (auto-generated if omitted):
 | Rule Type | SPL Keyword | Conclusion | Can be Defeated? |
 |-----------|-------------|------------|------------------|
 | Fact | `given` | +D | No |
-| Strict | `always` | +D | No |
+| Strict | `always` | +D from definite premises; otherwise potentially +d | Definite proof: no; defeasible support: yes |
 | Defeasible | `normally` | +d | Yes |
 | Defeater | `except` | None (blocks only) | N/A |

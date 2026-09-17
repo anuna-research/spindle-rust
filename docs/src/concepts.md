@@ -20,7 +20,7 @@ The motivating example for defeasible logic:
 
 > Tweety is a bird. Tweety is a penguin. Birds fly. Penguins don't fly. Does Tweety fly?
 
-Classical logic produces a contradiction. Defeasible logic resolves it by recognizing that "penguins don't fly" is a more specific rule that should override "birds fly."
+Classical logic produces a contradiction. The declared priority makes "penguins don't fly" override "birds fly." Spindle does not infer this priority automatically from specificity.
 
 ```spl
 (given bird)

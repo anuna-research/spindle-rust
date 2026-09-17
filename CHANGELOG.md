@@ -8,6 +8,41 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- **Aggregation in SPL**: named `agg` premises (`sum`, `count`, `min-of`,
+  `max-of`) and explicit `(bind ?result (fold ...))` expressions.
+  - Aggregate over completed, positively proved predicates, including derived
+    rows, with grouping and inferred strata. Cycles through aggregates are rejected.
+  - Distinct rows contribute separately even when their selected values match;
+    multiple proofs of the same row contribute once.
+  - Results bind directly without an enumerated output domain. `sum` and `count`
+    return zero on empty input; `min-of` and `max-of` fail the premise.
+  - Snapshot premises preserve defeasible evidence, source labels, and priorities;
+    internal snapshot predicates are hidden from conclusions.
+  - Checked integer arithmetic and bounded grounding report overflow or exhausted
+    budgets as errors. The aggregate bridge currently excludes decimal/float,
+    modal, temporal, and trust-weighted inputs.
+  - Syntax, embedding guidance, and a runnable example in
+    [Aggregation and extension functions](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/docs/aggregation-extensions.md).
+- **Extension functions**: `ExtensionFunction`, `FunctionRegistry`, and
+  `PrepareOptions::function_registry` support host-registered pure functions,
+  integer/symbol value bindings, and custom named aggregators. The builtin
+  prelude includes arithmetic, `round` (half-to-even), `floor`, and `ceil`.
+- **Trust diminishment**: applicable but overruled defeaters reduce defeasible
+  conclusion credibility multiplicatively using their weakest-link degrees.
+  Thresholds use the diminished degree, `WeightedConclusion::diminished_by`
+  records the challenges, and definite conclusions are exempt.
+- **Lean verification and differential testing**: models and proofs for
+  grounding, arithmetic, temporal intervals, query operators, and trust;
+  aggregate dependency/stratum inference, source semantics, lowering, and
+  completed-prefix equivalence for all four proof tags. Rust/Lean oracle suites
+  compare supported fragments; these do not establish whole-language Rust
+  conformance or verify custom extension implementations.
+- **Verification gate**: builds Lean libraries and oracle executables, rejects
+  admitted proofs and local axioms, checks for vacuous proofs, and audits theorem
+  dependencies.
+- **Aggregate benchmarks**: `make bench-aggregation` measures preparation and
+  full reasoning across row counts, groups, unrelated facts, and chained stages,
+  with a documented local baseline.
 - **Predicate model and vocabulary** (SPEC-024): a structural predicate identity
   and derived tooling projections, all additive and non-semantic (reasoning is
   unchanged).
@@ -27,8 +62,8 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
     metadata target.
   - Predicate-indicator recognizer (`functor/arity`) in `spindle-parser`.
   - Additive `spindle.vocabulary/1` JSON DTOs in `spindle-contract`.
-  - **Breaking (internal):** `Theory::metadata()` now returns
-    `&HashMap<MetaTarget, Meta>`; `add_meta`/`get_meta` remain label wrappers.
+  - `Theory::metadata()` retains its label-keyed API; predicate metadata is
+    available separately through `Theory::predicate_metadata()`.
 - **Arithmetic module** (SPEC-017): full arithmetic expression support in SPL.
   - `Term` enum with `Symbol`, `Integer`, `Decimal`, `Float` variants.
   - `FiniteFloat` wrapper: rejects NaN/Inf, normalizes `-0.0`, safe for `Eq`/`Hash`.
@@ -41,7 +76,7 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - Cross-type numeric matching in grounding (REQ-010/CON-005):
     `Integer(2)` matches `Decimal(2.0)` matches `Float(2.0)`.
   - Type promotion chain: Integer -> Decimal -> Float.
-  - `rust_decimal` dependency for arbitrary-precision decimal arithmetic.
+  - `rust_decimal` dependency for fixed-precision decimal arithmetic.
 - **SPL parser extensions**:
   - Arithmetic expression parser for `+`, `-`, `*`, `/`, `div`, `rem`,
     `**`, `abs`, `min`, `max`.
@@ -63,6 +98,24 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
+- **Reasoning semantics**: Rust and the standard Lean oracles now follow
+  traditional ambiguity-blocking DL(∂) with four constructive proof tags.
+  Unsupported cycles remain undecided instead of receiving automatic negative
+  conclusions; undecided attackers are not discarded. Contradictory definite
+  facts retain both positive definite and defeasible tags without proving
+  unrelated literals.
+- **Breaking**: arithmetic expressions use registry-dispatched `ArithExpr::Call`
+  nodes, replacing the operator-specific AST variants, with `Value` and `Fold`
+  variants for general bindings and aggregation.
+- Projection snapshots and abduction output use deterministic, injective
+  semantic keys, preserving distinct temporal windows and typed terms.
+- CI workflows restored for Forgejo compatibility.
+- Documentation book uses a forge-neutral repository icon and canonical repository
+  source links in place of edit links ([#37](https://codeberg.org/anuna/spindle-rust/pulls/37),
+  contributed by SamB).
+- Refreshed the documentation book with aggregation and verification guides,
+  current DL(∂) semantics, query and WASM APIs, trust diminishment, and aggregate
+  performance guidance. The book includes this changelog directly.
 - **Breaking**: bounded temporal queries now match exact windows (SPEC-020
   REQ-006). `query`, `requires`, `what_if`, and `abduce` goals carrying a
   bounded temporal window (e.g. `p@[1,10]`) only match conclusions with the
@@ -91,6 +144,26 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Temporal variables rejected as arithmetic operands (REQ-006).
 
 ### Fixed
+- Documentation examples now use complementary defeater heads and defeasible
+  defaults correctly. Temporal documentation describes current interval variables,
+  Allen constraints, and family matching instead of the removed bridge stage.
+- Explanations resolve grounded rule labels to source templates, and `why_not`
+  inspects grounded rules so variable-headed rules report actual blockers.
+  Superiority checks use template labels, and defeated rules are no longer
+  projected as supporting proofs.
+- `what_if` deduplicates new conclusions proven at both positive tags while
+  preserving distinct typed arguments and temporal windows.
+- Predicate declarations and metadata survive grounding, wildcard rewriting,
+  and temporal filtering. Vocabulary reports retain conflicting declarations
+  and their provenance; deferred shape checks no longer count as mismatches.
+- Vocabulary DTO validation rejects malformed functors and inconsistent
+  diagnostics while accepting coherent v1 signatures without optional
+  declaration origins. SPL rejects malformed metadata properties, and WASM
+  output quotes structured predicate metadata targets correctly.
+- Symbol-valued extension returns bind correctly, and float-to-integer boundary
+  checks reject out-of-range values.
+- Reasoning tracks repeated body occurrences per slot and discards attackers
+  with disproved premises consistently.
 - `FiniteFloat` serde deserialization now validates through `FiniteFloat::new`,
   preventing non-canonical values (`-0.0`) and non-finite values from bypassing
   type invariants.

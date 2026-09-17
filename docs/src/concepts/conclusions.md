@@ -7,9 +7,9 @@ Spindle computes four types of conclusions, representing different levels of pro
 | Symbol | Name | Meaning |
 |--------|------|---------|
 | `+D` | Definitely Provable | Proven via facts and strict rules only |
-| `-D` | Definitely Not Provable | Cannot be proven via strict rules |
+| `-D` | Definitely Not Provable | Constructively disproved at the definite level |
 | `+d` | Defeasibly Provable | Proven via defeasible rules (may be defeated) |
-| `-d` | Defeasibly Not Provable | Cannot be proven even defeasibly |
+| `-d` | Defeasibly Not Provable | Constructively disproved at the defeasible level |
 
 ## Definite Conclusions (+D / -D)
 
@@ -111,16 +111,18 @@ Conclusions:
 
 ## Negative Conclusions
 
-Negative conclusions (`-D`, `-d`) indicate unprovability:
+Negative conclusions (`-D`, `-d`) require constructive evidence under the
+proof conditions. Failure to find a positive proof is not itself a negative proof.
+For example, `(always loop p p)` leaves `p` undecided: neither `+D p` nor `-D p`,
+and neither `+d p` nor `-d p`. `(normally loop p p)` yields `-D p`, but leaves
+defeasible provability undecided.
 
-### -D (Definitely Not Provable)
-No chain of facts and strict rules leads to this literal.
+An undecided premise cannot be used to discard an attacker. This distinction
+matters when rules contain cycles. See [Algorithms](../guides/algorithms.md).
 
-### -d (Defeasibly Not Provable)
-No chain of rules (including defeasible) leads to this literal, OR the literal is blocked by:
-- A strict rule proving the complement
-- A superior defeasible rule
-- A defeater
+Negative tags also differ from strong negation: `-d p` does not establish `+d ~p`.
+If both `p` and `~p` are definite facts, both retain `+D` and `+d`; this does not
+prove unrelated literals.
 
 ## Reading Spindle Output
 

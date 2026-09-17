@@ -16,7 +16,7 @@ combining operation and empty-input behavior. Ordinary calculations still use
   (total-payment ?person ?total))
 ```
 
-Run the complete [example](../examples/aggregation.spl):
+Run the complete [example](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/examples/aggregation.spl):
 
 ```sh
 spindle reason examples/aggregation.spl --json
@@ -247,7 +247,7 @@ including grouping, empty inputs, duplicate contributions, conflicts and
 traditional DL(∂) cycle behavior. Every compared case must agree. Custom reducer
 functions remain outside the Lean proof fragment. Parsing and extension
 registration are tested integrations, not themselves verified Lean code.
-See [the proof guide](../lean/AGGREGATION.md).
+See [the proof guide](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/AGGREGATION.md).
 
 The domain-free aggregate operation is proved against independent unordered
 predicate semantics in `Spindle/Aggregation/Binding.lean`, including agreement

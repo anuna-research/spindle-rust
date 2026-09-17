@@ -81,7 +81,7 @@ Analysis:
 
 ## Symmetric Conflicts
 
-If two rules are equally superior over each other (or neither is superior), ambiguity results:
+If neither opposing rule has priority, ambiguity results:
 
 ```spl
 (given trigger)
@@ -101,7 +101,7 @@ Defeaters can be overridden by superiority:
 (given healthy)
 
 (normally r1 bird flies)
-(except d1 bird flies)          ; Defeater blocks flies
+(except d1 bird (not flies))          ; Defeater blocks flies
 (normally r2 healthy flies)
 
 (prefer r2 d1)                  ; Healthy birds overcome the defeater
@@ -111,7 +111,9 @@ If both `bird` and `healthy` are true, r2 beats d1 and `flies` is provable.
 
 ## Strict Rules and Superiority
 
-Strict rules **always win** over defeasible rules, regardless of superiority:
+A **definite proof** wins over merely defeasible opposition, regardless of
+superiority. A strict rule has this protection when its premises are definitely
+proved:
 
 ```spl
 (given p)
@@ -122,7 +124,8 @@ Strict rules **always win** over defeasible rules, regardless of superiority:
 
 Result: `+D q` (strict rule wins)
 
-Superiority only affects conflicts between:
+Superiority does not overturn definite proofs. It resolves defeasible conflicts,
+including strict rules used with only defeasible premises. Common cases include:
 - Defeasible rules
 - Defeasible rules and defeaters
 - Defeaters

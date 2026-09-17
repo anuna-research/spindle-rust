@@ -1,377 +1,115 @@
-# WebAssembly Integration
+# WebAssembly
 
-Spindle compiles to WebAssembly for use in browsers and Node.js.
+The `spindle-wasm` crate exposes a `Spindle` class to JavaScript. It uses the
+same preparation and reasoning pipeline as the Rust library.
 
-## Building
+## Build locally
 
-### Prerequisites
+Install `wasm-pack`, then run a target from the repository root:
 
-```bash
-cargo install wasm-pack
+```sh
+make wasm          # web target
+make wasm-node     # Node.js target
+make wasm-bundler  # bundler target
 ```
 
-### Build for Web
+Use the generated JavaScript and WASM files under `crates/spindle-wasm/pkg`.
+The examples below assume the web build is served from a `pkg` directory.
 
-```bash
-cd crates/spindle-wasm
-wasm-pack build --target web --release
-```
-
-### Build for Node.js
-
-```bash
-wasm-pack build --target nodejs --release
-```
-
-### Build for Bundlers (webpack, etc.)
-
-```bash
-wasm-pack build --target bundler --release
-```
-
-## Installation
-
-### npm/yarn
-
-```bash
-npm install spindle-wasm
-# or
-yarn add spindle-wasm
-```
-
-### From Local Build
+## Browser example
 
 ```javascript
-// Point to your build output
-import init, { Spindle } from './pkg/spindle_wasm.js';
-```
-
-## Browser Usage
-
-### ES Modules
-
-```html
-<script type="module">
 import init, { Spindle } from './pkg/spindle_wasm.js';
 
-async function main() {
-    await init();
-
-    const spindle = new Spindle();
-    spindle.addFact("bird");
-    spindle.addFact("penguin");
-    spindle.addDefeasibleRule(["bird"], "flies");
-    spindle.addDefeasibleRule(["penguin"], "~flies");
-    spindle.addSuperiority("r2", "r1");
-
-    const conclusions = spindle.reason();
-    console.log(conclusions);
-}
-
-main();
-</script>
-```
-
-### With Bundler (Vite, webpack)
-
-```typescript
-import init, { Spindle } from 'spindle-wasm';
-
-async function setup() {
-    await init();
-    return new Spindle();
-}
-
-const spindle = await setup();
-```
-
-## Node.js Usage
-
-```javascript
-const { Spindle } = require('spindle-wasm');
-
+await init();
 const spindle = new Spindle();
-
-spindle.parseSpl(`
-    (given bird)
-    (given penguin)
-    (normally r1 bird flies)
-    (normally r2 penguin (not flies))
-    (prefer r2 r1)
-`);
-
-const conclusions = spindle.reason();
-console.log(conclusions);
-```
-
-## API Reference
-
-### Constructor
-
-```typescript
-const spindle = new Spindle();
-```
-
-Creates a new empty theory.
-
-### Adding Facts
-
-```typescript
-spindle.addFact("bird");
-spindle.addFact("~guilty");  // Negated fact
-```
-
-### Adding Rules
-
-```typescript
-// Defeasible rules
-spindle.addDefeasibleRule(["bird"], "flies");
-spindle.addDefeasibleRule(["bird", "healthy"], "strong_flyer");
-
-// Strict rules
-spindle.addStrictRule(["penguin"], "bird");
-
-// Defeaters
-spindle.addDefeater(["broken_wing"], "flies");
-```
-
-### Superiority
-
-```typescript
-spindle.addSuperiority("r2", "r1");  // r2 > r1
-```
-
-### Parsing
-
-```typescript
-// Parse SPL
-spindle.parseSpl(`
-    (given bird)
-    (normally r1 bird flies)
-`);
-```
-
-### Reasoning
-
-```typescript
-const conclusions = spindle.reason();
-// Returns: Array of conclusion objects
-
-// Each conclusion:
-{
-    conclusion_type: "+D" | "-D" | "+d" | "-d",
-    literal: string,
-    positive: boolean
-}
-```
-
-### Query
-
-```typescript
-// Check if a literal is provable
-const result = spindle.query("flies");
-// Returns: { status: "provable" | "not_provable", literal, conclusion_type }
-```
-
-### What-If
-
-```typescript
-const result = spindle.whatIf(["wounded"], "~flies");
-// Returns: { provable: boolean, new_conclusions: Array, changed_conclusions: Array }
-```
-
-### Why-Not
-
-```typescript
-const explanation = spindle.whyNot("flies");
-// Returns: { literal, is_provable, would_derive, blockers: Array }
-```
-
-### Abduction
-
-```typescript
-const solutions = spindle.abduce("goal", 3);
-// Returns: { goal, solutions: Array<{ facts: string[], rules_used: string[], confidence: number }> }
-```
-
-### Reset
-
-```typescript
-spindle.clear();  // Clear all rules and facts
-```
-
-## TypeScript Types
-
-```typescript
-interface Conclusion {
-    conclusion_type: "+D" | "-D" | "+d" | "-d";
-    literal: string;
-    positive: boolean;
-}
-
-interface QueryResult {
-    status: "provable" | "not_provable";
-    literal: string;
-    conclusion_type?: string;
-}
-
-interface WhatIfResult {
-    provable: boolean;
-    new_conclusions: Conclusion[];
-    changed_conclusions: ChangedConclusion[];
-}
-
-interface WhyNotExplanation {
-    literal: string;
-    is_provable: boolean;
-    would_derive: string | null;
-    blockers: Blocker[];
-}
-
-interface Blocker {
-    blocking_type: "MissingPremise" | "Defeated" | "Contradicted";
-    rule_label: string;
-    blocking_rule: string | null;
-    explanation: string;
-}
-
-interface AbductionResult {
-    goal: string;
-    solutions: AbductionSolution[];
-}
-
-interface AbductionSolution {
-    facts: string[];
-    rules_used: string[];
-    confidence: number;
-}
-
-interface ChangedConclusion {
-    literal: string;
-    old_type: string;
-    new_type: string;
-}
-```
-
-## Complete Example
-
-```typescript
-import init, { Spindle } from 'spindle-wasm';
-
-async function reasonAboutPenguins() {
-    await init();
-
-    const spindle = new Spindle();
-
-    // Build theory
+try {
     spindle.parseSpl(`
-        (given bird)
-        (given penguin)
-
-        (normally r1 bird flies)
-        (normally r2 bird has-feathers)
-        (normally r3 penguin (not flies))
-        (normally r4 penguin swims)
-
-        (prefer r3 r1)
+        (given (payment alice first 10))
+        (given (payment alice second 10))
+        (normally total
+          (agg ?total sum ?amount (payment ?person ?id ?amount))
+          (total-payment ?total))
     `);
-
-    // Reason
-    const conclusions = spindle.reason();
-
-    // Filter positive conclusions
-    const positive = conclusions.filter(c =>
-        c.conclusion_type === "+D" || c.conclusion_type === "+d"
-    );
-
-    console.log("Provable:", positive.map(c => c.literal));
-
-    // Query specific literal
-    const fliesResult = spindle.query("flies");
-    console.log("Does it fly?", fliesResult.status);
-
-    // What-if analysis
-    const whatIf = spindle.whatIf(["super_bird"], "flies");
-    console.log("With super_bird:", whatIf.provable);
-
-    // Explain why not
-    if (fliesResult.status === "not_provable") {
-        const explanation = spindle.whyNot("flies");
-        console.log("Why not flies:", explanation.blockers);
+    const result = spindle.reasonV2();
+    console.log(result.schema_version); // spindle.reason.v2
+    for (const conclusion of result.conclusions) {
+        if (conclusion.positive) {
+            console.log(conclusion.conclusion_type, conclusion.literal_spl);
+        }
     }
-}
-
-reasonAboutPenguins();
-```
-
-## React Integration
-
-```tsx
-import { useState, useEffect } from 'react';
-import init, { Spindle } from 'spindle-wasm';
-
-function useSpindle() {
-    const [spindle, setSpindle] = useState<Spindle | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        init().then(() => {
-            setSpindle(new Spindle());
-            setLoading(false);
-        });
-    }, []);
-
-    return { spindle, loading };
-}
-
-function ReasoningComponent() {
-    const { spindle, loading } = useSpindle();
-    const [conclusions, setConclusions] = useState([]);
-
-    const reason = () => {
-        if (!spindle) return;
-
-        spindle.reset();
-        spindle.addFact("bird");
-        spindle.addDefeasibleRule(["bird"], "flies");
-
-        const result = spindle.reason();
-        setConclusions(result);
-    };
-
-    if (loading) return <div>Loading WASM...</div>;
-
-    return (
-        <div>
-            <button onClick={reason}>Reason</button>
-            <ul>
-                {conclusions.map((c, i) => (
-                    <li key={i}>{c.conclusion_type} {c.literal}</li>
-                ))}
-            </ul>
-        </div>
-    );
+} finally {
+    spindle.free();
 }
 ```
 
-## Performance Notes
+Initialization is asynchronous; calls on an initialized `Spindle` are synchronous.
+Parsing and reasoning failures throw JavaScript errors. Serve the generated assets
+over HTTP with a server that serves WASM correctly.
 
-1. **Initialize once**: Call `init()` once at startup
-2. **Reuse Spindle instances**: Create once, reset between uses
-3. **Batch operations**: Add all rules before reasoning
-4. **Use explicit superiority for conflict-heavy theories** to avoid unresolved ties
+## Reasoning output
 
-## Bundle Size
+`reason()` returns a structured `spindle.reason.v1` object, not a bare array.
+`reasonV2()` returns the corresponding `spindle.reason.v2` object with typed
+term arguments. Both include:
 
-Approximate sizes (gzipped):
-- Core WASM: ~150KB
-- JavaScript bindings: ~10KB
+- `schema_version`, `evaluated_at`, and `grounding` statistics.
+- `conclusions`, whose entries include `conclusion_type`, `literal_spl`,
+  `literal_struct`, and `positive`.
+- `diagnostics` and optional theory `stats`.
 
-## Browser Compatibility
+Use `result.conclusions` to iterate results. Use `getPositiveConclusions()` for
+an array of positive literal strings. The shared DTO definitions live in
+`spindle-contract`; WASM returns the result as a JavaScript object rather than serialized JSON text.
 
-Requires WebAssembly support:
-- Chrome 57+
-- Firefox 52+
-- Safari 11+
-- Edge 16+
-- Node.js 8+
+## Theory operations
+
+| Method | Purpose |
+|---|---|
+| `parseSpl(source)` | Replace the current theory with parsed SPL |
+| `addFact(name)` | Add a fact; return its label |
+| `addStrictRule(body, head)` | Add a strict rule; return its label |
+| `addDefeasibleRule(body, head)` | Add a defeasible rule; return its label |
+| `addDefeater(body, head)` | Add a defeater; return its label |
+| `addSuperiority(superior, inferior)` | Add a priority between rule labels |
+| `ruleCount()` / `getRules()` | Inspect the theory |
+| `clear()` | Remove the theory's rules and facts |
+| `reasonSpl(source)` | Parse and return formatted textual reasoning output |
+| `free()` | Release the WASM object when finished |
+
+For structured predicates, arithmetic, metadata, and aggregates, use SPL input.
+The builtin prelude is available; the current JavaScript API does not expose host
+extension registration. See [Aggregation](../guides/aggregation.md) for supported
+values and preparation restrictions.
+
+## Query methods
+
+```javascript
+const status = spindle.query('flies');
+// status.status: "provable", "refuted", or "unknown"
+const hypothetical = spindle.whatIf(['bird'], 'flies');
+// hypothetical.provable: boolean; new_conclusions: string[]
+const why = spindle.whyNot('flies');
+// why.is_provable, why.would_derive, why.blockers
+const candidates = spindle.abduce('flies', 3);
+// candidates.solutions: { facts: string[], rules_used: string[], confidence }[]
+```
+
+`whatIf` does not mutate the original theory and deduplicates newly positive
+literals. `whyNot` uses grounded rules for variable-headed diagnostics.
+Bounded temporal goals use exact windows; atemporal goals use family matching.
+
+`abduce` returns raw candidates, not verified requirements. The WASM class has no
+`requires` method. Use the Rust `requires_with_options` API or CLI `requires`
+command for verification by full reasoning. See [Query Operators](../guides/queries.md).
+
+## Application lifecycle
+
+Initialize the module once, reuse a `Spindle` object for repeated runs, and call
+`clear()` before rebuilding a theory programmatically. Release the instance with
+`free()` when its owner is disposed. In a UI, store `reasonV2().conclusions` and
+render `literal_spl`; keep initialization and error states visible to users.
+
+Large grounding or aggregation jobs are synchronous and can block the UI thread.
+Run them in a worker when needed and measure the generated bundle and workload
+rather than relying on a fixed historical size estimate.

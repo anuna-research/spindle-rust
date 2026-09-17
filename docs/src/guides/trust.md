@@ -360,6 +360,21 @@ assert_eq!(node.weakest_link_trust(), 0.9);
 
 Standard defeasible logic uses binary defeat: a conclusion is either proven or not. Trust-weighted reasoning introduces **diminishment**, where a defeater can reduce a conclusion's trust degree without fully defeating it.
 
+### Automatic diminishment in the pipeline
+
+After computing weakest-link credibility, the trust pass detects defeaters whose
+heads complement a surviving `+d` conclusion and whose premises are positively
+provable. These applicable but overruled challenges reduce its degree in rule
+order: `degree *= 1 - defeater_degree`. The defeater degree is the weakest link
+of its own derivation. Unfired defeaters do not diminish, and `+D` conclusions
+are exempt. Thresholds are evaluated after this fold, and `diminished_by`
+records the contributing challenges.
+
+For example, degree `0.9` challenged by degrees `0.3` and `0.4` becomes
+`0.9 * 0.7 * 0.6 = 0.378`. This affects credibility; it does not retract the
+positive logical conclusion. The aggregate snapshot bridge currently excludes
+trust-weighted inputs.
+
 ### Diminishment Formula
 
 ```

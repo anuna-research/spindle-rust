@@ -119,7 +119,7 @@ unary-op    = "abs"
 ### Defeaters (`except`)
 
 ```spl
-(except broken-wing-blocks-flight broken-wing flies)
+(except broken-wing-blocks-flight broken-wing (not flies))
 ```
 
 ### Unlabeled Rules
@@ -272,7 +272,7 @@ only; they carry no domain meaning and do not affect inference.
 |---|---|
 | `symbol` | an interned symbolic name |
 | `integer` | a 64-bit integer |
-| `decimal` | an arbitrary-precision decimal |
+| `decimal` | an fixed-precision decimal |
 | `float` | a finite IEEE-754 float |
 | `number` | any of `integer`, `decimal`, or `float` |
 | `any` | any ground term |
@@ -381,11 +381,20 @@ inf                              ; Positive infinity
 
 ### Allen Relations
 
-> **SPL status:** Allen relations are implemented in the core Rust API but are not yet
-> usable as SPL predicates. Exposing them requires interval variables (e.g.,
-> `(during p ?t)`), planned for a future release. The Allen `during` relation
-> (interval containment) is distinct from the [`during` SPL operator](#during)
-> described above.
+SPL supports interval variables such as `(during p ?T)` and all 13 Allen
+constraints in rule bodies. Use `within` for Allen's During relation, distinct
+from the [`during` SPL wrapper](#during). For example:
+
+```spl
+(given (during p 1 10))
+(given (during q 20 30))
+(normally sequence
+  (and (during p ?T) (during q ?S) (before ?T ?S))
+  ordered)
+```
+
+See [Temporal Reasoning](../guides/temporal.md) for interval propagation,
+state constraints, family matching, and as-of filtering.
 
 Allen's interval algebra defines exactly 13 mutually exclusive relations between
 two time intervals **X** and **Y**. Every pair of intervals satisfies exactly one.
@@ -436,7 +445,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 
 ```spl
 42          ; Integer
-3.14        ; Decimal (arbitrary precision)
+3.14        ; Decimal (fixed precision)
 ```
 
 ### Operators
@@ -453,6 +462,9 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 | `abs` | Unary | Absolute value |
 | `min` | N-ary | Minimum |
 | `max` | N-ary | Maximum |
+| `round` | Binary | Half-to-even rounding to decimal places |
+| `floor` | Unary | Round down to an integer |
+| `ceil` | Unary | Round up to an integer |
 
 ```spl
 (+ 1 2)           ; => 3
@@ -585,10 +597,44 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 (prefer penguins-dont-fly birds-fly)
 
 ; Defeater
-(except broken-wing-blocks-flight broken-wing flies)
+(except broken-wing-blocks-flight broken-wing (not flies))
 
 ; Metadata
 (meta birds-fly (description "Birds typically fly"))
 (meta penguins-dont-fly (description "Penguins are an exception"))
 ```
 
+
+## Aggregation and extension calls
+
+```spl
+(given (payment alice first 10))
+(given (payment alice second 10))
+(normally total
+  (agg ?total sum ?amount (payment ?person ?id ?amount))
+  (total-payment ?total))
+```
+
+This derives `(total-payment 20)`. Named aggregators are `sum`, `count`, `min-of`,
+and `max-of`. The output and contribution are variables; the contribution must
+occur in the single row pattern. For grouped results, bind grouping variables in
+earlier ordinary premises. Separate helper predicates can express joins/filters.
+
+Explicit folds remain available:
+
+```spl
+(normally total
+  (bind ?total (fold + ?amount :from (payment ?person ?id ?amount) :initial 0))
+  (total-payment ?total))
+```
+
+A fold appears directly in `bind` and has one `:from` pattern and either
+`:initial expression` or `:require-nonempty`. Nested folds require separate
+rules/strata. Aggregation is a rule premise, never a fact, head, or negated premise.
+The current bridge supports checked integer/symbol values; decimal/float, modal,
+temporal, and trust-weighted aggregate programs are unsupported.
+
+`bind` also accepts registered extension calls. Unknown functions and invalid
+arities are preparation errors; parsing does not load host code. See
+[Aggregation and Extension Functions](../guides/aggregation.md) for scoping,
+empty inputs, snapshot evidence, custom registries, and limits.

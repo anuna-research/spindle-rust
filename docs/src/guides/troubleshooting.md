@@ -63,7 +63,7 @@ SPL parse error: Unknown keyword: defeasible
 2. Check if a defeater is missing:
    ```spl
    ; Add a defeater to block
-   (except d1 exception unexpected-literal)
+   (except d1 exception (not unexpected-literal))
    ```
 
 ### Both Literals Unprovable (Ambiguity)
@@ -95,7 +95,7 @@ SPL parse error: Unknown keyword: defeasible
    ```
 
 2. Rule type compatibility:
-   - Superiority only affects defeasible rules and defeaters
+   - Superiority cannot overturn a definite proof; strict rules with only defeasible premises still participate in defeasible conflict resolution
    - Strict rules always win regardless of superiority
 
 3. Both rules actually fire:
@@ -251,4 +251,4 @@ If you can't resolve an issue:
 1. Create a minimal reproduction
 2. Include the theory file
 3. Show expected vs actual output
-4. Report at: https://codeberg.org/anuna/spindle-rust/issues
+4. Report at: https://git.anuna.io/anuna-research/spindle-rust/issues

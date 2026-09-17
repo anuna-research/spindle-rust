@@ -151,7 +151,11 @@ Negated predicates in the body:
 (normally r1 (and (bird ?x) (not (penguin ?x))) (flies ?x))
 ```
 
-**Important**: The negated predicate must be **ground** after substitution. Spindle uses stratified negation.
+**Important**: This is strong negation, not negation-as-failure. The rule needs
+explicit support for `(not (penguin ?x))`; merely omitting a penguin fact does
+not make Eddie fly. Add `(given (not (penguin eddie)))` to supply that premise.
+Stratification is used for aggregate dependencies, not to turn ordinary negation
+into a test for missing evidence.
 
 ## Grounding with Superiority
 

@@ -1,110 +1,66 @@
 # Negation
 
-Spindle uses **strong negation** (also called explicit negation), not negation-as-failure.
-
-## Strong Negation vs. Negation-as-Failure
-
-### Negation-as-Failure (NAF)
-Used in Prolog and many logic programming systems:
-- "not P" means "P cannot be proven"
-- Absence of evidence is evidence of absence
-
-### Strong Negation
-Used in Spindle:
-- `(not P)` is a separate proposition
-- Must be explicitly proven
-- Absence of `P` does not imply `(not P)`
-
-## Syntax
+Spindle uses **strong (explicit) negation**. `(not p)` must be supported by a
+fact or rule; absence of a proof of `p` does not establish `(not p)`.
 
 ```spl
 (given (not guilty))
-(normally r1 penguin (not flies))
+(normally no-flight penguin (not flies))
 ```
 
-## Three-Valued Outcomes
+## Positive evidence and unknown results
 
-For any literal `P`, the outcome can be:
+| Evidence | Interpretation |
+|---|---|
+| `+d p` | Positive proof of `p` |
+| `+d ~p` | Positive proof of its explicit complement |
+| Neither positive tag | Unknown from positive evidence; negative tags may or may not exist |
+| Both positive tags | Inconsistent positive evidence, possible with contradictory definite facts |
 
-| State | Meaning | Conclusions |
-|-------|---------|-------------|
-| True | P is provable | `+d P` |
-| False | (not P) is provable | `+d -P` |
-| Unknown | Neither provable | `-d P` and `-d -P` |
+For example, `(always loop p p)` supplies no positive or negative proof for `p`.
+A literal absent from the theory is not automatically listed in the engine's
+conclusions. A query can still report its status as unknown.
 
-## Example: Unknown State
+The negative proof tag `-d p` does not mean `+d ~p`. Read more in
+[Conclusions](conclusions.md).
+
+## Conflicts and definite evidence
 
 ```spl
-(given bird)
-(normally r1 bird flies)
-; No information about grounded
+(given trigger)
+(normally left trigger p)
+(normally right trigger (not p))
 ```
 
-Conclusions:
-- `+d flies` (via r1)
-- `-d grounded` (no rule proves it)
-- `-d -grounded` (no rule proves its negation either)
+Without priority, these competing defaults block each other. A definite proof of
+`~p` prevents a merely defeasible proof of `p`. If `p` is also definitely proved,
+both sides retain `+D` and `+d`; inconsistency does not prove unrelated literals.
 
-The `grounded` literal is in an **unknown** state.
-
-## Complementary Literals
-
-`P` and `(not P)` are **complements**. They interact in specific ways:
-
-### Conflict
-If rules prove both `P` and `(not P)`:
-```spl
-(given a)
-(normally r1 a p)
-(normally r2 a (not p))
-```
-Without superiority, neither is provable (ambiguity).
-
-### Definite Blocking
-If `(not P)` is **definitely** provable, `P` cannot be defeasibly provable:
-```spl
-(given (not p))              ; Definite fact: (not p)
-(normally r1 a p)            ; Tries to prove p
-```
-Even if r1's body is satisfied, `+d p` is blocked because `+D -p`.
-
-## Negation in Rule Bodies
-
-Negated literals can appear in rule bodies:
+## Negated premises
 
 ```spl
-(normally r1 (and bird (not penguin)) flies)          ; Non-penguin birds fly
-(normally r2 (and student (not employed)) needs-loan)
+(given (bird eddie))
+(given (not (penguin eddie)))
+(normally flight
+  (and (bird ?x) (not (penguin ?x)))
+  (flies ?x))
 ```
 
-## Consistency
+The negative premise needs its own positive proof. Removing the explicit
+not-penguin fact leaves the rule without that support.
 
-Spindle does not enforce consistency. A theory can prove both `P` and `(not P)`:
+## Explicit defeasible defaults
+
+To model a presumption that evidence may override, use an empty-body defeasible
+rule, not a fact:
 
 ```spl
-(given p)
-(given (not p))
+(normally presume () (not guilty))
+(normally convict evidence guilty)
+(prefer convict presume)
 ```
 
-Result:
-- `+D p`
-- `+D -p`
-
-This is an **inconsistent theory**. Spindle reports both conclusions without error.
-
-### Detecting Inconsistency
-
-To detect inconsistency, check for literals where both `+D P` and `+D -P` (or `+d P` and `+d -P`) are concluded.
-
-## Closed World Assumption
-
-Spindle does **not** use the Closed World Assumption by default. If you need it, add explicit rules:
-
-```spl
-; CWA for 'guilty': if not proven guilty, then not guilty
-(given (not guilty))                    ; Default: not guilty
-(normally r1 evidence guilty)           ; Can be overridden by evidence
-(prefer r1 f1)
-```
-
-This pattern uses a defeatable default.
+Without evidence, this derives `+d ~guilty`. Adding `(given evidence)` lets the
+preferred rule derive `+d guilty`. This is an explicit domain default; SPL has no
+general negation-as-failure operator. A `(given (not guilty))` fact would remain
+definitely true and cannot be overridden this way.

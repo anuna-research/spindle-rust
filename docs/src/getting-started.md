@@ -2,14 +2,17 @@
 
 This guide walks you through installing Spindle-Rust and running your first defeasible logic program.
 
-Spindle-Rust is a Rust port of [SPINdle](https://research.csiro.au/bpli/tools/spindle/), a defeasible logic reasoning system originally developed by NICTA (now Data61/CSIRO). This implementation is based on [spindle-racket](https://codeberg.org/anuna/spindle-racket) v1.7.0.
+Spindle-Rust is a Rust port of [SPINdle](https://research.csiro.au/bpli/tools/spindle/), a defeasible logic reasoning system originally developed by NICTA (later Data61/CSIRO, now [CSIRO Technology](https://www.csiro.au/en/Newsletters/D61-NextGenConnect/2026-05)). This implementation is based on [spindle-racket](https://codeberg.org/anuna/spindle-racket) v1.7.0.
 
 ## Installation
+
+Use Rust 1.87 or newer (edition 2024). WebAssembly builds additionally need
+`wasm-pack`; building this book uses the mdBook version pinned in CI.
 
 ### Building from Source
 
 ```bash
-git clone https://codeberg.org/anuna/spindle-rust
+git clone https://git.anuna.io/anuna-research/spindle-rust
 cd spindle-rust
 cargo build --release
 ```
