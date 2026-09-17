@@ -1,4 +1,4 @@
-# Process Mining
+# Process Mining API
 
 Spindle includes a process mining module that discovers defeasible logic rules from event logs. It implements the Alpha algorithm for Petri net discovery, footprint matrix construction, conflict detection, and SPL rule extraction with support/confidence metrics.
 
@@ -30,9 +30,9 @@ Given a set of recorded process executions (cases), Spindle can:
 
 An event log consists of **cases** (process executions), each containing a sequence of **events**.
 
-- `Event` -- a single activity execution with a timestamp, activity name, variable bindings, optional actor, and annotations
+- `Event` -- a single activity execution with a timestamp, activity name, variable bindings, actor when present, and annotations
 - `Case` -- a complete process trace identified by a unique ID, containing events sorted by timestamp
-- `EventLog` -- the collection of cases with optional metadata
+- `EventLog` -- the collection of cases with metadata when present
 
 ### Creating Events
 
@@ -61,7 +61,7 @@ let event = Event::new("2026-01-17T10:10:00Z", "approved", HashMap::new())
 
 ### Creating Cases and Logs
 
-Events within a case are automatically sorted by timestamp:
+`Case::new` automatically sorts events by timestamp:
 
 ```rust
 use spindle_core::mining::{Event, Case, EventLog};
@@ -123,8 +123,8 @@ Given two activities `a` and `b`, the footprint matrix assigns one of four relat
 
 | Relation | Symbol | Meaning |
 |----------|--------|---------|
-| `Causality` | `->` | `a` directly precedes `b` (but not `b` before `a`) |
-| `Reverse` | `<-` | `b` directly precedes `a` (but not `a` before `b`) |
+| `Causality` | `->` | The log contains adjacent `a, b` but no adjacent `b, a` |
+| `Reverse` | `<-` | The log contains adjacent `b, a` but no adjacent `a, b` |
 | `Parallel` | `\|\|` | Both orderings observed in the log |
 | `Unrelated` | `#` | Never directly adjacent in any trace |
 
@@ -174,7 +174,7 @@ let parallel = fp.parallel_pairs(); // Vec<(String, String)>
 
 The footprint matrix answers key questions about a process:
 
-- **Sequencing**: Which activities always follow others? (Causality)
+- **Sequencing**: Which adjacent activity pairs occur without their reverse? (Causality)
 - **Concurrency**: Which activities can happen in either order? (Parallel)
 - **Independence**: Which activities are never adjacent? (Unrelated)
 - **Reverse flow**: Which activities are preceded by others? (Reverse)
@@ -219,10 +219,10 @@ let activities = net.activities(); // HashSet<&str>
 
 The Alpha algorithm performs these steps:
 
-1. **Compute footprint** from the event log's directly-follows pairs
-2. **Identify start/end activities** (first/last in each trace)
-3. **Find maximal pairs** `(A, B)` where all activities in `A` causally lead to all activities in `B`, and both sets are internally unrelated
-4. **Build the net**: create transitions for each activity, places for start/end and each maximal pair, and arcs connecting them
+1. **Computes the footprint** from the event log's directly-follows pairs
+2. **Identifies start/end activities** (first/last in each trace)
+3. **Finds maximal pairs** `(A, B)` where all activities in `A` causally lead to all activities in `B`, and both sets are internally unrelated
+4. **Builds the net**: creates transitions for each activity, places for start/end and each maximal pair, and arcs connecting them
 
 ### Building a Petri Net Manually
 
@@ -295,7 +295,7 @@ for conflict in &conflicts {
 
 **Choice** conflicts are structural -- they come from XOR-split points in the Petri net where a place has multiple outgoing transitions. Only one transition can fire.
 
-**Mutex** conflicts are behavioral -- two activities are never observed together in the same trace, but the relationship is not already captured by a choice conflict. This can indicate implicit exclusion rules.
+**Mutex** conflicts are behavioral: no trace contains both activities. A choice conflict does not already capture the relationship. This can indicate implicit exclusion rules.
 
 ## Rule Learning
 
@@ -337,7 +337,7 @@ Each `LearnedRule` contains:
 
 ### Filtering by Thresholds
 
-Rules below the minimum support or confidence thresholds are excluded:
+The extractor excludes rules below the minimum support or confidence thresholds:
 
 ```rust
 // Strict thresholds: only high-confidence rules
@@ -404,17 +404,17 @@ println!("Min confidence: {}", result.metadata.get("min_confidence").unwrap());
 
 `mine_rules` performs the following steps internally:
 
-1. Build the footprint matrix from the event log
-2. Run the Alpha miner to discover the Petri net
-3. Detect conflicts from the net structure and trace analysis
-4. Extract SPL rules from causal pairs, filtered by support and confidence
-5. Package everything into a `MiningResult` with metadata
+1. Builds the footprint matrix from the event log
+2. Runs the Alpha miner to discover the Petri net
+3. Detects conflicts from the net structure and trace analysis
+4. Extracts SPL rules from causal pairs, filtered by support and confidence
+5. Packages everything into a `MiningResult` with metadata
 
 ## Use Cases
 
 ### Workflow Analysis
 
-Discover the actual execution patterns from system logs:
+This API example discovers actual execution patterns from system logs:
 
 ```rust
 use spindle_core::mining::{Event, Case, EventLog, mine_rules};
@@ -460,7 +460,7 @@ for lr in &result.rules {
 
 ### Compliance Checking
 
-Identify process deviations by comparing mined rules against expected patterns:
+This API example compares mined rules against expected patterns to identify process deviations:
 
 ```rust
 use spindle_core::mining::{Footprint, make_log_from_traces};
@@ -474,11 +474,11 @@ let log = make_log_from_traces(&[
 
 let fp = Footprint::from_log(&log);
 
-// Check if review always precedes approval
+// Check for an observed review-to-approve relation without its reverse
 if fp.is_causal("review", "approve") {
-    println!("Compliant: review always directly precedes approve");
+    println!("Observed: review directly precedes approve, with no reverse pair");
 } else {
-    println!("Violation: review does not always precede approve");
+    println!("No unidirectional review-to-approve relation");
 }
 
 // Check for unauthorized shortcuts
@@ -487,9 +487,13 @@ if fp.is_causal("submit", "approve") {
 }
 ```
 
+`is_causal` checks observed adjacent pairs across the log. It does not establish that review precedes every approval.
+This log contains a skipped review despite its causal `review -> approve` relation.
+Checking compliance for every approval requires inspecting each trace.
+
 ### Process Discovery
 
-Combine mining with Spindle's reasoning engine to build executable rule sets:
+Mining produces rule sets for Spindle’s reasoning engine:
 
 ```rust
 use spindle_core::mining::{mine_rules, make_log_from_traces};
@@ -519,6 +523,6 @@ for c in &result.conflicts {
 
 1. **Alpha algorithm scope**: The Alpha miner handles sequential, parallel, and choice patterns. It does not support loops, invisible transitions, or duplicate activities.
 2. **Directly-follows only**: The footprint matrix considers only directly adjacent activities, not long-range dependencies.
-3. **Timestamp ordering**: Events within a case are sorted lexicographically by timestamp string. Use ISO-8601 format to ensure correct ordering.
+3. **Timestamp ordering**: `Case::new` sorts events lexicographically by timestamp string. ISO-8601 formatting ensures correct ordering.
 4. **Rust API only**: Process mining is not yet available through the CLI or WebAssembly bindings.
-5. **No incremental mining**: The entire log must be provided upfront; streaming or incremental updates are not supported.
+5. **No incremental mining**: The API requires the entire log upfront. It does not support streaming or incremental updates.

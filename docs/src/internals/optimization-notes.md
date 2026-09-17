@@ -1,6 +1,7 @@
-# Optimization Notes
+# Lattice Memoization Experiments
 
-This document records optimization attempts and findings for future reference.
+This document records February 2026 optimization experiments and findings.
+The implementations and untested proposals below describe that historical investigation.
 
 ## Lattice-Based Memoization (February 2026)
 
@@ -8,15 +9,15 @@ This document records optimization attempts and findings for future reference.
 
 The `is_blocked_by_superior` function in `reason.rs` checks if a defeasible rule is blocked by attacking rules. The hypothesis was that:
 
-1. Multiple rules deriving the same head would check the same attackers
-2. Caching attacker status could avoid repeated O(body_size) checks
-3. A lattice-based approach (inspired by Ascent) could formalize memoization
+1. Multiple rules deriving the same head were expected to check the same attackers
+2. Caching attacker status promised to avoid repeated O(body_size) checks
+3. A lattice-based approach (inspired by Ascent) offered a formal model for memoization
 
 ### Approaches Tried
 
 #### 1. ProofStatus Lattice with Memoization
 
-Created a `ProofStatus` enum representing lattice positions:
+The first experiment created a `ProofStatus` enum representing lattice positions:
 
 ```rust
 enum ProofStatus {
@@ -34,19 +35,19 @@ enum ProofStatus {
 
 #### 2. BlockedByChecker with Conservative Invalidation
 
-Cached active attackers per complement literal, clearing cache when `proven` set grew.
+The second experiment cached active attackers per complement literal. It cleared the cache when the `proven` set grew.
 
-**Result**: Cache was cleared too often, providing no benefit.
+**Result**: The experiment cleared the cache too often, providing no benefit.
 
 #### 3. Incremental Invalidation
 
-Tracked `pending_body_literals` for each cache entry, only invalidating when relevant literals were proven.
+The third experiment tracked `pending_body_literals` for each cache entry. It invalidated entries only when the reasoner proved relevant literals.
 
 **Result**: Reduced unnecessary invalidation, but overhead still exceeded savings. Cloning the `proven` HashSet for snapshot tracking was expensive.
 
 #### 4. Lazy Attacker Tracking
 
-Tracked attacker activation incrementally (like rule body counters), avoiding body satisfaction checks entirely.
+The fourth experiment tracked attacker activation incrementally (like rule body counters), avoiding body satisfaction checks entirely.
 
 ```rust
 struct LazyAttackerTracker {
@@ -70,7 +71,7 @@ multi_target_blocked (M targets × N defenders):
 
 ### Why All Approaches Failed
 
-The original `is_blocked_by_superior` is already well-optimized:
+The investigation found the original `is_blocked_by_superior` already well-optimized:
 
 ```rust
 for attacker in attacking_rules {           // O(1) lookup via IndexedTheory
@@ -85,9 +86,9 @@ Key factors:
 2. **Single-pass algorithm** - Each literal checked once, no reuse opportunity
 3. **Cache overhead exceeds savings** - HashMap ops, allocations, tracking state
 
-### When Memoization Would Help
+### Proposed Memoization Applications
 
-| Scenario | Single-Pass | Would Benefit |
+| Scenario | Single-Pass | Expected Benefit |
 |----------|-------------|---------------|
 | Batch reasoning | ❌ No reuse | N/A |
 | Interactive queries | N/A | ✅ Repeated queries |
@@ -95,7 +96,7 @@ Key factors:
 | Explanation generation | N/A | ✅ Re-queries same literals |
 | What-if analysis | ❌ Fresh run | ✅ Partial cache hits |
 
-### Existing Optimizations (Already Effective)
+### Effective Optimizations at the Time
 
 1. **LiteralId** - 4-byte interned identifier, O(1) comparison
 2. **SuperiorityIndex** - O(1) superiority lookup
@@ -104,23 +105,23 @@ Key factors:
 
 ### Alternative Optimizations (Not Tried)
 
-If future profiling shows `is_blocked_by_superior` as a bottleneck:
+The investigation proposed these alternatives if later profiling identified `is_blocked_by_superior` as a bottleneck:
 
-1. **Bit vectors** - Replace HashSet with bit vector for proven literals
-2. **Arena allocation** - Pre-allocate rules in contiguous memory
-3. **Rule ordering** - Process rules in topological order
-4. **SIMD body checks** - Vectorize body satisfaction for large bodies
+1. **Bit vectors** - Replacing HashSet with a bit vector for proven literals
+2. **Arena allocation** - Pre-allocation of rules in contiguous memory
+3. **Rule ordering** - Processing rules in topological order
+4. **SIMD body checks** - Vectorization of body satisfaction for large bodies
 
 ### Lessons Learned
 
-1. **Profile before optimizing** - The target operation was already efficient
+1. **Profiling matters** - The target operation was already efficient
 2. **Single-pass algorithms resist caching** - No repeated queries means no cache hits
 3. **Cache overhead matters** - HashMap operations can exceed saved computation
 4. **Simple code is often fastest** - Direct iteration beats fancy data structures
 
 ### Code Location
 
-The experimental code is on branch `feature/lattice-proof-memoization`:
+The investigation stored its experimental code on branch `feature/lattice-proof-memoization`:
 
 ```
 8af967a feat(lattice): add lattice-based proof status memoization
@@ -130,4 +131,4 @@ The experimental code is on branch `feature/lattice-proof-memoization`:
 270aa98 experiment: add reason_lazy with lazy attacker tracking
 ```
 
-The lattice module (`lattice.rs`) and memoized/lazy functions remain available for reference but are not used in production.
+The investigation retained the lattice module (`lattice.rs`) and memoized/lazy functions for reference. It did not adopt them for production.

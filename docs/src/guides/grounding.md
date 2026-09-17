@@ -52,20 +52,20 @@ A classic example - computing ancestors:
 - `ancestor(bob, david)` - via r2
 - `ancestor(alice, david)` - via r2
 
-## How Grounding Works
+## Grounding Stages
 
-### Step 1: Collect Ground Facts
+### Ground Facts
 
-Extract all predicate instances from facts:
+The grounder extracts all predicate instances from facts:
 
 ```spl
 (given (parent alice bob))   →  parent(alice, bob)
 (given (parent bob charlie)) →  parent(bob, charlie)
 ```
 
-### Step 2: Match Rule Bodies
+### Rule Body Matching
 
-For each rule, find all substitutions that satisfy the body:
+For each rule, the grounder finds all substitutions that satisfy the body:
 
 ```spl
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
@@ -75,9 +75,9 @@ Substitutions:
 - `{?x → alice, ?y → bob}`
 - `{?x → bob, ?y → charlie}`
 
-### Step 3: Generate Ground Rules
+### Ground Rule Generation
 
-Apply substitutions to create ground instances:
+The grounder applies substitutions to create ground instances:
 
 ```spl
 ; Ground instances of r1
@@ -85,9 +85,9 @@ Apply substitutions to create ground instances:
 (normally r1_2 (parent bob charlie) (ancestor bob charlie))
 ```
 
-### Step 4: Forward Chaining
+### Forward Chaining
 
-Reason over the ground theory using standard algorithms.
+Standard algorithms reason over the ground theory.
 
 ## Multiple Variables
 
@@ -106,7 +106,7 @@ The join `(edge ?x ?y)` ∧ `(edge ?y ?z)` requires matching on `?y`:
 
 ## Wildcard Variable
 
-Use `_` when you don't care about a value:
+The wildcard `_` matches any value:
 
 ```spl
 (normally r1 (parent _ ?y) (has-parent ?y))
@@ -116,7 +116,7 @@ This matches any parent relationship.
 
 ## Variable Scope
 
-Variables are scoped to their rule:
+Each rule has its own variable scope:
 
 ```spl
 ; ?x in r1 is independent of ?x in r2
@@ -126,7 +126,7 @@ Variables are scoped to their rule:
 
 ## Safety Requirement
 
-All head variables must appear in the body (**range-restricted**):
+All head variables appear in the body of a safe rule (**range-restricted**):
 
 ```spl
 ; VALID: ?x and ?y appear in body
@@ -136,7 +136,7 @@ All head variables must appear in the body (**range-restricted**):
 (normally r2 (parent ?x ?y) (triple ?x ?y ?z))
 ```
 
-Unsafe rules would generate infinite ground instances.
+Unsafe rules generate infinite ground instances.
 
 ## Negation with Variables
 
@@ -153,8 +153,8 @@ Negated predicates in the body:
 
 **Important**: This is strong negation, not negation-as-failure. The rule needs
 explicit support for `(not (penguin ?x))`; merely omitting a penguin fact does
-not make Eddie fly. Add `(given (not (penguin eddie)))` to supply that premise.
-Stratification is used for aggregate dependencies, not to turn ordinary negation
+not make Eddie fly. The fact `(given (not (penguin eddie)))` supplies that premise.
+Stratification handles aggregate dependencies. It does not turn ordinary negation
 into a test for missing evidence.
 
 ## Grounding with Superiority
@@ -182,14 +182,12 @@ Grounding can produce many rules:
 | 100 | 2 (join) | up to 10,000 |
 | 100 | 3 (join) | up to 1,000,000 |
 
-Tips:
-- Keep rule bodies small
-- Use specific predicates to reduce matching
-- Add explicit superiority where grounded conflicts should resolve to one side
+Small rule bodies and specific predicates reduce matching.
+Explicit superiority resolves grounded conflicts in favor of one side.
 
 ## Arithmetic in Grounded Rules
 
-Arithmetic expressions are evaluated during grounding after variables are substituted.
+After substituting variables, the grounder evaluates arithmetic expressions.
 
 ### Bind Constraints
 
@@ -205,10 +203,10 @@ Arithmetic expressions are evaluated during grounding after variables are substi
 ```
 
 Grounding:
-1. Match `(item widget 25)` and `(tax-rate 0.1)` → `{?name→widget, ?price→25, ?rate→0.1}`
-2. Evaluate `(+ 25 (* 25 0.1))` → `27.5`
-3. Bind `?total → 27.5`
-4. Produce `(total-cost widget 27.5)`
+1. The grounder matches `(item widget 25)` and `(tax-rate 0.1)` → `{?name→widget, ?price→25, ?rate→0.1}`
+2. The grounder evaluates `(+ 25 (* 25 0.1))` → `27.5`
+3. The grounder binds `?total → 27.5`
+4. The grounder produces `(total-cost widget 27.5)`
 
 ### Comparison Guards
 
@@ -227,7 +225,7 @@ Only `{?name→alice, ?s→85}` satisfies `(>= 85 50)`, so only `(passing alice)
 
 ### Evaluation Order
 
-Body literals are evaluated left-to-right. Variables must be bound before they are used in arithmetic:
+The grounder evaluates body literals left-to-right. Arithmetic expressions need existing variable bindings:
 
 ```spl
 ; CORRECT: ?price is bound by (item ...) before (bind ...) uses it
@@ -267,7 +265,7 @@ SPL supports variables, so you can write a single rule:
 (normally r1 (parent ?x ?y) (ancestor ?x ?y))
 ```
 
-Without variables, you would need to enumerate all ground instances manually:
+Without variables, each ground instance needs a separate rule:
 
 ```spl
 (normally r1 (parent alice bob) (ancestor alice bob))

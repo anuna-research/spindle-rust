@@ -39,7 +39,7 @@ Expands to:
 
 ## Transitivity
 
-Superiority is **not automatically transitive**. If you need r3 > r1, declare it explicitly:
+Superiority is **not automatically transitive**. The relation r3 > r1 needs its own explicit declaration:
 
 ```spl
 (prefer r3 r2)
@@ -51,9 +51,9 @@ Superiority is **not automatically transitive**. If you need r3 > r1, declare it
 
 When evaluating a defeasible conclusion:
 
-1. Find all rules that could prove the literal
-2. Find all rules that could prove the complement (attackers)
-3. For each attacker with satisfied body:
+1. The engine identifies all rules that can prove the literal.
+2. The engine identifies all rules that can prove the complement (attackers).
+3. Each attacker with a satisfied body faces a superiority check:
    - If no defender is superior to it → blocked
    - If some defender is superior → attack fails
 4. If all attacks fail → conclusion is provable
@@ -130,25 +130,25 @@ including strict rules used with only defeasible premises. Common cases include:
 - Defeasible rules and defeaters
 - Defeaters
 
-## Best Practices
+## Priority Design
 
-### Use Specificity
-More specific rules should be superior:
+### Specificity
+Explicit priority lets a more specific rule override a general rule:
 ```spl
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
 (prefer r2 r1)    ; Penguin is more specific than bird
 ```
 
-### Document Reasoning
-Use comments to explain why one rule beats another:
+### Priority Rationale
+Comments explain why one rule beats another:
 ```spl
 ; Medical override: confirmed diagnosis beats symptoms
 (prefer r-diagnosis r-symptoms)
 ```
 
-### Avoid Cycles
-Don't create circular superiority:
+### Cycles
+Circular superiority creates a cycle:
 ```spl
 ; BAD — creates a cycle
 (prefer r1 r2)

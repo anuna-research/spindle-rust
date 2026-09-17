@@ -1,6 +1,7 @@
 # SPL Format Reference
 
-SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DFL syntax with a LISP-based DSL whose s-expression structure makes it straightforward to add new constructs (temporal operators, trust directives, claims blocks, etc.) without grammar ambiguity.
+SPL (Spindle Lisp) is the input language for Spindle. It replaces the earlier DFL syntax with a LISP-based DSL.
+Its s-expression structure supports new constructs without grammar ambiguity. These include temporal operators, trust directives, and claims blocks.
 
 ## File Extension
 
@@ -124,7 +125,7 @@ unary-op    = "abs"
 
 ### Unlabeled Rules
 
-Labels are optional (auto-generated):
+When labels are omitted, Spindle generates them automatically:
 
 ```spl
 (normally bird flies)        ; Gets label like "r1"
@@ -163,26 +164,18 @@ Or with prefix:
 
 ## Conjunction
 
-Use `and` for multiple conditions:
+The `and` form combines multiple conditions:
 
 ```spl
 (normally healthy-birds-fly (and bird healthy) flies)
 (normally busy-students (and student employed) busy)
 ```
 
-### Why there is no `or`
+### Disjunctive conditions
 
-Defeasible logic does not support disjunction in rule bodies. This is by design, not a missing feature — the proof theory (Nute/Billington/Antoniou) defines derivation over conjunctive rules only. Adding `or` would break the well-defined defeat and superiority semantics that make defeasible reasoning tractable.
-
-Instead, express disjunction as separate rules that conclude the same head:
-
-```spl
-; "If rain or snow, take umbrella"
-(normally rain-means-umbrella rain take-umbrella)
-(normally snow-means-umbrella snow take-umbrella)
-```
-
-Each rule independently supports the same conclusion. If either `rain` or `snow` is provable, `take-umbrella` follows. This is the standard encoding of disjunctive conditions in defeasible logic, and it preserves per-rule defeat — you can override one path without affecting the other.
+Rule bodies do not support `or`. Separate rules with the same head express
+disjunctive conditions. [Disjunctive Conditions](../concepts/disjunction.md)
+explains the rationale and gives an example.
 
 ## Variables
 
@@ -199,7 +192,7 @@ Variables start with `?`:
 
 ### Wildcard
 
-Use `_` to match anything:
+The wildcard `_` matches any value:
 
 ```spl
 (normally has-any-parent (parent _ ?y) (has-parent ?y))
@@ -227,9 +220,8 @@ Expands to:
 
 ## Predicate Declarations
 
-A predicate declaration records the *structure* of a predicate — its ordered
-argument names and primitive sorts — independently of how (or whether) it is
-used. Declarations are optional: undeclared predicates parse and reason exactly
+A predicate declaration records the *structure* of a predicate: its ordered argument names and primitive sorts.
+This structure is independent of predicate usage. Declarations are not mandatory: undeclared predicates parse and reason exactly
 as before. A declaration adds **no fact or rule**; it only populates the
 theory's [vocabulary](#the-predicate-vocabulary).
 
@@ -241,13 +233,13 @@ theory's [vocabulary](#the-predicate-vocabulary).
 (predicate emergency ())        ; zero-arity predicate emergency/0
 ```
 
-The arity is derived from the number of argument declarations, so
+The number of argument declarations determines the arity, so
 `assign-to/2` above has two positions and `emergency/0` has none.
 
 ### Inline Metadata
 
-A declaration may carry trailing `meta` properties inline, so you don't have to
-write a separate `(meta (predicate ...) ...)` statement for the common case:
+A declaration can carry trailing `meta` properties inline.
+This syntax replaces a separate `(meta (predicate ...) ...)` statement in the common case:
 
 ```spl
 (predicate assign-to
@@ -258,9 +250,8 @@ write a separate `(meta (predicate ...) ...)` statement for the common case:
 ```
 
 Inline properties are exact sugar for the [separate metadata
-target](#predicate-metadata-targets) — they land in the same predicate metadata
-store — so the declaration above is equivalent to writing the declaration and a
-`(meta (predicate assign-to 2) ...)` statement with the same properties. Inline
+target](#predicate-metadata-targets). Both forms populate the same predicate metadata store.
+The example equals a declaration plus a `(meta (predicate assign-to 2) ...)` statement with the same properties. Inline
 and separate metadata for the same predicate merge (later values win per key).
 
 ### Primitive Sorts
@@ -277,20 +268,17 @@ only; they carry no domain meaning and do not affect inference.
 | `number` | any of `integer`, `decimal`, or `float` |
 | `any` | any ground term |
 
-Declarations are validated when parsed: the argument names must be non-empty
-and unique, and an unknown sort is a parse error.
+The parser checks declarations. Argument names need non-empty, unique values; an unknown sort causes a parse error.
 
 ### Predicate Indicators
 
-For display and CLI interoperability, a predicate is written in Prolog-style
-`functor/arity` notation, e.g. `assign-to/2` or `emergency/0`. A functor that
-contains `/` is quoted: `"rate/limit"/2`. This notation is presentation only —
+For display and CLI interoperability, predicates use Prolog-style `functor/arity` notation, such as `assign-to/2` or `emergency/0`. When a functor contains `/`, its display includes quotes: `"rate/limit"/2`. This notation is presentation only —
 the machine representation always keeps functor and arity as separate
 structured fields, never a parsed string.
 
 ## Metadata
 
-Attach metadata to a rule (by label) or to a predicate (by structured target):
+Metadata attaches to a rule by label or to a predicate by structured target:
 
 ```spl
 (meta birds-fly
@@ -309,7 +297,7 @@ Attach metadata to a rule (by label) or to a predicate (by structured target):
 
 ### Predicate Metadata Targets
 
-A `meta` target may be a structured `(predicate functor arity)` selector
+A `meta` target can be a structured `(predicate functor arity)` selector
 instead of a label. This attaches metadata to one predicate symbol without
 overloading a rule label or parsing a predicate-indicator string:
 
@@ -320,17 +308,15 @@ overloading a rule label or parsing a predicate-indicator string:
   (description "Assign a task to an agent."))
 ```
 
-The predicate target is kept distinct from label metadata and from other
-arities: metadata for `(predicate assign-to 2)` never collides with a rule
-labelled `assign-to`, nor with `assign-to/1`. Predicate descriptions do not
+The metadata store distinguishes predicate targets from labels and other arities.
+Metadata for `(predicate assign-to 2)` never collides with a rule labelled `assign-to`, nor with `assign-to/1`. Predicate descriptions do not
 have to be declared — they can annotate any predicate the theory uses.
 
 ### The Predicate Vocabulary
 
-Declarations, predicate metadata, and observed rule usage together form a
-derived, read-only **vocabulary**: a catalogue keyed by predicate symbol that
-carries each predicate's signature, a description, observed argument kinds per
-position, and the rule occurrences that reference it. The vocabulary is a
+Declarations, predicate metadata, and observed rule usage together form a derived, read-only **vocabulary**.
+This catalogue uses predicate symbols as keys.
+Each entry carries a signature, a description, observed argument kinds per position, and the rule occurrences that reference the predicate. The vocabulary is a
 tooling projection — it never changes conclusions. See the
 [Rust Library guide](../integration/rust.md#predicate-vocabulary) for the API
 (`TheorySignature`, `Vocabulary`).
@@ -382,7 +368,7 @@ inf                              ; Positive infinity
 ### Allen Relations
 
 SPL supports interval variables such as `(during p ?T)` and all 13 Allen
-constraints in rule bodies. Use `within` for Allen's During relation, distinct
+constraints in rule bodies. The `within` keyword names Allen's During relation, distinct
 from the [`during` SPL wrapper](#during). For example:
 
 ```spl
@@ -479,7 +465,7 @@ Arithmetic expressions can appear in rule bodies as `bind` constraints, comparis
 
 ### Bind Constraints
 
-Bind a variable to the result of an arithmetic expression:
+A bind assigns an arithmetic expression’s result to a variable:
 
 ```spl
 (normally compute-total
@@ -490,7 +476,7 @@ Bind a variable to the result of an arithmetic expression:
 
 ### Comparison Guards
 
-Compare two arithmetic expressions:
+Comparison guards compare two arithmetic expressions:
 
 ```spl
 (normally adult-by-age
@@ -516,7 +502,7 @@ Arithmetic expressions can appear as predicate arguments in rule bodies:
 
 ### Type Promotion
 
-Numeric types are promoted during arithmetic: Integer → Decimal → Float.
+Arithmetic promotes numeric types: Integer → Decimal → Float.
 
 - Integer + Integer = Integer
 - Integer + Decimal = Decimal
@@ -544,7 +530,7 @@ Future reserved: `sum`, `count`, `avg`, `round`, `floor`, `ceil`
 
 ## Claims
 
-The `claims` block attributes statements to a named source, with optional metadata.
+The `claims` block attributes statements to a named source, with metadata when supplied.
 
 ```spl
 (claims agent:alice
@@ -564,10 +550,10 @@ The `claims` block attributes statements to a named source, with optional metada
 ```
 
 - **source** — an atom identifying the claiming agent (e.g., `agent:alice`).
-- **:at** — optional RFC3339 timestamp for when the claim was made.
-- **:sig** — optional signature string for verification.
-- **:id** — optional block identifier.
-- **:note** — optional free-text annotation.
+- **:at** — RFC3339 timestamp for when the claim was made.
+- **:sig** — signature string for verification.
+- **:id** — block identifier.
+- **:note** — free-text annotation.
 
 Statements inside a `claims` block are ordinary SPL expressions (`given`, `always`, `normally`, `except`, `prefer`) that automatically receive source metadata. See the [Trust & Multi-Agent guide](../guides/trust.md) for details.
 
@@ -616,9 +602,8 @@ Statements inside a `claims` block are ordinary SPL expressions (`given`, `alway
 ```
 
 This derives `(total-payment 20)`. Named aggregators are `sum`, `count`, `min-of`,
-and `max-of`. The output and contribution are variables; the contribution must
-occur in the single row pattern. For grouped results, bind grouping variables in
-earlier ordinary premises. Separate helper predicates can express joins/filters.
+and `max-of`. The output and contribution are variables; the contribution needs to
+occur in the single row pattern. For grouped results, earlier ordinary premises bind grouping variables. Separate helper predicates can express joins/filters.
 
 Explicit folds remain available:
 

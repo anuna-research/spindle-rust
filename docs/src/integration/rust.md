@@ -1,15 +1,23 @@
-# Rust Library Guide
+# Rust Library API
 
-This guide covers using Spindle as a Rust library.
+This reference describes Spindle’s Rust library types, preparation pipeline, and reasoning APIs.
 
 ## Installation
 
-Add to your `Cargo.toml`:
+Git dependency declarations in `Cargo.toml`:
 
 ```toml
 [dependencies]
 spindle-core = { git = "https://git.anuna.io/anuna-research/spindle-rust", package = "spindle-core" }
 spindle-parser = { git = "https://git.anuna.io/anuna-research/spindle-rust", package = "spindle-parser" }
+```
+
+Local path dependencies, for a consumer whose manifest sits beside `crates/`:
+
+```toml
+[dependencies]
+spindle-core = { path = "crates/spindle-core" }
+spindle-parser = { path = "crates/spindle-parser" }
 ```
 
 ## Basic Usage
@@ -216,7 +224,7 @@ Symbols are never numerically equal to anything (including other symbols).
 ### NumericValue
 
 `NumericValue` is a guaranteed-numeric counterpart to `Term` (no `Symbol`
-variant). Convert with `Term::to_numeric_value()`:
+variant). `Term::to_numeric_value()` performs the conversion:
 
 ```rust
 let term = Term::Integer(10);
@@ -309,7 +317,7 @@ for rule in theory.rules() {
 ## Pipeline
 
 The preparation pipeline transforms a raw `Theory` into a form ready for
-reasoning. It is built from composable stages assembled via `PipelineBuilder`.
+reasoning. `PipelineBuilder` assembles its composable stages.
 
 ### Default Pipeline
 
@@ -324,7 +332,7 @@ let prepared_theory = result.theory;
 
 ### PipelineBuilder
 
-For fine-grained control, build a custom pipeline from individual stages:
+`PipelineBuilder` supports custom pipelines assembled from individual stages:
 
 ```rust
 use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground};
@@ -411,8 +419,7 @@ impl PipelineStage for LogRuleCount {
 
 ### PipelineContext and Diagnostics
 
-A `PipelineContext` is threaded through all stages, collecting diagnostics and
-inter-stage metadata.
+All stages share a `PipelineContext`, which collects diagnostics and inter-stage metadata.
 
 ```rust
 use spindle_core::pipeline::{Pipeline, Validate, WildcardRewrite, Ground, Severity, MetadataVal};
@@ -446,7 +453,7 @@ if let Some(MetadataVal::Bool(true)) = ctx.metadata.get("grounding_limit_hit") {
 ### PrepareOptions
 
 The `prepare()` function builds a full pipeline from `PrepareOptions`,
-including optional temporal filtering and grounding configuration:
+including configurable temporal filtering and grounding:
 
 ```rust
 use spindle_core::pipeline::{prepare, PrepareOptions, GroundingOptions, ValidationOptions};
@@ -544,7 +551,7 @@ fn load_theory(path: &str) -> Result<Theory> {
 
 ## Advanced: Indexed Theory
 
-For multiple queries, build an indexed theory once:
+An indexed theory supports multiple queries after a single construction:
 
 ```rust
 use spindle_core::index::IndexedTheory;
@@ -637,9 +644,8 @@ assert_eq!(sym.arity(), 2);
 assert_eq!(sym.indicator().to_string(), "assign-to/2");
 ```
 
-`p(a)` and `~p(b)` share `p/1`, but this identity is deliberately *not* a
-proof-state key — `FamilyId`, `LitId`, and `ExactLitId` remain authoritative for
-reasoning.
+`p(a)` and `~p(b)` share `p/1`, but this identity is deliberately *not* a proof-state key.
+`FamilyId`, `LitId`, and `ExactLitId` remain authoritative for reasoning.
 
 ### Declaring Predicates Programmatically
 
@@ -694,8 +700,7 @@ println!("{} symbols, {} occurrences, {} conflicts",
     report.summary.declaration_conflicts);
 ```
 
-Entries are ordered by `(functor, arity)` and the output is independent of
-`HashMap` iteration order.
+Entries follow `(functor, arity)` order, independently of `HashMap` iteration order.
 
 ### Literal Phases
 
@@ -715,7 +720,7 @@ match Literal::simple("bird").classify() {
 ### Shape Validation
 
 A `Shape` compiled from a signature validates argument sorts at a boundary
-(e.g. before an effectful action). It is never consulted by the reasoner:
+(e.g. before an effectful action). The reasoner never consults it:
 
 ```rust
 use spindle_core::prelude::*;
@@ -728,7 +733,7 @@ let report = shape.validate(&lit).unwrap();
 ### Parsing Predicate Indicators
 
 The `spindle-parser` crate exposes a fully-consuming recognizer for the
-`functor/arity` notation (slash-bearing functors must be quoted):
+`functor/arity` notation (slash-bearing functors require quotes):
 
 ```rust
 use spindle_parser::parse_predicate_indicator;
@@ -741,20 +746,19 @@ let quoted = parse_predicate_indicator("\"rate/limit\"/2").unwrap(); // ok
 ## Extension registry and aggregate preparation
 
 `prepare()` supplies `FunctionRegistry::with_prelude()` and merges a host registry
-from `PrepareOptions::function_registry`. Implement `ExtensionFunction` with a
-`FunctionSignature` and `eval(&[Term]) -> Result<Term, EvalError>`, then register it
-using `registry.register(Box::new(function))`. Functions must be pure,
-deterministic, `Send + Sync`; they receive values, not theory access.
+from `PrepareOptions::function_registry`. An `ExtensionFunction` implementation supplies a
+`FunctionSignature` and `eval(&[Term]) -> Result<Term, EvalError>`.
+`registry.register(Box::new(function))` registers the implementation.
+Functions MUST be pure, deterministic, and `Send + Sync`. They receive values, not theory access.
 
 `ArithExpr::Call { name, args }` represents both builtin and extension calls;
 `Value` supports general terms and `Fold` represents snapshot-aware aggregation.
 The former operator-specific AST variants are no longer the dispatch interface.
 
-Named aggregators live in a separate registry namespace. Use
-`register_aggregator(name, AggregatorDefinition { reducer, identity, count })`
-for custom definitions. The [aggregation guide](../guides/aggregation.md) describes
+Named aggregators live in a separate registry namespace.
+`register_aggregator(name, AggregatorDefinition { reducer, identity, count })` registers custom definitions. The [aggregation guide](../guides/aggregation.md) describes
 reducer laws, preparation limits, and the Lean proof boundary.
 
-`Theory::metadata()` remains label-keyed. Use `predicate_metadata()` for the
+`Theory::metadata()` remains label-keyed. `predicate_metadata()` accesses the
 separate predicate store. Vocabulary DTOs preserve conflicting declarations and
-provenance; declaration origins are optional enrichment on coherent signatures.
+provenance; declaration origins enrich coherent signatures when present.

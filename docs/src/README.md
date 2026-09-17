@@ -9,7 +9,11 @@ This project is part of the SPINdle family:
 
 ## What is Defeasible Logic?
 
-Defeasible logic is a [**non-monotonic reasoning**](https://www.youtube.com/watch?v=Ozipf13jRr4&t=1066) system that allows conclusions to be defeated by stronger evidence. Unlike classical logic where adding new information only adds new conclusions, defeasible logic can revise existing conclusions when conflicting evidence appears. Crucially, it is **tractable** — for propositional theories, inference runs in linear time relative to the size of the theory (Maher, 2001). With first-order variables, a grounding phase instantiates rules against known facts before reasoning begins; the grounding step can be exponential in rule body size (as with Datalog), but reasoning over the ground theory remains polynomial. This makes defeasible logic practical where other non-monotonic formalisms are intractable.
+Defeasible logic is a [**non-monotonic reasoning**](https://www.youtube.com/watch?v=Ozipf13jRr4&t=1066) system. Stronger evidence can defeat its conclusions.
+Classical logic only adds conclusions when new information arrives. Defeasible logic can revise conclusions when conflicting evidence appears.
+
+Tractable inference makes defeasible logic practical where other non-monotonic formalisms are intractable.
+[Algorithms](guides/algorithms.md#theoretical-complexity-and-grounding) explains theoretical complexity and the separate cost of grounding first-order variables.
 
 ```spl
 ; The classic "Tweety" example
@@ -44,60 +48,21 @@ Tweety is defeasibly proven not to fly (`+d ~flies(tweety)`), because `penguins-
 
 ## Features
 
-- **Four rule types:** facts, strict rules, defeasible rules, and defeaters
-- **Reasoning engine:** traditional ambiguity-blocking DL(∂), with constructive negative tags
-- **Temporal reasoning:** Allen interval algebra with 13 temporal relations
-- **First-order variables:** Datalog-style grounding with `?x` syntax
-- **Query operators:** status queries, what-if, why-not, abduction, and verified requirements
-- **Aggregation:** grouped sum, count, minimum, and maximum over completed predicates
-- **Extension functions:** host-registered pure functions and named aggregators
-- **Predicate vocabulary:** declarations, metadata, and non-semantic shape diagnostics
-- **Verification:** Lean models and Rust/Lean differential tests for supported fragments
-- **Trust-aware reasoning:** source attribution and weighted conclusions
-- **SPL format:** Lisp-based input with variables, temporal, and trust directives
-- **WebAssembly support:** run in browsers and Node.js
+- **[Rules](concepts/rules.md) and [reasoning](guides/algorithms.md):** facts, strict rules, defeasible rules, and defeaters. The engine implements traditional ambiguity-blocking DL(∂) with constructive negative tags.
+- **[Variables](guides/grounding.md) and [time](guides/temporal.md):** Datalog-style grounding with `?x` syntax; Allen interval algebra with 13 temporal relations.
+- **[Queries](guides/queries.md):** status queries, what-if, why-not, abduction, and verified requirements.
+- **[Aggregation and extensions](guides/aggregation.md):** grouped sum, count, minimum, and maximum over completed predicates; host-registered pure functions and named aggregators.
+- **[Vocabulary](reference/spl.md#the-predicate-vocabulary) and [verification](internals/verification.md):** predicate declarations, metadata, and non-semantic shape diagnostics. Lean models and Rust/Lean differential tests cover supported fragments.
+- **[Trust-aware reasoning](guides/trust.md):** source attribution and weighted conclusions.
+- **[Input](reference/spl.md) and [integration](integration/wasm.md):** Lisp-based SPL with variable, temporal, and trust directives; WebAssembly support for browsers and Node.js.
 
-See [Aggregation and Extension Functions](guides/aggregation.md),
-[Query Operators](guides/queries.md), and [Verification](internals/verification.md)
-for current behavior and supported boundaries.
+The linked pages describe current behavior and supported boundaries.
 
-## Quick Example
+## Entry Points
 
-```rust
-use spindle_core::prelude::*;
-
-let mut theory = Theory::new();
-
-// Add facts
-theory.add_fact("bird");
-theory.add_fact("penguin");
-
-// Add defeasible rules
-let r1 = theory.add_defeasible_rule(&["bird"], "flies");
-let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
-
-// Penguin rule beats bird rule
-theory.add_superiority(&r2, &r1);
-
-// Reason and get conclusions
-let conclusions = theory.reason().expect("reasoning succeeds");
-```
-
-## Installation
-
-### CLI
-
-```bash
-cargo install --path crates/spindle-cli
-```
-
-### Library
-
-```toml
-[dependencies]
-spindle-core = { path = "crates/spindle-core" }
-spindle-parser = { path = "crates/spindle-parser" }
-```
+[Getting Started](getting-started.md) covers CLI installation and a first theory.
+The [Rust Library API](integration/rust.md#installation) describes library dependencies.
+Its [basic example](integration/rust.md#basic-usage) constructs the penguin theory, sets superiority, and obtains conclusions with `Theory::reason()`.
 
 ## Crate Structure
 

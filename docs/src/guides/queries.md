@@ -1,8 +1,8 @@
 # Query Operators
 
-Use `query` to check a literal, `why_not` to inspect blockers, and `what_if` to
-explore hypothetical facts. Use `requires_with_options` when proposed facts must
-be verified by rerunning the reasoner; `abduce` supplies raw candidates.
+`query` checks a literal, `why_not` identifies blockers, and `what_if` evaluates hypothetical facts.
+`requires_with_options` verifies proposed facts by rerunning the reasoner.
+`abduce` supplies raw candidates.
 
 ## Rust example
 
@@ -64,7 +64,7 @@ to templates when constructing proof trees.
 ## Abduction and verified requirements
 
 `abduce(&theory, &goal, max_solutions)?` returns candidate assumptions. A candidate
-may fail under full conflict resolution; use `requires_with_options` for verified
+can fail under full conflict resolution. `requires_with_options` returns verified
 solutions. Verification injects each candidate fact-set and reruns reasoning,
 retaining only candidates that establish the goal.
 
@@ -73,7 +73,7 @@ Each `AbductionSolution` contains:
 - `facts: Vec<Literal>`: deterministic, deduplicated assumptions preserving typed
   terms and distinct temporal windows.
 - `rules_used`: the rules associated with that solution's fact-set.
-- `confidence`: a confidence field on the candidate.
+- `confidence`: currently initialized to `1.0`; this value is not a calibrated probability or proof that the candidate establishes the goal.
 
 `RequiresResult` reports `already_provable`, `solutions`, `search_status`, and
 verification counters (`raw_examined`, `accepted`, `rejected`). `BoundedComplete`
@@ -89,9 +89,8 @@ Bounded goals use exact temporal windows. A query for `p@[1,10]` does not match
 Atemporal goals match any member of the same literal family. This applies to
 `query`, `requires`, `what_if`, and `abduce`.
 
-For an explicit family-wide core query, use
-`query_with_match_mode(&theory, &goal, QueryMatchMode::Family)` from
-`spindle_core::query`. See [Temporal Reasoning](temporal.md).
+`query_with_match_mode(&theory, &goal, QueryMatchMode::Family)` in
+`spindle_core::query` explicitly selects family-wide matching. See [Temporal Reasoning](temporal.md).
 
 ## CLI and WebAssembly
 
@@ -101,8 +100,8 @@ spindle why-not flies theory.spl --json
 spindle requires flies theory.spl --max 3 --json
 ```
 
-`requires --json` emits `spindle.requires.v2`; clients must accept an empty
-solution list for an unsatisfied goal. The CLI has no standalone `what-if` or
+`requires --json` emits `spindle.requires.v2`; an unsatisfied goal can have an empty
+solution list. The CLI has no standalone `what-if` or
 `abduce` command. The WASM `Spindle` object exposes `query`, `whatIf`, `whyNot`,
 and raw `abduce`; it does not expose the verified `requires` API.
 

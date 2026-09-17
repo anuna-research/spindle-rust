@@ -23,30 +23,16 @@ implementation, not a proof of whole-language Rust conformance. In particular:
 - Custom extension implementations and their reducer laws are host contracts.
 - SPL parsing and extension registration are tested integrations.
 - Historical lambda-only and strengthened two-sided models retain their own
-  proofs; those results must not be attributed to the current standard backend.
+  proofs; those results do not establish properties of the current standard backend.
 
-## Running checks
+## Verification gate
 
-From the repository root:
+The Lean gate builds libraries and oracle executables with warnings as errors.
+It rejects admitted proofs and local axioms, checks vacuity, and audits theorem axioms.
+The gate uses the Lean toolchain specified under `lean/`.
+Ordinary Cargo tests do not perform these checks.
 
-```sh
-make check
-make test
-scripts/check-lean-verification.sh
-```
-
-The Lean gate builds libraries and oracle executables with warnings as errors,
-rejects admitted proofs and local axioms, checks vacuity, and audits theorem
-axioms. It requires the Lean toolchain specified under `lean/`; ordinary Cargo
-tests do not substitute for this gate.
-
-After building the relevant oracle executables, run the external-oracle tests
-explicitly, for example:
-
-```sh
-cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
-cargo test -p spindle-core --test lean_arith_oracle_difftest -- --ignored
-```
+[Running verification checks](../guides/check-verification.md) gives the commands and external-oracle test examples.
 
 See the repository's
 [Lean guide](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/README.md),

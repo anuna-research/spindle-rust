@@ -1,11 +1,11 @@
 # Temporal Reasoning
 
 Spindle supports bounded temporal literals, whole-interval variables, Allen
-constraints, and optional “as-of” filtering.
+constraints, and “as-of” filtering when requested.
 
 ## Time points and intervals
 
-Time points are milliseconds since the Unix epoch (UTC). Use integer bounds,
+Time points are milliseconds since the Unix epoch (UTC). Accepted bounds include integers,
 `(moment "2024-06-15T14:30:00Z")`, or `-inf` / `inf`. Multi-argument calendar forms
 such as `(moment 2024 6 15)` are unsupported.
 
@@ -19,7 +19,7 @@ inclusive for active-at filtering.
 
 ## Interval variables and constraints
 
-Bind a whole interval in a premise with `(during literal ?T)`:
+The premise `(during literal ?T)` binds a whole interval:
 
 ```spl
 (given (during (p a) 1 10))
@@ -32,8 +32,10 @@ Bind a whole interval in a premise with `(during literal ?T)`:
 ```
 
 This derives `(ordered a b)`. SPL supports all 13 Allen constraints:
-`before`, `after`, `meets`, `met-by`, `overlaps`, `overlapped-by`, `starts`,
-`started-by`, `within`, `contains`, `finishes`, `finished-by`, and `equals`.
+
+- `before`, `after`, `meets`, `met-by`
+- `overlaps`, `overlapped-by`, `starts`, `started-by`
+- `within`, `contains`, `finishes`, `finished-by`, `equals`
 `within` names Allen's During relation, avoiding collision with SPL's `during`
 literal wrapper. Constraints filter interval bindings during grounding.
 
@@ -46,8 +48,7 @@ Intervals can also be carried into rule heads:
 
 This derives `q(a)` with bounds `[1,10]`. Endpoint variables in
 `(during literal ?start ?end)` are also supported. Temporal variables cannot be
-used as numeric arithmetic operands. Unresolved temporal expressions are rejected
-by the default preparation validation.
+used as numeric arithmetic operands. Default preparation validation rejects unresolved temporal expressions.
 
 `active-at`, `past-at`, and `future-at` are also available as body constraints,
 for example `(active-at ?T 150)` after binding `?T`.
@@ -75,13 +76,13 @@ a goal for `p@[1,10]` does not match `p@[20,30]`, atemporal `p`, or even the
 containing window `p@[0,20]`. The same distinction applies to `requires`,
 `what_if`, and `abduce`; `why_not` diagnoses the grounded goal.
 
-Use the SPL form when supplying a temporal literal to the CLI:
+The CLI accepts temporal literals in SPL form:
 
 ```sh
 spindle query '(during p 1 10)' theory.spl --json
 ```
 
-For explicit family-wide matching in Rust, use
+Explicit family-wide matching in Rust uses
 `query_with_match_mode(&theory, &goal, QueryMatchMode::Family)`.
 
 ## As-of filtering
@@ -92,8 +93,7 @@ spindle reason theory.spl --at '2026-09-17T12:00:00Z'
 
 Preparation keeps rules whose own interval, head literals, and logical body
 literals are active at the reference point. Arithmetic premises have no temporal
-window. Filtering runs around grounding so bound temporal expressions can be
-checked. Without `--at`, temporal evidence is not filtered to “now”.
+window. Filtering runs around grounding to check bound temporal expressions. Without `--at`, preparation does not filter temporal evidence to “now”.
 
 Temporal reasoning and aggregation are currently separate supported paths:
 the aggregate bridge rejects temporal constructs and temporal preparation options.

@@ -8,7 +8,7 @@ Spindle computes four types of conclusions, representing different levels of pro
 |--------|------|---------|
 | `+D` | Definitely Provable | Proven via facts and strict rules only |
 | `-D` | Definitely Not Provable | Constructively disproved at the definite level |
-| `+d` | Defeasibly Provable | Proven via defeasible rules (may be defeated) |
+| `+d` | Defeasibly Provable | Proven via defeasible rules (subject to defeat) |
 | `-d` | Defeasibly Not Provable | Constructively disproved at the defeasible level |
 
 ## Definite Conclusions (+D / -D)
@@ -28,8 +28,8 @@ Conclusions:
 
 ### When is +D Useful?
 
-Use definite provability when you need certainty:
-- Legal requirements that must be met
+Definite provability represents certainty in domains such as:
+- Binding legal requirements
 - Safety constraints
 - Logical necessities
 
@@ -100,14 +100,16 @@ Conclusions:
 ```
 
 Conclusions:
-- `+D a` — fact
-- `+D b` — strict from a
-- `+d a` — (implied by +D)
-- `+d b` — (implied by +D)
-- `+d c` — defeasible, r2 wins over r3
-- `-D c` — no strict path
-- `-D -c` — no strict path
-- `-d -c` — r3 defeated
+| Conclusion | Reason |
+|---|---|
+| `+D a` | Fact |
+| `+D b` | Strict from a |
+| `+d a` | Implied by +D |
+| `+d b` | Implied by +D |
+| `+d c` | Defeasible, r2 wins over r3 |
+| `-D c` | No strict path |
+| `-D -c` | No strict path |
+| `-d -c` | r3 defeated |
 
 ## Negative Conclusions
 
@@ -117,7 +119,7 @@ For example, `(always loop p p)` leaves `p` undecided: neither `+D p` nor `-D p`
 and neither `+d p` nor `-d p`. `(normally loop p p)` yields `-D p`, but leaves
 defeasible provability undecided.
 
-An undecided premise cannot be used to discard an attacker. This distinction
+An undecided premise does not justify discarding an attacker. This distinction
 matters when rules contain cycles. See [Algorithms](../guides/algorithms.md).
 
 Negative tags also differ from strong negation: `-d p` does not establish `+d ~p`.
@@ -146,7 +148,7 @@ Interpretation:
 
 ## Filtering Output
 
-Show only positive conclusions:
+The `--positive` flag restricts output to positive conclusions:
 ```bash
 spindle reason --positive penguin.spl
 ```

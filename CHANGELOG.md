@@ -32,9 +32,9 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   Thresholds use the diminished degree, `WeightedConclusion::diminished_by`
   records the challenges, and definite conclusions are exempt.
 - **Lean verification and differential testing**: models and proofs for
-  grounding, arithmetic, temporal intervals, query operators, and trust;
-  aggregate dependency/stratum inference, source semantics, lowering, and
-  completed-prefix equivalence for all four proof tags. Rust/Lean oracle suites
+  grounding, arithmetic, temporal intervals, query operators, and trust.
+  Aggregate coverage includes dependency/stratum inference, source semantics, lowering,
+  and completed-prefix equivalence for all four proof tags. Rust/Lean oracle suites
   compare supported fragments; these do not establish whole-language Rust
   conformance or verify custom extension implementations.
 - **Verification gate**: builds Lean libraries and oracle executables, rejects
@@ -57,7 +57,7 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - SPL: first-class `(predicate name ((arg sort) ...))` declarations and
     structured `(meta (predicate functor arity) ...)` metadata targets, stored
     in `Theory` with source provenance. Undeclared predicates remain valid.
-    Declarations may also carry inline `meta` properties
+    Declarations also accept inline `meta` properties
     (`(predicate name (...) (description "..."))`) as sugar for the separate
     metadata target.
   - Predicate-indicator recognizer (`functor/arity`) in `spindle-parser`.
@@ -122,10 +122,9 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   *identical* window. Previously the window was ignored, so a bounded query
   matched any conclusion in the same family — including atemporal `p` or
   `p@[20,30]`. A query window strictly contained in a proven window (query
-  `p@[1,10]` vs proven `p@[0,20]`) now also returns `unknown`. This applies
-  to the CLI (`spindle query`/`requires`/`what-if`) and WASM surfaces even
-  though the JSON envelope schemas (`spindle.query.v1`, `spindle.requires.v2`)
-  are unchanged — only the reported status for bounded queries differs.
+  `p@[1,10]` vs proven `p@[0,20]`) now also returns `unknown`. This applies to CLI queries (`spindle query`/`requires`) and WASM query methods.
+  The JSON envelope schemas (`spindle.query.v1`, `spindle.requires.v2`)
+  are unchanged; only the reported status for bounded queries differs.
   Atemporal queries still match any family member. Call
   `query_with_match_mode(theory, literal, QueryMatchMode::Family)` to restore
   family-wide matching for a bounded literal.
@@ -157,8 +156,7 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   and temporal filtering. Vocabulary reports retain conflicting declarations
   and their provenance; deferred shape checks no longer count as mismatches.
 - Vocabulary DTO validation rejects malformed functors and inconsistent
-  diagnostics while accepting coherent v1 signatures without optional
-  declaration origins. SPL rejects malformed metadata properties, and WASM
+  diagnostics while accepting coherent v1 signatures that omit declaration origins. SPL rejects malformed metadata properties, and WASM
   output quotes structured predicate metadata targets correctly.
 - Symbol-valued extension returns bind correctly, and float-to-integer boundary
   checks reject out-of-range values.
@@ -201,5 +199,5 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Added defensive collision handling for injected verification fact labels.
 
 ### Migration
-- Clients validating `requires` JSON should migrate from `spindle.requires.v1` to `spindle.requires.v2`.
+- Clients checking `requires` JSON need the `spindle.requires.v2` schema instead of `spindle.requires.v1`.
 - In v2, `satisfied=false` with `solutions=[]` is valid.

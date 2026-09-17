@@ -1,8 +1,8 @@
-# Explanation System
+# Explanation API and Output Formats
 
-Spindle provides a comprehensive explanation system for inspecting how and why conclusions are derived in defeasible reasoning. When a reasoner produces a conclusion, understanding the derivation path, the alternatives that were considered and rejected, and the conflicts that were resolved is essential for trust, debugging, and auditability.
+Spindle’s explanation system exposes the derivation path of defeasible reasoning conclusions. It records rejected alternatives and resolved conflicts alongside proof trees.
 
-## Why Explanations Matter
+## Explanation Coverage
 
 Defeasible reasoning involves rules that can be overridden, conflicts between competing conclusions, and subtle interactions between superiority relations. A bare conclusion like `+d ~flies` tells you the result but not the story. The explanation system answers questions such as:
 
@@ -11,13 +11,13 @@ Defeasible reasoning involves rules that can be overridden, conflicts between co
 - How were conflicts resolved -- by superiority, definite priority, or team defeat?
 - What is the full derivation chain from facts to conclusion?
 
-This is critical in domains like legal reasoning, medical diagnosis, and access control where decisions must be justified.
+These records support decision justification in legal reasoning, medical diagnosis, and access control.
 
 ## Proof Trees
 
 ### Structure
 
-An explanation is built around a **proof tree**: a recursive structure that traces the derivation of a literal back to the facts and rules that support it.
+An explanation contains a **proof tree**. This recursive structure traces a literal’s derivation back to its supporting facts and rules.
 
 The core types are:
 
@@ -25,11 +25,11 @@ The core types are:
   - `literal` -- the derived literal
   - `derivation_type` -- `Definite` (strict rules and facts only) or `Defeasible` (defeasible rules involved)
   - `proof_step` -- the rule application that produced this literal
-  - `blocked_alternatives` -- alternative derivations that were considered but rejected
+  - `blocked_alternatives` -- alternative derivations the reasoner considered but rejected
   - `conflicts_resolved` -- conflict resolutions that occurred at this node
 
 - `ProofStep` -- represents one application of a rule, containing:
-  - `rule_label` -- which rule was applied
+  - `rule_label` -- the applied rule
   - `rule_type` -- `Fact`, `Strict`, `Defeasible`, or `Defeater`
   - `rule_text` -- string representation of the rule
   - `body_proofs` -- recursive `ProofNode` entries for each body literal
@@ -39,9 +39,9 @@ The core types are:
 
 ### Navigating Proof Trees
 
-A proof tree reads from conclusion down to facts. At each node, the `proof_step` tells you which rule was used, and the `body_proofs` within that step give you the sub-trees for each premise.
+A proof tree reads from conclusion down to facts. Each node’s `proof_step` identifies the applied rule. Its `body_proofs` contain the sub-trees for each premise.
 
-For example, given a theory where `penguin` is a fact, `(always s1 penguin bird)` is strict, and `(normally r1 bird flies)` is defeasible, the proof tree for `flies` would look like:
+For example, a theory contains the fact `penguin`, strict rule `(always s1 penguin bird)`, and defeasible rule `(normally r1 bird flies)`. Its proof tree for `flies` has this structure:
 
 ```
 flies [defeasible, r1: bird -> flies]
@@ -55,7 +55,7 @@ Each level corresponds to a `ProofNode` whose `proof_step.body_proofs` contains 
 
 ### Blocked Alternatives
 
-When the reasoner considers multiple rules that could derive a literal (or its complement), some may be blocked. A `BlockedProof` records:
+Some candidate rules for a literal or its complement face blockers. A `BlockedProof` records:
 
 - `literal` -- what the blocked rule tried to prove
 - `rule_label` -- the label of the blocked rule
@@ -63,16 +63,16 @@ When the reasoner considers multiple rules that could derive a literal (or its c
   - `Superiority` -- blocked by a superior rule
   - `Defeater` -- blocked by a defeater
   - `Conflict` -- blocked due to an unresolved conflict
-  - `BodyUnprovable` -- the rule's body could not be satisfied
+  - `BodyUnprovable` -- the rule’s body is unsatisfied
 - `blocking_rule` -- the label of the rule that caused the blocking (if applicable)
 - `explanation` -- a human-readable description
 
 ### Conflict Resolutions
 
-When two rules derive contradictory conclusions, the conflict must be resolved. A `ConflictResolution` records:
+Rules deriving contradictory conclusions create a conflict. A `ConflictResolution` records:
 
 - `winning_rule` -- the rule that prevailed
-- `losing_rule` -- the rule that was defeated
+- `losing_rule` -- the defeated rule
 - `resolution_type` -- a `ResolutionType` enum value:
   - `Superiority` -- resolved by an explicit superiority relation
   - `DefinitePriority` -- resolved because strict rules override defeasible ones
@@ -111,7 +111,7 @@ Conflict Resolutions:
   1. 'r2' defeated 'r1' via superiority
 ```
 
-Annotations (description and source) are included when present on proof steps.
+The output includes description and source annotations when proof steps contain them.
 
 ### JSON
 
@@ -185,7 +185,7 @@ Produces a JSON-LD document with semantic annotations for integration with linke
 - `@type: "spindle:BlockedProof"` on blocked alternatives
 - `@type: "spindle:ConflictResolution"` on conflict resolutions
 
-Provenance annotations from rule metadata are mapped to standard vocabularies:
+The JSON-LD serializer maps rule metadata provenance annotations to standard vocabularies:
 
 - `source` / `prov:wasAttributedTo` for attribution
 - `description` / `rdfs:comment` for descriptions
@@ -207,7 +207,7 @@ Produces a DOT language graph for visual rendering. The color scheme encodes der
 | Blocked alternative | Dashed box | Red (`#ffcccc`) | Derivation that was rejected |
 | Conflict resolution | Diamond | Orange (`#ffe0b3`) | How a conflict was decided |
 
-The graph uses bottom-to-top layout (`rankdir=BT`), so facts appear at the bottom and conclusions at the top. Edges are labeled with rule labels.
+The graph uses bottom-to-top layout (`rankdir=BT`), so facts appear at the bottom and conclusions at the top. Edge labels identify rules.
 
 ## Annotations and Metadata
 
@@ -215,7 +215,7 @@ The graph uses bottom-to-top layout (`rankdir=BT`), so facts appear at the botto
 
 `Annotations` is a metadata container with two fields:
 
-- `id` -- an optional URI identifier (`@id` in JSON-LD)
+- `id` -- a URI identifier, when present (`@id` in JSON-LD)
 - `entries` -- a `HashMap<String, String>` of key-value pairs
 
 ### Standard Vocabulary Keys
@@ -268,13 +268,14 @@ let step = ProofStep::new("med_rule", RuleType::Defeasible, "symptom -> diagnosi
     .with_annotations(annots);
 ```
 
-Annotations are preserved across all output formats. In natural language, `description` and `source` are printed inline. In JSON-LD, they are mapped to `rdfs:comment`, `prov:wasAttributedTo`, and `spindle:confidence` respectively.
+All output formats preserve annotations. Natural-language output prints `description` and `source` inline.
+JSON-LD maps description, source, and confidence to `rdfs:comment`, `prov:wasAttributedTo`, and `spindle:confidence`, respectively.
 
 ## CLI Usage
 
 ### The `explain` Command
 
-Show the full derivation proof tree for a provable literal:
+`explain` returns the full derivation proof tree for a provable literal:
 
 ```bash
 spindle explain "~flies" theory.spl
@@ -290,13 +291,13 @@ spindle explain "~flies" theory.spl --json
 
 ### The `why-not` Command
 
-Explain why a literal is NOT provable:
+`why-not` reports why a literal is not provable:
 
 ```bash
 spindle why-not flies theory.spl
 ```
 
-Lists each rule that could have derived the literal and explains why it was blocked (missing premises, defeated by a stronger rule, or contradicted by a strict derivation).
+The output lists candidate derivation rules and their blockers. Blockers include missing premises, defeat by a stronger rule, and contradiction by a strict derivation.
 
 For machine-readable output:
 
@@ -306,23 +307,7 @@ spindle why-not flies theory.spl --json
 
 The JSON output includes `is_provable` to indicate whether the literal is actually provable, and `would_derive` with the rule label when available.
 
-### Debugging Workflow
-
-A typical debugging session combines both commands:
-
-```bash
-# 1. Check what was concluded
-spindle reason --positive theory.spl
-
-# 2. A literal you expected is missing -- find out why
-spindle why-not flies theory.spl
-
-# 3. A literal you did not expect is present -- inspect its proof
-spindle explain "~flies" theory.spl
-
-# 4. Pipe JSON output to other tools for further analysis
-spindle explain "~flies" theory.spl --json | jq '.blocked_alternatives'
-```
+The [conclusion debugging guide](debug-conclusions.md) combines these commands to diagnose unexpected results.
 
 ## Rust API Examples
 
@@ -474,11 +459,11 @@ if let Some(explanation) = explain(&theory, &literal) {
 The generated graph uses a consistent visual language:
 
 - **Blue boxes** at the bottom represent facts and strict derivations. These are the foundation of the proof and cannot be defeated.
-- **Green boxes** represent defeasible derivations. These are the conclusions that could potentially be overridden by new information.
+- **Green boxes** represent defeasible derivations. New information can override these conclusions.
 - **Red dashed boxes** in the "Blocked Alternatives" cluster show derivations that were considered but rejected. The label includes the rule label and the reason for blocking.
 - **Orange diamonds** in the "Conflict Resolutions" cluster show how conflicts between competing rules were resolved, including the winning and losing rules and the resolution mechanism.
 
-Edges flow upward from premises to conclusions, labeled with the rule that was applied.
+Edges flow upward from premises to conclusions. Each edge label identifies the applied rule.
 
 ### Example DOT Output
 
@@ -591,7 +576,7 @@ This enables downstream systems to dereference rule sources, look up agent infor
 
 ## Limitations
 
-1. **Positive proofs only**: The `explain` function returns `None` for literals that are not positively provable. Use the `why-not` CLI command or the query module for negative explanations.
-2. **Grounded theories**: Explanations work on grounded theories. Variables must be bound before explanation generation.
-3. **No incremental updates**: Explanations are generated from a full reasoning pass. Changes to the theory require re-running the reasoner.
-4. **Annotation attachment**: Annotations must be attached to proof steps manually when building explanations programmatically. The `explain` function does not yet automatically populate annotations from rule metadata.
+1. **Positive proofs only**: The `explain` function returns `None` for literals that are not positively provable. The `why-not` CLI command and query module provide negative explanations.
+2. **Grounded theories**: Explanations work on grounded theories. Explanation generation requires bound variables.
+3. **No incremental updates**: A full reasoning pass produces explanations. Changes to the theory require re-running the reasoner.
+4. **Annotation attachment**: Programmatic explanation construction requires manual annotation attachment to proof steps. The `explain` function does not yet automatically populate annotations from rule metadata.
