@@ -865,8 +865,12 @@ pub fn ground_theory_with_limit(
     ctx: &EvalContext<'_>,
 ) -> (Theory, bool) {
     // Separate ground rules from rules with variables
+    // Ground-instance labels are externally visible in explanations. Seed both
+    // rule and fact traversal by label rather than randomized HashMap order.
+    let mut ordered_rules: Vec<_> = theory.rules().collect();
+    ordered_rules.sort_by(|a, b| a.label.cmp(&b.label));
     let (ground_rules, var_rules): (Vec<_>, Vec<_>) =
-        theory.rules().partition(|r| !has_variables(r));
+        ordered_rules.into_iter().partition(|r| !has_variables(r));
 
     // If no rules with variables, return as-is
     if var_rules.is_empty() {
@@ -881,7 +885,7 @@ pub fn ground_theory_with_limit(
         FxHashMap::default();
 
     // Initialize with ground facts
-    for rule in theory.facts() {
+    for rule in ground_rules.iter().filter(|r| r.is_fact()) {
         if !has_variables(rule) {
             let lit = rule.head_literal().clone();
             let key = literal_key(&lit);

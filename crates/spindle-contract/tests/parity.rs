@@ -29,6 +29,7 @@ fn build_reason_output(literals: &[(&str, &str, bool)]) -> ReasonOutput {
                 positive: *positive,
                 trust_degree: None,
                 trust_sources: None,
+                trust_details: None,
             }
         })
         .collect();
@@ -115,6 +116,7 @@ fn test_conclusion_entry_fields() {
         positive: true,
         trust_degree: None,
         trust_sources: None,
+        trust_details: None,
     };
 
     let value: Value = serde_json::to_value(&entry).unwrap();

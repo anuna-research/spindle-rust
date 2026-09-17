@@ -8,6 +8,12 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- CLI/WASM feature parity: vocabulary inspection, portable typed lookup functions
+  and named aggregators, full reasoning trust details, WASM explanations and
+  verified requirements, WASM reference-time settings, CLI what-if and raw abduction.
+- Shared ground-literal input preserves typed arguments and temporal windows;
+  malformed input is rejected. Legacy comma notation remains supported.
+- WASM integration tests now run under Node in CI, including the new interfaces.
 - **Predicate identity**: public `PredicateKey` and `predicate_key()` accessors
   on `Literal` and `BodyLogicLiteral` expose functor plus arity, with diagnostic
   `functor/arity` formatting. Argument values, negation, modality, and temporal
@@ -148,6 +154,7 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Temporal variables rejected as arithmetic operands (REQ-006).
 
 ### Fixed
+- Stable grounded rule labels and trust challenge ordering across CLI/WASM runs.
 - Documentation examples now use complementary defeater heads and defeasible
   defaults correctly. Temporal documentation describes current interval variables,
   Allen constraints, and family matching instead of the removed bridge stage.

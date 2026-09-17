@@ -1,0 +1,10 @@
+(trusts supporter 0.9)
+(trusts challenger 0.3)
+(threshold action 0.7)
+(claims supporter
+  (given evidence)
+  (normally support evidence approved))
+(claims challenger
+  (given concern)
+  (except challenge concern (not approved)))
+(prefer support challenge)

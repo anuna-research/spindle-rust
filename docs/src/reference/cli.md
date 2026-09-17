@@ -17,6 +17,9 @@ spindle query <LITERAL> [FILE] [OPTIONS]
 spindle explain <LITERAL> [FILE] [OPTIONS]
 spindle why-not <LITERAL> [FILE] [OPTIONS]
 spindle requires <LITERAL> [FILE] [OPTIONS]
+spindle vocabulary [FILE] [OPTIONS]
+spindle what-if <LITERAL> [FILE] --given <LITERAL> [OPTIONS]
+spindle abduce <LITERAL> [FILE] [OPTIONS]
 spindle capabilities [OPTIONS]
 spindle explain-code <CODE>
 ```
@@ -45,8 +48,10 @@ Without `--v2`, the default schema is `spindle.reason.v1`.
 
 #### `--trust`
 
-`--trust` includes trust-weight annotations on each conclusion. When enabled, each conclusion
-carries a `trust_degree` (0.0--1.0) and a `trust_sources` list when present.
+`--trust` includes trust-weight annotations on each conclusion. In JSON, each conclusion
+carries a `trust_degree` (0.0--1.0), a `trust_sources` list when present, and
+`trust_details` containing ordered `diminished_by` challenges and named
+`above_threshold` results. Both JSON versions expose these fields.
 
 ```bash
 spindle reason examples/penguin.spl --json --trust
@@ -238,17 +243,22 @@ Output:
 ```
 Spindle Capabilities:
 
-Commands: reason, query, requires, explain, why-not
+Commands: reason, query, requires, explain, why-not, vocabulary, what-if, abduce, validate, stats, capabilities, explain-code
 
 Features:
   --stdin: yes
   --at: yes
   --json: yes
+  --v2: yes
+  --trust (including diminishment and thresholds): yes
+  --extensions: yes
   Trust overlay: no
   Given flags: no
 
 Schema versions:
   reason: spindle.reason.v1
+  reason_v2: spindle.reason.v2
+  vocabulary: spindle.vocabulary/1
   query: spindle.query.v1
   requires: spindle.requires.v2
   explain: spindle.explain.v1
@@ -272,8 +282,9 @@ It provides guidance for unfamiliar error codes in JSON error envelopes.
 
 ## JSON Envelope Schema Versions
 
-Every `--json` response includes a `schema_version` field identifying the
-envelope format. The following schema versions are defined:
+Reasoning and diagnostic envelopes use `schema_version`. Vocabulary uses `schema`;
+what-if and raw abduction use the corresponding WASM result shapes. The following
+schema versions are defined:
 
 | Schema | Command | Description |
 |--------|---------|-------------|
@@ -447,3 +458,65 @@ functions is a Rust embedding API, not a CLI plugin-loading facility.
 Bounded temporal goals match identical windows, including in `requires`.
 A containing window is not an exact match. Atemporal goals match any family
 member. See [Query Operators](../guides/queries.md).
+
+## Vocabulary and hypothetical queries
+
+`spindle vocabulary theory.spl --json` returns `spindle.vocabulary/1`: structural
+predicate symbols (functor/arity), declarations, profiles, provenance and shape
+or declaration diagnostics. It inspects the original theory without grounding.
+
+`spindle what-if '(q 2)' theory.spl --given '(p 2)' --json` evaluates hypothetical
+facts without modifying the file. Repeat `--given` for multiple facts. Its output
+contains `provable`, `new_conclusions`, `new_conclusions_struct` (typed literals),
+and `changed_conclusions`. Facts are added before grounding.
+
+`spindle abduce q theory.spl --max 10 --json` returns raw candidates with `facts` (display strings),
+`facts_struct` (typed literals), `rules_used` and `confidence`. Use `requires` when candidates must be verified.
+Both commands accept `--at` and `--extensions`.
+
+Query literals use SPL, including typed arguments, modal forms and temporal
+windows. Legacy comma notation such as `p(2)` is also accepted. Invalid input
+now reports `INVALID_LITERAL` instead of silently treating it as an atom.
+
+## Portable extensions
+
+Both CLI and WASM accept a `spindle.extensions.v1` JSON document. The CLI's global
+`--extensions FILE` option loads it; WASM uses `registerExtensions(jsonString)`.
+Registrations supply finite pure lookup functions and named integer aggregators.
+
+```json
+{
+  "schema_version": "spindle.extensions.v1",
+  "functions": [{
+    "name": "classification",
+    "arguments": ["integer"],
+    "returns": "symbol",
+    "rows": [{
+      "args": [{"type": "integer", "value": 2}],
+      "result": {"type": "symbol", "value": "small"}
+    }]
+  }],
+  "aggregators": [{"name": "total", "reducer": "+", "identity": 0}]
+}
+```
+
+Supported declared types are `symbol`, `integer`, `decimal`, and `float`, with
+values encoded using the typed term format. Decimal values are strings; integers
+outside JavaScript's exact range should be strings. Matching is type-sensitive.
+Names cannot replace builtins; duplicate names/keys, invalid terms, and signature
+mismatches are rejected. Missing lookup rows return evaluation failure; ordinary
+grounding discards that candidate binding.
+
+An aggregator names a binary reducer, an optional integer identity (null means
+empty input fails the premise), and optional `count: true`. Custom reducers must
+be associative and commutative and return integers for every intermediate value.
+The ordinary aggregate restrictions remain in force.
+
+```bash
+spindle reason examples/lookup-functions.spl \
+  --extensions examples/lookup-functions.json --json --v2
+```
+
+The same registry is used by `reason`, `query`, `explain`, `why-not`, `requires`,
+`what-if`, and `abduce`. This portable format does not execute arbitrary host code;
+Rust embedding retains the unrestricted pure-function registration API.

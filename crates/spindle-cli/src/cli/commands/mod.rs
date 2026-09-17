@@ -7,3 +7,5 @@ pub(crate) mod requires;
 pub(crate) mod stats;
 pub(crate) mod validate;
 pub(crate) mod why_not;
+
+pub(crate) mod inspection;

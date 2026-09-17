@@ -654,6 +654,8 @@ fn defeater_diminishers(
         );
         out.push((rule.label.clone(), tree.weakest_link_trust()));
     }
+    // Exposed diminishment steps must not depend on HashMap iteration order.
+    out.sort_by(|a, b| a.0.cmp(&b.0));
     out
 }
 
@@ -705,7 +707,7 @@ pub fn compute_weighted_conclusions(
 
             // Layer-2 diminishment: each defeater that fired and was
             // overruled reduces the degree to degree * (1 - defeater_degree),
-            // folded in rule order. Applies to +d only; +D cannot be
+            // folded in rule-label order. Applies to +d only; +D cannot be
             // challenged by a defeater.
             let mut diminishers = Vec::new();
             if c.conclusion_type == ConclusionType::DefeasiblyProvable {

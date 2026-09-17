@@ -26,6 +26,10 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub(crate) stdin: bool,
 
+    /// Load portable lookup functions and named aggregators from JSON
+    #[arg(long, global = true)]
+    pub(crate) extensions: Option<PathBuf>,
+
     /// Show full error details (source chain, unredacted paths)
     #[arg(long, global = true)]
     pub(crate) debug_errors: bool,
@@ -113,6 +117,23 @@ pub(crate) enum Commands {
         /// Output in JSON format
         #[arg(long)]
         json: bool,
+    },
+    /// Inspect predicate vocabulary, declarations, shapes and provenance
+    Vocabulary { file: Option<PathBuf> },
+    /// Reason with hypothetical facts without changing the input theory
+    WhatIf {
+        literal: String,
+        file: Option<PathBuf>,
+        /// A hypothetical literal; repeat for multiple facts
+        #[arg(long = "given", required = true)]
+        given: Vec<String>,
+    },
+    /// Generate raw (unverified) abduction candidates
+    Abduce {
+        literal: String,
+        file: Option<PathBuf>,
+        #[arg(long, default_value = "10")]
+        max: usize,
     },
     /// Show spindle capabilities
     Capabilities {

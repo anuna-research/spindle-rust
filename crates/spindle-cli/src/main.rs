@@ -66,6 +66,8 @@ fn main() {
         Commands::WhyNot { json, .. } => (Some("spindle.why_not.v1"), *json || cli.json),
         Commands::Requires { json, .. } => (Some("spindle.requires.v2"), *json || cli.json),
         Commands::Capabilities { json, .. } => (Some("spindle.capabilities.v1"), *json || cli.json),
+        Commands::Vocabulary { .. } => (None, cli.json),
+        Commands::WhatIf { .. } | Commands::Abduce { .. } => (None, cli.json),
         Commands::ExplainCode { .. } => (None, false),
         Commands::Validate { .. } | Commands::Stats { .. } => (None, cli.json),
     };
@@ -90,6 +92,32 @@ fn main() {
         None
     };
 
+    let function_registry = if let Some(path) = &cli.extensions {
+        let loaded = std::fs::read_to_string(path)
+            .map_err(|e| e.to_string())
+            .and_then(|s| {
+                serde_json::from_str::<spindle_contract::extensions::Extensions>(&s)
+                    .map_err(|e| e.to_string())
+            })
+            .and_then(|e| e.into_registry());
+        match loaded {
+            Ok(registry) => Some(registry),
+            Err(error) => emit_and_exit(
+                Err(CliError::validation("INVALID_EXTENSIONS", error)),
+                schema_version,
+                json_flag,
+                debug_errors,
+            ),
+        }
+    } else {
+        None
+    };
+    let options = spindle_core::PrepareOptions {
+        reference_time,
+        function_registry,
+        ..Default::default()
+    };
+
     let result = match cli.command {
         Commands::Reason {
             file,
@@ -102,7 +130,7 @@ fn main() {
             positive,
             json_flag,
             cli.stdin,
-            reference_time,
+            options,
             trust,
             v2,
         ),
@@ -116,47 +144,45 @@ fn main() {
             literal,
             file,
             json: _,
-        } => query::run_query(
-            file.as_ref(),
-            &literal,
-            json_flag,
-            cli.stdin,
-            reference_time,
-        ),
+        } => query::run_query(file.as_ref(), &literal, json_flag, cli.stdin, options),
         Commands::Explain {
             literal,
             file,
             json: _,
-        } => explain::run_explain(
-            file.as_ref(),
-            &literal,
-            json_flag,
-            cli.stdin,
-            reference_time,
-        ),
+        } => explain::run_explain(file.as_ref(), &literal, json_flag, cli.stdin, options),
         Commands::WhyNot {
             literal,
             file,
             json: _,
-        } => why_not::run_why_not(
-            file.as_ref(),
-            &literal,
-            json_flag,
-            cli.stdin,
-            reference_time,
-        ),
+        } => why_not::run_why_not(file.as_ref(), &literal, json_flag, cli.stdin, options),
         Commands::Requires {
             literal,
             file,
             max,
             json: _,
-        } => requires::run_requires(
+        } => requires::run_requires(file.as_ref(), &literal, max, json_flag, cli.stdin, options),
+        Commands::Vocabulary { file } => {
+            cli::commands::inspection::vocabulary(file.as_ref(), cli.stdin, json_flag)
+        }
+        Commands::WhatIf {
+            literal,
+            file,
+            given,
+        } => cli::commands::inspection::what_if(
             file.as_ref(),
+            cli.stdin,
+            json_flag,
+            &literal,
+            &given,
+            options,
+        ),
+        Commands::Abduce { literal, file, max } => cli::commands::inspection::abduce(
+            file.as_ref(),
+            cli.stdin,
+            json_flag,
             &literal,
             max,
-            json_flag,
-            cli.stdin,
-            reference_time,
+            options,
         ),
         Commands::Capabilities { json: _ } => capabilities::run_capabilities(json_flag),
         Commands::ExplainCode { code } => explain_code::run_explain_code(&code),

@@ -40,7 +40,12 @@ steps:
     commands:
       - rustup target add wasm32-unknown-unknown
       - curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-      - cd crates/spindle-wasm && wasm-pack build --target web --release
+      - apt-get update && apt-get install -y --no-install-recommends nodejs
+      - wasm-pack test --node crates/spindle-wasm
+      - wasm-pack build crates/spindle-wasm --target web --release
+      - cargo build -p spindle-cli
+      - wasm-pack build crates/spindle-wasm --target nodejs --out-dir /tmp/spindle-node
+      - node scripts/check-interface-parity.cjs /tmp/spindle-node/spindle_wasm.js
 
   - name: lean-oracle
     image: rust:1.88-bookworm

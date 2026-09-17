@@ -11,8 +11,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::conclusion::ConclusionType;
 use crate::error::Result;
 use crate::literal::Literal;
+use crate::pipeline::PrepareOptions;
 use crate::projection::canonical_literal_key;
-use crate::reason::reason;
+use crate::reason::reason_with_options;
 use crate::rule::Rule;
 use crate::theory::Theory;
 
@@ -147,8 +148,19 @@ pub fn what_if(
     hypotheticals: Vec<HypotheticalClaim>,
     goal: &Literal,
 ) -> Result<WhatIfResult> {
+    what_if_with_options(theory, hypotheticals, goal, PrepareOptions::default())
+}
+
+/// Hypothetical reasoning using the same preparation options for both worlds.
+/// Hypotheses are inserted before grounding, so they can introduce new bindings.
+pub fn what_if_with_options(
+    theory: &Theory,
+    hypotheticals: Vec<HypotheticalClaim>,
+    goal: &Literal,
+    options: PrepareOptions,
+) -> Result<WhatIfResult> {
     // Get baseline conclusions
-    let baseline = reason(theory)?;
+    let baseline = reason_with_options(theory, options.clone())?;
     // Key on the injective canonical key: `Literal` equality ignores temporal
     // bounds, so a set of `Literal`s would treat p[20,30] as already present
     // when only p[1,10] was, hiding genuinely new windows below. The rendered
@@ -170,7 +182,7 @@ pub fn what_if(
     }
 
     // Reason on modified theory (only once, not via query which reasons again)
-    let modified_conclusions = reason(&modified)?;
+    let modified_conclusions = reason_with_options(&modified, options)?;
 
     // Determine goal status directly from conclusions (avoids calling query->reason again).
     // Use semantic_literal_matches for consistency with query()/why_not()/abduce().

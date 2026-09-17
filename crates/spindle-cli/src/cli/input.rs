@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use spindle_core::literal::Literal;
 use spindle_parser::parse_spl;
-use spindle_parser::spl::parse_spl as parse_spl_str;
 
 use super::error::CliError;
 
@@ -153,26 +152,7 @@ fn is_dfl_identifier(s: &str) -> bool {
 }
 
 pub(crate) fn parse_literal_arg(s: &str) -> Result<Literal, CliError> {
-    // If it looks like an SPL expression (starts with paren), try to parse it as a dummy fact
-    if s.trim().starts_with('(') {
-        let dummy_spl = format!("(given {s})");
-        if let Ok(theory) = parse_spl_str(&dummy_spl)
-            && let Some(fact) = theory.facts().next()
-            && let Some(head) = fact.head.first()
-        {
-            return Ok(head.clone());
-        }
-    }
-
-    // Fallback to simple parsing logic
-    if s.starts_with("(not ") && s.ends_with(')') {
-        let inner = &s[5..s.len() - 1];
-        Ok(Literal::negated(inner))
-    } else if let Some(stripped) = s.strip_prefix('~') {
-        Ok(Literal::negated(stripped))
-    } else {
-        Ok(Literal::simple(s))
-    }
+    spindle_parser::parse_literal_input(s).map_err(|e| CliError::validation("INVALID_LITERAL", e))
 }
 
 #[cfg(test)]

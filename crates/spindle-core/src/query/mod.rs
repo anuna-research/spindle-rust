@@ -48,7 +48,9 @@ pub use requires::{
 };
 
 pub mod what_if;
-pub use what_if::{HypotheticalClaim, WhatIfResult, what_if, what_if_provable};
+pub use what_if::{
+    HypotheticalClaim, WhatIfResult, what_if, what_if_provable, what_if_with_options,
+};
 
 // =============================================================================
 // QUERY OPERATOR TRAIT AND SHARED TYPES

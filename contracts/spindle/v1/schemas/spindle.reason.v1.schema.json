@@ -29,7 +29,12 @@
 		"grounding": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["performed", "had_variables", "instances", "limit_hit"],
+			"required": [
+				"performed",
+				"had_variables",
+				"instances",
+				"limit_hit"
+			],
 			"properties": {
 				"performed": {
 					"type": "boolean"
@@ -77,11 +82,21 @@
 		"conclusion": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["conclusion_type", "literal_spl", "literal_struct", "positive"],
+			"required": [
+				"conclusion_type",
+				"literal_spl",
+				"literal_struct",
+				"positive"
+			],
 			"properties": {
 				"conclusion_type": {
 					"type": "string",
-					"enum": ["+D", "+d", "-D", "-d"]
+					"enum": [
+						"+D",
+						"+d",
+						"-D",
+						"-d"
+					]
 				},
 				"literal_spl": {
 					"type": "string",
@@ -92,6 +107,68 @@
 				},
 				"positive": {
 					"type": "boolean"
+				},
+				"trust_degree": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 1
+				},
+				"trust_sources": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"trust_details": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [
+						"diminished_by",
+						"above_threshold"
+					],
+					"properties": {
+						"above_threshold": {
+							"type": "object",
+							"additionalProperties": {
+								"type": "boolean"
+							}
+						},
+						"diminished_by": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"additionalProperties": false,
+								"required": [
+									"defeater_label",
+									"full_defeat",
+									"defeater_degree",
+									"target_degree",
+									"resulting_degree",
+									"diminishment"
+								],
+								"properties": {
+									"defeater_label": {
+										"type": "string"
+									},
+									"full_defeat": {
+										"type": "boolean"
+									},
+									"defeater_degree": {
+										"type": "number"
+									},
+									"target_degree": {
+										"type": "number"
+									},
+									"resulting_degree": {
+										"type": "number"
+									},
+									"diminishment": {
+										"type": "number"
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 		}

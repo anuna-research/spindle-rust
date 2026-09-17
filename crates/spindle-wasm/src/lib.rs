@@ -13,31 +13,25 @@
 //! const spindle = new Spindle();
 //! spindle.addFact("bird");
 //! spindle.addFact("penguin");
-//! spindle.addDefeasibleRule(["bird"], "flies", "r1");
-//! spindle.addDefeasibleRule(["penguin"], "~flies", "r2");
-//! spindle.addSuperiority("r2", "r1");
+//! const r1 = spindle.addDefeasibleRule(["bird"], "flies");
+//! const r2 = spindle.addDefeasibleRule(["penguin"], "~flies");
+//! spindle.addSuperiority(r2, r1);
 //!
 //! const conclusions = spindle.reason();
-//! console.log(conclusions);
-//! // => ["+D bird", "+D penguin", "+d ~flies", ...]
+//! console.log(conclusions.conclusions);
 //! ```
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use spindle_contract::error::ProblemDetails;
-use spindle_contract::literal::{LiteralStructJson, LiteralStructJsonV2};
-use spindle_contract::reason::{
-    ConclusionEntry, ConclusionEntryV2, GroundingStats, ReasonOutput, ReasonOutputV2, SCHEMA_V1,
-    SCHEMA_V2, TheoryStats,
-};
+use spindle_contract::literal::LiteralStructJson;
+use spindle_contract::reason::{ConclusionEntry, GroundingStats, ReasonOutput, TheoryStats};
 use spindle_core::error::SpindleError;
 use spindle_core::literal::Literal;
-use spindle_core::mode::Mode;
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{self, QueryStatus};
-use spindle_core::reason::reason;
-use spindle_core::temporal::Temporal;
+use spindle_core::reason::{reason_prepared, reason_with_options};
 use spindle_core::theory::{MetaValue, Theory};
 use spindle_parser::parse_spl;
 
@@ -141,6 +135,7 @@ pub struct JsAbductionSolution {
 #[wasm_bindgen]
 pub struct Spindle {
     theory: Theory,
+    options: PrepareOptions,
 }
 
 #[wasm_bindgen]
@@ -150,6 +145,7 @@ impl Spindle {
     pub fn new() -> Spindle {
         Spindle {
             theory: Theory::new(),
+            options: PrepareOptions::default(),
         }
     }
 
@@ -197,98 +193,113 @@ impl Spindle {
     /// Perform reasoning and return structured JSON output
     #[wasm_bindgen]
     pub fn reason(&self) -> Result<JsValue, JsError> {
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
-
-        let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
-
-        let mut output_conclusions: Vec<ConclusionEntry> = conclusions
-            .iter()
-            .map(|c| ConclusionEntry {
-                conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStructJson::from(&c.literal),
-                positive: c.conclusion_type.is_positive(),
-                trust_degree: None,
-                trust_sources: None,
-            })
-            .collect();
-        // Sort for deterministic output matching CLI behavior
-        output_conclusions.sort_by(|a, b| {
-            a.literal_spl
-                .cmp(&b.literal_spl)
-                .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
-        });
-
-        let output = ReasonOutput {
-            schema_version: SCHEMA_V1.to_string(),
-            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            grounding: GroundingStats {
-                performed: prepared.grounding_report.performed,
-                had_variables: prepared.grounding_report.had_variables,
-                instances: prepared.grounding_report.instances,
-                limit_hit: prepared.grounding_report.limit_hit,
-            },
-            conclusions: output_conclusions,
-            diagnostics: vec![],
-            stats: Some(TheoryStats {
-                rule_count: prepared.theory.rule_count(),
-                fact_count: prepared.theory.facts().count(),
-            }),
-        };
-
-        Ok(serde_wasm_bindgen::to_value(&output)?)
+        self.reason_output(false, false)
     }
 
-    /// Perform reasoning and return v2 structured JSON output with typed term arguments
+    /// Return typed v2 reasoning output.
     #[wasm_bindgen(js_name = reasonV2)]
     pub fn reason_v2(&self) -> Result<JsValue, JsError> {
-        let prepared = prepare(&self.theory, PrepareOptions::default())
-            .map_err(|e| JsError::new(&e.to_string()))?;
+        self.reason_output(true, false)
+    }
 
-        let conclusions = reason(&prepared.theory).map_err(|e| JsError::new(&e.to_string()))?;
+    /// Return trust degrees, sources, diminishment details and thresholds.
+    /// Set `v2` to true for typed arguments.
+    #[wasm_bindgen(js_name = reasonWithTrust)]
+    pub fn reason_with_trust(&self, v2: bool) -> Result<JsValue, JsError> {
+        self.reason_output(v2, true)
+    }
 
-        let mut output_conclusions: Vec<ConclusionEntryV2> = conclusions
-            .iter()
-            .map(|c| ConclusionEntryV2 {
-                conclusion_type: c.conclusion_type.symbol().to_string(),
-                literal_spl: c.literal.to_spl(),
-                literal_struct: LiteralStructJsonV2::from(&c.literal),
-                positive: c.conclusion_type.is_positive(),
-                trust_degree: None,
-                trust_sources: None,
+    /// Set the RFC 3339 reference time used by all reasoning/query methods.
+    /// Pass null/undefined to restore reasoning without an as-of filter.
+    #[wasm_bindgen(js_name = setReferenceTime)]
+    pub fn set_reference_time(&mut self, at: Option<String>) -> Result<(), JsError> {
+        self.options.reference_time = at
+            .map(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s)
+                    .map(|t| spindle_core::TimePoint::from_millis(t.timestamp_millis()))
+                    .map_err(|e| JsError::new(&format!("INVALID_TIME_FORMAT: {e}")))
             })
-            .collect();
-        output_conclusions.sort_by(|a, b| {
-            a.literal_spl
-                .cmp(&b.literal_spl)
-                .then_with(|| a.conclusion_type.cmp(&b.conclusion_type))
-        });
+            .transpose()?;
+        Ok(())
+    }
 
-        let output = ReasonOutputV2 {
-            schema_version: SCHEMA_V2.to_string(),
-            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            grounding: GroundingStats {
-                performed: prepared.grounding_report.performed,
-                had_variables: prepared.grounding_report.had_variables,
-                instances: prepared.grounding_report.instances,
-                limit_hit: prepared.grounding_report.limit_hit,
-            },
-            conclusions: output_conclusions,
-            diagnostics: vec![],
-            stats: Some(TheoryStats {
-                rule_count: prepared.theory.rule_count(),
-                fact_count: prepared.theory.facts().count(),
-            }),
+    /// Replace portable extension registrations from a spindle.extensions.v1 JSON document.
+    /// Registrations persist across parseSpl and clear; invalid input leaves them unchanged.
+    #[wasm_bindgen(js_name = registerExtensions)]
+    pub fn register_extensions(&mut self, json: &str) -> Result<(), JsError> {
+        let extensions: spindle_contract::extensions::Extensions =
+            serde_json::from_str(json).map_err(|e| JsError::new(&e.to_string()))?;
+        let registry = extensions.into_registry().map_err(|e| JsError::new(&e))?;
+        self.options.function_registry = Some(registry);
+        Ok(())
+    }
+
+    /// Inspect declared and inferred predicate signatures, shapes and provenance.
+    #[wasm_bindgen]
+    pub fn vocabulary(&self) -> Result<JsValue, JsError> {
+        let report = spindle_core::Vocabulary::derive(&self.theory);
+        Ok(serde_wasm_bindgen::to_value(
+            &spindle_contract::vocabulary::VocabularyReportDto::from(&report),
+        )?)
+    }
+
+    /// Return a grounded explanation with the CLI spindle.explain.v1 envelope.
+    #[wasm_bindgen]
+    pub fn explain(&self, literal: &str) -> Result<JsValue, JsError> {
+        let lit = parse_literal(literal)?;
+        let prepared = self.prepared()?;
+        let status = query::query(&prepared.theory, &lit)
+            .map_err(js_error)?
+            .status;
+        let proof = spindle_core::explanation::explain(&prepared.theory, &lit).map_err(js_error)?;
+        let diagnostics = if proof.is_none() {
+            serde_json::json!([{
+                "severity":"warning", "code":"NOT_PROVABLE", "message":format!("Literal {lit} is not provable")
+            }])
+        } else {
+            serde_json::json!([])
         };
+        let output = serde_json::json!({
+            "schema_version":"spindle.explain.v1", "literal_spl":lit.to_spl(),
+            "literal_struct":LiteralStructJson::from(&lit),
+            "status":match status { QueryStatus::Provable => "provable", QueryStatus::Refuted => "refuted", QueryStatus::Unknown => "unknown" },
+            "proof_tree":proof.map(|p| p.to_json()),
+            "evaluated_at":prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+            "trust":null, "diagnostics":diagnostics
+        });
+        json_value(&output)
+    }
 
-        Ok(serde_wasm_bindgen::to_value(&output)?)
+    /// Find verified requirements, with the CLI spindle.requires.v2 envelope.
+    #[wasm_bindgen]
+    pub fn requires(&self, goal: &str, max_solutions: usize) -> Result<JsValue, JsError> {
+        if max_solutions == 0 {
+            return Err(JsError::new("max_solutions must be at least 1"));
+        }
+        let lit = parse_literal(goal)?;
+        let prepared = self.prepared()?;
+        let result = query::requires_with_options(
+            &prepared.theory,
+            &lit,
+            query::RequiresOptions {
+                max_solutions: max_solutions.saturating_add(1),
+                ..Default::default()
+            },
+        )
+        .map_err(js_error)?;
+        json_value(&spindle_contract::query::requires_output(
+            &lit,
+            &result,
+            max_solutions,
+            prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+        ))
     }
 
     /// Get only positive conclusions as strings
     #[wasm_bindgen(js_name = getPositiveConclusions)]
     pub fn get_positive_conclusions(&self) -> Result<Vec<String>, JsError> {
-        let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
+        let conclusions = reason_with_options(&self.theory, self.options.clone())
+            .map_err(|e| JsError::new(&e.to_string()))?;
         Ok(conclusions
             .iter()
             .filter(|c| c.conclusion_type.is_positive())
@@ -299,8 +310,9 @@ impl Spindle {
     /// Query a literal
     #[wasm_bindgen]
     pub fn query(&self, literal: &str) -> Result<JsValue, JsError> {
-        let lit = parse_literal(literal);
-        let result = query::query(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+        let lit = parse_literal(literal)?;
+        let result = query::query(&self.prepared()?.theory, &lit)
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsQueryResult {
             status: match result.status {
@@ -320,40 +332,23 @@ impl Spindle {
     pub fn what_if(&self, hypotheticals: Vec<String>, goal: &str) -> Result<JsValue, JsError> {
         let hyps: Vec<_> = hypotheticals
             .iter()
-            .map(|s| query::HypotheticalClaim::new(parse_literal(s)))
-            .collect();
+            .map(|s| parse_literal(s).map(query::HypotheticalClaim::new))
+            .collect::<Result<_, _>>()?;
 
-        let goal_lit = parse_literal(goal);
-        let result = query::what_if(&self.theory, hyps, &goal_lit)
-            .map_err(|e| JsError::new(&e.to_string()))?;
+        let goal_lit = parse_literal(goal)?;
+        let result =
+            query::what_if_with_options(&self.theory, hyps, &goal_lit, self.options.clone())
+                .map_err(|e| JsError::new(&e.to_string()))?;
 
-        let js_result = JsWhatIfResult {
-            provable: result.is_provable(),
-            new_conclusions: result
-                .new_conclusions
-                .iter()
-                .map(|l| l.to_string())
-                .collect(),
-            changed_conclusions: result
-                .changed_conclusions
-                .iter()
-                .map(|(lit, old, new)| JsChangedConclusion {
-                    literal: lit.to_string(),
-                    old_type: old.symbol().to_string(),
-                    new_type: new.symbol().to_string(),
-                })
-                .collect(),
-        };
-
-        Ok(serde_wasm_bindgen::to_value(&js_result)?)
+        json_value(&spindle_contract::query::what_if_output(&result))
     }
 
     /// Why-not query: why isn't this literal provable?
     #[wasm_bindgen(js_name = whyNot)]
     pub fn why_not(&self, literal: &str) -> Result<JsValue, JsError> {
-        let lit = parse_literal(literal);
-        let result =
-            query::why_not(&self.theory, &lit).map_err(|e| JsError::new(&e.to_string()))?;
+        let lit = parse_literal(literal)?;
+        let result = query::why_not(&self.prepared()?.theory, &lit)
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhyNotResult {
             literal: literal.to_string(),
@@ -377,24 +372,14 @@ impl Spindle {
     /// Abduction: what facts would make this goal provable?
     #[wasm_bindgen]
     pub fn abduce(&self, goal: &str, max_solutions: usize) -> Result<JsValue, JsError> {
-        let goal_lit = parse_literal(goal);
-        let result = query::abduce(&self.theory, &goal_lit, max_solutions)
+        if max_solutions == 0 {
+            return Err(JsError::new("max_solutions must be at least 1"));
+        }
+        let goal_lit = parse_literal(goal)?;
+        let result = query::abduce(&self.prepared()?.theory, &goal_lit, max_solutions)
             .map_err(|e| JsError::new(&e.to_string()))?;
 
-        let js_result = JsAbductionResult {
-            goal: goal.to_string(),
-            solutions: result
-                .solutions
-                .iter()
-                .map(|sol| JsAbductionSolution {
-                    facts: sol.facts.iter().map(|l| l.to_string()).collect(),
-                    rules_used: sol.rules_used.iter().cloned().collect(),
-                    confidence: sol.confidence,
-                })
-                .collect(),
-        };
-
-        Ok(serde_wasm_bindgen::to_value(&js_result)?)
+        json_value(&spindle_contract::query::abduction_output(goal, &result))
     }
 
     /// Get the number of rules in the theory
@@ -457,7 +442,8 @@ impl Spindle {
     pub fn reason_spl(&mut self, input: &str) -> Result<String, JsError> {
         reject_dfl_input(input)?;
         self.theory = parse_spl(input).map_err(|e| JsError::new(&e.to_string()))?;
-        let conclusions = reason(&self.theory).map_err(|e| JsError::new(&e.to_string()))?;
+        let conclusions = reason_with_options(&self.theory, self.options.clone())
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
         let mut output = Vec::new();
 
@@ -495,6 +481,41 @@ impl Spindle {
         }
 
         Ok(output.join("\n"))
+    }
+}
+
+// Serialize JSON-shaped results as plain JavaScript objects, not Maps.
+fn json_value(value: &serde_json::Value) -> Result<JsValue, JsError> {
+    Ok(value.serialize(&serde_wasm_bindgen::Serializer::json_compatible())?)
+}
+
+fn js_error(error: spindle_core::SpindleError) -> JsError {
+    JsError::new(&error.to_string())
+}
+
+impl Spindle {
+    fn prepared(&self) -> Result<spindle_core::pipeline::PipelineResult, JsError> {
+        prepare(&self.theory, self.options.clone()).map_err(js_error)
+    }
+
+    fn reason_output(&self, v2: bool, trust: bool) -> Result<JsValue, JsError> {
+        let prepared = self.prepared()?;
+        let conclusions = reason_prepared(&prepared.theory).map_err(js_error)?;
+        let weighted = trust.then(|| {
+            spindle_core::pipeline::compute_weighted_conclusions(
+                &conclusions,
+                &prepared.theory,
+                prepared.theory.trust_policy(),
+                prepared.evaluated_at,
+            )
+        });
+        json_value(&spindle_contract::reason::reason_output(
+            &prepared,
+            &conclusions,
+            weighted.as_deref(),
+            false,
+            v2,
+        ))
     }
 }
 
@@ -586,46 +607,8 @@ fn is_dfl_identifier(s: &str) -> bool {
 /// - `"(not flies)"` → negated literal (SPL-style)
 /// - `"parent(X, Y)"` → literal with predicate arguments
 /// - `"~parent(X, Y)"` → negated literal with predicate arguments
-fn parse_literal(s: &str) -> Literal {
-    let s = s.trim();
-
-    // Handle SPL-style (not ...) syntax
-    if s.starts_with("(not ") && s.ends_with(')') {
-        let inner = s[5..s.len() - 1].trim();
-        return parse_literal_inner(inner, true);
-    }
-
-    // Handle ~ or - negation prefix
-    if let Some(name) = s.strip_prefix('~') {
-        return parse_literal_inner(name, true);
-    }
-    if let Some(name) = s.strip_prefix('-') {
-        return parse_literal_inner(name, true);
-    }
-
-    parse_literal_inner(s, false)
-}
-
-/// Parse the inner part of a literal, handling predicate arguments like `parent(X, Y)`
-fn parse_literal_inner(s: &str, negated: bool) -> Literal {
-    if let Some(paren_pos) = s.find('(')
-        && s.ends_with(')')
-    {
-        let name = &s[..paren_pos];
-        let args_str = &s[paren_pos + 1..s.len() - 1];
-        let args: Vec<String> = args_str
-            .split(',')
-            .map(|a| a.trim().to_string())
-            .filter(|a| !a.is_empty())
-            .collect();
-        return Literal::new(name, negated, Mode::empty(), Temporal::empty(), args);
-    }
-
-    if negated {
-        Literal::negated(s)
-    } else {
-        Literal::simple(s)
-    }
+fn parse_literal(s: &str) -> Result<Literal, JsError> {
+    spindle_parser::parse_literal_input(s).map_err(|e| JsError::new(&e))
 }
 
 /// Convert a SpindleError to a ProblemDetails JsValue for structured WASM error output.
@@ -884,21 +867,21 @@ mod tests {
 
     #[test]
     fn test_parse_literal_tilde() {
-        let lit = parse_literal("~flies");
+        let lit = parse_literal("~flies").unwrap();
         assert!(lit.negation);
         assert_eq!(lit.name(), "flies");
     }
 
     #[test]
     fn test_parse_literal_dash() {
-        let lit = parse_literal("-flies");
+        let lit = parse_literal("-flies").unwrap();
         assert!(lit.negation);
         assert_eq!(lit.name(), "flies");
     }
 
     #[test]
     fn test_parse_literal_positive() {
-        let lit = parse_literal("bird");
+        let lit = parse_literal("bird").unwrap();
         assert!(!lit.negation);
         assert_eq!(lit.name(), "bird");
     }
@@ -938,14 +921,14 @@ mod tests {
 
     #[test]
     fn test_parse_literal_not_syntax() {
-        let lit = parse_literal("(not flies)");
+        let lit = parse_literal("(not flies)").unwrap();
         assert!(lit.negation);
         assert_eq!(lit.name(), "flies");
     }
 
     #[test]
     fn test_parse_literal_predicate_args() {
-        let lit = parse_literal("parent(X, Y)");
+        let lit = parse_literal("parent(X, Y)").unwrap();
         assert!(!lit.negation);
         assert_eq!(lit.name(), "parent");
         assert!(lit.is_predicate());
@@ -954,7 +937,7 @@ mod tests {
 
     #[test]
     fn test_parse_literal_negated_predicate_args() {
-        let lit = parse_literal("~parent(X, Y)");
+        let lit = parse_literal("~parent(X, Y)").unwrap();
         assert!(lit.negation);
         assert_eq!(lit.name(), "parent");
         assert!(lit.is_predicate());
@@ -963,7 +946,7 @@ mod tests {
 
     #[test]
     fn test_parse_literal_not_syntax_trimmed() {
-        let lit = parse_literal("  (not  bird )  ");
+        let lit = parse_literal("  (not  bird )  ").unwrap();
         assert!(lit.negation);
         assert_eq!(lit.name(), "bird");
     }

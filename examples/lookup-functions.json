@@ -1,0 +1,15 @@
+{
+  "schema_version": "spindle.extensions.v1",
+  "functions": [
+    {
+      "name": "classification",
+      "arguments": ["integer"],
+      "returns": "symbol",
+      "rows": [
+        {"args": [{"type": "integer", "value": 2}], "result": {"type": "symbol", "value": "small"}},
+        {"args": [{"type": "integer", "value": 5}], "result": {"type": "symbol", "value": "large"}}
+      ]
+    }
+  ],
+  "aggregators": [{"name": "total", "reducer": "+", "identity": 0}]
+}
