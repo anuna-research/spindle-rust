@@ -1,0 +1,66 @@
+; Documentation evidence classification, not an independent truth oracle.
+; Evidence and scope: 2026-09-17-factcheck.md
+
+(always source-support (source-supported ?claim) (supported ?claim))
+(always reproduced-support (reproduced ?claim) (supported ?claim))
+(normally evidence-check (supported ?claim) (verified ?claim))
+(normally counterexample-check (contradicted ?claim) (not (verified ?claim)))
+(prefer counterexample-check evidence-check)
+(always needs-correction (contradicted ?claim) (needs-correction ?claim))
+(always resolved-correction (and (needs-correction ?claim) (corrected ?claim)) (resolved ?claim))
+
+; A defeater headed flies blocks flies.
+(given (contradicted defeater-direction-old))
+(given (corrected defeater-direction-old))
+; A defeater headed not-flies blocks flies without proving not-flies.
+(given (reproduced defeater-direction-current))
+; A given not-guilty fact can be overridden by a preferred defeasible rule.
+(given (contradicted fact-default-old))
+(given (corrected fact-default-old))
+; An empty-body defeasible default can be overridden.
+(given (reproduced defeasible-default-current))
+; An unknown literal necessarily has negative tags.
+(given (contradicted unknown-tags-old))
+(given (corrected unknown-tags-old))
+; Every fired strict rule produces a definite conclusion.
+(given (contradicted strict-head-old))
+(given (corrected strict-head-old))
+; Missing penguin evidence does not establish not-penguin.
+(given (reproduced strong-negation-current))
+; Ordinary SPL negation is stratified negation.
+(given (contradicted stratified-negation-old))
+(given (corrected stratified-negation-old))
+; An atemporal body needs a synthesized base fact to consume temporal evidence.
+(given (contradicted temporal-base-old))
+(given (corrected temporal-base-old))
+; Preparation runs a TemporalBridge stage with reserved __bridge labels.
+(given (contradicted temporal-bridge-old))
+(given (corrected temporal-bridge-old))
+; SPL has no whole-interval variables or interval propagation.
+(given (contradicted interval-vars-old))
+(given (corrected interval-vars-old))
+; Allen relations are not exposed in SPL.
+(given (contradicted allen-spl-old))
+(given (corrected allen-spl-old))
+; Distinct rows with equal contributions both count toward sum.
+(given (reproduced aggregate-current))
+; Strict self-loops remain undecided and defeasible self-loops derive only -D.
+(given (reproduced cycles-current))
+; Equal opposing defaults block both positive defeasible conclusions.
+(given (reproduced ambiguity-current))
+; Contradictory facts retain both positive tags without explosion.
+(given (reproduced inconsistency-current))
+; WASM reason and reasonV2 return structured objects.
+(given (source-supported wasm-output-current))
+; Requires verifies candidates by adding facts and rerunning reasoning.
+(given (source-supported requires-current))
+; Predicate metadata is separate from label-keyed metadata.
+(given (source-supported metadata-current))
+; Trust applies diminishment from fired overruled defeaters before thresholds.
+(given (source-supported trust-current))
+; Extension functions are pure value calls with separate aggregator registration.
+(given (source-supported extension-current))
+; Lean verification does not prove whole-language Rust conformance.
+(given (source-supported lean-boundary-current))
+; Data61 transitioned into CSIRO Technology.
+(given (source-supported csiro-current))

@@ -11,8 +11,9 @@ build-dir = "book"
 [output.html]
 default-theme = "rust"
 preferred-dark-theme = "coal"
-git-repository-url = "https://codeberg.org/anuna/spindle-rust"
-edit-url-template = "https://codeberg.org/anuna/spindle-rust/_edit/main/docs/{path}"
+git-repository-url = "https://git.anuna.io/anuna-research/spindle-rust"
+git-repository-icon = "fa-code-fork"
+edit-url-template = "https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/docs/{path}"
 
 additional-js = ["src/spl-highlight.js"]
 

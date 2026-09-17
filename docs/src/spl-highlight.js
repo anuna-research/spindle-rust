@@ -47,14 +47,15 @@ hljs.registerLanguage("spl", function(hljs) {
   var FORM_KEYWORDS = [
     "given", "normally", "always", "except",
     "prefer", "meta", "import", "provide", "claims",
-    "trusts", "decays", "threshold"
+    "trusts", "decays", "threshold", "predicate"
   ];
 
   // Logic keywords (orange via built_in) — operators within rules
   var LOGIC_KEYWORDS = [
     "and", "or", "not", "during",
     "must", "may", "forbidden",
-    "bind", "abs", "div", "rem", "min", "max",
+    "bind", "agg", "fold", "sum", "count", "min-of", "max-of",
+    "round", "floor", "ceil", "abs", "div", "rem", "min", "max",
     "exponential", "linear", "step"
   ];
 

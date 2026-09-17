@@ -6,7 +6,7 @@
 A Rust implementation of the [SPINdle](https://research.csiro.au/bpli/tools/spindle/) defeasible logic reasoning engine.
 
 This project is part of the SPINdle family:
-- **[SPINdle](https://research.csiro.au/bpli/tools/spindle/)** - The original Java implementation (v2.2.4) by NICTA (now Data61/CSIRO)
+- **[SPINdle](https://research.csiro.au/bpli/tools/spindle/)** - The original Java implementation (v2.2.4) by NICTA (later Data61/CSIRO, now [CSIRO Technology](https://www.csiro.au/en/Newsletters/D61-NextGenConnect/2026-05))
 - **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A Racket port with trust-weighted reasoning and `#lang spindle`
 - **spindle-rust** - This Rust port, based on spindle-racket v1.7.0
 
@@ -19,7 +19,7 @@ This project is part of the SPINdle family:
   - Defeaters (`~>`) - Block conclusions without proving anything
 
 - **Reasoning Mode**:
-  - Standard DL(d) - Traditional forward chaining
+  - Traditional DL(∂) - Traditional forward chaining
 
 - **Temporal Reasoning**: Allen interval algebra with 13 temporal relations
 
@@ -31,7 +31,7 @@ This project is part of the SPINdle family:
   - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`, `round`, `floor`, `ceil`
   - Variable binding: `(bind ?total (+ ?price ?tax))`
   - Comparison guards: `(> ?age 18)`, `(<= ?score 100)`
-  - Three numeric types: Integer, Decimal (arbitrary-precision), Float
+  - Three numeric types: Integer, Decimal (fixed-precision), Float
   - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
 
 - **Finite-Domain Aggregation (SPL, CLI, and typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
@@ -272,7 +272,7 @@ const abduce = spindle.abduce("flies", 3);
 ## Crate Structure
 
 - `spindle-core` - Core reasoning engine
-  - `reason/` - Standard DL(d) forward chaining with `Reasoner` trait
+  - `reason/` - Traditional DL(∂) forward chaining with `Reasoner` trait
   - `pipeline/` - Composable `PipelineStage` stages (validate, temporal, wildcard, ground)
   - `query/` - Query operators with `QueryOperator` trait (what-if, why-not, abduction)
   - `explanation/` - Proof trees with `ExplanationFormatter` trait (natural language, JSON, JSON-LD, DOT)
@@ -323,15 +323,27 @@ job. See [lean/README.md](lean/README.md) for the other oracles.
 
 ## Documentation
 
-Full documentation is available at [docs/](docs/) or build locally:
+Full documentation is available at [docs/](docs/).
+Local documentation builds use the mdBook version pinned in `.forgejo/workflows/docs.yml`.
+From the repository root, serve the book locally:
 
 ```bash
 cd docs && mdbook serve
 ```
 
+Forgejo builds the book for pull requests that change its sources, configuration,
+theme, included `CHANGELOG.md`, or documentation workflow.
+After those changes reach `main`, it deploys to [spindle-rust.anuna.io](https://spindle-rust.anuna.io)
+through the Cloudflare Pages project `spindle-docs`.
+Generated `docs/book/` files and review notes do not trigger deployment.
+
+The workflow uses Actions secrets `CF_API_TOKEN` (Cloudflare Pages write access)
+and `CF_ACCOUNT_ID`. The token needs access to the account containing `spindle-docs`.
+A manual run on `main` can retry deployment without a content change.
+
 ## References
 
-- [SPINdle Project](https://research.csiro.au/bpli/tools/spindle/) - Original Java implementation by NICTA/Data61
+- [SPINdle Project](https://research.csiro.au/bpli/tools/spindle/) - Original Java implementation by NICTA (later Data61/CSIRO, now [CSIRO Technology](https://www.csiro.au/en/Newsletters/D61-NextGenConnect/2026-05))
 - Nute, D. (1994). "Defeasible Logic" - Foundational paper
 - [spindle-racket](https://codeberg.org/anuna/spindle-racket) - Racket implementation
 

@@ -25,7 +25,7 @@ spindle explain-code <CODE>
 
 ### reason
 
-Perform defeasible reasoning on a theory.
+`reason` performs defeasible reasoning on a theory.
 
 ```bash
 spindle reason examples/penguin.spl
@@ -33,7 +33,7 @@ spindle reason examples/penguin.spl
 
 #### `--v2`
 
-Select JSON schema version v2 (`spindle.reason.v2`) for the JSON output envelope.
+`--v2` selects JSON schema version v2 (`spindle.reason.v2`) for the JSON output envelope.
 The v2 schema includes typed term arguments in the `literal_struct` fields, giving
 downstream consumers richer structure than the v1 flat-string representation.
 
@@ -45,8 +45,8 @@ Without `--v2`, the default schema is `spindle.reason.v1`.
 
 #### `--trust`
 
-Include trust-weight annotations on each conclusion. When enabled, each conclusion
-carries a `trust_degree` (0.0--1.0) and optional `trust_sources` list.
+`--trust` includes trust-weight annotations on each conclusion. When enabled, each conclusion
+carries a `trust_degree` (0.0--1.0) and a `trust_sources` list when present.
 
 ```bash
 spindle reason examples/penguin.spl --json --trust
@@ -54,7 +54,7 @@ spindle reason examples/penguin.spl --json --trust
 
 ### validate
 
-Check syntax without reasoning.
+`validate` checks syntax without reasoning.
 
 ```bash
 spindle validate examples/penguin.spl
@@ -81,7 +81,7 @@ Error at line 5: could not parse: invalid => syntax
 
 ### stats
 
-Show theory statistics.
+`stats` shows theory statistics.
 
 ```bash
 spindle stats examples/penguin.spl
@@ -116,7 +116,7 @@ With `--json` success output:
 
 ### query
 
-Query if a literal holds in the theory.
+`query` reports whether a literal holds in the theory.
 
 ```bash
 spindle query flies examples/penguin.spl
@@ -147,7 +147,7 @@ With `--json`:
 
 ### explain
 
-Show the derivation proof tree for why a literal holds.
+`explain` shows the derivation proof tree for a literal.
 
 ```bash
 spindle explain "-flies" examples/penguin.spl
@@ -171,7 +171,7 @@ With `--json`, the output is a JSON or JSON-LD structure containing an `Explanat
 
 ### why-not
 
-Explain why a literal is NOT provable.
+`why-not` explains why a literal is not provable.
 
 ```bash
 spindle why-not flies examples/penguin.spl
@@ -192,13 +192,13 @@ Possible blocking reasons:
 
 | Reason | Meaning |
 |--------|---------|
-| MissingPremise | A required premise of the rule is not provable |
+| MissingPremise | A premise of the rule is not provable |
 | Defeated | The rule is defeated by a stronger or competing rule |
 | Contradicted | The conclusion conflicts with a strictly proved literal |
 
 ### requires
 
-Abduction: find the minimal sets of facts needed to derive a literal.
+`requires` finds minimal sets of facts needed to derive a literal through abduction.
 
 ```bash
 spindle requires flies examples/penguin.spl
@@ -209,8 +209,7 @@ spindle requires flies examples/penguin.spl --json
 The `--max` option limits the number of solutions returned (defaults to 10).
 
 As of the v2 contract (IMPL-011), `requires` **verifies all candidate solutions
-by default**. Each candidate set of facts is fed back through the reasoning
-engine to confirm it actually makes the goal provable. The JSON output includes
+by default**. The reasoning engine checks each candidate set of facts to verify that it makes the goal provable. The JSON output includes
 `verification_mode: "verified"` and a `verification` object with
 `raw_examined`, `accepted`, and `rejected` counts. Only accepted solutions
 appear in the `solutions` array. The JSON envelope uses schema
@@ -223,12 +222,11 @@ Verified requirements for flies:
   2. Add facts: {flies}
 ```
 
-Each result is a minimal, verified set of assumptions that, if added to the theory, would make the literal provable.
+Each result is a minimal, verified set of assumptions. Adding those assumptions to the theory makes the literal provable.
 
 ### capabilities
 
-Show the commands, features, and JSON schema versions supported by this build
-of Spindle. Useful for tooling that needs to discover available functionality
+`capabilities` lists the commands, features, and JSON schema versions this Spindle build supports. Useful for tooling that needs to discover available functionality
 at runtime.
 
 ```bash
@@ -262,7 +260,7 @@ containing `commands`, `features`, and `schemas` fields.
 
 ### explain-code
 
-Look up the meaning and common causes of a stable error code.
+`explain-code` reports the meaning and common causes of a stable error code.
 
 ```bash
 spindle explain-code RULE_NOT_FOUND
@@ -270,8 +268,7 @@ spindle explain-code SPL_PARSE_ERROR
 ```
 
 This command does not accept `--json`; output is always human-readable text.
-Use it to get guidance when a JSON error envelope contains an unfamiliar error
-code.
+It provides guidance for unfamiliar error codes in JSON error envelopes.
 
 ## JSON Envelope Schema Versions
 
@@ -292,7 +289,7 @@ envelope format. The following schema versions are defined:
 
 ### `--json`
 
-Output results in JSON format. Available for all commands, including `validate` and `stats`.
+`--json` outputs results in JSON format, including for `validate` and `stats`. The `explain-code` command does not accept this option.
 When `--json` is present, success and failure paths are machine-readable JSON.
 
 ```bash
@@ -310,8 +307,7 @@ spindle --json
 
 ### `--at <TIME>`
 
-Set the reference time for temporal ("as-of") reasoning. The value must be an
-ISO 8601 / RFC 3339 timestamp.
+`--at` sets the reference time for temporal ("as-of") reasoning. The value MUST be an ISO 8601 / RFC 3339 timestamp.
 
 ```bash
 spindle reason --at 2024-06-15T12:00:00Z examples/temporal.spl
@@ -320,7 +316,7 @@ spindle query p --at 2024-06-15T12:00:00Z examples/temporal.spl
 
 ### `--stdin`
 
-Read the theory from standard input instead of a file. Mutually exclusive with
+`--stdin` reads the theory from standard input instead of a file. Mutually exclusive with
 providing a file path.
 
 ```bash
@@ -330,7 +326,7 @@ spindle --json validate --stdin < examples/penguin.spl
 
 ### `--positive`
 
-Show only positive conclusions (+D, +d). Applies to the `reason` command.
+`--positive` shows only positive conclusions (+D, +d). Applies to the `reason` command.
 
 ```bash
 spindle reason --positive examples/penguin.spl
@@ -347,7 +343,7 @@ Output:
 
 ### `--debug-errors`
 
-Show full error details including source chains and unredacted file paths.
+`--debug-errors` shows full error details including source chains and unredacted file paths.
 Useful for diagnosing unexpected failures.
 
 ```bash
@@ -432,8 +428,22 @@ done
 
 | Variable | Description |
 |----------|-------------|
-| `SPINDLE_LOG` | Set log level (error, warn, info, debug, trace) |
+| `SPINDLE_LOG` | Log level (error, warn, info, debug, trace) |
 
 ```bash
 SPINDLE_LOG=debug spindle reason theory.spl
 ```
+
+## Aggregate programs and query matching
+
+```sh
+spindle reason examples/aggregation.spl --json --v2
+spindle query '(total-payment alice 20)' examples/aggregation.spl
+```
+
+Aggregation uses the normal `reason` and `query` commands without an extra flag. The CLI supplies the builtin function prelude. Registering custom
+functions is a Rust embedding API, not a CLI plugin-loading facility.
+
+Bounded temporal goals match identical windows, including in `requires`.
+A containing window is not an exact match. Atemporal goals match any family
+member. See [Query Operators](../guides/queries.md).

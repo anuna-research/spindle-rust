@@ -1,301 +1,63 @@
-# Performance Tuning
+# How to Tune Reasoning Performance
 
-This guide covers performance optimization for Spindle.
+Measure complete preparation and reasoning on representative theories. Grounding,
+conflict resolution, and aggregate stages can dominate different workloads.
 
-## Reasoning Engine
+## Start with a baseline
 
-### Standard DL(d)
-
-Spindle uses the standard DL(d) forward-chaining engine.
-
-```bash
-spindle reason theory.spl
+```sh
+cargo build --release -p spindle-cli
+./target/release/spindle stats theory.spl
+time ./target/release/spindle reason theory.spl > /dev/null
+make bench
+make bench-scaling
 ```
 
-### Benchmark Your Theory
+When comparing revisions, use the same toolchain, machine, and fixture. A short
+local benchmark is not a portable performance guarantee.
 
-```bash
-# Time a representative run
-time spindle reason theory.spl > /dev/null
-```
+## Control grounding
 
-## Theory Design
-
-### Minimize Rule Bodies
-
-Larger bodies = more matching work:
+Independent variables multiply candidate combinations. For example, with 100
+nodes this rule can produce 10,000 pairs:
 
 ```spl
-; Slower: 5-way join
-(normally r1 (and a b c d e) result)
-
-; Faster: chain of 2-way joins
-(normally r1 (and a b) ab)
-(normally r2 (and ab c) abc)
-(normally r3 (and abc d) abcd)
-(normally r4 (and abcd e) result)
+(normally pairs (and (node ?x) (node ?y)) (pair ?x ?y))
 ```
 
-### Use Specific Predicates
+When selective relations and guards express the intended domain, use them.
+Bind expression inputs before evaluating them. Configure grounding limits via
+`PrepareOptions` in Rust. Splitting a rule or adding priorities can change
+its defeasible semantics. After a rewrite, check conclusions as well as runtime.
 
-```spl
-; Slower: matches all 'thing' facts
-(normally r1 (thing ?x) (processed ?x))
+## Aggregate workloads
 
-; Faster: matches only relevant facts
-(normally r1 (unprocessed-item ?x) (processed ?x))
+```sh
+make bench-aggregation
+cargo bench -p spindle-core --bench aggregation -- --test
+cargo bench -p spindle-core --bench aggregation -- --save-baseline before
+# After changing the implementation:
+cargo bench -p spindle-core --bench aggregation -- --baseline before
 ```
 
-### Reduce Grounding Explosion
-
-Variables can cause combinatorial explosion:
-
-```spl
-; If there are 100 'node' facts, this creates 10,000 ground rules
-(normally r1 (and (node ?x) (node ?y)) (pair ?x ?y))
-
-; Add constraints to reduce matching
-(normally r1 (and (node ?x) (node ?y) (edge ?x ?y)) (connected ?x ?y))
-```
-
-## Memory Optimization
-
-> **Note:** During reasoning, the proven literal set now uses a `BitSet` instead
-> of `HashSet<LiteralId>`, providing O(1) membership tests with significantly
-> better cache locality. See [Recent Optimizations](#recent-optimizations) for
-> details.
-
-### String Interning
-
-Spindle uses string interning internally. You can benefit by:
-
-```rust
-// Reuse literal names
-let bird = "bird";
-theory.add_fact(bird);
-theory.add_defeasible_rule(&[bird], "flies");
-```
-
-### Stream Large Results
-
-For large result sets:
-
-```rust
-// Instead of collecting all conclusions
-let conclusions: Vec<Conclusion> = theory.reason();
-
-// Process incrementally (future API)
-for conclusion in theory.reason_iter() {
-    process(conclusion);
-}
-```
-
-### Theory Cloning
-
-Avoid unnecessary cloning:
-
-```rust
-// Expensive: clones the whole theory
-let copy = theory.clone();
-
-// Better: reuse the indexed theory
-let indexed = IndexedTheory::build(theory);
-// Use indexed for multiple queries
-```
-
-## Conflict Optimization
-
-### Minimize Conflicts
-
-Fewer conflicts = faster resolution:
-
-```spl
-; Many potential conflicts
-(normally r1 a result)
-(normally r2 b ~result)
-(normally r3 c result)
-(normally r4 d ~result)
-
-; Better: restructure to reduce conflicts
-(normally supports a supports-result)
-(normally supports c supports-result)
-(normally opposes b opposes-result)
-(normally opposes d opposes-result)
-(normally conclusion supports-result result)
-(normally conclusion opposes-result ~result)
-(prefer conclusion ...)
-```
-
-### Explicit Superiority
-
-Unresolved conflicts cause ambiguity propagation:
-
-```spl
-; Bad: no superiority, causes ambiguity checks
-(normally r1 a q)
-(normally r2 b ~q)
-
-; Good: explicit resolution
-(normally r1 a q)
-(normally r2 b ~q)
-(prefer r1 r2)  ; or (prefer r2 r1)
-```
-
-## Indexing Benefits
-
-Spindle indexes rules by:
-- Head literal → O(1) lookup
-- Body literal → O(1) lookup
-- Superiority → O(1) lookup
-
-The indexed theory is built once and reused:
-
-```rust
-let indexed = IndexedTheory::build(theory);
-
-// Fast: O(1) lookups
-for rule in indexed.rules_with_head(&literal) { ... }
-for rule in indexed.rules_with_body(&literal) { ... }
-```
-
-## Profiling
-
-### Theory Statistics
-
-```bash
-spindle stats theory.spl
-```
-
-Look for:
-- High rule count → check grounding and rule-body fanout
-- Many defeaters → potential blocking overhead
-- Complex bodies → grounding overhead
-
-### Rust Profiling
-
-```bash
-# Build with profiling
-cargo build --release
-
-# Profile with flamegraph
-cargo flamegraph -- spindle reason theory.spl
-```
-
-### Memory Profiling
-
-```bash
-# Use heaptrack
-heaptrack spindle reason large-theory.spl
-heaptrack_print heaptrack.spindle.*.gz
-```
-
-## Recent Optimizations
-
-Several targeted optimizations have been applied to Spindle's internals. These
-are transparent to end users but can significantly reduce runtime and memory
-overhead, especially for larger theories.
-
-### SmallVec for Rule Bodies/Heads
-
-*Commit [9bee7a3]*
-
-Rule body and head storage was changed from `Vec<Literal>` to
-`SmallVec<[Literal; 4]>`. This means that rules with four or fewer body/head
-literals avoid heap allocation entirely -- the data is stored inline on the
-stack.
-
-Most real-world defeasible rules have 1-3 body literals, so the common case is
-covered without any heap allocation. This reduces allocation pressure during
-both grounding and reasoning.
-
-```rust
-// Before
-struct Rule {
-    head: Vec<Literal>,
-    body: Vec<Literal>,
-}
-
-// After
-use smallvec::SmallVec;
-struct Rule {
-    head: SmallVec<[Literal; 4]>,
-    body: SmallVec<[Literal; 4]>,
-}
-```
-
-### BitSet for Proven Literals
-
-*Commit [82ae834]*
-
-The set of proven literals during reasoning was changed from
-`HashSet<LiteralId>` to a compact `BitSet`. Since `LiteralId` is a `u32`,
-bitmap indexing is a natural fit:
-
-- **O(1)** contains and insert operations (bit test / bit set).
-- **Better cache locality** -- the entire proven set fits in a contiguous
-  allocation rather than being scattered across hash buckets.
-- **Significant improvement** for theories with many literals, where hash
-  collisions and bucket traversal previously added up.
-
-### FxHash for Internal HashMaps
-
-*Commit [4fbe1fd]*
-
-All internal `HashMap` / `HashSet` instances were switched from the default
-`SipHash` hasher to `FxHash` (provided by the `rustc-hash` crate).
-
-- `FxHash` is considerably faster for small keys (`u32`, `u64`) that are common
-  throughout Spindle's indexing and reasoning structures.
-- It is **not** cryptographically secure, but Spindle's internal maps are never
-  exposed to untrusted input, so this is not a concern.
-- This is the same hasher used inside the Rust compiler itself.
-
-### Pre-allocation Strategies
-
-*Commit [2e92b84]*
-
-Worklists, intermediate buffers, and result vectors are now pre-allocated based
-on the size of the theory before reasoning begins:
-
-- The conclusion vector is allocated with an estimate of
-  `rules.len() * avg_head_size`.
-- Worklists are sized to the number of rules to avoid repeated reallocation
-  during the fixed-point loop.
-
-This avoids the cost of incremental `Vec` growth (repeated
-allocate-copy-deallocate cycles) and reduces peak memory usage by avoiding
-over-allocation.
-
-## Benchmarks
-
-Run the built-in benchmarks:
-
-```bash
-cd crates/spindle-core
-cargo bench
-```
-
-Key benchmarks:
-- `reason_penguin` - basic conflict resolution
-- `reason_long_chain` - forward chaining depth
-- `reason_wide` - parallel independent rules
-
-## Performance Checklist
-
-1. **Use explicit superiority in conflicts**
-   - [ ] Conflicting defeasible rules are intentionally unresolved unless ordered
-   - [ ] Add superiority relations where one side must win
-
-2. **Optimize theory design**
-   - [ ] Keep rule bodies small
-   - [ ] Use specific predicates
-   - [ ] Control grounding size
-
-3. **Resolve conflicts**
-   - [ ] Add superiority relations
-   - [ ] Avoid unnecessary ambiguity
-
-4. **Monitor resources**
-   - [ ] Check `spindle stats` output
-   - [ ] Profile if needed
-   - [ ] Benchmark representative theories
+The aggregate suite measures preparation and full reasoning separately. It
+covers reducer choice, row count, grouping, unrelated facts, and chained stages.
+Fixture creation and expected-output checks happen outside timed loops;
+timed loops include allocation and destruction. See the
+[initial baseline and methodology](../reference/aggregation-benchmarks.md).
+
+Repeated stages can require grounding and reasoning earlier prefixes again.
+Grounding can instantiate cyclic predicates over source and computed constants.
+These combinations can grow exponentially. `max_instances` bounds aggregate grounding work across
+repeated passes; exhaustion is an error, not a partial answer.
+
+## Memory and integration
+
+The engine uses interned names, compact indexes, bitsets, and small-vector rule
+storage. These reduce overhead but do not eliminate the cost of a large grounded
+theory. `reason()` returns a collected result; there is no public `reason_iter()`
+streaming API. Unless your application needs cloned theories or full result histories, avoid retaining them.
+
+For heap profiling, use `make bench-memory`. Criterion output lives under
+`target/criterion/`. In browser applications, run expensive synchronous WASM
+reasoning in a worker to keep the UI responsive.

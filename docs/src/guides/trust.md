@@ -1,4 +1,4 @@
-# Trust-Weighted Reasoning
+# Trust-Weighted Reasoning API and SPL Directives
 
 Spindle supports trust-weighted defeasible reasoning, enabling source attribution, trust-weighted conclusions, partial defeat (diminishment), and multi-perspective evaluation.
 
@@ -46,7 +46,7 @@ The `claims` block attributes statements to a source identity:
 
 **Syntax**: `(claims source claims-meta? statements...)`
 
-**Metadata fields** (all optional):
+**Metadata fields** (each can be omitted):
 
 | Field  | Description                          | Example                          |
 |--------|--------------------------------------|----------------------------------|
@@ -169,7 +169,7 @@ Assigns a trust value to a source identifier:
 (trusts external:api 0.6)
 ```
 
-Values must be in the range `[0.0, 1.0]`.
+Values MUST be in the range `[0.0, 1.0]`.
 
 ### `(decays source model param)`
 
@@ -224,7 +224,7 @@ Defines a named threshold for decision-making:
 
 ## Decay Models
 
-Decay models compute a time-dependent multiplier in `[0.0, 1.0]` that is applied to a source's base trust value. This models the intuition that older assertions become less trustworthy over time.
+Decay models compute a time-dependent multiplier in `[0.0, 1.0]`. Multiplying the source’s base trust by this value gives its decayed trust. This models the intuition that older assertions become less trustworthy over time.
 
 ### Exponential Decay
 
@@ -360,6 +360,21 @@ assert_eq!(node.weakest_link_trust(), 0.9);
 
 Standard defeasible logic uses binary defeat: a conclusion is either proven or not. Trust-weighted reasoning introduces **diminishment**, where a defeater can reduce a conclusion's trust degree without fully defeating it.
 
+### Automatic diminishment in the pipeline
+
+After computing weakest-link credibility, the trust pass detects defeaters whose
+heads complement a surviving `+d` conclusion and whose premises are positively
+provable. These applicable but overruled challenges reduce its degree in rule
+order: `degree *= 1 - defeater_degree`. The defeater degree is the weakest link
+of its own derivation. Unfired defeaters do not diminish, and `+D` conclusions
+are exempt. The trust pass evaluates thresholds after this fold, and `diminished_by`
+records the contributing challenges.
+
+For example, degree `0.9` challenged by degrees `0.3` and `0.4` becomes
+`0.9 * 0.7 * 0.6 = 0.378`. This affects credibility; it does not retract the
+positive logical conclusion. The aggregate snapshot bridge currently excludes
+trust-weighted inputs.
+
 ### Diminishment Formula
 
 ```
@@ -494,7 +509,7 @@ assert_eq!(wc.is_above_threshold("unknown"), None);
 
 ## Multi-Perspective Evaluation
 
-The same derivation can be evaluated under different trust policies, yielding different conclusions. This models real-world scenarios where different stakeholders have different trust assessments.
+Different trust policies can evaluate the same derivation, yielding different conclusions. This models real-world scenarios where different stakeholders have different trust assessments.
 
 ### Different Perspectives on the Same Sources
 
@@ -809,7 +824,7 @@ Trust explanations provide a full audit trail for every conclusion:
 - Whether any diminishers reduced the conclusion
 - Whether the conclusion meets each named threshold
 
-This is useful for compliance requirements where decisions must be traceable and explainable.
+This supports compliance requirements for traceable, explainable decisions.
 
 ### Regulatory Compliance
 
@@ -842,7 +857,7 @@ assert_eq!(operations.is_above_threshold(degree, "compliant"), Some(true));
 
 This example demonstrates the complete trust workflow from theory definition through CLI output.
 
-**1. Define a theory with trust directives** (`review.spl`):
+**Theory with trust directives** (`review.spl`):
 
 ```spl
 ; Trust configuration
@@ -885,17 +900,17 @@ This example demonstrates the complete trust workflow from theory definition thr
 > **Important:** The default trust for unsourced rules is `0.0`. Any rule
 > defined outside a `claims` block has no source attribution and will receive
 > a trust degree of zero — making it the weakest link in any derivation chain
-> that passes through it. Always wrap rules in a `claims` block when using
-> trust-weighted reasoning. For structural or policy rules that are axiomatic,
-> attribute them to a fully-trusted system source like `system:policy`.
+> that passes through it. A `claims` block supplies the source attribution for
+> trust-weighted reasoning. A fully trusted source such as `system:policy`
+> represents axiomatic structural or policy rules.
 
-**2. Run with trust output**:
+**CLI invocation with trust output**:
 
 ```bash
 spindle reason --trust review.spl
 ```
 
-**3. Output**:
+**Output**:
 
 ```
 Conclusions:
@@ -922,8 +937,8 @@ The deployment conclusion (`ready_to_deploy`) has trust `0.80` — the weakest l
 
 ## Limitations
 
-1. **Static trust values**: Trust values are fixed per policy. Dynamic trust that updates based on track record is not built in (use decay models for time-based adjustment).
+1. **Static trust values**: Each policy fixes its trust values. Dynamic trust based on track record is not built in. Decay models provide time-based adjustment.
 2. **Weakest-link only**: The model uses minimum trust propagation. Alternative models (e.g., weighted average, product) are not supported.
-3. **No cryptographic verification**: The `:sig` metadata field is stored but not verified against any cryptographic infrastructure.
+3. **No cryptographic verification**: Spindle stores the `:sig` metadata field without checking it against cryptographic infrastructure.
 4. **Floating-point precision**: Trust values are `f64`, so standard floating-point precision considerations apply to boundary comparisons.
-5. **Decay requires reference time**: Decay models need the age of assertions to be computed externally; the pipeline does not automatically track assertion timestamps for decay purposes.
+5. **Decay requires reference time**: Callers compute assertion ages externally for decay models. The pipeline does not automatically track assertion timestamps for decay purposes.

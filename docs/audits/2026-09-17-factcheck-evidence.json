@@ -1,0 +1,140 @@
+[
+  {
+    "id": "defeater-direction-old",
+    "claim": "A defeater headed flies blocks flies.",
+    "verdict": "contradicted",
+    "evidence": "CLI counterexample: positive-headed defeater leaves +d flies."
+  },
+  {
+    "id": "defeater-direction-current",
+    "claim": "A defeater headed not-flies blocks flies without proving not-flies.",
+    "verdict": "supported",
+    "evidence": "CLI with complementary defeater head: neither positive flies conclusion."
+  },
+  {
+    "id": "fact-default-old",
+    "claim": "A given not-guilty fact can be overridden by a preferred defeasible rule.",
+    "verdict": "contradicted",
+    "evidence": "CLI: strict not-guilty remains +D; defeasible guilty is blocked."
+  },
+  {
+    "id": "defeasible-default-current",
+    "claim": "An empty-body defeasible default can be overridden.",
+    "verdict": "supported",
+    "evidence": "CLI: preferred evidence rule defeats empty-body default."
+  },
+  {
+    "id": "unknown-tags-old",
+    "claim": "An unknown literal necessarily has negative tags.",
+    "verdict": "contradicted",
+    "evidence": "CLI strict self-loop: no tags for p."
+  },
+  {
+    "id": "strict-head-old",
+    "claim": "Every fired strict rule produces a definite conclusion.",
+    "verdict": "contradicted",
+    "evidence": "CLI: defeasibly supported strict premise yields +d c, not +D c."
+  },
+  {
+    "id": "strong-negation-current",
+    "claim": "Missing penguin evidence does not establish not-penguin.",
+    "verdict": "supported",
+    "evidence": "CLI: absence of penguin eddie does not derive flies eddie."
+  },
+  {
+    "id": "stratified-negation-old",
+    "claim": "Ordinary SPL negation is stratified negation.",
+    "verdict": "contradicted",
+    "evidence": "crates/spindle-core/src/literal.rs polarity; CLI strong-negation-current counterexample; stratification applies to aggregate dependencies."
+  },
+  {
+    "id": "temporal-base-old",
+    "claim": "An atemporal body needs a synthesized base fact to consume temporal evidence.",
+    "verdict": "contradicted",
+    "evidence": "CLI: +D q with temporal p but no positive atemporal p; reason/mod.rs matched_body_slots."
+  },
+  {
+    "id": "temporal-bridge-old",
+    "claim": "Preparation runs a TemporalBridge stage with reserved __bridge labels.",
+    "verdict": "contradicted",
+    "evidence": "crates/spindle-core/src/pipeline/mod.rs prepare; reason/mod.rs ReasonResult and cover_body_slots; no TemporalBridge stage."
+  },
+  {
+    "id": "interval-vars-old",
+    "claim": "SPL has no whole-interval variables or interval propagation.",
+    "verdict": "contradicted",
+    "evidence": "CLI binds ?T in body and carries it into temporal q head; allen_constraint_tests.rs."
+  },
+  {
+    "id": "allen-spl-old",
+    "claim": "Allen relations are not exposed in SPL.",
+    "verdict": "contradicted",
+    "evidence": "CLI before constraint succeeds; allen_constraint_tests.rs tests all 13 parsed relations."
+  },
+  {
+    "id": "aggregate-current",
+    "claim": "Distinct rows with equal contributions both count toward sum.",
+    "verdict": "supported",
+    "evidence": "CLI yields (total 20)."
+  },
+  {
+    "id": "cycles-current",
+    "claim": "Strict self-loops remain undecided and defeasible self-loops derive only -D.",
+    "verdict": "supported",
+    "evidence": "CLI four-tag result matches traditional_dl.rs."
+  },
+  {
+    "id": "ambiguity-current",
+    "claim": "Equal opposing defaults block both positive defeasible conclusions.",
+    "verdict": "supported",
+    "evidence": "CLI yields no positive p or not-p."
+  },
+  {
+    "id": "inconsistency-current",
+    "claim": "Contradictory facts retain both positive tags without explosion.",
+    "verdict": "supported",
+    "evidence": "CLI p and not-p each +D/+d; q not positively derived."
+  },
+  {
+    "id": "wasm-output-current",
+    "claim": "WASM reason and reasonV2 return structured objects.",
+    "verdict": "source-supported",
+    "evidence": "crates/spindle-wasm/src/lib.rs"
+  },
+  {
+    "id": "requires-current",
+    "claim": "Requires verifies candidates by adding facts and rerunning reasoning.",
+    "verdict": "source-supported",
+    "evidence": "crates/spindle-core/src/query/requires.rs"
+  },
+  {
+    "id": "metadata-current",
+    "claim": "Predicate metadata is separate from label-keyed metadata.",
+    "verdict": "source-supported",
+    "evidence": "crates/spindle-core/src/theory.rs"
+  },
+  {
+    "id": "trust-current",
+    "claim": "Trust applies diminishment from fired overruled defeaters before thresholds.",
+    "verdict": "source-supported",
+    "evidence": "crates/spindle-core/src/pipeline/mod.rs"
+  },
+  {
+    "id": "extension-current",
+    "claim": "Extension functions are pure value calls with separate aggregator registration.",
+    "verdict": "source-supported",
+    "evidence": "crates/spindle-core/src/function_registry.rs"
+  },
+  {
+    "id": "lean-boundary-current",
+    "claim": "Lean verification does not prove whole-language Rust conformance.",
+    "verdict": "source-supported",
+    "evidence": "lean/README.md"
+  },
+  {
+    "id": "csiro-current",
+    "claim": "Data61 transitioned into CSIRO Technology.",
+    "verdict": "source-supported",
+    "evidence": "CSIRO May 2026 newsletter: https://www.csiro.au/en/Newsletters/D61-NextGenConnect/2026-05 ; current staff page: https://people.csiro.au/T/R/Ronnie-Taib"
+  }
+]

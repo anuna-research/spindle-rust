@@ -4,11 +4,12 @@ Spindle supports modal operators for deontic reasoning, allowing you to express 
 
 ## Introduction
 
-Deontic logic is a branch of formal logic concerned with normative concepts such as obligation, permission, and prohibition. In defeasible reasoning, deontic modalities are particularly useful because normative rules are often subject to exceptions. For example, a general obligation to pay taxes may be defeated by a specific exemption for non-profit organizations.
+Deontic logic is a branch of formal logic concerned with normative concepts such as obligation, permission, and prohibition. In defeasible reasoning, deontic modalities are particularly useful because normative rules are often subject to exceptions. For example, a general obligation to pay taxes can be defeated by a specific exemption for non-profit organizations.
 
-Spindle integrates deontic modalities directly into its literal representation. Each literal can carry a modal operator that qualifies the proposition with a normative meaning, and these modal literals participate in the same defeasible reasoning process as ordinary literals -- including conflict resolution, superiority, and defeat.
+Spindle integrates deontic modalities directly into its literal representation. Each literal can carry a modal operator that qualifies the proposition with a normative meaning. Modal literals undergo ordinary defeasible reasoning, including conflict resolution, superiority, and defeat.
 
-> **Note:** Modal operators are currently only accessible via the Rust API and WASM bindings. They are not directly supported through the CLI. If you need modal reasoning, use the library or WASM integration.
+> **CLI support:** SPL theories accept `(must ...)`, `(may ...)`, and `(forbidden ...)` wrappers through the CLI.
+> The Rust API and WASM bindings also provide modal reasoning.
 
 ## The Three Standard Operators
 
@@ -16,13 +17,13 @@ Spindle provides three built-in deontic operators:
 
 | Operator | Display | SPL Syntax | Meaning |
 |----------|---------|------------|---------|
-| Obligation | `[O]` | `(must ...)` | The proposition **must** hold |
-| Permission | `[P]` | `(may ...)` | The proposition **may** hold |
-| Forbidden | `[F]` | `(forbidden ...)` | The proposition **must not** hold |
+| Obligation | `[O]` | `(must ...)` | An obligation applies to the proposition |
+| Permission | `[P]` | `(may ...)` | Permission applies to the proposition |
+| Forbidden | `[F]` | `(forbidden ...)` | A prohibition applies to the proposition |
 
 ### Obligation (`must`)
 
-An obligation states that something is required. If `(must pay)` is concluded, then there is an obligation to pay.
+An obligation states a normative duty. If `(must pay)` is concluded, then there is an obligation to pay.
 
 ### Permission (`may`)
 
@@ -113,7 +114,7 @@ In SPL, modal operators can be combined with predicates and variables:
 
 ## Modal Negation and Complements
 
-Every modal operator has a complement, obtained by toggling the negation flag. The complement of `[O]` (obligation) is `[-O]` (no obligation). This is distinct from the negation of the underlying proposition.
+Toggling the negation flag produces the complement of a modal operator. The complement of `[O]` (obligation) is `[-O]` (no obligation). This is distinct from the negation of the underlying proposition.
 
 | Expression | Meaning |
 |------------|---------|
@@ -124,7 +125,7 @@ Every modal operator has a complement, obtained by toggling the negation flag. T
 
 The distinction between modal negation and literal negation is important:
 
-- **Modal negation** (`[-O]pay`): The obligation itself does not hold. You are not required to pay, but you may still choose to.
+- **Modal negation** (`[-O]pay`): The obligation itself does not hold. Payment carries no obligation, but remains a choice.
 - **Literal negation** (`[O]~pay`): The obligation holds, but over the negated proposition. You are obligated not to pay.
 
 ### Display Format
@@ -253,7 +254,7 @@ let rule = Rule::new("r2", RuleType::Defeasible, body, head);
 
 ### Equality and Hashing
 
-Modal operators participate in literal equality and hashing. Two literals with the same name but different modes are considered distinct:
+Modal operators participate in literal equality and hashing. Spindle treats literals with the same name but different modes as distinct:
 
 ```rust
 use spindle_core::prelude::*;
@@ -280,7 +281,7 @@ set.insert(pay.literal_id());
 
 ### Compliance Rules
 
-Model regulatory compliance where obligations can be defeated by exceptions:
+Regulatory compliance rules express obligations subject to exceptions:
 
 ```spl
 ; All companies must file annual reports
@@ -300,7 +301,7 @@ Model regulatory compliance where obligations can be defeated by exceptions:
 
 ### Permission Systems
 
-Model access control with defeasible permissions:
+Access control rules express defeasible permissions:
 
 ```spl
 ; Employees may access the office
@@ -319,7 +320,7 @@ Model access control with defeasible permissions:
 
 ### Obligation Tracking
 
-Track obligations through chains of reasoning:
+Chains of reasoning track obligations:
 
 ```spl
 ; Signing a contract creates an obligation to pay
@@ -338,7 +339,7 @@ Track obligations through chains of reasoning:
 
 ### Mixed Normative Reasoning
 
-Combine obligations, permissions, and prohibitions in a single theory:
+A single theory combines obligations, permissions, and prohibitions:
 
 ```spl
 ; Citizens must pay taxes
@@ -361,27 +362,27 @@ Combine obligations, permissions, and prohibitions in a single theory:
 
 ## Limitations
 
-1. **No CLI support**: Modal operators cannot be specified through the command-line interface. Use the Rust API or WASM bindings to construct modal literals.
-2. **No inter-modal axioms**: Spindle does not enforce relationships between operators (e.g., it does not automatically derive `[P]a` from `[O]a`). If you need such relationships, encode them as explicit rules.
-3. **Custom modes are uninterpreted**: Custom modes created with `Mode::new(name)` have no built-in semantics. Their meaning is determined entirely by the rules you write.
+1. **CLI syntax**: Modal operators use SPL wrappers in theory files. The CLI reasons over these literals without a separate modal flag.
+2. **No inter-modal axioms**: Spindle does not enforce relationships between operators (e.g., it does not automatically derive `[P]a` from `[O]a`). Explicit rules encode these relationships.
+3. **Custom modes are uninterpreted**: Custom modes created with `Mode::new(name)` have no built-in semantics. The theory’s rules entirely determine their meaning.
 4. **No modal logic tableau**: Spindle performs defeasible reasoning, not modal logic model checking. Modal operators are labels on literals, not Kripke-style accessibility relations.
 
-## Best Practices
+## Modal Rule Patterns
 
-1. **Be explicit about modal relationships**
+1. **Explicit modal relationships**
    ```spl
    ; If something is obligatory, it is also permitted
    (always obligation-implies-permission (must ?x) (may ?x))
    ```
 
-2. **Use superiority to handle conflicts between norms**
+2. **Superiority resolves conflicts between norms**
    ```spl
    (normally r1 employee (must attend-meeting))
    (normally r2 (and employee on-leave) (not (must attend-meeting)))
    (prefer r2 r1)
    ```
 
-3. **Separate normative and factual reasoning**
+3. **Separate normative and factual rules**
    ```spl
    ; Factual rules
    (normally r1 penguin bird)
@@ -391,7 +392,7 @@ Combine obligations, permissions, and prohibitions in a single theory:
    (normally r3 (and endangered-species (may hunt)) (not (may hunt)))
    ```
 
-4. **Document the intended interpretation of custom modes**
+4. **Metadata records the intended interpretation of custom modes**
    ```spl
    ; [K] = epistemic "known to be true"
    ; Use metadata to document the mode's meaning

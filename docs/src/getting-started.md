@@ -1,15 +1,15 @@
 # Getting Started
 
-This guide walks you through installing Spindle-Rust and running your first defeasible logic program.
-
-Spindle-Rust is a Rust port of [SPINdle](https://research.csiro.au/bpli/tools/spindle/), a defeasible logic reasoning system originally developed by NICTA (now Data61/CSIRO). This implementation is based on [spindle-racket](https://codeberg.org/anuna/spindle-racket) v1.7.0.
+This tutorial installs Spindle-Rust and runs a theory where a penguin exception defeats the usual bird rule.
 
 ## Installation
+
+Use Rust 1.87 or newer (edition 2024).
 
 ### Building from Source
 
 ```bash
-git clone https://codeberg.org/anuna/spindle-rust
+git clone https://git.anuna.io/anuna-research/spindle-rust
 cd spindle-rust
 cargo build --release
 ```
@@ -93,69 +93,20 @@ Output:
 +D penguin
 +d bird
 +d penguin
-+d -flies
++d ~flies
 -D flies
--D -flies
+-D ~flies
 -d flies
 ```
 
-Key result: `+d -flies` - Tweety defeasibly doesn't fly because the penguin rule (`r2`) beats the bird rule (`r1`).
+Key result: `+d ~flies` - Tweety defeasibly doesn't fly because the penguin rule (`r2`) beats the bird rule (`r1`).
 
-## CLI Options
+## Next steps
 
-```bash
-# Show only positive conclusions
-spindle reason --positive penguin.spl
+The result `+d ~flies` completes this tutorial: the explicit priority resolves the conflict.
 
-# Output as JSON
-spindle reason --json penguin.spl
-
-# Validate syntax without reasoning
-spindle validate penguin.spl
-
-# Show theory statistics
-spindle stats penguin.spl
-```
-
-## Using as a Library
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-spindle-core = { path = "crates/spindle-core" }
-```
-
-Basic usage:
-
-```rust
-use spindle_core::prelude::*;
-
-fn main() {
-    let mut theory = Theory::new();
-
-    // Add facts
-    theory.add_fact("bird");
-    theory.add_fact("penguin");
-
-    // Add defeasible rules
-    let r1 = theory.add_defeasible_rule(&["bird"], "flies");
-    let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
-
-    // Set superiority
-    theory.add_superiority(&r2, &r1);
-
-    // Reason
-    let conclusions = theory.reason();
-
-    for c in conclusions {
-        println!("{}", c);
-    }
-}
-```
-
-## Next Steps
-
-- [Concepts](concepts.md) - Understand defeasible logic fundamentals
-- [SPL Reference](reference/spl.md) - Complete SPL syntax
-- [Examples](guides/grounding.md) - Advanced examples with variables
+- [Inspect the theory](guides/inspect-theory.md) with CLI filters, JSON output, syntax checks, and statistics.
+- [Rust library](integration/rust.md) covers programmatic theory construction.
+- [Concepts](concepts.md) explains the proof tags and rule types.
+- [SPL reference](reference/spl.md) describes the complete syntax.
+- [Variables and grounding](guides/grounding.md) explains rules with variables.

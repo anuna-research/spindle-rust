@@ -1,270 +1,115 @@
 # Query Operators
 
-Spindle provides three query operators for interactive reasoning: what-if, why-not, and abduction.
+`query` checks a literal, `why_not` identifies blockers, and `what_if` evaluates hypothetical facts.
+`requires_with_options` verifies proposed facts by rerunning the reasoner.
+`abduce` supplies raw candidates.
 
-## What-If Queries
-
-**What-if** performs hypothetical reasoning: "What would be concluded if these facts were true?"
-
-### API
+## Rust example
 
 ```rust
-use spindle_core::query::{what_if, HypotheticalClaim};
-use spindle_core::literal::Literal;
+use spindle_core::{Literal, Theory};
+use spindle_core::query::{
+    query, why_not, what_if, HypotheticalClaim,
+    requires_with_options, RequiresOptions,
+};
 
-let hypotheticals = vec![
-    HypotheticalClaim::new(Literal::simple("wounded"))
-];
-let goal = Literal::negated("flies");
-let result = what_if(&theory, hypotheticals, &goal);
-```
+fn main() -> spindle_core::error::Result<()> {
+    let mut theory = Theory::new();
+    theory.add_defeasible_rule(&["bird"], "flies");
+    let goal = Literal::simple("flies");
 
-### How It Works
+    let current = query(&theory, &goal)?;
+    println!("Status: {}", current.status);
+    let why = why_not(&theory, &goal)?;
+    println!("Blockers: {:?}", why.blocked_by);
 
-1. Create a copy of the theory
-2. Add hypothetical facts
-3. Reason over the modified theory
-4. Return new conclusions
+    let hypothetical = what_if(
+        &theory,
+        vec![HypotheticalClaim::new(Literal::simple("bird"))],
+        &goal,
+    )?;
+    assert!(hypothetical.is_provable());
 
-### Example
-
-Original theory:
-```spl
-(given bird)
-(normally r1 bird flies)
-(normally r2 wounded (not flies))
-(prefer r2 r1)
-```
-
-Query: What if `wounded` is true?
-
-```rust
-let hypotheticals = vec![HypotheticalClaim::new(Literal::simple("wounded"))];
-let goal = Literal::negated("flies");
-let result = what_if(&theory, hypotheticals, &goal);
-// result.is_provable() = true
-// result.new_conclusions = [Literal("~flies")]
-```
-
-### Use Cases
-
-- Exploring consequences of decisions
-- Scenario analysis
-- Testing rule interactions
-
-## Why-Not Queries
-
-**Why-not** explains why a literal is NOT provable.
-
-### API
-
-```rust
-use spindle_core::query::why_not;
-use spindle_core::literal::Literal;
-
-let literal = Literal::simple("flies");
-let explanation = why_not(&theory, &literal);
-```
-
-### How It Works
-
-1. Check if the literal is actually unprovable
-2. Find rules that could prove it
-3. For each rule, identify what's blocking it:
-   - Missing body literals
-   - Defeated by superior rules
-   - Blocked by defeaters
-
-### Example
-
-Theory:
-```spl
-(given bird)
-(given penguin)
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(prefer r2 r1)
-```
-
-Query: Why is `flies` not provable?
-
-```rust
-let literal = Literal::simple("flies");
-let explanation = why_not(&theory, &literal);
-// explanation.literal = Literal("flies")
-// explanation.would_derive = Some("r1")
-// explanation.blocked_by = [BlockingCondition { ... }]
-```
-
-### Result Structure
-
-```rust
-struct WhyNotResult {
-    literal: Literal,              // What we're asking about
-    would_derive: Option<String>,  // Rule that could prove it
-    blocked_by: Vec<BlockingCondition>,  // What's blocking
-}
-
-struct BlockingCondition {
-    blocking_type: BlockingType,   // Type of blocking
-    rule_label: String,            // The blocked rule
-    missing_literals: Vec<Literal>, // Missing premises (if applicable)
-    blocking_rule: Option<String>, // Blocking rule (if applicable)
-    explanation: String,           // Human-readable explanation
-}
-
-enum BlockingType {
-    MissingPremise,    // Body not satisfied
-    Defeated,          // Defeated by defeater
-    Contradicted,      // Complement is proven
+    let required = requires_with_options(&theory, &goal, RequiresOptions {
+        max_solutions: 3,
+        max_raw_candidates: 1000,
+    })?;
+    for solution in &required.solutions {
+        println!("Assume: {:?}", solution.facts);
+    }
+    println!("Search: {:?}", required.search_status);
+    Ok(())
 }
 ```
 
-### Use Cases
+`query` returns `Provable`, `Refuted` (the complement is provable), or `Unknown`.
+These statuses summarize positive evidence; `Unknown` does not mean the engine
+has proved a negative tag. See [Conclusions](../concepts/conclusions.md).
 
-- Debugging unexpected results
-- Understanding rule interactions
-- Explaining decisions to users
+## Hypothetical reasoning
 
-## Abduction
+`what_if` clones the theory, adds the supplied facts, and compares the new result
+with the baseline. `new_conclusions` contains newly provable literals without
+repeating a literal proved at both `+D` and `+d`. Distinct temporal windows and
+typed terms are preserved. The original theory is unchanged.
 
-**Abduction** finds hypotheses that would make a goal provable.
+## Explaining missing conclusions
 
-### API
+`why_not` examines grounded rules, so a query such as `(flies opus)` can find a
+rule written with `(flies ?x)` in its head. Its `blocked_by` entries identify
+missing premises, defeat, contradiction, or undetermined conditions. Superiority
+uses source template labels. The explanation system also resolves grounded labels
+to templates when constructing proof trees.
 
-```rust
-use spindle_core::query::abduce;
-use spindle_core::literal::Literal;
+## Abduction and verified requirements
 
-let goal = Literal::simple("goal");
-let result = abduce(&theory, &goal, max_solutions);
+`abduce(&theory, &goal, max_solutions)?` returns candidate assumptions. A candidate
+can fail under full conflict resolution. `requires_with_options` returns verified
+solutions. Verification injects each candidate fact-set and reruns reasoning,
+retaining only candidates that establish the goal.
+
+Each `AbductionSolution` contains:
+
+- `facts: Vec<Literal>`: deterministic, deduplicated assumptions preserving typed
+  terms and distinct temporal windows.
+- `rules_used`: the rules associated with that solution's fact-set.
+- `confidence`: currently initialized to `1.0`; this value is not a calibrated probability or proof that the candidate establishes the goal.
+
+`RequiresResult` reports `already_provable`, `solutions`, `search_status`, and
+verification counters (`raw_examined`, `accepted`, `rejected`). `BoundedComplete`
+means the available search finished or the requested solution count was reached;
+it does not promise exhaustive enumeration. `BudgetExhausted` means further raw
+candidates existed beyond the budget. Duplicate fact-sets consume one budget slot.
+An unproved goal with no accepted solutions is a valid result.
+
+## Temporal matching
+
+Bounded goals use exact temporal windows. A query for `p@[1,10]` does not match
+`p@[20,30]`, atemporal `p`, or even a containing window `p@[0,20]`.
+Atemporal goals match any member of the same literal family. This applies to
+`query`, `requires`, `what_if`, and `abduce`.
+
+`query_with_match_mode(&theory, &goal, QueryMatchMode::Family)` in
+`spindle_core::query` explicitly selects family-wide matching. See [Temporal Reasoning](temporal.md).
+
+## CLI and WebAssembly
+
+```sh
+spindle query flies theory.spl --json
+spindle why-not flies theory.spl --json
+spindle requires flies theory.spl --max 3 --json
 ```
 
-### How It Works
+`requires --json` emits `spindle.requires.v2`; an unsatisfied goal can have an empty
+solution list. The CLI has no standalone `what-if` or
+`abduce` command. The WASM `Spindle` object exposes `query`, `whatIf`, `whyNot`,
+and raw `abduce`; it does not expose the verified `requires` API.
 
-1. Start with the goal literal
-2. Find rules that could prove it
-3. For each rule, identify missing body literals
-4. Recursively abduce missing literals
-5. Return minimal sets of assumptions
-
-### Example
-
-Theory:
-```spl
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(normally r3 (and bird healthy) strong-flyer)
-(prefer r2 r1)
+```javascript
+const hypothetical = spindle.whatIf(["bird"], "flies");
+const blockers = spindle.whyNot("flies");
+const candidates = spindle.abduce("flies", 3);
 ```
 
-Query: What facts would make `flies` provable?
-
-```rust
-let goal = Literal::simple("flies");
-let result = abduce(&theory, &goal, 3);
-// result.solutions[0].facts = HashSet { Literal("bird") }
-```
-
-### Solution Structure
-
-```rust
-struct AbductionResult {
-    goal: Literal,
-    solutions: Vec<AbductionSolution>,
-}
-
-struct AbductionSolution {
-    facts: HashSet<Literal>,      // Facts to assume
-    rules_used: HashSet<String>,  // Rules involved
-    confidence: f64,              // Trust score (if weighted)
-}
-```
-
-### Handling Conflicts
-
-Abduction considers superiority:
-
-```spl
-(given penguin)
-(normally r1 bird flies)
-(normally r2 penguin (not flies))
-(prefer r2 r1)
-```
-
-Abducing `flies` might return:
-- `["bird", "healthy"]` with a rule `(normally r3 (and bird healthy) flies)` where r3 > r2
-- Or indicate that `flies` cannot be achieved given `penguin`
-
-### Use Cases
-
-- Diagnosis: What conditions explain symptoms?
-- Planning: What actions achieve a goal?
-- Debugging: What facts would fix this?
-
-## Combined Queries
-
-### Debugging Workflow
-
-1. **Observe**: `flies` is not provable
-2. **Why-not**: Discover r2 is blocking
-3. **What-if**: Test `what_if(["healthy"])`
-4. **Abduce**: Find minimal fix
-
-### Example Session
-
-```rust
-// 1. Check current state
-let conclusions = theory.reason();
-assert!(!is_provable(&conclusions, "flies"));
-
-// 2. Understand why
-let why = why_not(&theory, "flies");
-println!("Blocked by: {:?}", why.blockers);
-
-// 3. Explore hypotheticals
-let hypo = what_if(&theory, &["super_bird"], "flies");
-if hypo.provable {
-    println!("Would work if super_bird");
-}
-
-// 4. Find minimal solution
-let solutions = abduce(&theory, "flies", 3);
-println!("Minimal fixes: {:?}", solutions);
-```
-
-## WebAssembly API
-
-The WASM bindings expose these operators:
-
-```typescript
-import { Spindle } from 'spindle-wasm';
-
-const spindle = new Spindle();
-spindle.parseSpl(`
-  (given bird)
-  (given penguin)
-  (normally r1 bird flies)
-  (normally r2 penguin (not flies))
-  (prefer r2 r1)
-`);
-
-// What-if
-const whatIf = spindle.whatIf(["healthy"], "flies");
-console.log(whatIf);
-
-// Why-not
-const whyNot = spindle.whyNot("flies");
-console.log(whyNot);
-
-// Abduction
-const abduce = spindle.abduce("flies", 3);
-console.log(abduce);
-```
-
-## Limitations
-
-1. **Depth limits**: Abduction has a configurable depth limit to avoid infinite search
-2. **Minimal solutions**: Abduction returns minimal sets, not all possible sets
-3. **Grounded queries**: Queries work on grounded theories; variables must be bound
-4. **Performance**: Deep abduction can be expensive for large theories
+See the [CLI reference](../reference/cli.md) and
+[WebAssembly guide](../integration/wasm.md) for output formats.

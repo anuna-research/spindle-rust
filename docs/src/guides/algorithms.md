@@ -1,61 +1,67 @@
 # Algorithms
 
-Spindle uses a single reasoning engine: **standard DL(d) forward chaining**.
+Spindle's built-in engine implements traditional ambiguity-blocking **DL(∂)**
+with team defeat and four constructive proof tags. `StandardReasoner` is the
+backend selected by `select_reasoner("standard")`.
 
-## Overview
+## Proof propagation
 
-The engine computes conclusions in three phases:
+Facts establish `+D` and therefore `+d`. Strict rules propagate definite proofs.
+Defeasible reasoning combines supported rules, negative definite evidence for
+the complement, and checks against opposing rules. A strict rule whose premises
+are only defeasibly proved can also contribute defeasible support.
 
-1. Seed facts as both `+D` and `+d`.
-2. Forward-chain strict and defeasible rules until saturation.
-3. Emit negative conclusions (`-D`, `-d`) for literals not proven.
+The engine derives negative tags through their own proof conditions. Absence of `+D` or `+d`
+is not enough to emit `-D` or `-d`. The engine propagates evidence until no further
+tags can be established.
 
-## Forward Chaining
+## Conflict handling
 
-At a high level:
-
-```text
-function reason(theory):
-  proven_definite = {}
-  proven_defeasible = {}
-  worklist = facts + empty-body rule heads
-
-  while worklist not empty:
-    lit = pop(worklist)
-    for rule triggered by lit:
-      if body_satisfied(rule):
-        fire(rule)
-
-  emit -D and -d for literals not in proven sets
+```spl
+(given trigger)
+(normally left trigger p)
+(normally right trigger (not p))
 ```
 
-Strict rules add both `+D` and `+d`.  
-Defeasible rules add `+d` only if not blocked.
+With no priority, neither side is defeasibly provable: this is ambiguity blocking.
+Adding `(prefer left right)` lets `p` win. Under team defeat, different supporting
+rules can defeat different attackers; a single rule need not outrank every opponent.
+Defeaters can attack the complementary conclusion but cannot establish their own
+heads. When a premise is disproved, the engine discards the attacker. An unproved premise alone does not justify discarding it.
 
-## Conflict Handling
+## Cycles and inconsistency
 
-For a defeasible rule `(normally r body q)`, attackers are rules for `(not q)`.
+```spl
+(always strict-loop p p)
+(normally defeasible-loop q q)
+```
 
-`r` is blocked when:
+The strict self-loop leaves `p` undecided at both levels. The defeasible self-loop
+has `-D q`, but neither `+d q` nor `-d q`. A rule depending on such an undecided
+premise can continue to block an opponent.
 
-1. An applicable **defeater** for `~q` exists, and `r` is not superior to it.
-2. An applicable **defeasible** attacker exists that is explicitly superior to `r`.
+If both `p` and `(not p)` are facts, both receive `+D` and `+d`. This strict
+inconsistency does not establish unrelated literals. See
+[Conclusions](../concepts/conclusions.md) for how to read the tags.
 
-If no superiority relation exists between two applicable defeasible opponents, Spindle does **not**
-auto-block ties. Both sides can remain defeasibly derivable unless explicit superiority or defeaters
-resolve the conflict.
+## Grounding and aggregation
 
-This means superiority declarations are the primary mechanism for deterministic conflict resolution.
+Grounding instantiates variables before ordinary reasoning. Grounding can grow
+combinatorially; its budgets constrain large theories. Aggregate programs
+infer strata, complete earlier reasoning, and lower aggregate results with
+snapshot premises before continuing. The engine accepts ordinary cycles but rejects cycles through
+an aggregate dependency. See [Aggregation](aggregation.md).
 
-## Practical Semantics
+## Theoretical complexity and grounding
 
-- Add `prefer r1 r2` / `r1 > r2` when you want one side to win.
-- Without superiority, opposing defeasible rules can yield both `+d p` and `+d ~p`.
-- `-d p` means “not defeasibly provable”, not “false”.
+For propositional theories, defeasible inference runs in linear time relative to theory size (Maher, 2001).
+With first-order variables, grounding instantiates rules against known facts before reasoning begins.
+As with Datalog, grounding can be exponential in rule body size. Reasoning over the ground theory remains polynomial.
+This tractability makes defeasible logic practical where other non-monotonic formalisms are intractable.
 
-## Complexity
+## Measuring performance
 
-- Time: roughly `O(n * m)` where `n` is rules and `m` is average body size.
-- Space: linear in literals/rules for indexes, worklists, and proven sets.
-
-The implementation relies on indexing and bitsets for fast membership checks during propagation.
+Indexes, worklists, and bitsets reduce repeated lookup and propagation work.
+End-to-end cost also includes grounding, conflict checks, and, for aggregates,
+repeated prefix reasoning. The `make bench` and `make bench-aggregation` targets measure representative theories.
+A propositional complexity bound does not bound the whole pipeline.

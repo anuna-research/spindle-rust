@@ -82,18 +82,4 @@ steps:
             "scripts/check-lean-verification.sh",
           ]
 
-  - name: deploy-docs
-    image: node:22-bookworm
-    when:
-      - event: push
-        branch: main
-        path: "docs/**"
-    environment:
-      CLOUDFLARE_API_TOKEN:
-        from_secret: cf_api_token
-      CLOUDFLARE_ACCOUNT_ID:
-        from_secret: cf_account_id
-    commands:
-      - curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.51/mdbook-v0.4.51-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C /usr/local/bin
-      - mdbook build docs
-      - npx wrangler pages deploy docs/book --project-name=spindle-docs --commit-dirty=true
+  # Documentation deployment runs in .forgejo/workflows/docs.yml.

@@ -16,25 +16,29 @@ Facts produce **definite conclusions** (`+D`) that cannot be defeated.
 
 ## Strict Rules (`always`)
 
-Strict rules express necessary implications. If the body is true, the head **must** be true.
+Strict rules express necessary implications. If the body is true, the implication also makes the head true.
 
 ```spl
 (always r1 penguin bird)              ; All penguins are birds
 (always r2 (and human mortal) dies)   ; All mortal humans die
 ```
 
-Strict rules produce **definite conclusions** (`+D`). They cannot be defeated by defeasible rules.
+Strict rules produce **definite conclusions** (`+D`) when every premise is
+definitely proved. With only defeasible support, a strict rule can instead
+contribute `+d`, subject to conflict checks. Aggregate snapshot premises also
+carry defeasible evidence. A definite conclusion cannot be defeated by a
+defeasible rule.
 
 ### When to Use Strict Rules
 
-Use strict rules for:
+Strict rules represent:
 - Definitional relationships (penguins are birds)
 - Logical necessities (modus ponens)
 - Constraints that have no exceptions
 
 ## Defeasible Rules (`normally`)
 
-Defeasible rules express typical or default behavior that may have exceptions.
+Defeasible rules express typical or default behavior with possible exceptions.
 
 ```spl
 (normally r1 bird flies)            ; Birds typically fly
@@ -48,17 +52,19 @@ Defeasible rules produce **defeasible conclusions** (`+d`) that can be defeated 
 
 ### When to Use Defeasible Rules
 
-Use defeasible rules for:
+Defeasible rules represent:
 - Default behaviors with exceptions
 - Typical properties
 - Rules of thumb
 
 ## Defeaters (`except`)
 
-Defeaters are special rules that **block** conclusions without proving anything themselves.
+Defeaters are special rules that attack the **complement of their head** without
+proving the head. A defeater with head `(not flies)` blocks `flies`.
+An applicable defeater can itself be overcome by superiority.
 
 ```spl
-(except d1 broken-wing flies)    ; A broken wing blocks "flies"
+(except d1 broken-wing (not flies))    ; A broken wing blocks "flies"
 ```
 
 ### Defeater vs. Defeasible Rule
@@ -68,7 +74,7 @@ Defeaters are special rules that **block** conclusions without proving anything 
 (normally r1 penguin (not flies))
 
 ; Defeater: only blocks flies, doesn't prove (not flies)
-(except d1 sick flies)
+(except d1 sick (not flies))
 ```
 
 The difference:
@@ -77,10 +83,10 @@ The difference:
 
 ### When to Use Defeaters
 
-Use defeaters when:
-- You want to express doubt without asserting the opposite
-- Evidence should block a conclusion but not prove its negation
-- You're modeling uncertainty
+Defeaters represent:
+- Doubt without an assertion of the opposite
+- Evidence that blocks a conclusion without proving its negation
+- Uncertainty
 
 ## Rule Bodies (Antecedents)
 
@@ -123,7 +129,7 @@ Every rule has a label (identifier) used for:
 - Explanations
 - Debugging
 
-Labels are optional (auto-generated if omitted):
+When labels are omitted, Spindle generates them automatically:
 ```spl
 (normally r1 bird flies)      ; labeled r1
 (normally bird flies)         ; auto-labeled
@@ -134,6 +140,6 @@ Labels are optional (auto-generated if omitted):
 | Rule Type | SPL Keyword | Conclusion | Can be Defeated? |
 |-----------|-------------|------------|------------------|
 | Fact | `given` | +D | No |
-| Strict | `always` | +D | No |
+| Strict | `always` | +D from definite premises; otherwise potentially +d | Definite proof: no; defeasible support: yes |
 | Defeasible | `normally` | +d | Yes |
 | Defeater | `except` | None (blocks only) | N/A |

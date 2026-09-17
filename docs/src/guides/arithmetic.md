@@ -10,7 +10,9 @@ Arithmetic adds three capabilities to SPL rules:
 2. **Bind constraints** — assign computed results to new variables
 3. **Comparison guards** — filter substitutions based on numeric conditions
 
-All arithmetic is restricted to rule bodies. Arithmetic cannot appear in facts, rule heads, or as standalone statements.
+SPL accepts arithmetic constraints and expression arguments in rule bodies.
+It rejects arithmetic in facts, rule heads, and standalone statements.
+Numeric values and variables bound by body expressions remain valid head arguments.
 
 ## Numeric Types
 
@@ -30,11 +32,11 @@ The parser chooses the numeric type based on how you write the literal:
 - **Decimal**: Contains a decimal point but no exponent (`e`/`E`). `3.14`, `0.001`, `-0.5`.
 - **Float**: Contains an exponent (`e` or `E`). `1.5e2` (= 150.0), `1e-3` (= 0.001), `2.0E10`.
 
-Decimal is the default for numbers with a decimal point because it gives exact representation. This matters for financial calculations and precise comparisons: `0.1 + 0.2` equals exactly `0.3` in Decimal, but not in floating point. Use scientific notation only when you specifically need IEEE 754 semantics or very large/small magnitudes.
+Decimal is the default for numbers with a decimal point because it gives exact representation. This matters for financial calculations and precise comparisons: `0.1 + 0.2` equals exactly `0.3` in Decimal, but not in floating point. Scientific notation selects IEEE 754 semantics and supports very large or small magnitudes.
 
 ### Promotion Rules
 
-When mixing types in an operation, values are promoted along the chain:
+When an operation mixes types, it promotes values along the chain:
 
 ```
 Integer → Decimal → Float
@@ -44,7 +46,7 @@ Integer → Decimal → Float
 - Integer + Decimal = Decimal
 - Anything + Float = Float
 
-Once a Float enters a computation, the entire result is Float. Keep this in mind if exact precision matters to your use case.
+Once a Float enters a computation, the entire result is Float. This affects calculations that need exact precision.
 
 ### Cross-Type Matching
 
@@ -112,7 +114,7 @@ Expressions can be arbitrarily nested:
 (bind ?total (+ ?price ?tax))
 ```
 
-The variable must be unbound (not previously assigned in this rule). If it is already bound, the bind succeeds only if the existing value equals the computed result.
+A new binding assigns an unbound variable (one without a previous assignment in this rule). If it is already bound, the bind succeeds only if the existing value equals the computed result.
 
 ### Example: Computing Derived Values
 
@@ -170,7 +172,7 @@ Both sides can be expressions:
 
 ## Evaluation Order
 
-Body elements are evaluated **left to right**. Variables must be bound by a preceding literal or bind before they can be used in arithmetic:
+The grounder evaluates body elements **left to right**. Arithmetic expressions need variables bound by a preceding literal or bind:
 
 ```spl
 ; CORRECT: ?price is bound before bind uses it
@@ -180,27 +182,38 @@ Body elements are evaluated **left to right**. Variables must be bound by a prec
   (sale-price ?name ?discounted))
 ```
 
-If an arithmetic expression references an unbound variable, the substitution is silently discarded (the rule does not fire for that ground instance).
+If an arithmetic expression references an unbound variable, the grounder silently discards the substitution. The rule does not fire for that ground instance.
 
 ## Arithmetic in Predicate Arguments
 
-Arithmetic expressions can appear directly as predicate arguments in the body:
+Arithmetic expressions can appear as predicate arguments in the body, but SPL rejects them in head arguments.
+This head-expression example is invalid:
 
 ```spl
+; INVALID — arithmetic expression in a head argument
 (normally r1
   (and (base ?x ?b) (offset ?x ?o))
   (result ?x (+ ?b ?o)))
 ```
 
-The expression `(+ ?b ?o)` is evaluated during grounding and the result becomes a concrete term in the head literal.
+A body `bind` computes the result for a head variable:
+
+```spl
+(normally r1
+  (and (base ?x ?b) (offset ?x ?o) (bind ?total (+ ?b ?o)))
+  (result ?x ?total))
+```
+
+The grounder evaluates `(+ ?b ?o)` in the body. The bound `?total` becomes a concrete term in the head literal.
 
 ## Restrictions
 
-Spindle enforces several restrictions on where arithmetic can appear. Each is checked at parse time and produces a clear error message.
+Spindle enforces several restrictions on where arithmetic can appear. The parser checks each restriction and produces an error message.
 
 ### No Arithmetic in Heads or Facts (REQ-009)
 
-Arithmetic constraints (`bind`, comparisons) are for filtering and computing in rule bodies. They cannot appear as conclusions.
+Arithmetic constraints (`bind`, comparisons) filter and compute in rule bodies. They cannot appear as conclusions.
+SPL also rejects expression arguments in heads and facts, as the preceding example illustrates.
 
 ```spl
 ; INVALID — bind in head position
@@ -223,7 +236,7 @@ The same message appears for comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>
 
 ### No Negated Arithmetic (REQ-011)
 
-Arithmetic constraints cannot be wrapped in `not`. This avoids ambiguity about what "not greater than" means in a defeasible logic context.
+The `not` wrapper rejects arithmetic constraints. This avoids ambiguity about what "not greater than" means in a defeasible logic context.
 
 ```spl
 ; INVALID — cannot negate a comparison
@@ -239,7 +252,7 @@ Arithmetic constraints cannot be wrapped in `not`. This avoids ambiguity about w
 Arithmetic predicate '>' cannot be negated (REQ-011). Use the positive form in the rule body instead.
 ```
 
-Use the complementary comparison instead:
+The complementary comparison expresses the opposite condition:
 
 ```spl
 ; CORRECT — use <= instead of (not >)
@@ -248,7 +261,7 @@ Use the complementary comparison instead:
 
 ### No Temporal Variables in Arithmetic (REQ-006)
 
-Variables bound by `during` expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If a temporal variable appears in an arithmetic expression, the substitution is silently discarded (the rule does not fire for that ground instance).
+Variables bound by `during` expressions represent time points or intervals, not numeric values. They cannot be used as arithmetic operands. If an arithmetic expression contains a temporal variable, the grounder silently discards the substitution. The rule does not fire for that ground instance.
 
 ```spl
 ; The rule below will never produce "shifted" because ?T is temporal
@@ -260,7 +273,7 @@ Variables bound by `during` expressions represent time points or intervals, not 
 
 ### Reserved Keywords (REQ-008)
 
-Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels. This prevents confusing programs where `+` or `bind` might look like user-defined predicates.
+Arithmetic operators and comparison symbols cannot be used as predicate names or rule labels. This prevents confusing programs where `+` or `bind` look like user-defined predicates.
 
 ```
 +  -  *  /  div  rem  abs  min  max  **
@@ -290,7 +303,7 @@ This also applies to tilde-negated forms (e.g., `~>` is rejected because `>` is 
 | Unbound variable | Variable not yet assigned when expression is evaluated |
 | Temporal variable in arithmetic | `(+ ?T 1)` where `?T` is from a `during` |
 
-When any of these occur during grounding, the substitution is discarded — the rule simply does not fire for that ground instance. No error is raised to the user; the rule is silently skipped for that particular combination of variable bindings.
+When any of these occur during grounding, the grounder discards the substitution. The rule does not fire for that ground instance. The grounder reports no error to the user. It silently skips the rule for that particular combination of variable bindings.
 
 ### Parse-Time Errors
 
@@ -304,3 +317,15 @@ When any of these occur during grounding, the substitution is discarded — the 
 | Invalid operand | Non-numeric, non-variable atom | `(+ bird 1)` |
 
 Parse-time errors halt processing and report the line number and a description of the problem.
+
+## Rounding, value bindings, and aggregates
+
+The builtin prelude includes `(round value decimal-places)` with half-to-even
+rounding, `(floor value)`, and `(ceil value)`. Host applications can register
+additional pure functions. `bind` can carry integer or symbol results from these
+functions; builtin numeric guards still require numeric operands.
+
+The `agg` form and explicit `fold` expressions in `bind` compute reductions across predicates.
+The aggregate bridge currently uses checked integer arithmetic, even though
+ordinary arithmetic supports decimals and floats. See
+[Aggregation and Extension Functions](aggregation.md).

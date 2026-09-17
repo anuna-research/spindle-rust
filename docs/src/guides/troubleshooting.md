@@ -1,6 +1,6 @@
-# Troubleshooting
+# How to Troubleshoot Spindle
 
-Common issues and how to resolve them.
+Use this guide to diagnose parse errors, unexpected conclusions, grounding failures, and performance problems.
 
 ## Parse Errors
 
@@ -26,12 +26,12 @@ SPL parse error: Unknown keyword: defeasible
 
 **Debugging steps**:
 
-1. Check if the rule exists:
+1. Check whether the rule exists:
    ```bash
    spindle stats theory.spl
    ```
 
-2. Check if the body is satisfied:
+2. Check whether the reasoner proves the body:
    ```spl
    ; Is 'bird' actually proven?
    (normally r1 bird flies)
@@ -51,7 +51,7 @@ SPL parse error: Unknown keyword: defeasible
 
 ### Unexpected Conclusion Present
 
-**Symptom**: A literal is `+d` when it shouldn't be.
+**Symptom**: A literal unexpectedly has status `+d`.
 
 **Debugging steps**:
 
@@ -60,10 +60,10 @@ SPL parse error: Unknown keyword: defeasible
    grep "literal" theory.spl
    ```
 
-2. Check if a defeater is missing:
+2. Check whether a defeater is missing:
    ```spl
    ; Add a defeater to block
-   (except d1 exception unexpected-literal)
+   (except d1 exception (not unexpected-literal))
    ```
 
 ### Both Literals Unprovable (Ambiguity)
@@ -95,8 +95,8 @@ SPL parse error: Unknown keyword: defeasible
    ```
 
 2. Rule type compatibility:
-   - Superiority only affects defeasible rules and defeaters
-   - Strict rules always win regardless of superiority
+   - Superiority cannot overturn a definite proof. Strict rules with only defeasible premises still participate in defeasible conflict resolution.
+   - Check whether strict-rule premises have definite proofs before treating the resulting conclusion as immune to defeasible attacks.
 
 3. Both rules actually fire:
    ```bash
@@ -177,11 +177,14 @@ SPL parse error: Unknown keyword: defeasible
 
 **Symptom**: You see both `+d p` and `+d ~p`.
 
-**Cause**: No superiority relation resolves the conflict.
+**Cause**: Contradictory facts or strict derivations can prove both sides definitely. Unresolved defeasible conflicts alone block both sides.
 
 **Fix**:
-1. Add an explicit superiority declaration between the conflicting rules.
-2. Re-run reasoning and verify only the preferred side remains `+d`.
+1. Check whether both literals also have `+D` proofs.
+2. Inspect their facts and strict derivations with `spindle explain`.
+3. When the domain does not justify both sides, correct contradictory premises or strict rules.
+4. When the domain establishes a preference between competing defeasible derivations, add a superiority declaration.
+5. Re-run reasoning and check the resulting conclusions.
 
 ## Performance Issues
 
@@ -208,7 +211,7 @@ SPL parse error: Unknown keyword: defeasible
 
 ### Validate First
 
-Always validate before reasoning:
+Check the theory before reasoning:
 ```bash
 spindle validate theory.spl && spindle reason theory.spl
 ```
@@ -251,4 +254,4 @@ If you can't resolve an issue:
 1. Create a minimal reproduction
 2. Include the theory file
 3. Show expected vs actual output
-4. Report at: https://codeberg.org/anuna/spindle-rust/issues
+4. Report at: https://git.anuna.io/anuna-research/spindle-rust/issues
