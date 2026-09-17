@@ -1,0 +1,63 @@
+(given (procedure-step verify-v1 check run-tests))
+(given (procedure-step verify-v1 review review-change))
+(given (procedure-run run-b verify-v1 rev-b))
+(given (procedure-run run-c verify-v1 rev-c))
+(given (verification-needed rev-b))
+(given (verification-needed rev-c))
+(given (step-guidance verify-v1 check "Run the acceptance suite against this exact revision"))
+(given (step-pitfall verify-v1 check "A report for another revision does not verify this revision"))
+
+(normally check-applicable
+  (and (procedure-run ?run verify-v1 ?rev)
+       (procedure-step verify-v1 ?step run-tests)
+       (verification-needed ?rev) (build-available ?rev))
+  (applicable ?run ?step))
+(normally review-applicable
+  (and (procedure-run ?run verify-v1 ?rev)
+       (procedure-step verify-v1 ?step review-change)
+       (verification-needed ?rev) (tests-passed ?rev))
+  (applicable ?run ?step))
+(normally recommend (applicable ?run ?step) (recommended ?run ?step))
+
+(except already-tested
+  (and (procedure-run ?run verify-v1 ?rev)
+       (procedure-step verify-v1 ?step run-tests) (tests-passed ?rev))
+  (not (recommended ?run ?step)))
+(except already-reviewed
+  (and (procedure-run ?run verify-v1 ?rev)
+       (procedure-step verify-v1 ?step review-change) (review-approved ?rev))
+  (not (recommended ?run ?step)))
+
+(normally attempt-active (attempt-started ?attempt) (attempt-in-progress ?attempt))
+(except attempt-ended (attempt-result ?attempt ?result)
+  (not (attempt-in-progress ?attempt)))
+(except step-busy
+  (and (step-attempt ?attempt ?run ?step) (attempt-in-progress ?attempt))
+  (not (recommended ?run ?step)))
+
+(normally report-establishes-tests
+  (and (procedure-run ?run verify-v1 ?rev)
+       (procedure-step verify-v1 ?step run-tests)
+       (step-attempt ?attempt ?run ?step)
+       (attempt-result ?attempt finished)
+       (attempt-artifact ?attempt ?report)
+       (report-revision ?report ?rev)
+       (report-outcome ?report passed))
+  (tests-passed ?rev))
+(normally verification
+  (and (tests-passed ?rev) (review-approved ?rev))
+  (verified ?rev))
+(given (build-available rev-b))
+(given (build-available rev-c))
+(given (step-attempt try-1 run-b check))
+(given (attempt-started try-1))
+(given (attempt-result try-1 failed))
+(given (step-attempt try-2 run-b check))
+(given (attempt-started try-2))
+(given (attempt-result try-2 finished))
+(given (attempt-artifact try-2 report-wrong))
+(given (report-revision report-wrong rev-a))
+(given (report-outcome report-wrong passed))
+(given (attempt-artifact try-2 report-b))
+(given (report-revision report-b rev-b))
+(given (report-outcome report-b passed))

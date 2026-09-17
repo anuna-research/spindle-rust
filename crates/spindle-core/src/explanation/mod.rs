@@ -20,9 +20,8 @@ pub use types::*;
 
 use std::collections::HashSet;
 
-use crate::conclusion::ConclusionType;
+use crate::conclusion::{Conclusion, ConclusionType};
 use crate::error::Result;
-use crate::grounding::{apply_substitution_to_literal, match_literal};
 use crate::literal::Literal;
 
 // ---------------------------------------------------------------------------
@@ -69,55 +68,28 @@ impl Explanation {
     }
 }
 
-/// Explain why a conclusion holds (returns Proof Tree)
+/// Explain why a conclusion holds (returns Proof Tree).
+///
+/// Prepares and reasons over one theory snapshot so proof steps retain the
+/// actual grounded rule instances, including bindings for body-only variables.
+/// A positive conclusion whose complete derivation cannot be recovered is
+/// returned without a proof tree, rather than with a partial justification.
 pub fn explain(theory: &crate::theory::Theory, literal: &Literal) -> Result<Option<Explanation>> {
-    let mut visited = HashSet::new();
-    if !theory.aggregate_guards.is_empty() {
-        // Snapshot premises are hidden from user conclusion lists, but their
-        // defeasible proofs must remain visible when auditing a lowered rule.
-        let mut audit_theory = theory.clone();
-        audit_theory.aggregate_guards.clear();
-        return explain_inner(&audit_theory, literal, &mut visited);
-    }
-    explain_inner(theory, literal, &mut visited)
-}
-
-/// Resolve a conclusion's `rule_label` to the rule that carries its body.
-/// A grounded instance is labelled `{template}_{instance_num}` (grounding),
-/// and only the template rule (with its body) lives in the theory, so when
-/// the direct lookup misses, strip trailing `_<digits>` segments to recover
-/// the template. Without this, a conclusion derived by a variable rule (whose
-/// instances are renamed) gets no proof tree, and the natural-language
-/// formatter then prints a contradictory "No derivation found." under a
-/// "This was proven…" summary.
-fn resolve_rule<'a>(
-    theory: &'a crate::theory::Theory,
-    label: &str,
-) -> Option<&'a crate::rule::Rule> {
-    if let Some(rule) = theory.get_rule(label) {
-        return Some(rule);
-    }
-    let mut cur = label;
-    while let Some((prefix, suffix)) = cur.rsplit_once('_') {
-        if suffix.is_empty() || !suffix.bytes().all(|b| b.is_ascii_digit()) {
-            break;
-        }
-        if let Some(rule) = theory.get_rule(prefix) {
-            return Some(rule);
-        }
-        cur = prefix;
-    }
-    None
+    let mut prepared = crate::pipeline::prepare(theory, Default::default())?;
+    // Snapshot premises are hidden from user conclusion lists, but their
+    // defeasible proofs must remain visible when auditing a lowered rule.
+    prepared.theory.aggregate_guards.clear();
+    let conclusions = crate::reason::reason_prepared(&prepared.theory)?;
+    explain_inner(&prepared.theory, &conclusions, literal, &mut HashSet::new())
 }
 
 /// Internal recursive helper with cycle detection via `visited` set.
 fn explain_inner(
     theory: &crate::theory::Theory,
+    conclusions: &[Conclusion],
     literal: &Literal,
     visited: &mut HashSet<String>,
 ) -> Result<Option<Explanation>> {
-    use crate::reason::reason;
-
     let literal_key = literal.to_string();
 
     // Cycle detection: if we are already in the process of explaining this
@@ -126,8 +98,6 @@ fn explain_inner(
         return Ok(None);
     }
     visited.insert(literal_key.clone());
-
-    let conclusions = reason(theory)?;
 
     // Find the conclusion for the target literal
     let conclusion = match conclusions
@@ -144,7 +114,7 @@ fn explain_inner(
     let mut explanation = Explanation::new(conclusion.conclusion_type, conclusion.literal.clone());
 
     if let Some(rule_label) = &conclusion.rule_label
-        && let Some(rule) = resolve_rule(theory, rule_label)
+        && let Some(rule) = theory.get_rule(rule_label)
     {
         let mut step = ProofStep::new(
             rule.label.clone(),
@@ -152,45 +122,21 @@ fn explain_inner(
             rule.to_spl(), // SPL format includes temporal, Allen constraints, state queries
         );
 
-        // Determine substitution by matching rule head against conclusion literal
-        // If rule has multiple heads, find the one that matches
-        let head_pattern = rule
-            .head
-            .iter()
-            .find(|h| match_literal(h, literal).is_some())
-            .unwrap_or(&rule.head[0]); // Fallback, shouldn't happen if logic correct
-
-        let subst = match_literal(head_pattern, literal).unwrap_or_default();
-
-        // Recursively build proofs for body, applying substitution
+        // Every premise belongs to this exact grounded instance. Never replace
+        // a missing premise with an independently matching positive literal.
         let mut body_proofs = Vec::new();
         for body_bl in &rule.body {
-            // Only logic body literals participate in proof trees
-            let body_lit = match body_bl.as_logic() {
-                Some(lit) => lit.to_literal(),
-                None => continue, // skip arithmetic constraints
+            let Some(body_lit) = body_bl.as_logic() else {
+                continue; // arithmetic constraints were checked during preparation
             };
-            let ground_body_lit = apply_substitution_to_literal(&body_lit, &subst);
-
-            if let Some(body_expl) = explain_inner(theory, &ground_body_lit, visited)? {
-                if let Some(body_tree) = body_expl.proof_tree {
-                    body_proofs.push(body_tree);
-                }
-            } else {
-                // If exact ground literal not found, try to find a matching one
-                // (Handle existential cases like matter_seen where body var isn't in head)
-                // We need to iterate carefully to propagate errors from explain_inner
-                for c in &conclusions {
-                    if c.conclusion_type.is_positive()
-                        && match_literal(&body_lit, &c.literal).is_some()
-                        && let Some(body_expl) = explain_inner(theory, &c.literal, visited)?
-                        && let Some(body_tree) = body_expl.proof_tree
-                    {
-                        body_proofs.push(body_tree);
-                        break;
-                    }
-                }
-            }
+            let body_tree = explain_inner(theory, conclusions, &body_lit.to_literal(), visited)?
+                .and_then(|explanation| explanation.proof_tree);
+            let Some(body_tree) = body_tree else {
+                // Preserve the positive conclusion, but do not publish a partial proof.
+                visited.remove(&literal_key);
+                return Ok(Some(explanation));
+            };
+            body_proofs.push(body_tree);
         }
         step.body_proofs = body_proofs;
 
@@ -221,8 +167,8 @@ mod tests {
     #[test]
     fn explain_builds_proof_tree_for_grounded_variable_rule() {
         // A conclusion derived by a variable rule carries a grounded instance
-        // label (`pn_1`) absent from the template theory; explain must still
-        // resolve it to the template `pn` and build a proof tree — otherwise
+        // label (`pn_1`) absent from the template theory; explain must retain
+        // the prepared instance and build a proof tree — otherwise
         // the formatter contradicts itself ("This was proven…" then
         // "No derivation found.").
         use crate::intern::intern;
