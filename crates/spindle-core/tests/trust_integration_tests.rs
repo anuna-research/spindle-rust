@@ -562,3 +562,24 @@ fn test_strict_conclusion_not_diminished() {
         wc.degree
     );
 }
+
+#[test]
+fn obligation_defeater_does_not_diminish_permission() {
+    let wcs = weighted_from_spl(
+        "(trusts alice 0.8) (trusts bob 0.9)
+         (claims alice (normally permit () (may play)))
+         (claims bob (except block () (forbidden play)))",
+        None,
+    );
+    let permission = wcs
+        .iter()
+        .find(|wc| {
+            wc.literal.mode.name.as_deref() == Some("P")
+                && !wc.literal.negation
+                && !wc.literal.mode.negation
+                && wc.conclusion_type == ConclusionType::DefeasiblyProvable
+        })
+        .expect("explicit permission survives the non-attacking defeater");
+    assert!(permission.diminished_by.is_empty());
+    assert!((permission.degree - 0.8).abs() < 1e-10);
+}

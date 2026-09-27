@@ -108,6 +108,10 @@ pub fn has_variables(rule: &Rule) -> bool {
 /// When the pattern has a `temporal_expr`, temporal variables are bound
 /// against the ground literal's concrete temporal endpoints.
 pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution> {
+    let pattern_canonical = pattern.deontic_canonical();
+    let ground_canonical = ground.deontic_canonical();
+    let pattern = &pattern_canonical;
+    let ground = &ground_canonical;
     // Check negation matches
     if pattern.negation != ground.negation {
         return None;
@@ -406,6 +410,7 @@ fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitut
 /// Create a key for indexing facts (using interned SymbolId, zero allocation)
 #[inline]
 fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
+    let lit = lit.deontic_canonical();
     (
         lit.name_id(),
         lit.negation,
@@ -419,6 +424,7 @@ fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
 /// Includes temporal so that `p[1,2]` and `p[3,4]` are treated as distinct facts.
 #[inline]
 fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<crate::term::Term>, Mode, Temporal) {
+    let lit = lit.deontic_canonical();
     (
         lit.name_id(),
         lit.negation,
@@ -455,8 +461,8 @@ fn normalize_body_against_facts(
             };
             for fact in facts {
                 if lit.name_id() == fact.name_id()
-                    && lit.negation == fact.negation
-                    && lit.mode == fact.mode
+                    && lit.deontic_canonical().negation == fact.deontic_canonical().negation
+                    && lit.deontic_canonical().mode == fact.deontic_canonical().mode
                     && lit.temporal == fact.temporal
                     && lit.predicate_args().len() == fact.predicate_args().len()
                     && lit
@@ -580,6 +586,15 @@ fn resolve_body_logic(
     Some(result)
 }
 
+/// Resolve refutation premises only after the other premises supply bindings.
+fn negative_modal_is_bound(
+    lit: &BodyLogicLiteral,
+    subst: &Substitution,
+    ctx: &EvalContext<'_>,
+) -> bool {
+    resolve_body_logic(lit, subst, ctx).is_some_and(|lit| !literal_has_variables(&lit))
+}
+
 /// Match body literals against facts, returning all valid substitutions.
 ///
 /// Evaluates [`BodyLiteral`] elements in source order, threading
@@ -587,6 +602,8 @@ fn resolve_body_logic(
 ///
 /// - **Logic** literals have their `BodyArg::Arith` arguments evaluated
 ///   under the current substitution, then are matched against facts.
+/// - Negative modal premises are deferred until the other premises bind their
+///   variables. Grounding retains them for the reasoner to check.
 /// - **Arithmetic** constraints are evaluated under the current
 ///   substitution: `Bind` extends it, `Compare` filters it.
 ///
@@ -620,10 +637,23 @@ fn match_body_against_facts_ctx(
 
     match first {
         BodyLiteral::Logic(logic_lit) => {
-            // Resolve BodyArg::Arith arguments and variable terms under current_subst
+            // Refutation premises do not generate bindings. Match the rest first,
+            // then require this premise to be ground; the reasoner checks -d.
+            if logic_lit.to_literal().is_negative_modal() {
+                return match_body_against_facts_ctx(
+                    rest,
+                    fact_index,
+                    all_facts,
+                    current_subst,
+                    ctx,
+                )
+                .into_iter()
+                .filter(|subst| negative_modal_is_bound(logic_lit, subst, ctx))
+                .collect();
+            }
             let first_lit = match resolve_body_logic(logic_lit, current_subst, ctx) {
                 Some(lit) => lit,
-                None => return Vec::new(), // arith eval failed — discard path
+                None => return Vec::new(),
             };
 
             // Get candidate facts
@@ -665,7 +695,8 @@ fn match_body_against_facts_ctx(
 
 /// Match body with at least one delta (new) fact.
 ///
-/// Evaluates body elements in source order (left-to-right), threading
+/// Evaluates binding body elements in source order, deferring negative modal
+/// checks until their variables are bound, threading
 /// substitutions and tracking whether at least one delta fact was used.
 /// Only substitutions that involve at least one delta fact are returned.
 ///
@@ -716,7 +747,8 @@ fn match_body_with_delta(
 
 /// Recursive helper for source-order body matching with delta tracking.
 ///
-/// Processes body elements left-to-right, accumulating `current_subst` and
+/// Processes binding elements left-to-right, deferring negative modal premises,
+/// accumulating `current_subst` and
 /// tracking whether any matched fact belongs to the delta set.
 fn match_body_ordered_delta(
     body: &[BodyLiteral],
@@ -736,6 +768,20 @@ fn match_body_ordered_delta(
 
     match first {
         BodyLiteral::Logic(logic_lit) => {
+            if logic_lit.to_literal().is_negative_modal() {
+                return match_body_ordered_delta(
+                    rest,
+                    fact_index,
+                    all_facts,
+                    delta_keys,
+                    current_subst,
+                    used_delta,
+                    ctx,
+                )
+                .into_iter()
+                .filter(|(subst, _)| negative_modal_is_bound(logic_lit, subst, ctx))
+                .collect();
+            }
             let first_lit = match resolve_body_logic(logic_lit, current_subst, ctx) {
                 Some(lit) => lit,
                 None => return Vec::new(),
@@ -999,6 +1045,53 @@ pub fn ground_theory_with_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn negative_modal_matching_defers_until_bound() {
+        let negative = BodyLiteral::from(Literal::new(
+            "pay",
+            false,
+            Mode::obligation().complement(),
+            Temporal::empty(),
+            vec!["?x".to_string()],
+        ));
+        let binder = BodyLiteral::from(Literal::new(
+            "customer",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["?x".to_string()],
+        ));
+        let fact = Literal::new(
+            "customer",
+            false,
+            Mode::empty(),
+            Temporal::empty(),
+            vec!["alice".to_string()],
+        );
+        let mut index = FxHashMap::default();
+        index.insert(fact_index_key(&fact), vec![fact.clone()]);
+        for body in [
+            vec![negative.clone(), binder.clone()],
+            vec![binder, negative.clone()],
+        ] {
+            let matches = match_body_against_facts(
+                &body,
+                &index,
+                std::slice::from_ref(&fact),
+                &Substitution::default(),
+            );
+            assert_eq!(matches.len(), 1);
+            assert_eq!(
+                matches[0].terms.get(&intern("?x")),
+                Some(&Term::Symbol(intern("alice")))
+            );
+        }
+        assert!(
+            match_body_against_facts(&[negative], &index, &[fact], &Substitution::default())
+                .is_empty()
+        );
+    }
 
     #[test]
     fn test_is_variable() {

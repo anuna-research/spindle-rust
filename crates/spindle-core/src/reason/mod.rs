@@ -156,7 +156,9 @@ fn collect_projection_labels(state: &ReasoningState<'_>, theory: &Theory) -> FxH
         Some(rule) if rule.rule_type.is_defeater() => true,
         Some(rule) => rule.head.iter().any(|h| {
             crate::query::has_exact_positive_match(h, &state.conclusions)
-                || !crate::query::has_exact_positive_match(&h.complement(), &state.conclusions)
+                || !h.opponents().iter().any(|opponent| {
+                    crate::query::has_exact_positive_match(opponent, &state.conclusions)
+                })
         }),
     });
     labels

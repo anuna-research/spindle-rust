@@ -228,7 +228,7 @@ pub fn why_not_with_conclusions(
         return Ok(result);
     }
 
-    let complement = literal.complement();
+    let opponents = literal.opponents();
     let mut result = WhyNotResult::new(literal.clone());
     let mut found_rule = false;
 
@@ -266,7 +266,7 @@ pub fn why_not_with_conclusions(
                 .collect();
             let missing: Vec<_> = body_lits
                 .iter()
-                .filter(|b| !has_positive_match(b, conclusions))
+                .filter(|b| !super::premise_satisfied(b, conclusions))
                 .cloned()
                 .collect();
 
@@ -282,10 +282,9 @@ pub fn why_not_with_conclusions(
                 // family-matches a temporal rule (e.g. why_not(p) against
                 // `a => p[1,10]`), the blocker is `~p[1,10]`, so comparing
                 // against `~p` would miss a temporal complement fact/attacker.
-                let head_complement = rule.head_literal().complement();
                 let mut blocked = false;
                 for attacker in grounded.rules() {
-                    if exact_literal_match(&head_complement, attacker.head_literal()) {
+                    if attacker.can_attack(rule.head_literal()) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
@@ -293,53 +292,56 @@ pub fn why_not_with_conclusions(
                             .collect();
                         let attacker_body_satisfied = attacker_body_lits
                             .iter()
-                            .all(|b| has_positive_match(b, conclusions));
+                            .all(|b| super::premise_satisfied(b, conclusions));
                         if !attacker_body_satisfied {
+                            continue;
+                        }
+
+                        // Mirror the reasoner's complete team-defense set.
+                        // Definite opposition cannot be overridden by preference.
+                        let definite_attack = conclusions.iter().any(|c| {
+                            c.conclusion_type == crate::ConclusionType::DefinitelyProvable
+                                && exact_literal_match(attacker.head_literal(), &c.literal)
+                        });
+                        if !definite_attack
+                            && grounded.rules().any(|defender| {
+                                defender.can_defend(rule.head_literal(), attacker)
+                                    && theory.is_superior(
+                                        defender.template_label(),
+                                        attacker.template_label(),
+                                    )
+                                    && defender.body.iter().all(|body| {
+                                        body.as_logic().is_some_and(|lit| {
+                                            super::premise_satisfied(&lit.to_literal(), conclusions)
+                                        })
+                                    })
+                            })
+                        {
                             continue;
                         }
 
                         // Superiority is declared on template labels; grounded
                         // instances carry renamed labels (`r1_0`), so compare
                         // template labels exactly as the reasoner does.
-                        if attacker.rule_type == RuleType::Defeater {
-                            // Defeaters block unless the rule is explicitly superior
-                            let rule_superior = theory
-                                .is_superior(rule.template_label(), attacker.template_label());
-                            if !rule_superior {
-                                result.blocked_by.push(BlockingCondition::defeated(
-                                    &rule.label,
-                                    &attacker.label,
-                                ));
-                                blocked = true;
-                            }
-                        } else {
-                            // For defeasible rules: check superiority both directions
-                            let attacker_superior = theory
-                                .is_superior(attacker.template_label(), rule.template_label());
-                            let rule_superior = theory
-                                .is_superior(rule.template_label(), attacker.template_label());
-
-                            if rule_superior && !attacker_superior {
-                                // Rule is superior — skip this attacker
-                                continue;
-                            }
-
-                            // Report as blocker if the opposing rule is not
-                            // strictly defeated by superiority.
-                            result.blocked_by.push(BlockingCondition::contradicted(
-                                &rule.label,
-                                &attacker.label,
-                            ));
-                            blocked = true;
-                        }
+                        result
+                            .blocked_by
+                            .push(if attacker.rule_type == RuleType::Defeater {
+                                BlockingCondition::defeated(&rule.label, &attacker.label)
+                            } else {
+                                BlockingCondition::contradicted(&rule.label, &attacker.label)
+                            });
+                        blocked = true;
                     }
                 }
                 if !blocked {
                     debug_assert!(
-                        !has_positive_match(&head_complement, conclusions),
-                        "why_not fell back to an undetermined blocker for rule {} even though {} is already positively supported",
-                        rule.label,
-                        head_complement
+                        !rule
+                            .head_literal()
+                            .opponents()
+                            .iter()
+                            .any(|opponent| has_positive_match(opponent, conclusions)),
+                        "why_not fell back to an undetermined blocker for rule {} even though an opponent is already positively supported",
+                        rule.label
                     );
                     result.blocked_by.push(BlockingCondition::undetermined(
                         &rule.label,
@@ -351,13 +353,17 @@ pub fn why_not_with_conclusions(
     }
 
     // If no rules found at all
-    if !found_rule && has_positive_match(&complement, conclusions) {
+    if !found_rule
+        && let Some(opponent) = opponents
+            .iter()
+            .find(|opponent| has_positive_match(opponent, conclusions))
+    {
         result.blocked_by.push(BlockingCondition {
             blocking_type: BlockingType::Contradicted,
             rule_label: String::new(),
             missing_literals: Vec::new(),
             blocking_rule: None,
-            explanation: format!("Complement {complement} is proven"),
+            explanation: format!("Opponent {opponent} is proven"),
         });
     }
 

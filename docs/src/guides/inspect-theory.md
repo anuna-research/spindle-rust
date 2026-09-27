@@ -2,10 +2,10 @@
 
 Start with `penguin.spl` from [Getting Started](../getting-started.md).
 
-1. Show only positive conclusions:
+1. Show each proved literal once:
 
    ```bash
-   spindle reason --positive penguin.spl
+   spindle reason penguin.spl
    ```
 
 2. Request structured JSON output:
@@ -27,3 +27,6 @@ Start with `penguin.spl` from [Getting Started](../getting-started.md).
    ```
 
 The [CLI reference](../reference/cli.md) describes each command and its output.
+
+For proof tags and refutations, use `spindle reason --detailed penguin.spl`.
+Add `--positive` to filter that detailed view or JSON output to positive tags.

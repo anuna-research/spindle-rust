@@ -100,10 +100,10 @@ fn explain_inner(
     visited.insert(literal_key.clone());
 
     // Find the conclusion for the target literal
-    let conclusion = match conclusions
-        .iter()
-        .find(|c| c.literal == *literal && c.conclusion_type.is_positive())
-    {
+    let conclusion = match conclusions.iter().find(|c| {
+        crate::query::semantic_literal_matches(literal, &c.literal)
+            && c.conclusion_type.is_positive()
+    }) {
         Some(c) => c,
         None => {
             visited.remove(&literal_key);
@@ -129,6 +129,27 @@ fn explain_inner(
             let Some(body_lit) = body_bl.as_logic() else {
                 continue; // arithmetic constraints were checked during preparation
             };
+            let premise = body_lit.to_literal();
+            if premise.is_negative_modal()
+                && !crate::query::has_positive_match(&premise, conclusions)
+                && crate::query::premise_satisfied(&premise, conclusions)
+            {
+                // Negative tags are evidence, not positive proofs of [-O]/[-P].
+                // Preserve each temporal member needed to refute a family.
+                let positive = premise.outer_negation();
+                body_proofs.extend(
+                    conclusions
+                        .iter()
+                        .filter(|c| {
+                            c.conclusion_type == ConclusionType::DefeasiblyNotProvable
+                                && crate::query::semantic_literal_matches(&positive, &c.literal)
+                        })
+                        .map(|c| {
+                            ProofNode::new(c.literal.clone(), DerivationType::DefeasibleRefutation)
+                        }),
+                );
+                continue;
+            }
             let body_tree = explain_inner(theory, conclusions, &body_lit.to_literal(), visited)?
                 .and_then(|explanation| explanation.proof_tree);
             let Some(body_tree) = body_tree else {

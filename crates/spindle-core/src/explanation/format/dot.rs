@@ -119,14 +119,17 @@ fn render_proof_node_to_dot(node: &ProofNode, output: &mut String, counter: &mut
     let node_id = *counter;
 
     let color = match node.derivation_type {
-        DerivationType::Definite => "#cce5ff",   // Light blue
+        DerivationType::Definite => "#cce5ff", // Light blue
+        DerivationType::DefeasibleRefutation => "#fff3cd",
         DerivationType::Defeasible => "#d4edda", // Light green
     };
 
     let escaped_literal = escape_dot_label(&node.literal.to_string());
 
     // Create node label
-    let label = if let Some(ref step) = node.proof_step {
+    let label = if node.derivation_type == DerivationType::DefeasibleRefutation {
+        format!("-d {escaped_literal}")
+    } else if let Some(ref step) = node.proof_step {
         let rule_type_str = match step.rule_type {
             RuleType::Fact => "fact",
             RuleType::Strict => "strict",

@@ -32,23 +32,19 @@ Tractable inference makes defeasible logic practical where other non-monotonic f
 **Result:**
 
 ```
-Conclusions:
+Proved:
 
-  +D penguin(tweety)
-  +D bird(tweety)
-  +d penguin(tweety)
-  +d bird(tweety)
-  +d ~flies(tweety)
-  -D flies(tweety)
-  -d flies(tweety)
-  -D ~flies(tweety)
+  (bird tweety)
+  (not (flies tweety))
+  (penguin tweety)
 ```
 
-Tweety is defeasibly proven not to fly (`+d ~flies(tweety)`), because `penguins-dont-fly` defeats `birds-fly`.
+Tweety is defeasibly proven not to fly (`(not (flies tweety))`), because `penguins-dont-fly` defeats `birds-fly`.
 
 ## Features
 
 - **[Rules](concepts/rules.md) and [reasoning](guides/algorithms.md):** facts, strict rules, defeasible rules, and defeaters. The engine implements traditional ambiguity-blocking DL(∂) with constructive negative tags.
+- **[Modal operators](guides/modal.md):** obligations (`must`), explicit permissions (`may`), and prohibitions (`forbidden`), with preference-based conflict resolution. Lean proofs and Rust/Lean comparisons cover the single-head deontic profile.
 - **[Variables](guides/grounding.md) and [time](guides/temporal.md):** Datalog-style grounding with `?x` syntax; Allen interval algebra with 13 temporal relations.
 - **[Queries](guides/queries.md):** status queries, what-if, why-not, abduction, and verified requirements.
 - **[Aggregation and extensions](guides/aggregation.md):** grouped sum, count, minimum, and maximum over completed predicates; host-registered pure functions and named aggregators.

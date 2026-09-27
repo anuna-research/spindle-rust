@@ -457,7 +457,7 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                         });
                     }
                     let inner = parse_literal_with_line(&items[1], line)?;
-                    Ok(inner.complement())
+                    Ok(inner.outer_negation())
                 }
                 "must" => {
                     // (must literal)
@@ -470,6 +470,14 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
+                    if !lit.mode.is_empty() {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "Nested modal operators are not supported".into(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     lit.mode = Mode::obligation();
                     Ok(lit)
                 }
@@ -484,6 +492,14 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
+                    if !lit.mode.is_empty() {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "Nested modal operators are not supported".into(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     lit.mode = Mode::permission();
                     Ok(lit)
                 }
@@ -498,6 +514,14 @@ pub(crate) fn parse_literal_with_line(expr: &SExpr, line: usize) -> Result<Liter
                         });
                     }
                     let mut lit = parse_literal_with_line(&items[1], line)?;
+                    if !lit.mode.is_empty() {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "Nested modal operators are not supported".into(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     lit.mode = Mode::forbidden();
                     Ok(lit)
                 }
@@ -685,7 +709,11 @@ fn parse_body_logic_literal_with_line(
                         });
                     }
                     let mut inner = parse_body_logic_literal_with_line(&items[1], line)?;
-                    inner.negation = !inner.negation;
+                    if inner.mode.is_empty() {
+                        inner.negation = !inner.negation;
+                    } else {
+                        inner.mode.negation = !inner.mode.negation;
+                    }
                     Ok(inner)
                 }
                 "must" => {
@@ -698,6 +726,14 @@ fn parse_body_logic_literal_with_line(
                         });
                     }
                     let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    if !lit.mode.is_empty() {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "Nested modal operators are not supported".into(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     lit.mode = Mode::obligation();
                     Ok(lit)
                 }
@@ -711,6 +747,14 @@ fn parse_body_logic_literal_with_line(
                         });
                     }
                     let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    if !lit.mode.is_empty() {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "Nested modal operators are not supported".into(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     lit.mode = Mode::permission();
                     Ok(lit)
                 }
@@ -724,6 +768,14 @@ fn parse_body_logic_literal_with_line(
                         });
                     }
                     let mut lit = parse_body_logic_literal_with_line(&items[1], line)?;
+                    if !lit.mode.is_empty() {
+                        return Err(ParseError::ParserError {
+                            line,
+                            message: "Nested modal operators are not supported".into(),
+                            format: ParserFormat::Spl,
+                            source_line: None,
+                        });
+                    }
                     lit.mode = Mode::forbidden();
                     Ok(lit)
                 }

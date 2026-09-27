@@ -11,7 +11,7 @@ echo "==> Building Lean libraries and oracle executables with warnings as errors
 build_output="$(mktemp)"
 trap 'rm -f "$build_output"' EXIT
 lake build --wfail 2>&1 | tee "$build_output"
-lake build --wfail spindlelean TrustOracle ArithOracle GroundingOracle EndToEndOracle AggregationOracle 2>&1 | tee -a "$build_output"
+lake build --wfail spindlelean TrustOracle ArithOracle GroundingOracle EndToEndOracle AggregationOracle ModalOracle 2>&1 | tee -a "$build_output"
 
 if grep -nE "declaration uses 'sorry'|sorryAx" "$build_output"; then
   echo "error: Lean build contains admitted proofs" >&2

@@ -8,6 +8,18 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- **Modal team defense**: following Governatori et al. Definitions 8(2.3.2)
+  and 10(2.3.2), a superior defeater can counter an obligation attacker, but a
+  separate productive rule is still required to derive a modal conclusion.
+  This intentionally differs from plain-literal team defense; defeaters alone
+  never derive their heads. Permission and defeater attackers require an
+  obligation rule as defender.
+- **Lean modal verification**: single-head deontic model with proofs of
+  prohibition normalization, opposition, negation scope, typed defense, finite
+  closure, saturation, and derivability. Kernel-checked examples distinguish
+  weak and strong permission. `ModalOracle` compares all four proof tags with
+  Rust in both CI configurations; this is model verification and executable
+  comparison evidence, not a Rust refinement proof.
 - **Predicate identity**: public `PredicateKey` and `predicate_key()` accessors
   on `Literal` and `BodyLogicLiteral` expose functor plus arity, with diagnostic
   `functor/arity` formatting. Argument values, negation, modality, and temporal
@@ -103,6 +115,25 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
+- **CLI text output**: `reason` now lists proved literals once in canonical SPL
+  syntax. `--detailed` shows all four proof tags; `--positive` filters detailed
+  text or JSON. JSON v1/v2 fields and default full conclusion lists are unchanged.
+- **Breaking — JSON modal names**: shared literal DTOs now emit `must`, `may`,
+  and `forbidden` instead of `O`, `P`, and `F` in `mode.name`, including CLI
+  commands and structured WASM output. Custom names and both negation fields
+  are preserved. Envelope schema identifiers remain unchanged; consumers
+  matching the old names must migrate.
+- **Breaking — deontic semantics (#44)**: the default single-head strong-permission
+  profile makes `(forbidden p)` equivalent to `(must (not p))`. Permission and
+  prohibition compete through preferences, while opposite permissions can coexist.
+  Obligation-headed defeaters can block obligations but cannot attack explicit
+  permissions (Governatori et al., Definition 10).
+  Outer modal negation stays distinct from inner negation; negative modal premises
+  can consume constructive refutation, and nested modalities are rejected.
+  Negative output can include implicit opponents and canonical prohibition aliases.
+  Explanations add `defeasible_refutation` evidence; conflict diagnostics use
+  `ModalOpposition`. See the
+  [modal migration notes](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/docs/src/guides/modal.md#compatibility).
 - **Reasoning semantics**: Rust and the standard Lean oracles now follow
   traditional ambiguity-blocking DL(∂) with four constructive proof tags.
   Unsupported cycles remain undecided instead of receiving automatic negative
@@ -148,6 +179,11 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Temporal variables rejected as arithmetic operands (REQ-006).
 
 ### Fixed
+- Negative modal premises now ground independently of their position relative
+  to binding premises. Unbound refutation variables still cannot invent values.
+- Prohibition aliases such as `(forbidden p)` and `(must (not p))` emit one
+  defeasible positive conclusion per semantic literal and temporal window,
+  including detailed and JSON output.
 - Documentation examples now use complementary defeater heads and defeasible
   defaults correctly. Temporal documentation describes current interval variables,
   Allen constraints, and family matching instead of the removed bridge stage.

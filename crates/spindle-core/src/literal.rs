@@ -287,6 +287,90 @@ impl Literal {
         }
     }
 
+    /// Negate the entire expression, preserving the scope of a modal operator.
+    /// Unlike [`Self::complement`], this maps `O p` to `not O p`, not `O not p`.
+    pub fn outer_negation(&self) -> Self {
+        let mut result = self.clone();
+        if result.mode.is_empty() {
+            result.negation = !result.negation;
+        } else {
+            result.mode.negation = !result.mode.negation;
+        }
+        result
+    }
+
+    /// Whether this is an explicitly negated deontic expression. In a rule
+    /// premise it can also be discharged by a constructive negative proof of
+    /// the unnegated expression; absence of a proof is insufficient.
+    pub fn is_negative_modal(&self) -> bool {
+        self.mode.negation && matches!(self.mode.name.as_deref(), Some("O" | "P" | "F"))
+    }
+
+    /// Canonical modal identity: prohibition of p is obligation of not-p.
+    pub fn deontic_normalized(&self) -> Self {
+        let mut result = self.clone();
+        if result.mode.name.as_deref() == Some("F") {
+            result.mode.name = Some("O".into());
+            result.negation = !result.negation;
+        }
+        result
+    }
+
+    /// Borrow ordinary literals in identity-sensitive hot paths.
+    pub(crate) fn deontic_canonical(&self) -> std::borrow::Cow<'_, Self> {
+        if self.mode.name.as_deref() == Some("F") {
+            std::borrow::Cow::Owned(self.deontic_normalized())
+        } else {
+            std::borrow::Cow::Borrowed(self)
+        }
+    }
+
+    /// Literals opposing this expression in the single-head strong-permission
+    /// profile. Opposite permissions coexist; obligations conflict with both
+    /// opposite obligations and opposite permissions. Explicit outer negation
+    /// conflicts only with the same unnegated modal assertion.
+    pub fn opponents(&self) -> Vec<Self> {
+        let literal = self.deontic_normalized();
+        if !matches!(literal.mode.name.as_deref(), Some("O" | "P")) {
+            return vec![literal.complement()];
+        }
+        let mut result = vec![literal.outer_negation()];
+        if !literal.mode.negation {
+            let mut opposite = literal.complement();
+            opposite.mode = Mode::obligation();
+            result.push(opposite.clone());
+            if literal.mode.name.as_deref() == Some("O") {
+                opposite.mode = Mode::permission();
+                result.push(opposite);
+            }
+        }
+        result
+    }
+
+    /// Whether the two exact literals are opponents (including temporal bounds).
+    pub fn opposes(&self, other: &Self) -> bool {
+        let other = other.deontic_normalized();
+        self.temporal == other.temporal && self.opponents().contains(&other)
+    }
+
+    /// Whether this head can defend `goal` against `attacker` by superiority.
+    /// Defenses of O/P goals may cross modes, but must themselves oppose the
+    /// attacker; a permission cannot defeat another permission.
+    pub fn can_defend(&self, goal: &Self, attacker: &Self) -> bool {
+        let head = self.deontic_normalized();
+        let goal = goal.deontic_normalized();
+        (head == goal && head.temporal == goal.temporal)
+            || (matches!(goal.mode.name.as_deref(), Some("O" | "P"))
+                && !goal.mode.negation
+                && !head.mode.negation
+                && matches!(head.mode.name.as_deref(), Some("O" | "P"))
+                && head.name_id == goal.name_id
+                && head.predicate_args == goal.predicate_args
+                && head.negation == goal.negation
+                && head.temporal == goal.temporal
+                && head.opposes(attacker))
+    }
+
     /// Get the literal name as a string slice
     ///
     /// This resolves the interned name back to its string.
