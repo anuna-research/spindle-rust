@@ -126,7 +126,9 @@ The Rust `Literal` structural equality API retains spelling distinctions;
 `Literal::complement()` still flips inner negation; use `outer_negation()` for expression scope and `opponents()` for conflicts.
 
 Review these theories before upgrading. Pin the earlier binary to restore earlier interpretation.
-The nonmodal Lean model does not certify the deontic extension; Rust integration regressions cover it.
+The Lean modal model proves modal laws and finite closure properties.
+Its oracle compares all four tags against Rust; this is not a Rust refinement proof.
+See `lean/MODAL.md` in the repository for the exact guarantees and limitations.
 
 ## SPL Syntax
 

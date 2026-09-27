@@ -40,12 +40,16 @@ lake exe spindlelean        # Default example
 | `SpindleLean/FamilyTwoSided.lean` | Historical strengthened two-sided model and property proofs |
 | `Spindle/Arith/` | Grounding, arithmetic, temporal, and query models |
 | `Spindle/Aggregation/` | Source aggregate semantics, stratum inference, lowering correctness, and completed-prefix equivalence |
+| `Spindle/Modal/` | Modal opposition, strong permission, constructive inference, finite closure proofs, and kernel-checked examples |
 | `AxiomAudit.lean` | Dependency audit of the principal results |
 
 The ordinary closure iteration budget is derived from the finite literal
 universe (`allLiterals.length + 1`); it is not a fixed 1,000-step limit.
 Containment and faithfulness results carry their stated consistency or other
 hypotheses. The aggregation guide describes the supported fragment in detail.
+
+The [modal verification reference](MODAL.md) describes the obligation,
+permission, and prohibition proofs and their Rust differential oracle.
 
 ## Aggregation oracle
 
@@ -85,6 +89,7 @@ cargo test -p spindle-core --test lean_family_exhaustive_difftest -- --ignored
 cargo test -p spindle-core --test lean_arith_oracle_difftest -- --ignored
 cargo test -p spindle-core --test lean_grounding_oracle_difftest -- --ignored
 cargo test -p spindle-core --test lean_trust_oracle_difftest -- --ignored
+cargo test -p spindle-core --test lean_modal_oracle_difftest -- --ignored
 ```
 
 [Forgejo CI](../.forgejo/workflows/ci.yml) runs the proof gate and aggregate

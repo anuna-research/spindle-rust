@@ -49,3 +49,5 @@ import Spindle.Aggregation.LoweringCorrectness
 import Spindle.Aggregation.LoweringCorrectnessTests
 
 import Spindle.Aggregation.Binding
+import Spindle.Modal.Properties
+import Spindle.Modal.Examples
