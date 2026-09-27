@@ -21,7 +21,7 @@ fn examples() -> Vec<String> {
     assert!(current.is_none(), "unclosed SPL fence");
     assert_eq!(
         examples.len(),
-        14,
+        7,
         "update the example audit when SPL fences change"
     );
     examples
@@ -69,149 +69,58 @@ fn every_modal_chapter_spl_block_parses_and_reasons() {
 
 #[test]
 fn modal_chapter_examples_match_their_explanations() {
-    let permission = example_containing("normally no-play");
-    check(
-        &permission,
-        &["hat", "(may play)"],
-        &["(forbidden play)", "play"],
+    // Every runnable example is followed by its complete positive output.
+    let chapter = include_str!("../../../docs/src/guides/modal.md");
+    let sections: Vec<_> = chapter.split("```spl\n").skip(1).collect();
+    assert_eq!(
+        sections.len(),
+        examples().len(),
+        "every example needs an output check"
     );
-    check(
-        &permission.replace("(prefer hat-play no-play)", "(prefer no-play hat-play)"),
-        &["(forbidden play)"],
-        &["(may play)"],
-    );
-    check(
-        &permission.replace("(prefer hat-play no-play)", ""),
-        &[],
-        &["(may play)", "(forbidden play)"],
-    );
-    check(
-        &permission.replace("(given hat)", ""),
-        &["(forbidden play)"],
-        &["(may play)"],
-    );
+    for section in sections {
+        let (source, rest) = section.split_once("```").unwrap();
+        let output = rest
+            .split_once("```text\n")
+            .unwrap()
+            .1
+            .split_once("```")
+            .unwrap()
+            .0;
+        let mut expected: Vec<_> = output.lines().map(str::to_owned).collect();
+        let mut actual: Vec<_> = reason(&parse_spl(source).unwrap())
+            .unwrap()
+            .iter()
+            .filter(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable)
+            .map(|c| c.literal.to_spl())
+            .collect();
+        expected.sort();
+        actual.sort();
+        actual.dedup();
+        assert_eq!(actual, expected, "documented output for {source}");
+    }
 
+    let permission = example_containing("normally archive-closed");
     check(
-        &example_containing("normally check"),
-        &["weakly-allowed"],
-        &["(may play)"],
+        &permission.replace(
+            "(prefer pass-allows-entry archive-closed)",
+            "(prefer archive-closed pass-allows-entry)",
+        ),
+        &["(forbidden enter-archive)"],
+        &["(may enter-archive)"],
     );
     check(
-        &example_containing("employee alice"),
-        &[
-            "(must (report-hours alice))",
-            "(must (report-hours bob))",
-            "(may (approve-expenses alice))",
-            "(forbidden (access-internal charlie))",
-        ],
+        &permission.replace("(prefer pass-allows-entry archive-closed)", ""),
         &[],
-    );
-
-    check(
-        &example_containing("; Obligation: (must <literal>)"),
-        &["(must pay)", "(may access)", "(forbidden enter)"],
-        &[],
+        &["(may enter-archive)", "(forbidden enter-archive)"],
     );
     check(
-        &format!(
-            "{} (given exemption) (given revoked) (given authorized)",
-            example_containing("; Negated obligation:")
-        ),
-        &[
-            "(not (must pay))",
-            "(not (may access))",
-            "(not (forbidden enter))",
-        ],
-        &[],
+        &permission.replace("(given access-pass)", ""),
+        &["(forbidden enter-archive)"],
+        &["(may enter-archive)"],
     );
     check(
-        &format!(
-            "{} (given signed-contract) (given (not paid)) (given member)
-        (given unauthorized) (given exemption) (given pending-review) (given payment-disputed)",
-            example_containing("except d1 payment-disputed")
-        ),
-        &[
-            "(not (must pay))",
-            "(forbidden enter)",
-            "(forbidden access)",
-        ],
-        &["(must pay)", "violation", "(may access)"],
-    );
-    check(
-        &format!(
-            "{} (given company) (given small-company) (given public-company) (given in-bankruptcy)",
-            example_containing("must file-annual-report")
-        ),
-        &[
-            "(not (must file-annual-report))",
-            "(not (must disclose-finances))",
-        ],
-        &["(must file-annual-report)", "(must disclose-finances)"],
-    );
-    check(
-        &format!(
-            "{} (given employee) (given suspended) (given manager) (given (not has-clearance))",
-            example_containing("may access-office")
-        ),
-        &[
-            "(not (may access-office))",
-            "(may access-restricted)",
-            "(forbidden access-server-room)",
-        ],
-        &["(may access-office)"],
-    );
-    check(
-        &format!(
-            "{} (given citizen) (given minor) (given convicted-felon)",
-            example_containing("must pay-taxes")
-        ),
-        &["(not (must pay-taxes))", "(forbidden vote)"],
-        &["(must pay-taxes)", "(may vote)"],
-    );
-    check(
-        &format!(
-            "{} (given employee) (given on-leave)",
-            example_containing("must attend-meeting")
-        ),
-        &["(not (must attend-meeting))"],
-        &["(must attend-meeting)"],
-    );
-
-    let tracking = example_containing("normally r3 in-violation");
-    let overdue = format!("{tracking} (given signed-contract) (given (not paid))");
-    check(
-        &overdue,
-        &["(must pay)", "in-violation", "(must remedy)"],
-        &[],
-    );
-    check(
-        &format!("{overdue} (given paid-within-grace)"),
-        &["(must pay)", "(not in-violation)"],
-        &["in-violation", "(must remedy)"],
-    );
-
-    check(
-        &format!(
-            "{} (given (must pay))",
-            example_containing("obligation-implies-permission")
-        ),
-        &["(may pay)"],
-        &[],
-    );
-    check(
-        &format!(
-            "{} (given endangered-species)",
-            example_containing("normally r1 penguin bird")
-        ),
-        &["(forbidden hunt)"],
-        &[],
-    );
-    check(
-        &format!(
-            "{} (given (must pay))",
-            example_containing("obligatory-action ?x")
-        ),
-        &["(obligatory-action pay)"],
-        &[],
+        &example_containing("normally outstanding-sign-in").replace("(given (not signed-in))", ""),
+        &["(must sign-in)"],
+        &["sign-in-outstanding"],
     );
 }

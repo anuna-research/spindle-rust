@@ -4,39 +4,227 @@ mode: reference
 
 # Modal Operators (Deontic Logic)
 
-Spindle supports modal operators for deontic reasoning, allowing you to express obligations, permissions, and prohibitions within defeasible logic theories.
-
-## Introduction
-
-Deontic logic is a branch of formal logic concerned with normative concepts such as obligation, permission, and prohibition. In defeasible reasoning, deontic modalities are particularly useful because normative rules are often subject to exceptions. For example, a general obligation to pay taxes can be defeated by a specific exemption for non-profit organizations.
-
-Spindle integrates deontic modalities directly into its literal representation. Each literal can carry a modal operator that qualifies the proposition with a normative meaning. Modal literals undergo ordinary defeasible reasoning, including conflict resolution, superiority, and defeat.
-
-> **CLI support:** SPL theories accept `(must ...)`, `(may ...)`, and `(forbidden ...)` wrappers through the CLI.
-> The Rust API and WASM bindings also provide modal reasoning.
+Use modal operators to describe what someone **must**, **may**, or **must not**
+do. These are statements about duties and permissions, not evidence that an
+action happened.
 
 ## The Three Standard Operators
 
-Spindle provides three built-in deontic operators:
+| SPL | Meaning |
+|---|---|
+| `(must sign-in)` | There is a duty to sign in: signing in is obligatory. |
+| `(may enter-archive)` | There is explicit permission to enter the archive. |
+| `(forbidden take-originals)` | Taking originals is prohibited. This means `(must (not take-originals))`. |
 
-| Operator | Display | SPL Syntax | Meaning |
-|----------|---------|------------|---------|
-| Obligation | `[O]` | `(must ...)` | An obligation applies to the proposition |
-| Permission | `[P]` | `(may ...)` | Permission applies to the proposition |
-| Forbidden | `[F]` | `(forbidden ...)` | A prohibition applies to the proposition |
+`must` means obliged; `may` means permitted. Neither one proves that the action
+actually occurred. An obligation does not automatically create a `may` conclusion.
 
-### Obligation (`must`)
+## Running the examples
 
-An obligation states a normative duty. `(must pay)` means **obliged to pay**.
-Obligation is already represented by `must`; `may` expresses permission.
+Each SPL block below is a complete, independent theory. Save one as `example.spl`
+and run:
 
-### Permission (`may`)
+```sh
+spindle reason example.spl
+```
 
-A permission is explicit, strong permission. Refuting a prohibition does not produce a `(may ...)` conclusion.
+The accompanying result lists every proved conclusion, including input facts;
+ordering may differ. The CLI writes zero-argument atoms in parentheses, so
+`(may (enter-archive))` is the same SPL expression as `(may enter-archive)`.
+Use `--detailed` to see proof tags and refutations as well.
 
-### Forbidden (`forbidden`)
+## Permission overrides a default prohibition
 
-A prohibition is an obligation not to act: `(forbidden enter)` and `(must (not enter))` have the same reasoning identity.
+An archive is closed to visitors by default, but a reader with an access pass
+has explicit permission to enter.
+
+```spl
+(given access-pass)
+
+; () means this default has no conditions.
+(normally archive-closed () (forbidden enter-archive))
+(normally pass-allows-entry access-pass (may enter-archive))
+(prefer pass-allows-entry archive-closed)
+```
+
+Expected proved conclusions:
+
+```text
+(access-pass)
+(may (enter-archive))
+```
+
+Both rules apply. `prefer` makes the permission rule stronger, so the prohibition
+is defeated. Permission does not prove `(enter-archive)` itself.
+
+Try changing just one line:
+
+| Change | Result, apart from the input fact |
+|---|---|
+| Remove `(given access-pass)` | `(forbidden (enter-archive))` is proved. |
+| Remove the `prefer` line | Neither permission nor prohibition is proved: the defaults block each other. |
+| Reverse it to `(prefer archive-closed pass-allows-entry)` | The prohibition is proved instead of the permission. |
+
+An unconditional body is `()`; no extra `true` fact is needed.
+Preferences resolve competing defaults, but cannot override facts or strict conclusions.
+
+## Obligations do not report completed actions
+
+An archive visitor must sign in and must not take original documents away.
+
+```spl
+(given visitor)
+(normally visitor-sign-in visitor (must sign-in))
+(normally originals-stay visitor (forbidden take-originals))
+```
+
+Expected proved conclusions:
+
+```text
+(visitor)
+(must (sign-in))
+(forbidden (take-originals))
+```
+
+This establishes the two duties. It establishes neither `(sign-in)` nor
+`(not (take-originals))` as a fact about what the visitor actually did.
+
+## SPL Negation
+
+**Not obliged to act** and **obliged not to act** mean different things:
+
+| Expression | Meaning |
+|---|---|
+| `(not (must attend-briefing))` | The obligation to attend is explicitly negated. |
+| `(must (not attend-briefing))` | There is an obligation not to attend. |
+| `(forbidden attend-briefing)` | The same prohibition as the preceding row. |
+
+For example, staff normally must attend a briefing, but staff on leave are exempt:
+
+```spl
+(given staff)
+(given on-leave)
+(normally staff-briefing staff (must attend-briefing))
+(normally leave-exemption on-leave (not (must attend-briefing)))
+(prefer leave-exemption staff-briefing)
+```
+
+Expected proved conclusions:
+
+```text
+(staff)
+(on-leave)
+(not (must (attend-briefing)))
+```
+
+The exemption removes the duty; it does not forbid attendance or grant an
+explicit permission. Similarly, `(not (may p))` negates a permission assertion;
+it is not another spelling of `(forbidden p)`.
+
+## Using a modal conclusion as a premise
+
+A duty can be a condition of another rule. Here a visitor has an outstanding
+sign-in requirement because there is explicit evidence they have not signed in.
+
+```spl
+(given visitor)
+(given (not signed-in))
+(normally require-sign-in visitor (must sign-in))
+(normally outstanding-sign-in
+  (and (must sign-in) (not signed-in))
+  sign-in-outstanding)
+```
+
+Expected proved conclusions:
+
+```text
+(visitor)
+(not (signed-in))
+(must (sign-in))
+(sign-in-outstanding)
+```
+
+Removing `(given (not signed-in))` removes the outstanding conclusion. A missing
+`signed-in` fact is not enough: ordinary negative premises need explicit negative
+evidence.
+
+## Combining with Predicates and Variables
+
+Use arguments to keep different people's duties separate:
+
+```spl
+(given (visitor alice))
+(given (visitor bob))
+(normally individual-sign-in (visitor ?person) (must (sign-in ?person)))
+```
+
+Expected proved conclusions:
+
+```text
+(visitor alice)
+(visitor bob)
+(must (sign-in alice))
+(must (sign-in bob))
+```
+
+The variable is bound by each visitor fact. Each resulting obligation concerns
+that particular person.
+
+## Weak permission is not explicit permission
+
+A rule may check that a prohibition has been **refuted**. This is called weak
+permission. It does not create the explicit permission expressed by `may`.
+
+In this independent example, photography is prohibited during conservation work.
+We explicitly know that no conservation work is taking place:
+
+```spl
+(given (not conservation-work))
+(normally protect-documents conservation-work (forbidden photograph))
+(normally no-prohibition-check (not (forbidden photograph)) photography-not-prohibited)
+```
+
+Expected proved conclusions:
+
+```text
+(not (conservation-work))
+(photography-not-prohibited)
+```
+
+The prohibition rule cannot apply, so the engine can refute the prohibition.
+The negative modal premise consumes that refutation. There is no rule granting
+`(may photograph)`, so that explicit permission is not proved.
+
+This special treatment of negative **modal** premises differs from ordinary
+negative premises such as `(not signed-in)` above. An undecided prohibition is
+not a refuted prohibition; merely failing to see it in the default output does
+not establish weak permission. `--detailed` exposes the distinction with `-d`
+for a defeasible refutation.
+
+## Defeaters block a duty without asserting its opposite
+
+A disputed copying fee can block a duty to pay. A defeater uses `except` and
+never proves its own head:
+
+```spl
+(given copying-requested)
+(given fee-disputed)
+(normally copying-fee copying-requested (must pay-fee))
+(except dispute-blocks-fee fee-disputed (forbidden pay-fee))
+(prefer dispute-blocks-fee copying-fee)
+```
+
+Expected proved conclusions:
+
+```text
+(copying-requested)
+(fee-disputed)
+```
+
+Neither `(must pay-fee)` nor `(forbidden pay-fee)` is proved. The defeater
+blocks the obligation without imposing a prohibition. This example does not
+grant permission either. Under the strong-permission profile, an
+obligation-headed defeater cannot block an explicit permission.
 
 ## Strong-permission profile
 
@@ -62,22 +250,6 @@ A defender need not itself win its own conflict; its body must be applicable.
 Without a preference, competing defaults block each other.
 The negative proof conditions mirror these checks; an unresolved cycle stays undecided.
 
-```spl
-(normally no-play () (forbidden play))
-(normally hat-play hat (may play))
-(prefer hat-play no-play)
-(given hat)
-```
-
-The default text view lists `(hat)` and `(may (play))` under `Proved:`.
-With `--detailed`, the permission appears as `+d (may (play))` and the
-refuted prohibition as `-d (must (not (play)))`. The tables below use the
-traditional `[O]`/`[P]` notation to explain the internal representation;
-CLI reasoning text and JSON `literal_spl` use SPL syntax.
-Reversing the preference derives the prohibition instead.
-Removing the preference blocks both defaults; removing `hat` leaves the prohibition applicable.
-`()` is an unconditional body and needs no `true` fact.
-
 ### Scope and extensions
 
 The implementation uses Spindle's existing strict/defeasible rules, typed terms, and exact temporal opposition.
@@ -100,11 +272,9 @@ Custom mode names retain their existing behavior.
 
 Weak permission for `p` means a constructive `-d (forbidden p)` proof.
 It is not a `+d (may p)` proof and is not inferred from missing output.
-In a rule body, `(not (forbidden p))` can consume that negative proof:
+In a rule body, `(not (forbidden p))` can consume that negative proof.
 
-```spl
-(normally check (not (forbidden play)) weakly-allowed)
-```
+See the worked weak-permission example above.
 
 An explicit proof of the outer-negated expression can also satisfy that premise.
 For an atemporal negative premise, every indexed positive family member must be refuted.
@@ -144,120 +314,22 @@ See the [modal proof reference](https://git.anuna.io/anuna-research/spindle-rust
 for the exact guarantees and limitations, and
 [verification commands](check-verification.md) to run the proofs and oracle comparisons.
 
-## SPL Syntax
-
-Modal operators use keyword wrappers:
-
-```spl
-; Obligation: (must <literal>)
-(given (must pay))
-(normally r1 signed-contract (must pay))
-
-; Permission: (may <literal>)
-(given (may access))
-(normally r2 member (may access))
-
-; Forbidden: (forbidden <literal>)
-(given (forbidden enter))
-(normally r3 unauthorized (forbidden enter))
-```
-
-### SPL Negation
-
-Negation of modal literals in SPL uses the `not` wrapper:
-
-```spl
-; Negated obligation: not obligated to pay
-(normally r4 exemption (not (must pay)))
-
-; Negated permission: not permitted to access
-(normally r5 revoked (not (may access)))
-
-; Negated prohibition: explicit absence of prohibition, not strong permission
-(normally r6 authorized (not (forbidden enter)))
-```
-
-## Using Modal Operators in Rules
-
-Each code block is a separate example. Rule-only examples need matching facts
-to produce conclusions; add those facts when trying the rules in the CLI.
-Plain negative premises such as `(not paid)` or `(not citizen)` require
-explicit negative evidence; missing positive facts do not satisfy them.
-
-Modal operators can appear in both the body and head of rules, in all rule types.
-
-### Examples
-
-```spl
-; If you signed a contract, you are obligated to pay
-(normally r1 signed-contract (must pay))
-
-; If obligated to pay and haven't paid, violation
-(normally r2 (and (must pay) (not paid)) violation)
-
-; Members may access resources
-(normally r3 member (may access))
-
-; Unauthorized users are forbidden from entering
-(normally r4 unauthorized (forbidden enter))
-
-; An exemption defeats the obligation to pay
-(normally r5 exemption (not (must pay)))
-(prefer r5 r1)
-
-; A prohibition rule: pending review overrides the permission
-(normally r6 pending-review (forbidden access))
-(prefer r6 r3)
-
-; A defeater can block an obligation without establishing a prohibition
-(except d1 payment-disputed (forbidden pay))
-(prefer d1 r1)
-```
-
-### Combining with Predicates and Variables
-
-In SPL, modal operators can be combined with predicates and variables:
-
-```spl
-; Employees are obligated to report hours
-(given (employee alice))
-(given (employee bob))
-(normally r1 (employee ?x) (must (report-hours ?x)))
-
-; Managers may approve expenses
-(given (manager alice))
-(normally r2 (manager ?x) (may (approve-expenses ?x)))
-
-; Contractors are forbidden from accessing internal systems
-(given (contractor charlie))
-(normally r3 (contractor ?x) (forbidden (access-internal ?x)))
-```
-
 ## Modal Negation and Complements
 
-Toggling the negation flag produces the complement of a modal operator. The complement of `[O]` (obligation) is `[-O]` (explicit negation of obligation). This is distinct from the negation of the underlying proposition.
+The Rust display format uses the traditional modal notation below. CLI reasoning
+text and JSON `literal_spl` use the SPL expressions shown in the examples.
 
-| Expression | Meaning |
-|------------|---------|
-| `[O]pay` | There is an obligation to pay |
-| `[-O]pay` | An explicit assertion negating the obligation to pay |
-| `[O]~pay` | There is an obligation not to pay |
-| `[-O]~pay` | An explicit assertion negating the obligation not to pay |
+| SPL expression | Rust display |
+|---|---|
+| `(must pay)` | `[O]pay` |
+| `(not (must pay))` | `[-O]pay` |
+| `(must (not pay))` | `[O]~pay` |
+| `(may pay)` | `[P]pay` |
+| `(forbidden pay)` | `[F]pay` |
 
-The distinction between modal negation and literal negation is important:
-
-- **Modal negation** (`[-O]pay`): An explicit assertion negates the obligation to pay. It neither grants strong permission nor excludes an obligation not to pay.
-- **Literal negation** (`[O]~pay`): The obligation holds, but over the negated proposition. You are obligated not to pay.
-
-### Display Format
-
-| Mode | Display | Negated Display |
-|------|---------|-----------------|
-| Obligation | `[O]` | `[-O]` |
-| Permission | `[P]` | `[-P]` |
-| Forbidden | `[F]` | `[-F]` |
-| Custom `X` | `[X]` | `[-X]` |
-| Empty | *(nothing)* | *(nothing)* |
+`Mode::complement()` toggles outer modal negation. `Literal::complement()`
+flips the inner literal negation instead; use `Literal::outer_negation()`
+for expression scope.
 
 ## Rust API Usage
 
@@ -398,90 +470,6 @@ set.insert(pay.literal_id());
 // must_pay has a different hash due to the mode
 ```
 
-## Use Cases
-
-### Compliance Rules
-
-Regulatory compliance rules express obligations subject to exceptions:
-
-```spl
-; All companies must file annual reports
-(normally r1 company (must file-annual-report))
-
-; Small companies are exempt from annual reporting
-(normally r2 (and company small-company) (not (must file-annual-report)))
-(prefer r2 r1)
-
-; Public companies must disclose finances
-(normally r3 public-company (must disclose-finances))
-
-; Companies in bankruptcy are exempt from disclosure
-(normally r4 (and public-company in-bankruptcy) (not (must disclose-finances)))
-(prefer r4 r3)
-```
-
-### Permission Systems
-
-Access control rules express defeasible permissions:
-
-```spl
-; Employees may access the office
-(normally r1 employee (may access-office))
-
-; Suspended employees lose access
-(normally r2 (and employee suspended) (not (may access-office)))
-(prefer r2 r1)
-
-; Managers may access restricted areas
-(normally r3 manager (may access-restricted))
-
-; Even managers are forbidden from the server room without clearance
-(normally r4 (and manager (not has-clearance)) (forbidden access-server-room))
-```
-
-### Obligation Tracking
-
-Chains of reasoning track obligations:
-
-```spl
-; Signing a contract creates an obligation to pay
-(normally r1 signed-contract (must pay))
-
-; Obligation to pay and failure to pay results in violation
-(normally r2 (and (must pay) (not paid)) in-violation)
-
-; Being in violation creates an obligation to remedy
-(normally r3 in-violation (must remedy))
-
-; Payment within the grace period defeats the violation rule
-; Use the obligation as a premise, not the violation this rule defeats.
-(normally r4 (and (must pay) paid-within-grace) (not in-violation))
-(prefer r4 r2)
-```
-
-### Mixed Normative Reasoning
-
-A single theory combines obligations, permissions, and prohibitions:
-
-```spl
-; Citizens must pay taxes
-(normally r1 citizen (must pay-taxes))
-
-; Citizens may vote
-(normally r2 citizen (may vote))
-
-; Convicted felons are forbidden from voting (in some jurisdictions)
-(normally r3 (and citizen convicted-felon) (forbidden vote))
-(prefer r3 r2)
-
-; Minors are exempt from taxation
-(normally r4 (and citizen minor) (not (must pay-taxes)))
-(prefer r4 r1)
-
-; Non-citizens are forbidden from voting
-(normally r5 (not citizen) (forbidden vote))
-```
-
 ## Limitations
 
 1. **CLI syntax**: Modal operators use SPL wrappers in theory files. The CLI reasons over these literals without a separate modal flag.
@@ -489,38 +477,7 @@ A single theory combines obligations, permissions, and prohibitions:
 3. **Custom modes are uninterpreted**: Custom modes created with `Mode::new(name)` have no built-in semantics. The theory’s rules entirely determine their meaning.
 4. **No modal logic tableau**: Spindle performs defeasible reasoning, not modal logic model checking. The strong-permission profile defines modal opposition without Kripke-style accessibility relations.
 
-## Modal Rule Patterns
 
-1. **Explicit modal relationships**
-   ```spl
-   ; If something is obligatory, it is also permitted
-   (always obligation-implies-permission (must ?x) (may ?x))
-   ```
-
-2. **Superiority resolves conflicts between norms**
-   ```spl
-   (normally r1 employee (must attend-meeting))
-   (normally r2 (and employee on-leave) (not (must attend-meeting)))
-   (prefer r2 r1)
-   ```
-
-3. **Separate normative and factual rules**
-   ```spl
-   ; Factual rules
-   (normally r1 penguin bird)
-   (normally r2 bird flies)
-
-   ; Normative rules
-   (normally r3 endangered-species (forbidden hunt))
-   ```
-
-4. **Metadata documents the meaning of ordinary predicates**
-   ```spl
-   ; This is a domain predicate, not a new modal operator.
-   (meta r1 (description "Record actions that are obligatory"))
-   (normally r1 (must ?x) (obligatory-action ?x))
-   ```
-
-   SPL provides the three standard modal wrappers. `(K ?x)` would be an
-   ordinary predicate named `K`; metadata does not make it a modal operator.
-   Custom modes can be constructed through the Rust API with `Mode::new("K")`.
+SPL provides the three standard modal wrappers. `(K ?x)` is an ordinary
+predicate named `K`, not a custom modal wrapper. Custom modes can be constructed
+through the Rust API with `Mode::new("K")`.
