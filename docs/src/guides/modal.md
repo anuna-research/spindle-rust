@@ -84,8 +84,11 @@ Inconsistent modal facts remain inconsistent rather than being silently repaired
 
 The paper's ordered obligation/reparation and permission chains are outside this profile.
 Spindle additionally permits explicit outer-negated modal facts and rule heads.
-Typed defeaters attack according to their modal head; they never directly establish it.
-These oppose the same unnegated modal assertion using ordinary superiority.
+Typed defeaters never directly establish their head. Under Definition 10(2.3),
+an obligation-headed defeater can block a contrary obligation but cannot block
+an explicit permission. Only an obligation rule can attack that permission in
+the paper's O/P fragment. Explicit outer-negated heads are a separate extension:
+they oppose the same unnegated modal assertion using ordinary superiority.
 Nested modal operators are rejected instead of discarding the inner operator.
 Custom mode names retain their existing behavior.
 
@@ -189,8 +192,13 @@ Modal operators can appear in both the body and head of rules, in all rule types
 (normally r5 exemption (not (must pay)))
 (prefer r5 r1)
 
-; A defeater: pending review blocks the permission
-(except d1 pending-review (forbidden access))
+; A prohibition rule: pending review overrides the permission
+(normally r6 pending-review (forbidden access))
+(prefer r6 r3)
+
+; A defeater can block an obligation without establishing a prohibition
+(except d1 payment-disputed (forbidden pay))
+(prefer d1 r1)
 ```
 
 ### Combining with Predicates and Variables

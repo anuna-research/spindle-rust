@@ -112,6 +112,8 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - **Breaking — deontic semantics (#44)**: the default single-head strong-permission
   profile makes `(forbidden p)` equivalent to `(must (not p))`. Permission and
   prohibition compete through preferences, while opposite permissions can coexist.
+  Obligation-headed defeaters can block obligations but cannot attack explicit
+  permissions (Governatori et al., Definition 10).
   Outer modal negation stays distinct from inner negation; negative modal premises
   can consume constructive refutation, and nested modalities are rejected.
   Negative output can include implicit opponents and canonical prohibition aliases.

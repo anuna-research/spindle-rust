@@ -282,13 +282,9 @@ pub fn why_not_with_conclusions(
                 // family-matches a temporal rule (e.g. why_not(p) against
                 // `a => p[1,10]`), the blocker is `~p[1,10]`, so comparing
                 // against `~p` would miss a temporal complement fact/attacker.
-                let head_opponents = rule.head_literal().opponents();
                 let mut blocked = false;
                 for attacker in grounded.rules() {
-                    if head_opponents
-                        .iter()
-                        .any(|opponent| exact_literal_match(opponent, attacker.head_literal()))
-                    {
+                    if attacker.can_attack(rule.head_literal()) {
                         let attacker_body_lits: Vec<Literal> = attacker
                             .body
                             .iter()
@@ -339,7 +335,9 @@ pub fn why_not_with_conclusions(
                 }
                 if !blocked {
                     debug_assert!(
-                        !head_opponents
+                        !rule
+                            .head_literal()
+                            .opponents()
                             .iter()
                             .any(|opponent| has_positive_match(opponent, conclusions)),
                         "why_not fell back to an undetermined blocker for rule {} even though an opponent is already positively supported",

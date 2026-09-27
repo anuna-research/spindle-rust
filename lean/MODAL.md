@@ -18,6 +18,10 @@ matching, including universal refutation of a family for negative premises.
 `Reason.lean` defines the four constructive inference conditions independently
 of Rust's event queue. It includes facts, strict rules, defeasible rules,
 defeaters, directly declared superiority, and typed team defense.
+Rule attacks account for rule kind: Definition 10(2.3) excludes defeaters from
+attacks on positive permission. Literal opposition alone does not establish
+that a rule is an attacker. Explicit outer-negated heads retain ordinary
+opposition as an extension beyond the paper's rule language.
 Negative modal premises accept explicit negative assertions or constructive
 refutation of the positive modality. Missing positive evidence is insufficient.
 
@@ -39,6 +43,7 @@ comes from the domain size, with a proof that it reaches a fixed point.
 | `opposition_symmetric` | Either side recognizes the same conflict |
 | `opposite_permissions_compatible` | Opposite permissions do not attack each other |
 | `permission_opposes_prohibition`, `obligations_conflict` | Permission/prohibition and opposite-obligation conflicts exist |
+| `defeater_cannot_attack_permission` | A defeater with a positive modal head cannot attack explicit permission |
 | `permission_cannot_defend_against_permission` | A permission cannot defend an obligation against an opposite permission |
 | `close_fixedpoint` | The finite reference closure terminates at a fixed point |
 | `close_complete` | Every enabled inference over the finite domain is included at completion |
@@ -54,7 +59,8 @@ it is not a theorem of equivalence with the Rust implementation.
 
 `Examples.lean` additionally checks concrete completed runs in the kernel:
 preferred permission defeats prohibition, opposite permissions both hold,
-and weak permission does not manufacture strong permission. These witnesses
+weak permission does not manufacture strong permission, and even a superior
+obligation-headed defeater cannot block explicit permission. These witnesses
 use `decide`, not `native_decide`. The axiom audit includes these results.
 
 ## Rust comparison

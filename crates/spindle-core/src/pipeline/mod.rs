@@ -611,12 +611,13 @@ fn collect_tree_sources(node: &TrustDerivationNode) -> HashSet<Source> {
 
 /// Find defeaters that fired against a defeasible conclusion and were overruled.
 ///
-/// A defeater diminishes a `+d` conclusion when its head is the complement of
-/// the conclusion's literal and its body is defeasibly provable (it *fired*).
-/// Because the conclusion is nonetheless positive, the proof theory guarantees
-/// the defeater was beaten by the superiority relation (*overruled*). A
-/// defeater whose antecedent is not provable mounts no challenge and does not
-/// diminish. The defeater's credibility is the weakest link of its own
+/// A defeater diminishes a `+d` conclusion when it is an eligible rule-level
+/// attacker and its body is defeasibly provable (it *fired*). In particular,
+/// obligation-headed defeaters do not attack or diminish explicit permissions.
+/// For rule-derived defeasible proofs, the challenge must have been overcome
+/// by superiority. Definite proofs are seeded independently; their `+D` entries
+/// are exempt from diminishment. A defeater whose antecedent is not provable
+/// mounts no challenge and does not diminish. The defeater's credibility is the weakest link of its own
 /// derivation, mirroring `build_trust_tree` on the conclusion side.
 fn defeater_diminishers(
     conclusion_literal: &Literal,
@@ -625,18 +626,13 @@ fn defeater_diminishers(
     policy: &TrustPolicy,
     reference_time: Option<TimePoint>,
 ) -> Vec<(String, TrustValue)> {
-    let opponents = conclusion_literal.opponents();
     let mut out = Vec::new();
 
     for rule in theory.rules() {
         if !rule.rule_type.is_defeater() {
             continue;
         }
-        if rule.head.is_empty()
-            || !opponents
-                .iter()
-                .any(|opponent| crate::query::exact_literal_match(opponent, &rule.head[0]))
-        {
+        if !rule.can_attack(conclusion_literal) {
             continue;
         }
         // Fired: every logic body literal is positively provable.

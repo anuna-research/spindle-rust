@@ -77,6 +77,13 @@ def MTheory.normalize (t : MTheory) : MTheory :=
 def MTheory.superior (t : MTheory) (a b : String) : Bool :=
   t.priority.contains (a, b)
 
+/-- Definition 10(2.3): defeaters do not attack positive permission.
+Explicit outer-negated heads remain an extension with ordinary opposition. -/
+def attacks (goal : Lit) (r : MRule) : Bool :=
+  conflict goal r.head &&
+    !(decide (r.kind = .defeater ∧ goal.mode = .permission ∧
+      goal.outer = false ∧ r.head.outer = false))
+
 /-- Team defense respects both the modal head and the attacker's rule class. -/
 def defends (goal : Lit) (attacker defender : MRule) : Bool :=
   let same := decide (defender.head = goal)

@@ -39,7 +39,7 @@ def discarded (t : MTheory) (s : State) (tag : ConclusionType) (r : MRule) : Boo
     else negativePremise t s tag l
 
 def heads (t : MTheory) (l : Lit) : List MRule := t.rules.filter (fun r => decide (r.head = l))
-def attackers (t : MTheory) (l : Lit) : List MRule := t.rules.filter (fun r => conflict l r.head)
+def attackers (t : MTheory) (l : Lit) : List MRule := t.rules.filter (attacks l)
 def defenders (t : MTheory) (l : Lit) (a : MRule) : List MRule := t.rules.filter (defends l a)
 
 /-- Four constructive inference conditions, independent of the Rust worklist. -/

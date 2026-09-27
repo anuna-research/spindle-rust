@@ -131,6 +131,21 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// Whether this rule can attack the goal, including the attacker's rule class.
+    /// Governatori et al., Definition 10(2.3), excludes defeaters from attacks on
+    /// positive permission. Explicit outer-negated heads retain ordinary opposition.
+    /// Uses the first head, as the reasoner operates on normalized single-head rules.
+    pub(crate) fn can_attack(&self, goal: &Literal) -> bool {
+        let goal = goal.deontic_canonical();
+        self.head.first().is_some_and(|head| {
+            head.opposes(&goal)
+                && (!self.rule_type.is_defeater()
+                    || goal.mode.name.as_deref() != Some("P")
+                    || goal.mode.negation
+                    || head.mode.negation)
+        })
+    }
+
     /// Candidate team defense, including the asymmetric modal rule classes.
     pub(crate) fn can_defend(&self, goal: &Literal, attacker: &Rule) -> bool {
         let goal = goal.deontic_canonical();

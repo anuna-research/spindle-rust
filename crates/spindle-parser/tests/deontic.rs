@@ -381,3 +381,57 @@ fn diagnostics_share_deontic_opposition() {
         1
     );
 }
+
+// Governatori et al., Definition 10(2.3): only obligation rules attack
+// explicit permission. An obligation-headed defeater is not such a rule.
+#[test]
+fn obligation_defeater_does_not_attack_permission() {
+    for prohibition in ["(forbidden play)", "(must (not play))"] {
+        for preference in ["", "(prefer block permit)", "(prefer permit block)"] {
+            let source = format!(
+                "(normally permit () (may play)) (except block () {prohibition})
+                 (normally use (may play) allowed) {preference}"
+            );
+            assert!(
+                tag(&source, "(may play)", ConclusionType::DefeasiblyProvable),
+                "{source}"
+            );
+            assert!(
+                !tag(&source, "(may play)", ConclusionType::DefeasiblyNotProvable),
+                "{source}"
+            );
+            assert!(tag(&source, "allowed", ConclusionType::DefeasiblyProvable));
+            assert!(!tag(
+                &source,
+                prohibition,
+                ConclusionType::DefeasiblyProvable
+            ));
+            let theory = parse_spl(&source).unwrap();
+            assert_eq!(
+                query(&theory, &literal("(may play)")).unwrap().status,
+                QueryStatus::Provable
+            );
+            assert!(
+                why_not(&theory, &literal("(may play)"))
+                    .unwrap()
+                    .blocked_by
+                    .is_empty()
+            );
+        }
+    }
+}
+
+#[test]
+fn obligation_defeater_still_attacks_obligation() {
+    let source = "(normally oblige () (must play)) (except block () (forbidden play))";
+    assert!(tag(
+        source,
+        "(must play)",
+        ConclusionType::DefeasiblyNotProvable
+    ));
+    assert!(!tag(
+        source,
+        "(must play)",
+        ConclusionType::DefeasiblyProvable
+    ));
+}

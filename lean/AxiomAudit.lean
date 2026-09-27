@@ -7,6 +7,8 @@ import Spindle.Arith.WhatIf
 import Spindle.Arith.WhyNot
 
 -- Single-head deontic profile: kernel proofs, not native_decide.
+#print axioms Spindle.Modal.defeater_cannot_attack_permission
+#print axioms Spindle.Modal.Examples.obligation_defeater_does_not_block_permission
 #print axioms Spindle.Modal.normalize_idempotent
 #print axioms Spindle.Modal.forbidden_is_obligation_not
 #print axioms Spindle.Modal.negate_involutive

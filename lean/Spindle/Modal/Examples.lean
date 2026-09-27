@@ -41,4 +41,15 @@ theorem weak_permission_is_not_strong :
     has (reason weakPermission) .defeasiblyProvable permission = false := by
   decide
 
+def permissionWithDefeater : MTheory := ⟨[
+  ⟨"permit", .defeasible, [], permission⟩,
+  ⟨"block", .defeater, [], prohibition⟩], [("block", "permit")]⟩
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 4000000 in
+theorem obligation_defeater_does_not_block_permission :
+    has (reason permissionWithDefeater) .defeasiblyProvable permission = true ∧
+    has (reason permissionWithDefeater) .defeasiblyNotProvable permission = false := by
+  decide
+
 end Spindle.Modal.Examples

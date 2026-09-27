@@ -350,9 +350,11 @@ impl<'a> IndexedTheory<'a> {
 
     /// Rules attacking a literal under the deontic conflict profile.
     pub fn attacking_rules(&self, id: LitId) -> Vec<&Rule> {
+        let goal = self.resolve_literal(id);
         self.opponent_ids(id)
             .into_iter()
             .flat_map(|opponent| self.rules_with_head_id(opponent))
+            .filter(|rule| rule.can_attack(&goal))
             .collect()
     }
 

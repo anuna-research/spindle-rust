@@ -56,6 +56,14 @@ theorem permission_cannot_defend_against_permission
       ⟨d, .defeasible, bodyD, ⟨atom, .permission, inner, false, window⟩⟩ = false := by
   cases inner <;> simp [defends, conflict, MRule.productive]
 
+/-- The paper separates defeaters from obligation rules in permission attacks. -/
+theorem defeater_cannot_attack_permission (atom : String) (inner : Bool)
+    (window : Option (Int × Int)) (label : String) (body : List Lit)
+    (head : Lit) (positiveHead : head.outer = false) :
+    attacks ⟨atom, .permission, inner, false, window⟩
+      ⟨label, .defeater, body, head⟩ = false := by
+  simp [attacks, positiveHead]
+
 /-- Refuting a prohibition alone cannot invent explicit strong permission. -/
 theorem no_support_no_strong_permission (t : MTheory) (s : State) (l : Lit)
     (noDefinite : has s .definitelyProvable l = false)
