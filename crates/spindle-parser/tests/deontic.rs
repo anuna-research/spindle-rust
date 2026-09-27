@@ -435,3 +435,92 @@ fn obligation_defeater_still_attacks_obligation() {
         ConclusionType::DefeasiblyProvable
     ));
 }
+
+#[test]
+fn negative_modal_grounding_is_independent_of_binder_position() {
+    for modal in ["must", "may", "forbidden"] {
+        for body in [
+            format!("(and (not ({modal} (pay ?x))) (customer ?x))"),
+            format!("(and (customer ?x) (not ({modal} (pay ?x))))"),
+        ] {
+            let source = format!(
+                "(given (customer alice)) (given (customer bob))
+                 (given ({modal} (pay bob)))
+                 (normally result {body} (may (skip ?x)))"
+            );
+            assert!(
+                tag(
+                    &source,
+                    "(may (skip alice))",
+                    ConclusionType::DefeasiblyProvable
+                ),
+                "{source}"
+            );
+            assert!(
+                !tag(
+                    &source,
+                    "(may (skip bob))",
+                    ConclusionType::DefeasiblyProvable
+                ),
+                "{source}"
+            );
+        }
+    }
+    // Arithmetic arguments in a deferred premise also resolve after binding.
+    let arithmetic = "(given (amount 2))
+        (normally r (and (not (must (pay (+ ?n 1)))) (amount ?n)) result)";
+    assert!(tag(
+        arithmetic,
+        "result",
+        ConclusionType::DefeasiblyProvable
+    ));
+    assert!(!tag(
+        &format!("{arithmetic} (given (must (pay 3)))"),
+        "result",
+        ConclusionType::DefeasiblyProvable
+    ));
+    // An unbound negative modal premise must not invent a binding.
+    assert!(!tag(
+        "(normally r (not (must (pay ?x))) (may (skip ?x)))",
+        "(may (skip alice))",
+        ConclusionType::DefeasiblyProvable
+    ));
+}
+
+#[test]
+fn prohibition_aliases_emit_one_positive_conclusion() {
+    for source in [
+        "(normally a () (forbidden pay)) (normally b () (must (not pay)))",
+        "(given (forbidden pay)) (normally b () (must (not pay)))",
+        "(normally b () (must (not pay))) (normally a () (forbidden pay))",
+    ] {
+        let conclusions = reason(&parse_spl(source).unwrap()).unwrap();
+        let goal = literal("(forbidden pay)");
+        assert_eq!(
+            conclusions
+                .iter()
+                .filter(|c| c.conclusion_type == ConclusionType::DefeasiblyProvable
+                    && c.literal.family_id() == goal.family_id())
+                .count(),
+            1,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn modal_defeater_defends_but_cannot_supply_productive_support() {
+    // Definition 8(2.3.2): any rule can counter an obligation attacker.
+    let modal = "(normally support () (must pay))
+                 (normally attacker () (forbidden pay))
+                 (except defender () (must pay)) (prefer defender attacker)";
+    assert!(tag(modal, "(must pay)", ConclusionType::DefeasiblyProvable));
+    assert!(!tag(
+        &modal.replace("(normally support () (must pay))", ""),
+        "(must pay)",
+        ConclusionType::DefeasiblyProvable
+    ));
+    let plain = "(normally support () pay) (normally attacker () (not pay))
+                 (except defender () pay) (prefer defender attacker)";
+    assert!(tag(plain, "pay", ConclusionType::DefeasiblyNotProvable));
+}

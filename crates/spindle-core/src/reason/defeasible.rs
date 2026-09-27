@@ -13,7 +13,7 @@
 //! 3. Compute constructive +d/-d until no further proof can be added.
 //! 4. Emit derived tags; undecided cycles receive no synthetic negative tag.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -655,31 +655,32 @@ fn try_prove_defeasible(
 
     // All conditions met.
     //
-    // Emit one +d conclusion per distinct grounded supporter head literal
+    // Emit one +d conclusion per semantic grounded supporter head literal
     // (e.g., distinct temporal windows). Use deterministic ordering so output
     // does not depend on supporter discovery order.
     //
     // If q is already +d, keep emitting any newly-applicable temporal windows.
-    let mut existing_positive_q: FxHashSet<String> = conclusions
+    let mut existing_positive_q: FxHashSet<_> = conclusions
         .iter()
         .filter(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && indexed.get_lit_id(&c.literal) == Some(q)
         })
-        .map(|c| c.literal.to_spl())
+        .map(|c| (c.literal.family_id(), c.literal.temporal.clone()))
         .collect();
 
     if applicable_supporters.is_empty() {
         let lit = indexed.resolve_literal(q);
-        if existing_positive_q.insert(lit.to_spl()) {
+        if existing_positive_q.insert((lit.family_id(), lit.temporal.clone())) {
             conclusions.push(Conclusion::defeasibly_provable(lit));
         }
     } else {
         // For duplicate supporters with the same grounded head literal, keep the
         // lexicographically-smallest label for deterministic attribution.
-        let mut supporters_by_literal: BTreeMap<String, &crate::rule::Rule> = BTreeMap::new();
+        let mut supporters_by_literal: FxHashMap<_, &crate::rule::Rule> = FxHashMap::default();
         for supporter in applicable_supporters {
-            let literal_key = supporter.head_literal().to_spl();
+            let head = supporter.head_literal();
+            let literal_key = (head.family_id(), head.temporal.clone());
             supporters_by_literal
                 .entry(literal_key)
                 .and_modify(|selected| {
@@ -690,9 +691,11 @@ fn try_prove_defeasible(
                 .or_insert(supporter);
         }
 
-        for supporter in supporters_by_literal.values() {
+        let mut supporters: Vec<_> = supporters_by_literal.into_values().collect();
+        supporters.sort_by(|a, b| a.label.cmp(&b.label));
+        for supporter in supporters {
             let lit = supporter.head_literal().clone();
-            if existing_positive_q.insert(lit.to_spl()) {
+            if existing_positive_q.insert((lit.family_id(), lit.temporal.clone())) {
                 conclusions.push(Conclusion::defeasibly_provable(lit).with_rule(&supporter.label));
             }
         }

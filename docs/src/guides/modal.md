@@ -247,6 +247,21 @@ An applicable superior rule can defeat an attacker.
 An obligation attacker can be countered by same-direction obligation, permission, or defeater rules.
 A permission or defeater attacker against an obligation requires a superior obligation rule, not another permission or defeater.
 A defender need not itself win its own conflict; its body must be applicable.
+
+**Defense is different from producing a conclusion.** Definitions 8(2.3.2)
+and 10(2.3.2) allow a superior defeater to counter an obligation attacker.
+A separate applicable obligation or permission rule must still supply the
+productive support; the defeater cannot derive its head on its own. For example,
+an obligation rule for `pay-fee` can survive an opposing prohibition rule when a
+superior defeater for the same obligation defeats that prohibition. Removing the
+supporting obligation rule leaves no obligation to derive.
+
+This is an intentional difference from plain-literal reasoning, where defeaters
+cannot serve as team defenders. It follows the paper's modal proof conditions;
+“defeaters never support” means they never provide the productive rule needed to
+establish a modal conclusion. Against a permission or defeater attacker, defense
+still requires an obligation rule.
+
 Without a preference, competing defaults block each other.
 The negative proof conditions mirror these checks; an unresolved cycle stays undecided.
 
@@ -279,7 +294,9 @@ See the worked weak-permission example above.
 An explicit proof of the outer-negated expression can also satisfy that premise.
 For an atemporal negative premise, every indexed positive family member must be refuted.
 A live or undecided temporal member prevents that inference.
-Variable arguments in a refutation premise need bindings from preceding positive premises.
+Variable arguments in a refutation premise need bindings from other premises.
+The binding premise may appear before or after the negative modal premise;
+grounding defers the refutation check until its variables are bound.
 Strict rules using refutation become defeasibly applicable; refutation does not create a definite premise.
 
 `(not (must p))` negates the obligation; `(must (not p))` obliges the opposite action.

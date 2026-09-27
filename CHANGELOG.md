@@ -8,6 +8,12 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- **Modal team defense**: following Governatori et al. Definitions 8(2.3.2)
+  and 10(2.3.2), a superior defeater can counter an obligation attacker, but a
+  separate productive rule is still required to derive a modal conclusion.
+  This intentionally differs from plain-literal team defense; defeaters alone
+  never derive their heads. Permission and defeater attackers require an
+  obligation rule as defender.
 - **Lean modal verification**: single-head deontic model with proofs of
   prohibition normalization, opposition, negation scope, typed defense, finite
   closure, saturation, and derivability. Kernel-checked examples distinguish
@@ -173,6 +179,11 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Temporal variables rejected as arithmetic operands (REQ-006).
 
 ### Fixed
+- Negative modal premises now ground independently of their position relative
+  to binding premises. Unbound refutation variables still cannot invent values.
+- Prohibition aliases such as `(forbidden p)` and `(must (not p))` emit one
+  defeasible positive conclusion per semantic literal and temporal window,
+  including detailed and JSON output.
 - Documentation examples now use complementary defeater heads and defeasible
   defaults correctly. Temporal documentation describes current interval variables,
   Allen constraints, and family matching instead of the removed bridge stage.
