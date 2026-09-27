@@ -111,6 +111,13 @@ fn conclusion_type_explanation(ct: ConclusionType) -> &'static str {
 fn proof_node_to_natural_language(node: &ProofNode, num: usize, indent: &str) -> String {
     let mut output = String::new();
 
+    if node.derivation_type == DerivationType::DefeasibleRefutation {
+        return format!(
+            "{indent}{num}. \"{}\" was constructively refuted (-d)\n",
+            node.literal
+        );
+    }
+
     if let Some(ref step) = node.proof_step {
         let derivation_str = match node.derivation_type {
             DerivationType::Definite => {
@@ -121,6 +128,7 @@ fn proof_node_to_natural_language(node: &ProofNode, num: usize, indent: &str) ->
                 }
             }
             DerivationType::Defeasible => "derived defeasibly",
+            DerivationType::DefeasibleRefutation => "constructively refuted (-d)",
         };
 
         output.push_str(&format!(

@@ -329,7 +329,7 @@ impl Theory {
     ///
     /// Returns a list of warning messages for:
     /// - Circular superiority relations
-    /// - Contradictory definite conclusions (both +D p and +D ~p)
+    /// - Opposing definite conclusions (classical or deontic opposition)
     pub fn check_consistency(&self) -> Vec<String> {
         let mut warnings = Vec::new();
 
@@ -342,18 +342,18 @@ impl Theory {
 
         // Check contradictory strict conclusions
         if let Ok(conclusions) = self.reason() {
-            let definite: std::collections::HashSet<_> = conclusions
+            let definite: Vec<_> = conclusions
                 .iter()
                 .filter(|c| c.conclusion_type == ConclusionType::DefinitelyProvable)
                 .map(|c| &c.literal)
                 .collect();
-
-            for lit in &definite {
-                let comp = lit.complement();
-                if definite.contains(&comp) {
-                    warnings.push(format!(
-                        "Contradictory definite conclusions: both +D {lit} and +D {comp}"
-                    ));
+            for (i, lit) in definite.iter().enumerate() {
+                for opponent in &definite[i + 1..] {
+                    if lit.opposes(opponent) {
+                        warnings.push(format!(
+                            "Contradictory definite conclusions: both +D {lit} and +D {opponent}"
+                        ));
+                    }
                 }
             }
         }

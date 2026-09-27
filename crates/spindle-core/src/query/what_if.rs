@@ -174,7 +174,7 @@ pub fn what_if(
 
     // Determine goal status directly from conclusions (avoids calling query->reason again).
     // Use semantic_literal_matches for consistency with query()/why_not()/abduce().
-    let goal_complement = goal.complement();
+    let goal_opponents = goal.opponents();
     let mut result = QueryResult::new(goal.clone(), QueryStatus::Unknown);
     for conc in &modified_conclusions {
         if semantic_literal_matches(goal, &conc.literal) && conc.conclusion_type.is_positive() {
@@ -185,7 +185,9 @@ pub fn what_if(
     }
     if result.status == QueryStatus::Unknown {
         for conc in &modified_conclusions {
-            if semantic_literal_matches(&goal_complement, &conc.literal)
+            if goal_opponents
+                .iter()
+                .any(|opponent| semantic_literal_matches(opponent, &conc.literal))
                 && conc.conclusion_type.is_positive()
             {
                 result = QueryResult::new(goal.clone(), QueryStatus::Refuted);

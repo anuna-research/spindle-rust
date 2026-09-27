@@ -625,14 +625,18 @@ fn defeater_diminishers(
     policy: &TrustPolicy,
     reference_time: Option<TimePoint>,
 ) -> Vec<(String, TrustValue)> {
-    let complement_key = conclusion_literal.complement().to_spl();
+    let opponents = conclusion_literal.opponents();
     let mut out = Vec::new();
 
     for rule in theory.rules() {
         if !rule.rule_type.is_defeater() {
             continue;
         }
-        if rule.head.is_empty() || rule.head[0].to_spl() != complement_key {
+        if rule.head.is_empty()
+            || !opponents
+                .iter()
+                .any(|opponent| crate::query::exact_literal_match(opponent, &rule.head[0]))
+        {
             continue;
         }
         // Fired: every logic body literal is positively provable.

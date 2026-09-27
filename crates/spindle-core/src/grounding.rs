@@ -108,6 +108,10 @@ pub fn has_variables(rule: &Rule) -> bool {
 /// When the pattern has a `temporal_expr`, temporal variables are bound
 /// against the ground literal's concrete temporal endpoints.
 pub fn match_literal(pattern: &Literal, ground: &Literal) -> Option<Substitution> {
+    let pattern_canonical = pattern.deontic_canonical();
+    let ground_canonical = ground.deontic_canonical();
+    let pattern = &pattern_canonical;
+    let ground = &ground_canonical;
     // Check negation matches
     if pattern.negation != ground.negation {
         return None;
@@ -406,6 +410,7 @@ fn merge_substitutions(s1: &Substitution, s2: &Substitution) -> Option<Substitut
 /// Create a key for indexing facts (using interned SymbolId, zero allocation)
 #[inline]
 fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
+    let lit = lit.deontic_canonical();
     (
         lit.name_id(),
         lit.negation,
@@ -419,6 +424,7 @@ fn fact_index_key(lit: &Literal) -> (SymbolId, bool, usize, Mode) {
 /// Includes temporal so that `p[1,2]` and `p[3,4]` are treated as distinct facts.
 #[inline]
 fn literal_key(lit: &Literal) -> (SymbolId, bool, Vec<crate::term::Term>, Mode, Temporal) {
+    let lit = lit.deontic_canonical();
     (
         lit.name_id(),
         lit.negation,
@@ -455,8 +461,8 @@ fn normalize_body_against_facts(
             };
             for fact in facts {
                 if lit.name_id() == fact.name_id()
-                    && lit.negation == fact.negation
-                    && lit.mode == fact.mode
+                    && lit.deontic_canonical().negation == fact.deontic_canonical().negation
+                    && lit.deontic_canonical().mode == fact.deontic_canonical().mode
                     && lit.temporal == fact.temporal
                     && lit.predicate_args().len() == fact.predicate_args().len()
                     && lit
@@ -626,6 +632,17 @@ fn match_body_against_facts_ctx(
                 None => return Vec::new(), // arith eval failed — discard path
             };
 
+            // A fully bound negative modal premise is tested by the reasoner
+            // against -d; grounding must not require a positive fact for it.
+            if first_lit.is_negative_modal() && !literal_has_variables(&first_lit) {
+                return match_body_against_facts_ctx(
+                    rest,
+                    fact_index,
+                    all_facts,
+                    current_subst,
+                    ctx,
+                );
+            }
             // Get candidate facts
             let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
                 all_facts.iter().collect()
@@ -740,6 +757,18 @@ fn match_body_ordered_delta(
                 Some(lit) => lit,
                 None => return Vec::new(),
             };
+
+            if first_lit.is_negative_modal() && !literal_has_variables(&first_lit) {
+                return match_body_ordered_delta(
+                    rest,
+                    fact_index,
+                    all_facts,
+                    delta_keys,
+                    current_subst,
+                    used_delta,
+                    ctx,
+                );
+            }
 
             let candidates: Vec<&Literal> = if is_variable(first_lit.name()) {
                 all_facts.iter().collect()

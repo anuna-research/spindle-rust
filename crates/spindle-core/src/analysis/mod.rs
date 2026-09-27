@@ -47,13 +47,6 @@ pub(crate) fn analysis_key(lit: &Literal) -> AnalysisKey<'_> {
     )
 }
 
-/// Same as [`analysis_key`] but omits negation, for detecting p/~p pairs
-/// that truly refer to the same ground atom.
-#[inline]
-pub(crate) fn analysis_key_unsigned(lit: &Literal) -> (&'static str, &[Term], &Mode, &Temporal) {
-    (lit.name(), lit.predicate_args(), &lit.mode, &lit.temporal)
-}
-
 // ---------------------------------------------------------------------------
 // Conflict report
 // ---------------------------------------------------------------------------
@@ -78,6 +71,8 @@ pub struct ConflictReport {
 pub enum ConflictKind {
     /// Classical negation: `p` vs `~p`
     Negation,
+    /// Conflict between obligation, permission, or outer-negated modalities.
+    ModalOpposition,
     /// Mutual exclusion inferred from traces.
     MutualExclusion,
     /// XOR-choice from Petri net structure.

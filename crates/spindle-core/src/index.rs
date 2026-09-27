@@ -105,6 +105,8 @@ pub struct IndexedTheory<'a> {
     body_index: FxHashMap<LitId, Vec<RuleLabel>>,
     /// Rules indexed by atemporal body families.
     family_body_index: FxHashMap<FamilyId, Vec<RuleLabel>>,
+    /// Cached deontic opponents; ordinary literals use their complement bit.
+    modal_opponents: FxHashMap<LitId, Vec<LitId>>,
     /// Set of all literal IDs in the theory
     literal_set: FxHashSet<LitId>,
     /// Map from (ExactAtomKey, negated) to ExactLitId
@@ -148,6 +150,7 @@ impl<'a> IndexedTheory<'a> {
             body_index: FxHashMap::default(),
             family_body_index: FxHashMap::default(),
             literal_set: FxHashSet::default(),
+            modal_opponents: FxHashMap::default(),
             exact_map: FxHashMap::default(),
             exact_atoms: Vec::new(),
             exact_to_family: FxHashMap::default(),
@@ -189,11 +192,39 @@ impl<'a> IndexedTheory<'a> {
             }
         }
 
+        // Intern modal opposition closure before allocating reasoning bitsets.
+        // Missing opponents need constructive negative tags too.
+        let mut pending: Vec<_> = idx.literal_set.iter().copied().collect();
+        while let Some(id) = pending.pop() {
+            let literal = idx.resolve_literal(id);
+            if matches!(literal.mode.name.as_deref(), Some("O" | "P" | "F")) {
+                for opponent in literal.opponents() {
+                    let opponent_id = idx.intern_literal(&opponent);
+                    if idx.literal_set.insert(opponent_id) {
+                        idx.try_intern_exact(&opponent)?;
+                        pending.push(opponent_id);
+                    }
+                }
+            }
+        }
+        for &id in &idx.literal_set {
+            let literal = idx.resolve_literal(id);
+            if matches!(literal.mode.name.as_deref(), Some("O" | "P")) {
+                let opponents = literal
+                    .opponents()
+                    .iter()
+                    .filter_map(|lit| idx.get_lit_id(lit))
+                    .collect();
+                idx.modal_opponents.insert(id, opponents);
+            }
+        }
         Ok(idx)
     }
 
     /// Intern a literal into the local atom store.
     pub fn intern_literal(&mut self, lit: &Literal) -> LitId {
+        let canonical = lit.deontic_canonical();
+        let lit: &Literal = &canonical;
         let mode_id = lit
             .mode
             .name
@@ -221,6 +252,8 @@ impl<'a> IndexedTheory<'a> {
 
     /// Lookup a literal ID without interning new atoms.
     pub fn get_lit_id(&self, lit: &Literal) -> Option<LitId> {
+        let canonical = lit.deontic_canonical();
+        let lit: &Literal = &canonical;
         let mode_id = lit
             .mode
             .name
@@ -307,6 +340,55 @@ impl<'a> IndexedTheory<'a> {
             .unwrap_or_default()
     }
 
+    /// Exact modal opponents, or the ordinary complement for nonmodal literals.
+    pub fn opponent_ids(&self, id: LitId) -> Vec<LitId> {
+        self.modal_opponents
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| vec![id.complement()])
+    }
+
+    /// Rules attacking a literal under the deontic conflict profile.
+    pub fn attacking_rules(&self, id: LitId) -> Vec<&Rule> {
+        self.opponent_ids(id)
+            .into_iter()
+            .flat_map(|opponent| self.rules_with_head_id(opponent))
+            .collect()
+    }
+
+    /// Candidate team defenders; only modal goals admit cross-mode defense.
+    pub fn defending_rules(&self, goal: LitId, attacker: &Rule) -> Vec<&Rule> {
+        if !self.modal_opponents.contains_key(&goal) {
+            return self
+                .rules_with_head_id(goal)
+                .into_iter()
+                .filter(|rule| !rule.rule_type.is_defeater())
+                .collect();
+        }
+        let literal = self.resolve_literal(goal);
+        if literal.mode.negation {
+            return self
+                .rules_with_head_id(goal)
+                .into_iter()
+                .filter(|rule| !rule.rule_type.is_defeater())
+                .collect();
+        }
+        let mut heads = vec![literal.clone()];
+        let mut other = literal.clone();
+        other.mode = if literal.mode.name.as_deref() == Some("O") {
+            crate::mode::Mode::permission()
+        } else {
+            crate::mode::Mode::obligation()
+        };
+        heads.push(other);
+        heads
+            .iter()
+            .filter_map(|head| self.get_lit_id(head))
+            .flat_map(|id| self.rules_with_head_id(id))
+            .filter(|rule| rule.can_defend(&literal, attacker))
+            .collect()
+    }
+
     /// Get rules with the given literal in the body.
     pub fn rules_with_body(&self, lit: &Literal) -> Vec<&Rule> {
         let mut rules = Vec::new();
@@ -350,6 +432,8 @@ impl<'a> IndexedTheory<'a> {
     /// Returns the same `ExactLitId` for structurally identical literals
     /// (same functor, args, mode, negation, and temporal window).
     fn try_intern_exact(&mut self, lit: &Literal) -> Result<ExactLitId> {
+        let canonical = lit.deontic_canonical();
+        let lit: &Literal = &canonical;
         let mode_id = lit
             .mode
             .name

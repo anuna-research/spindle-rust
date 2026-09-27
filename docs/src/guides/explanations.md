@@ -23,7 +23,7 @@ The core types are:
 
 - `ProofNode` -- represents the derivation of a single literal, containing:
   - `literal` -- the derived literal
-  - `derivation_type` -- `Definite` (strict rules and facts only) or `Defeasible` (defeasible rules involved)
+  - `derivation_type` -- `Definite` (strict rules and facts only), `Defeasible` (defeasible rules involved), or `DefeasibleRefutation` (constructive `-d` evidence for a negated modal premise)
   - `proof_step` -- the rule application that produced this literal
   - `blocked_alternatives` -- alternative derivations the reasoner considered but rejected
   - `conflicts_resolved` -- conflict resolutions that occurred at this node
@@ -391,6 +391,7 @@ fn walk_proof(node: &ProofNode, depth: usize) {
     let dtype = match node.derivation_type {
         DerivationType::Definite => "definite",
         DerivationType::Defeasible => "defeasible",
+        DerivationType::DefeasibleRefutation => "defeasible refutation (-d)",
     };
     println!("{}{} [{}]", indent, node.literal, dtype);
 

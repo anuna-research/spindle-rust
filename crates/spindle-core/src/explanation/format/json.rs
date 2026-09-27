@@ -46,6 +46,7 @@ fn proof_node_to_json(node: &ProofNode) -> serde_json::Value {
         "derivation_type": match node.derivation_type {
             DerivationType::Definite => "definite",
             DerivationType::Defeasible => "defeasible",
+            DerivationType::DefeasibleRefutation => "defeasible_refutation",
         },
         "proof_step": node.proof_step.as_ref().map(|step| serde_json::json!({
             "rule_label": step.rule_label,

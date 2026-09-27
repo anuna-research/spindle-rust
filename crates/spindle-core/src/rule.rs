@@ -131,6 +131,32 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// Candidate team defense, including the asymmetric modal rule classes.
+    pub(crate) fn can_defend(&self, goal: &Literal, attacker: &Rule) -> bool {
+        let goal = goal.deontic_canonical();
+        if !self
+            .head_literal()
+            .can_defend(&goal, attacker.head_literal())
+        {
+            return false;
+        }
+        if !matches!(goal.mode.name.as_deref(), Some("O" | "P")) || goal.mode.negation {
+            return !self.rule_type.is_defeater();
+        }
+        let attack = attacker.head_literal().deontic_canonical();
+        if attack.mode.name.as_deref() == Some("O")
+            && !attack.mode.negation
+            && !attacker.rule_type.is_defeater()
+        {
+            return true;
+        }
+        // Permissions and defeaters are countered by obligation rules only.
+        // Explicit outer negation is the SDL extension: same-head rules defend.
+        !self.rule_type.is_defeater()
+            && (attack.mode.negation
+                || self.head_literal().deontic_canonical().mode.name.as_deref() == Some("O"))
+    }
+
     /// Create a new rule
     pub fn new(
         label: impl Into<String>,
