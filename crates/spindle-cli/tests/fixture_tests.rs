@@ -25,6 +25,7 @@ fn parse_expectations(content: &str) -> (Vec<String>, Vec<String>) {
 fn run_reason(path: &Path) -> String {
     let output = cargo_bin_cmd!("spindle")
         .arg("reason")
+        .arg("--detailed")
         .arg(path)
         .output()
         .expect("failed to execute spindle");
@@ -38,7 +39,7 @@ fn run_reason(path: &Path) -> String {
 }
 
 /// Parse conclusion lines from the reasoner output.
-/// Each conclusion line looks like "  +D bird" or "  +d flies".
+/// Detailed text uses SPL; normalize it to the fixture annotations’ legacy notation.
 fn parse_conclusions(output: &str) -> Vec<String> {
     output
         .lines()
@@ -49,7 +50,12 @@ fn parse_conclusions(output: &str) -> Vec<String> {
                 || l.starts_with("-D ")
                 || l.starts_with("-d ")
         })
-        .map(|l| l.to_string())
+        .map(|line| {
+            let (tag, spl) = line.split_once(' ').unwrap();
+            let theory = spindle_parser::parse_spl(&format!("(given {spl})"))
+                .expect("detailed conclusion should be valid SPL");
+            format!("{tag} {}", theory.rules().next().unwrap().head_literal())
+        })
         .collect()
 }
 

@@ -16,6 +16,7 @@
 					"required": ["name", "negation"],
 					"properties": {
 						"name": {
+							"description": "Standard modes use SPL names: must, may, forbidden. Custom names are preserved; null means no modality.",
 							"oneOf": [
 								{
 									"type": "string",

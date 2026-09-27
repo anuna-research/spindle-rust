@@ -139,3 +139,6 @@ jobs:
 
       - name: Compare Rust aggregation with Lean
         run: cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
+
+      - name: Compare Rust modal reasoning with Lean
+        run: cargo test -p spindle-core --test lean_modal_oracle_difftest -- --ignored --nocapture

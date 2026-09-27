@@ -110,9 +110,13 @@ impl FamilyId {
     pub fn new(
         functor: InternedLiteralName,
         args: impl Into<SmallVec<[Term; 2]>>,
-        mode: Mode,
-        negated: bool,
+        mut mode: Mode,
+        mut negated: bool,
     ) -> Self {
+        if mode.name.as_deref() == Some("F") {
+            mode.name = Some("O".into());
+            negated = !negated;
+        }
         Self {
             functor,
             args: args.into(),
@@ -159,12 +163,15 @@ impl FamilyId {
 impl From<&Literal> for FamilyId {
     /// Extract a `FamilyId` from a literal, dropping temporal information.
     fn from(lit: &Literal) -> Self {
-        Self {
-            functor: lit.interned_name(),
-            args: lit.predicate_args().iter().cloned().collect(),
-            mode: lit.mode.clone(),
-            negated: lit.negation,
-        }
+        Self::new(
+            lit.interned_name(),
+            lit.predicate_args()
+                .iter()
+                .cloned()
+                .collect::<SmallVec<[Term; 2]>>(),
+            lit.mode.clone(),
+            lit.negation,
+        )
     }
 }
 

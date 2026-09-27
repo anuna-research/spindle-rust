@@ -20,7 +20,9 @@ pub struct LiteralStructJson {
 /// JSON-serializable mode structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModeJson {
+    /// SPL keyword for standard modes; custom names are preserved. None means no mode.
     pub name: Option<String>,
+    /// Outer negation, distinct from the literal's inner `negated` field.
     pub negation: bool,
 }
 
@@ -47,7 +49,15 @@ impl From<&Literal> for LiteralStructJson {
 impl From<&spindle_core::mode::Mode> for ModeJson {
     fn from(mode: &spindle_core::mode::Mode) -> Self {
         Self {
-            name: mode.name.clone(),
+            name: mode.name.as_deref().map(|name| {
+                match name {
+                    "O" => "must",
+                    "P" => "may",
+                    "F" => "forbidden",
+                    custom => custom,
+                }
+                .to_owned()
+            }),
             negation: mode.negation,
         }
     }

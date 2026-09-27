@@ -45,6 +45,10 @@ try {
   for (const goal of ['p(2)', '(p 2)', '(during q 100 200)']) {
     equal(engine.query(goal).status, cli(source, 'query', goal).status, `query ${goal}`);
   }
+  for (const malformed of ['p(,a)', 'p(a,)', 'p(a,,b)']) {
+    assert.throws(() => engine.query(malformed), /empty legacy literal argument/);
+    assert.throws(() => cli(source, 'query', malformed), /Command failed/);
+  }
   const at = '1970-01-01T00:00:00.150Z';
   engine.setReferenceTime(at);
   equal(engine.reasonV2(), cli(source, 'reason', '--v2', '--at', at), 'reference time');

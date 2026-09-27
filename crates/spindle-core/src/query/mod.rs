@@ -147,11 +147,7 @@ fn default_query_match_mode(literal: &Literal) -> QueryMatchMode {
 }
 
 pub(crate) fn exact_literal_match(expected: &Literal, candidate: &Literal) -> bool {
-    expected.name_id() == candidate.name_id()
-        && expected.negation == candidate.negation
-        && expected.mode == candidate.mode
-        && expected.predicate_args() == candidate.predicate_args()
-        && expected.temporal == candidate.temporal
+    FamilyId::from(expected) == FamilyId::from(candidate) && expected.temporal == candidate.temporal
 }
 
 pub(crate) fn literal_matches(
@@ -190,6 +186,29 @@ pub(crate) fn find_positive_match<'a>(
 
 pub(crate) fn has_positive_match(literal: &Literal, conclusions: &[Conclusion]) -> bool {
     find_positive_match(literal, conclusions).is_some()
+}
+
+/// Satisfaction of a modal antecedent includes constructive refutation for
+/// an outer-negated modality. An undecided cycle does not satisfy it.
+pub(crate) fn premise_satisfied(literal: &Literal, conclusions: &[Conclusion]) -> bool {
+    if has_positive_match(literal, conclusions) {
+        return true;
+    }
+    if !literal.is_negative_modal() {
+        return false;
+    }
+    let positive = literal.outer_negation();
+    let members: Vec<_> = conclusions
+        .iter()
+        .filter(|c| semantic_literal_matches(&positive, &c.literal))
+        .collect();
+    !members.is_empty()
+        && members.iter().all(|c| {
+            conclusions.iter().any(|other| {
+                other.conclusion_type == ConclusionType::DefeasiblyNotProvable
+                    && exact_literal_match(&c.literal, &other.literal)
+            })
+        })
 }
 
 /// Like [`has_positive_match`] but always uses EXACT literal identity, never
@@ -549,7 +568,7 @@ pub fn query_with_match_mode(
 /// ExactTemporal matching: conclusion must match both atemporal identity AND
 /// temporal bounds of the query literal.
 fn match_exact_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
-    let complement = literal.complement();
+    let opponents = literal.opponents();
 
     // Check if literal is provable with exact temporal match
     for conc in conclusions {
@@ -561,7 +580,11 @@ fn match_exact_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result
 
     // Check if complement is provable with exact temporal match (refuted)
     for conc in conclusions {
-        if conc.conclusion_type.is_positive() && exact_literal_match(&complement, &conc.literal) {
+        if conc.conclusion_type.is_positive()
+            && opponents
+                .iter()
+                .any(|opponent| exact_literal_match(opponent, &conc.literal))
+        {
             return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
         }
     }
@@ -592,7 +615,7 @@ fn strongest_positive_conclusion_type<'a>(
 
 fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
     let family = FamilyId::from(literal);
-    let complement_family = family.complement();
+    let opponent_families: Vec<_> = literal.opponents().iter().map(FamilyId::from).collect();
 
     let best_positive = strongest_positive_conclusion_type(
         conclusions
@@ -610,7 +633,7 @@ fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryRe
     for conc in conclusions {
         if conc.conclusion_type.is_positive() {
             let conc_family = FamilyId::from(&conc.literal);
-            if conc_family == complement_family {
+            if opponent_families.contains(&conc_family) {
                 return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
             }
         }
@@ -626,7 +649,7 @@ fn match_family(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryRe
 /// member.
 fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Result<QueryResult> {
     let family = FamilyId::from(literal);
-    let complement_family = family.complement();
+    let opponent_families: Vec<_> = literal.opponents().iter().map(FamilyId::from).collect();
 
     // Collect all positive conclusions in the family, then pick the
     // deterministic representative.
@@ -658,7 +681,7 @@ fn match_wildcard_temporal(literal: &Literal, conclusions: &[Conclusion]) -> Res
     for conc in conclusions {
         if conc.conclusion_type.is_positive() {
             let conc_family = FamilyId::from(&conc.literal);
-            if conc_family == complement_family {
+            if opponent_families.contains(&conc_family) {
                 return Ok(QueryResult::new(literal.clone(), QueryStatus::Refuted));
             }
         }

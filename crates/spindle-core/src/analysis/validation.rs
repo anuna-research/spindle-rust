@@ -17,7 +17,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{Severity, ValidationDiagnostic, analysis_key, analysis_key_unsigned};
+use super::{Severity, ValidationDiagnostic, analysis_key};
 use crate::rule::{Rule, RuleType};
 
 /// Validate a set of rules and produce diagnostics.
@@ -90,9 +90,7 @@ fn check_tautological_bodies(rules: &[&Rule], diags: &mut Vec<ValidationDiagnost
             continue;
         }
 
-        // A body is tautological only when it contains two literals that
-        // are exact complements: same name, args, mode, and temporal but
-        // opposite negation.  Comparing by name alone produces false
+        // Check exact classical or deontic opposition.  Comparing by name alone produces false
         // positives for bodies like `p(a), ~p(b)`.
         // Only logic body literals participate in tautology checks.
         let logic_lits: Vec<_> = rule
@@ -100,22 +98,16 @@ fn check_tautological_bodies(rules: &[&Rule], diags: &mut Vec<ValidationDiagnost
             .iter()
             .filter_map(|bl| bl.as_logic().map(|l| l.to_literal()))
             .collect();
-        let positive: Vec<_> = logic_lits.iter().filter(|l| !l.is_negated()).collect();
-        let negative: Vec<_> = logic_lits.iter().filter(|l| l.is_negated()).collect();
-
-        'outer: for pos in &positive {
-            let pos_key = analysis_key_unsigned(pos);
-            for neg in &negative {
-                if pos_key == analysis_key_unsigned(neg) {
+        'outer: for (i, pos) in logic_lits.iter().enumerate() {
+            for neg in &logic_lits[i + 1..] {
+                if pos.opposes(neg) {
                     diags.push(ValidationDiagnostic {
                         severity: Severity::Warning,
                         code: "W002",
                         message: format!(
-                            "Rule '{}' has a tautological body: both '{}' and '~{}' \
+                            "Rule '{}' has a tautological body: both '{}' and '{}' \
                              appear, so the rule can never fire.",
-                            rule.label,
-                            pos.name(),
-                            pos.name(),
+                            rule.label, pos, neg,
                         ),
                         rules: vec![rule.label.clone()],
                     });

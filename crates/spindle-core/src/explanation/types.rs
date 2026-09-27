@@ -88,6 +88,8 @@ pub enum DerivationType {
     Definite,
     /// Derived via defeasible rules
     Defeasible,
+    /// Constructive -d evidence discharging an outer-negated modal premise.
+    DefeasibleRefutation,
 }
 
 /// Reason why a proof was blocked

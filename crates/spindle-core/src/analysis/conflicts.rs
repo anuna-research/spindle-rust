@@ -1,28 +1,24 @@
 //! Rule-level conflict detection for defeasible logic theories.
 //!
 //! Provides an iterator-based API for detecting conflicting rule pairs
-//! (rules whose heads are classically negated versions of each other).
+//! (rules whose heads oppose each other classically or deontically).
 //!
 //! This module is distinct from the trace-level conflict detection in
 //! `mining.rs` which operates on `EventLog` + `PetriNet`.
 
-use super::{ConflictKind, ConflictReport, analysis_key_unsigned};
+use super::{ConflictKind, ConflictReport};
 use crate::literal::Literal;
 use crate::rule::Rule;
 
 /// Check whether two rules have conflicting heads.
 ///
-/// Two heads conflict when one is the classical negation of the other
-/// **and** they refer to the same ground atom (same name, predicate
-/// arguments, mode, and temporal scope).  For example `flies` vs
-/// `~flies` conflict, but `O(p)` vs `~p` or `p@t1` vs `~p@t2` do not.
+/// Heads conflict under classical or deontic opposition with identical
+/// arguments and temporal windows. Opposite permissions do not conflict;
+/// a permission and the opposite obligation do.
 pub fn is_conflicting(a: &Rule, b: &Rule) -> bool {
-    a.head.iter().any(|ha| {
-        b.head.iter().any(|hb| {
-            ha.is_negated() != hb.is_negated()
-                && analysis_key_unsigned(ha) == analysis_key_unsigned(hb)
-        })
-    })
+    a.head
+        .iter()
+        .any(|ha| b.head.iter().any(|hb| ha.opposes(hb)))
 }
 
 /// Return the first pair of conflicting head literals between two rules,
@@ -30,9 +26,7 @@ pub fn is_conflicting(a: &Rule, b: &Rule) -> bool {
 fn conflicting_head_pair<'a>(a: &'a Rule, b: &'a Rule) -> Option<(&'a Literal, &'a Literal)> {
     for ha in &a.head {
         for hb in &b.head {
-            if ha.is_negated() != hb.is_negated()
-                && analysis_key_unsigned(ha) == analysis_key_unsigned(hb)
-            {
+            if ha.opposes(hb) {
                 return Some((ha, hb));
             }
         }
@@ -60,7 +54,11 @@ where
                     rule_b: rules[j].label.clone(),
                     head_a: format!("{ha}"),
                     head_b: format!("{hb}"),
-                    conflict_type: ConflictKind::Negation,
+                    conflict_type: if ha.is_modal() {
+                        ConflictKind::ModalOpposition
+                    } else {
+                        ConflictKind::Negation
+                    },
                 });
             }
         }

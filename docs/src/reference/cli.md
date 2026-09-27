@@ -34,6 +34,29 @@ spindle explain-code <CODE>
 spindle reason examples/penguin.spl
 ```
 
+Text output shows a `Proved:` list of positive literals in canonical SPL syntax,
+with each exact literal listed once. Facts therefore do not appear twice for
+`+D` and `+d`. Negation and distinct temporal windows are preserved. If no
+positive conclusion is proved, the command says so; this does not mean every
+literal is refuted. For distinctions between numeric types, use `--json --v2`:
+text can render distinct typed values such as integer `1` and float `1e0` alike.
+
+#### `--detailed`
+
+Show all four proof tags, including constructive refutations and implicit modal
+opponents. Literals still use SPL syntax, such as `+d (may (play))`.
+
+```bash
+spindle reason --detailed examples/penguin.spl
+```
+
+`--detailed` affects text presentation only. JSON v1/v2 retain their existing
+fields and full conclusion lists, including both `+D` and `+d` for a fact.
+Standard `literal_struct.mode.name` values use the SPL words `must`, `may`, and
+`forbidden`; custom names are preserved and no mode is `null`.
+`mode.negation` remains outer negation, while `literal_struct.negated` is inner
+negation. Consumers matching the former `O`/`P`/`F` names must update.
+
 #### `--v2`
 
 `--v2` selects JSON schema version v2 (`spindle.reason.v2`) for the JSON output envelope.
@@ -337,20 +360,16 @@ spindle --json validate --stdin < examples/penguin.spl
 
 ### `--positive`
 
-`--positive` shows only positive conclusions (+D, +d). Applies to the `reason` command.
+`--positive` filters detailed text or JSON to positive proof tags (`+D`, `+d`).
+The default concise text view already shows only proved literals.
 
 ```bash
-spindle reason --positive examples/penguin.spl
+spindle reason --detailed --positive examples/penguin.spl
+spindle reason --json --positive examples/penguin.spl
 ```
 
-Output:
-```
-+D bird
-+D penguin
-+d bird
-+d penguin
-+d -flies
-```
+An explicit negative literal, such as `(not (flies))`, can be positively proved;
+`--positive` retains it. The option filters proof tags, not literal negation.
 
 ### `--debug-errors`
 
@@ -452,8 +471,10 @@ spindle reason examples/aggregation.spl --json --v2
 spindle query '(total-payment alice 20)' examples/aggregation.spl
 ```
 
-Aggregation uses the normal `reason` and `query` commands without an extra flag. The CLI supplies the builtin function prelude. Registering custom
-functions is a Rust embedding API, not a CLI plugin-loading facility.
+Aggregation uses the normal `reason` and `query` commands without an extra flag.
+The CLI supplies the builtin function prelude. Use `--extensions` for portable
+lookup functions and named aggregators; arbitrary function implementations are
+available through the Rust embedding API.
 
 Bounded temporal goals match identical windows, including in `requires`.
 A containing window is not an exact match. Atemporal goals match any family

@@ -21,6 +21,11 @@ This project is part of the SPINdle family:
 - **Reasoning Mode**:
   - Traditional DL(∂) - Traditional forward chaining
 
+- **Deontic Reasoning**: Obligations (`must`), explicit permissions (`may`), and prohibitions (`forbidden`)
+  - Prohibition aliases an obligation not to act
+  - Preferences resolve permission/prohibition conflicts; opposite permissions can coexist
+  - Lean modal proofs and Rust/Lean comparisons cover the single-head strong-permission profile
+
 - **Temporal Reasoning**: Allen interval algebra with 13 temporal relations
 
 - **Superiority Relations**: Conflict resolution via rule preferences
@@ -80,10 +85,10 @@ This project is currently pre-1.0 and follows strict Semantic Versioning for
 
 ```bash
 # Reason about a theory (SPL format)
-spindle examples/penguin.spl
+spindle reason examples/penguin.spl
 
-# Show only positive conclusions
-spindle --positive examples/penguin.spl
+# Show all four proof tags (including refutations)
+spindle reason --detailed examples/penguin.spl
 
 # Validate a theory file
 spindle validate examples/penguin.spl
@@ -125,6 +130,48 @@ spindle stats examples/penguin.spl
   (and (total-cost ?name ?t) (> ?t 20))
   (expensive ?name))
 ```
+
+## Obligations and Permissions
+
+| SPL | Meaning |
+|---|---|
+| `(must pay)` | Obliged to pay |
+| `(may pay)` | Explicitly permitted to pay |
+| `(forbidden pay)` | Obliged not to pay; equivalent to `(must (not pay))` |
+
+`may` does not mean obliged. An obligation does not automatically derive an
+explicit permission or establish that the action happened.
+
+```spl
+(given hat)
+(normally no-play () (forbidden play))
+(normally hat-play hat (may play))
+(prefer hat-play no-play)
+```
+
+The default CLI output shows each proved literal once in SPL syntax:
+
+```text
+Proved:
+
+  (hat)
+  (may (play))
+```
+
+The preferred permission defeats the prohibition. `(may (play))` is canonical
+SPL for `(may play)`. Use `--detailed` for all four proof tags; `--positive`
+filters detailed or JSON output. JSON v1/v2 still include all tags by default. Standard structured mode names
+use `must`, `may`, and `forbidden`.
+Without the preference, the competing defaults block each other.
+
+Negation has scope: `(not (must pay))` negates the obligation, while
+`(must (not pay))` obliges nonpayment. Weak permission is a constructive
+refutation of a prohibition; it does not produce a `(may ...)` conclusion.
+Missing evidence alone is insufficient.
+
+See the [modal guide](docs/src/guides/modal.md) for conflicts, negated premises,
+and compatibility changes, and the [Lean modal reference](lean/MODAL.md) for
+proof guarantees and limitations.
 
 ## Library Usage
 
@@ -294,6 +341,7 @@ const abduce = spindle.abduce("flies", 3);
 
 The workspace test suite covers:
 - Core reasoning (facts, rules, conflicts, superiority)
+- Modal opposition, permission/prohibition preferences, negation scope, and temporal families
 - Arithmetic expressions, type promotion, and numeric evaluation
 - Edge cases (cycles, empty theories, defeaters)
 - Stress tests (long chains, wide theories)
@@ -308,18 +356,24 @@ make test
 make check
 ```
 
-To check the Lean proofs and run the aggregate differential suite (requires
+To check the Lean proofs and run the aggregate and modal differential suites (requires
 [elan](https://github.com/leanprover/elan)):
 
 ```bash
 scripts/check-lean-verification.sh
 cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
+cargo test -p spindle-core --test lean_modal_oracle_difftest -- --ignored --nocapture
 ```
 
-The verification script builds `AggregationOracle`. Missing oracle binaries fail
-the explicit differential run; ordinary Cargo runs skip the external-oracle tests.
-Forgejo CI runs the proof gate and aggregate differential suite in its `lean-oracle`
-job. See [lean/README.md](lean/README.md) for the other oracles.
+The verification script builds `AggregationOracle`, `ModalOracle`, and the other
+oracles. Missing binaries fail explicit differential runs; ordinary Cargo runs
+skip these external-oracle tests. Forgejo and Woodpecker CI run the modal suite.
+
+The modal proofs cover normalization, opposition, negation scope, typed defense,
+finite closure, saturation, and derivability. Kernel-checked examples distinguish
+weak from strong permission. Comparisons check all four tags against Rust; they
+provide executable evidence rather than a proof of the Rust implementation.
+See [lean/README.md](lean/README.md) for the other oracles.
 
 ## Documentation
 

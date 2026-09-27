@@ -6,6 +6,29 @@ import Spindle.Arith.Abduce
 import Spindle.Arith.WhatIf
 import Spindle.Arith.WhyNot
 
+-- Single-head deontic profile: kernel proofs, not native_decide.
+#print axioms Spindle.Modal.defeater_cannot_attack_permission
+#print axioms Spindle.Modal.Examples.obligation_defeater_does_not_block_permission
+#print axioms Spindle.Modal.normalize_idempotent
+#print axioms Spindle.Modal.forbidden_is_obligation_not
+#print axioms Spindle.Modal.negate_involutive
+#print axioms Spindle.Modal.opposition_symmetric
+#print axioms Spindle.Modal.opposite_permissions_compatible
+#print axioms Spindle.Modal.permission_opposes_prohibition
+#print axioms Spindle.Modal.obligations_conflict
+#print axioms Spindle.Modal.outer_negation_distinct
+#print axioms Spindle.Modal.permission_cannot_defend_against_permission
+#print axioms Spindle.Modal.close_fixedpoint
+#print axioms Spindle.Modal.close_complete
+#print axioms Spindle.Modal.close_sound
+#print axioms Spindle.Modal.defeater_only_no_positive
+#print axioms Spindle.Modal.reason_sound
+#print axioms Spindle.Modal.reason_fixedpoint
+#print axioms Spindle.Modal.reason_no_productive_support
+#print axioms Spindle.Modal.Examples.preferred_permission_wins
+#print axioms Spindle.Modal.Examples.opposite_permissions_both_provable
+#print axioms Spindle.Modal.Examples.weak_permission_is_not_strong
+
 -- Core SDL results
 #print axioms Properties.reason_plusD_sound
 #print axioms Properties.reason_plusD_complete

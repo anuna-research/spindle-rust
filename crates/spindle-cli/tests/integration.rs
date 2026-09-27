@@ -71,8 +71,8 @@ fn test_reason_spl_file_from_text_fixture() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"))
-        .stdout(predicate::str::contains("+d flies"));
+        .stdout(predicate::str::contains("Proved:"))
+        .stdout(predicate::str::contains("(flies)"));
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn test_reason_spl_file() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"))
+        .stdout(predicate::str::contains("Proved:"))
         .stdout(predicate::str::contains("flies"));
 }
 
@@ -106,7 +106,7 @@ fn test_reason_with_positive_flag() {
         .arg("--positive")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .stdout(predicate::str::contains("Proved:"));
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn test_reason_with_strict_rules() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("+D mortal"));
+        .stdout(predicate::str::contains("(mortal)"));
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn test_reason_with_superiority() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("+d ~flies"));
+        .stdout(predicate::str::contains("(not (flies))"));
 }
 
 // ============================================================================
@@ -705,7 +705,7 @@ fn test_spl_detection_by_extension() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .stdout(predicate::str::contains("Proved:"));
 }
 
 #[test]
@@ -721,7 +721,7 @@ fn test_spl_detection_by_lang_line() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .stdout(predicate::str::contains("Proved:"));
 }
 
 #[test]
@@ -736,7 +736,7 @@ fn test_spl_detection_by_paren() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .stdout(predicate::str::contains("Proved:"));
 }
 
 #[test]
@@ -752,7 +752,7 @@ fn test_spl_detection_by_comment() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Conclusions:"));
+        .stdout(predicate::str::contains("Proved:"));
 }
 
 // ============================================================================
@@ -776,7 +776,7 @@ fn test_reason_complex_theory() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("+d ~flies"));
+        .stdout(predicate::str::contains("(not (flies))"));
 }
 
 #[test]
@@ -794,7 +794,7 @@ fn test_reason_defeaters() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("-d flies"));
+        .stdout(predicate::str::contains("  (flies)").not());
 }
 
 // ============================================================================
@@ -814,7 +814,7 @@ fn test_spl_always_rule() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("+D mortal"));
+        .stdout(predicate::str::contains("(mortal)"));
 }
 
 #[test]
@@ -832,7 +832,7 @@ fn test_spl_except_rule() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("-d flies"));
+        .stdout(predicate::str::contains("  (flies)").not());
 }
 
 #[test]
@@ -878,4 +878,176 @@ fn test_direct_json_flag() {
         .expect("direct parse failure with --json should emit JSON envelope");
     assert_eq!(json["error"]["code"], "CLI_PARSE_ERROR");
     assert!(json["diagnostics"].is_array());
+}
+
+#[test]
+fn concise_modal_output_is_spl_without_duplicate_proof_tags() {
+    let (_dir, path) = setup_theory_file(
+        "(normally no-play () (forbidden play))
+         (normally hat-play hat (may play))
+         (prefer hat-play no-play) (given hat)",
+        "spl",
+    );
+    let output = spindle()
+        .arg("reason")
+        .arg(&path)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_eq!(
+        String::from_utf8(output).unwrap().trim(),
+        "Proved:\n\n  (hat)\n  (may (play))"
+    );
+    spindle()
+        .arg("reason")
+        .arg(&path)
+        .arg("--detailed")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("+D (hat)"))
+        .stdout(predicate::str::contains("+d (hat)"))
+        .stdout(predicate::str::contains("+d (may (play))"))
+        .stdout(predicate::str::contains("-D (may (play))"))
+        .stdout(predicate::str::contains("-d (must (not (play)))"));
+    spindle()
+        .arg("reason")
+        .arg(&path)
+        .args(["--detailed", "--positive"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("+d (may (play))"))
+        .stdout(predicate::str::contains("-D ").not())
+        .stdout(predicate::str::contains("-d ").not());
+}
+
+#[test]
+fn detailed_flag_does_not_change_either_json_contract() {
+    let (_dir, path) = setup_theory_file("(given hat) (normally r hat (may play))", "spl");
+    for v2 in [false, true] {
+        let read = |detailed, positive| {
+            let mut command = spindle();
+            command.arg("reason").arg(&path).arg("--json");
+            if v2 {
+                command.arg("--v2");
+            }
+            if detailed {
+                command.arg("--detailed");
+            }
+            if positive {
+                command.arg("--positive");
+            }
+            let output = command.assert().success().get_output().stdout.clone();
+            serde_json::from_slice::<Value>(&output).unwrap()
+        };
+        let full = read(false, false);
+        assert_eq!(full, read(true, false));
+        let conclusions = full["conclusions"].as_array().unwrap();
+        assert!(conclusions.iter().any(|c| c["positive"] == false));
+        for tag in ["+D", "+d"] {
+            assert!(
+                conclusions
+                    .iter()
+                    .any(|c| c["conclusion_type"] == tag && c["literal_spl"] == "(hat)")
+            );
+        }
+        let positive = read(false, true);
+        assert_eq!(positive, read(true, true));
+        assert!(
+            positive["conclusions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|c| c["positive"] == true)
+        );
+    }
+}
+
+#[test]
+fn concise_output_preserves_negation_windows_and_empty_results() {
+    let (_dir, path) = setup_theory_file(
+        "(given (during p 1 2)) (given (during p 3 4)) (given (not p))",
+        "spl",
+    );
+    spindle()
+        .arg("reason")
+        .arg(&path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(during (p) 1 2)"))
+        .stdout(predicate::str::contains("(during (p) 3 4)"))
+        .stdout(predicate::str::contains("(not (p))"));
+    spindle()
+        .args(["reason", "--stdin"])
+        .write_stdin("(normally cycle p p)")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No positive conclusions proved."));
+}
+
+#[test]
+fn concise_trust_uses_definite_proof_once() {
+    spindle()
+        .args(["reason", "--stdin", "--trust"])
+        .write_stdin("(trusts alice 0.8) (claims alice (given hat))")
+        .assert()
+        .success()
+        .stdout("Proved:\n\n  (hat) (trust: 0.80) [alice]\n\n");
+}
+
+#[test]
+fn modal_json_uses_spl_names_in_both_versions() {
+    let theory = "(given (must pay)) (given (may play)) (given (forbidden enter))
+                  (given (not (must report))) (given (must (not leave)))";
+    for version in [vec![], vec!["--v2"]] {
+        let output = spindle()
+            .args(["reason", "--stdin", "--json", "--positive"])
+            .args(version)
+            .write_stdin(theory)
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: Value = serde_json::from_slice(&output).unwrap();
+        let conclusions = json["conclusions"].as_array().unwrap();
+        for (functor, mode, outer, inner) in [
+            ("pay", "must", false, false),
+            ("play", "may", false, false),
+            ("enter", "forbidden", false, false),
+            ("report", "must", true, false),
+            ("leave", "must", false, true),
+        ] {
+            let literal = &conclusions
+                .iter()
+                .find(|c| c["literal_struct"]["functor"] == functor && c["conclusion_type"] == "+D")
+                .unwrap()["literal_struct"];
+            assert_eq!(
+                literal["mode"],
+                serde_json::json!({"name": mode, "negation": outer})
+            );
+            assert_eq!(literal["negated"], inner);
+        }
+    }
+}
+
+#[test]
+fn query_and_explain_json_share_readable_modal_names() {
+    for command in ["query", "explain"] {
+        let output = spindle()
+            .args([command, "(not (must pay))", "--stdin", "--json"])
+            .write_stdin("(given (not (must pay)))")
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone();
+        let json: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(
+            json["literal_struct"]["mode"],
+            serde_json::json!({"name": "must", "negation": true})
+        );
+        assert_eq!(json["literal_struct"]["negated"], false);
+    }
 }

@@ -41,6 +41,7 @@ fn legacy_expression(input: &str) -> Result<String, String> {
         let mut quoted = false;
         let mut escaped = false;
         let mut converted = String::new();
+        let mut argument_start = 0;
         for c in args.chars() {
             if escaped {
                 escaped = false;
@@ -49,10 +50,20 @@ fn legacy_expression(input: &str) -> Result<String, String> {
             } else if c == '"' {
                 quoted = !quoted;
             } else if c == ',' && !quoted {
+                if converted[argument_start..].trim().is_empty() {
+                    return Err("empty legacy literal argument".into());
+                }
                 converted.push(' ');
+                argument_start = converted.len();
                 continue;
             }
             converted.push(c);
+        }
+        if quoted || escaped {
+            return Err("unclosed quoted literal argument".into());
+        }
+        if argument_start > 0 && converted[argument_start..].trim().is_empty() {
+            return Err("empty legacy literal argument".into());
         }
         return Ok(format!("({} {converted})", &input[..pos]));
     }
@@ -96,6 +107,10 @@ mod tests {
             "(p ?x)",
             "p) (predicate x ()",
             "p q",
+            "p(,a)",
+            "p(a,)",
+            "p(a,,b)",
+            "p(a, ,b)",
         ] {
             assert!(parse_literal_input(input).is_err(), "{input}");
         }

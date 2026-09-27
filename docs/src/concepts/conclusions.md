@@ -128,36 +128,37 @@ prove unrelated literals.
 
 ## Reading Spindle Output
 
-```bash
-$ spindle reason penguin.spl
-+D bird
-+D penguin
-+d bird
-+d penguin
-+d -flies
--D flies
--D -flies
--d flies
+The default `spindle reason penguin.spl` lists proved literals once in SPL syntax.
+Use `--detailed` to inspect proof tags:
+
+```text
+$ spindle reason --detailed penguin.spl
+Conclusions:
+
+  +D (bird)
+  +D (penguin)
+  +d (bird)
+  +d (penguin)
+  +d (not (flies))
+  -D (flies)
+  -d (flies)
+  -D (not (flies))
 ```
 
 Interpretation:
-- `bird` and `penguin` are facts (both +D and +d)
-- `-flies` is defeasibly provable (penguin rule wins)
-- `flies` is not provable at any level
-- Neither `flies` nor `-flies` is definitely provable
+- `bird` and `penguin` are facts (both +D and +d).
+- `(not (flies))` is defeasibly provable (the penguin rule wins).
+- `flies` is not provable at either level.
+- Neither `flies` nor `(not (flies))` is definitely provable.
 
 ## Filtering Output
 
-The `--positive` flag restricts output to positive conclusions:
+The `--positive` flag filters detailed text or JSON to positive proof tags:
+
 ```bash
-spindle reason --positive penguin.spl
+spindle reason --detailed --positive penguin.spl
 ```
 
-Output:
-```
-+D bird
-+D penguin
-+d bird
-+d penguin
-+d -flies
-```
+This retains `+D` and `+d`, including the positive proof of `(not (flies))`.
+The default concise text view already shows only proved literals and merges
+multiple proof tags for the same literal.

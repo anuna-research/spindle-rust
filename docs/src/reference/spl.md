@@ -323,6 +323,11 @@ tooling projection — it never changes conclusions. See the
 
 ## Modal Operators
 
+The [strong-permission profile](../guides/modal.md#strong-permission-profile)
+defines modal conflicts and negation scope. `forbidden p` aliases `must (not p)`.
+`may p` is strong permission; opposite permissions coexist.
+`(not (must p))` differs from `(must (not p))`. Nested modalities are rejected.
+
 ### Obligation (`must`)
 
 ```spl

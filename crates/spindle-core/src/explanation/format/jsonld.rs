@@ -89,6 +89,7 @@ fn proof_node_to_jsonld(node: &ProofNode) -> serde_json::Value {
         "derivationType": match node.derivation_type {
             DerivationType::Definite => "definite",
             DerivationType::Defeasible => "defeasible",
+            DerivationType::DefeasibleRefutation => "defeasible_refutation",
         },
     });
 

@@ -1,6 +1,6 @@
 # Spindle Lean 4 Formal Verification
 
-This directory contains a complete formal verification of the Spindle defeasible logic engine in Lean 4.27.0 with Mathlib 4.27.0.
+This directory contains formal models and checked proofs for Spindle in Lean 4.27.0 with Mathlib 4.27.0. It does not establish whole-language Rust conformance.
 
 **Status:** 0 sorry, 0 custom axioms, 300+ proven theorems.
 
@@ -20,6 +20,18 @@ This directory contains a complete formal verification of the Spindle defeasible
   ```
 
 ## What Is Proven
+
+### Modal operators
+
+The [modal reference](MODAL.md) documents the single-head deontic model and
+theorems for prohibition normalization, opposition, scope, typed defense,
+finite closure, saturation, and derivability. Its completed-run theorem
+excludes positive proofs without productive support. Kernel-checked examples
+cover preferred permission, compatible opposite permissions, and the
+distinction between weak and strong permission.
+
+The modal oracle compares all four proof tags with Rust. This comparison is
+executable evidence, not a proof that the Rust implementation refines Lean.
 
 ### Aggregation contract
 

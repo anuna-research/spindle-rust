@@ -122,3 +122,19 @@ fn numeric_temporal_queries_and_invalid_literals() {
         .assert()
         .failure();
 }
+
+#[test]
+fn malformed_legacy_arguments_do_not_query_a_different_literal() {
+    for literal in ["p(,a)", "p(a,)", "p(a,,b)"] {
+        let output = cargo_bin_cmd!("spindle")
+            .args(["query", literal, "--stdin", "--json"])
+            .write_stdin("(given (p a)) (given (p a b))")
+            .assert()
+            .failure()
+            .get_output()
+            .stdout
+            .clone();
+        let error: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(error["error"]["code"], "INVALID_LITERAL");
+    }
+}

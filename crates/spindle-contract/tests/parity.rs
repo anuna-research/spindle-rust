@@ -274,3 +274,21 @@ fn test_stats_none_omitted() {
     // stats should be omitted when None (skip_serializing_if)
     assert!(!value.as_object().unwrap().contains_key("stats"));
 }
+
+#[test]
+fn standard_json_modes_use_spl_keywords_and_preserve_scope() {
+    use spindle_core::mode::Mode;
+    for (internal, expected) in [("O", "must"), ("P", "may"), ("F", "forbidden"), ("K", "K")] {
+        for negation in [false, true] {
+            let mode = Mode {
+                name: Some(internal.into()),
+                negation,
+            };
+            let value = serde_json::to_value(ModeJson::from(&mode)).unwrap();
+            assert_eq!(
+                value,
+                serde_json::json!({"name": expected, "negation": negation})
+            );
+        }
+    }
+}

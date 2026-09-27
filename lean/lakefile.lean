@@ -54,3 +54,7 @@ lean_exe TrustOracle where
 lean_exe AggregationOracle where
   root := `Spindle.DiffTest.AggregationOracle
   supportInterpreter := true
+
+lean_exe ModalOracle where
+  root := `Spindle.DiffTest.ModalOracle
+  supportInterpreter := true

@@ -13,7 +13,7 @@
 //! 3. Compute constructive +d/-d until no further proof can be added.
 //! 4. Emit derived tags; undecided cycles receive no synthetic negative tag.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -202,6 +202,9 @@ pub(crate) fn resolve_defeasible(
                     let should_discard = rule.body.iter().any(|bl| match bl.as_logic() {
                         Some(logic) => {
                             let b = logic.to_literal();
+                            if b.is_negative_modal() {
+                                return false; // Constructive refutation is handled at the sweep.
+                            }
                             if b.is_temporal() {
                                 // Temporal body: requires exactly this literal.
                                 // FamilyId excludes the window (as does Literal
@@ -258,33 +261,34 @@ pub(crate) fn resolve_defeasible(
                             &mut state.conclusions,
                         );
                         // Re-check complement (resolved attacker may unblock)
-                        let comp_head = head_id.complement();
-                        try_prove_defeasible(
-                            comp_head,
-                            indexed,
-                            theory,
-                            &state.definite_proven,
-                            &state.definite_disproven,
-                            &mut state.defeasible_proven,
-                            &mut state.defeasible_disproven,
-                            &state.defeasible_body_remaining,
-                            &state.rule_discarded,
-                            &mut state.projection_labels,
-                            &mut worklist,
-                            &mut state.conclusions,
-                        );
-                        try_disprove_defeasible(
-                            comp_head,
-                            indexed,
-                            theory,
-                            &state.definite_proven,
-                            &state.definite_disproven,
-                            &mut state.defeasible_proven,
-                            &mut state.defeasible_disproven,
-                            &state.defeasible_body_remaining,
-                            &state.rule_discarded,
-                            &mut worklist,
-                        );
+                        for comp_head in indexed.opponent_ids(head_id) {
+                            try_prove_defeasible(
+                                comp_head,
+                                indexed,
+                                theory,
+                                &state.definite_proven,
+                                &state.definite_disproven,
+                                &mut state.defeasible_proven,
+                                &mut state.defeasible_disproven,
+                                &state.defeasible_body_remaining,
+                                &state.rule_discarded,
+                                &mut state.projection_labels,
+                                &mut worklist,
+                                &mut state.conclusions,
+                            );
+                            try_disprove_defeasible(
+                                comp_head,
+                                indexed,
+                                theory,
+                                &state.definite_proven,
+                                &state.definite_disproven,
+                                &mut state.defeasible_proven,
+                                &mut state.defeasible_disproven,
+                                &state.defeasible_body_remaining,
+                                &state.rule_discarded,
+                                &mut worklist,
+                            );
+                        }
                     }
                 }
 
@@ -300,50 +304,52 @@ pub(crate) fn resolve_defeasible(
                         let head_id = indexed
                             .get_lit_id(rule.head_literal())
                             .expect("Head literal missing from index");
-                        let comp_head = head_id.complement();
-                        try_prove_defeasible(
-                            comp_head,
-                            indexed,
-                            theory,
-                            &state.definite_proven,
-                            &state.definite_disproven,
-                            &mut state.defeasible_proven,
-                            &mut state.defeasible_disproven,
-                            &state.defeasible_body_remaining,
-                            &state.rule_discarded,
-                            &mut state.projection_labels,
-                            &mut worklist,
-                            &mut state.conclusions,
-                        );
-                        try_disprove_defeasible(
-                            comp_head,
-                            indexed,
-                            theory,
-                            &state.definite_proven,
-                            &state.definite_disproven,
-                            &mut state.defeasible_proven,
-                            &mut state.defeasible_disproven,
-                            &state.defeasible_body_remaining,
-                            &state.rule_discarded,
-                            &mut worklist,
-                        );
+                        for comp_head in indexed.opponent_ids(head_id) {
+                            try_prove_defeasible(
+                                comp_head,
+                                indexed,
+                                theory,
+                                &state.definite_proven,
+                                &state.definite_disproven,
+                                &mut state.defeasible_proven,
+                                &mut state.defeasible_disproven,
+                                &state.defeasible_body_remaining,
+                                &state.rule_discarded,
+                                &mut state.projection_labels,
+                                &mut worklist,
+                                &mut state.conclusions,
+                            );
+                            try_disprove_defeasible(
+                                comp_head,
+                                indexed,
+                                theory,
+                                &state.definite_proven,
+                                &state.definite_disproven,
+                                &mut state.defeasible_proven,
+                                &mut state.defeasible_disproven,
+                                &state.defeasible_body_remaining,
+                                &state.rule_discarded,
+                                &mut worklist,
+                            );
+                        }
                     }
                 }
 
                 // q being +d may cause ~q to become -d
-                let comp_id = q_id.complement();
-                try_disprove_defeasible(
-                    comp_id,
-                    indexed,
-                    theory,
-                    &state.definite_proven,
-                    &state.definite_disproven,
-                    &mut state.defeasible_proven,
-                    &mut state.defeasible_disproven,
-                    &state.defeasible_body_remaining,
-                    &state.rule_discarded,
-                    &mut worklist,
-                );
+                for comp_id in indexed.opponent_ids(q_id) {
+                    try_disprove_defeasible(
+                        comp_id,
+                        indexed,
+                        theory,
+                        &state.definite_proven,
+                        &state.definite_disproven,
+                        &mut state.defeasible_proven,
+                        &mut state.defeasible_disproven,
+                        &state.defeasible_body_remaining,
+                        &state.rule_discarded,
+                        &mut worklist,
+                    );
+                }
             } else {
                 // q just proved -d
                 // 1. Rules with q in body are now discarded → try -d for their heads
@@ -373,9 +379,29 @@ pub(crate) fn resolve_defeasible(
                     }
 
                     // Rule is now discarded as attacker → re-check complement
-                    let comp_head = head_id.complement();
+                    for comp_head in indexed.opponent_ids(head_id) {
+                        try_prove_defeasible(
+                            comp_head,
+                            indexed,
+                            theory,
+                            &state.definite_proven,
+                            &state.definite_disproven,
+                            &mut state.defeasible_proven,
+                            &mut state.defeasible_disproven,
+                            &state.defeasible_body_remaining,
+                            &state.rule_discarded,
+                            &mut state.projection_labels,
+                            &mut worklist,
+                            &mut state.conclusions,
+                        );
+                    }
+                }
+
+                // q being -d means attackers using q in body are discarded
+                // → try +d for complement(q)
+                for comp_id in indexed.opponent_ids(q_id) {
                     try_prove_defeasible(
-                        comp_head,
+                        comp_id,
                         indexed,
                         theory,
                         &state.definite_proven,
@@ -389,24 +415,53 @@ pub(crate) fn resolve_defeasible(
                         &mut state.conclusions,
                     );
                 }
+            }
+        }
 
-                // q being -d means attackers using q in body are discarded
-                // → try +d for complement(q)
-                let comp_id = q_id.complement();
-                try_prove_defeasible(
-                    comp_id,
-                    indexed,
-                    theory,
-                    &state.definite_proven,
-                    &state.definite_disproven,
-                    &mut state.defeasible_proven,
-                    &mut state.defeasible_disproven,
-                    &state.defeasible_body_remaining,
-                    &state.rule_discarded,
-                    &mut state.projection_labels,
-                    &mut worklist,
-                    &mut state.conclusions,
-                );
+        // Negative modal premises consume constructive -d proofs, not absence
+        // of +d and not the inner-negated obligation/permission.
+        for rule in theory.rules() {
+            for (slot, body) in rule.body.iter().enumerate() {
+                let Some(logic) = body.as_logic() else {
+                    continue;
+                };
+                let literal = logic.to_literal();
+                if !literal.is_negative_modal() {
+                    continue;
+                }
+                let positive = literal.outer_negation();
+                let members: Vec<_> = all_ids
+                    .iter()
+                    .copied()
+                    .filter(|&id| {
+                        crate::query::semantic_literal_matches(
+                            &positive,
+                            &indexed.resolve_literal(id),
+                        )
+                    })
+                    .collect();
+                if !members.is_empty()
+                    && members
+                        .iter()
+                        .all(|&id| state.defeasible_disproven.contains(id))
+                {
+                    let slots = state
+                        .defeasible_slots_satisfied
+                        .get_mut(rule.label.as_str())
+                        .unwrap();
+                    if !slots.contains(slot) {
+                        slots.insert(slot);
+                        *state
+                            .defeasible_body_remaining
+                            .get_mut(rule.label.as_str())
+                            .unwrap() -= 1;
+                    }
+                } else if members
+                    .iter()
+                    .any(|&id| state.defeasible_proven.contains(id))
+                {
+                    *state.rule_discarded.get_mut(rule.label.as_str()).unwrap() = true;
+                }
             }
         }
 
@@ -490,7 +545,7 @@ fn try_prove_defeasible(
     }
     let already_proven = defeasible_proven.contains(q);
 
-    let nq = q.complement();
+    let opponents = indexed.opponent_ids(q);
 
     // Condition (1): ∃r ∈ Rsd[q] that is applicable
     let supporting_rules = indexed.rules_with_head_id(q);
@@ -511,12 +566,16 @@ fn try_prove_defeasible(
     }
 
     // Condition (2): -D ~q (complement is not definitely proved)
-    if !definite_proven.contains(q) && !definite_disproven.contains(nq) {
+    if !definite_proven.contains(q)
+        && !opponents
+            .iter()
+            .all(|&opponent| definite_disproven.contains(opponent))
+    {
         return;
     }
 
     // Condition (3): every attacker for ~q is countered
-    let attacking_rules = indexed.rules_with_head_id(nq);
+    let attacking_rules = indexed.attacking_rules(q);
     let applicable_supporters: Vec<&crate::rule::Rule> = supporting_rules
         .iter()
         .filter(|r| {
@@ -556,9 +615,16 @@ fn try_prove_defeasible(
             .unwrap_or(0);
 
         // Check if any applicable supporter is superior to this attacker.
-        let defeated_by_superior = applicable_supporters
-            .iter()
-            .any(|t| theory.is_superior(t.template_label(), attacker.template_label()));
+        let defeated_by_superior = indexed.defending_rules(q, attacker).iter().any(|t| {
+            body_remaining
+                .get(t.label.as_str())
+                .is_some_and(|&rem| rem == 0)
+                && !rule_discarded
+                    .get(t.label.as_str())
+                    .copied()
+                    .unwrap_or(false)
+                && theory.is_superior(t.template_label(), attacker.template_label())
+        });
 
         if att_remaining > 0 {
             // Attacker with undecided body: if a superior applicable rule
@@ -589,31 +655,32 @@ fn try_prove_defeasible(
 
     // All conditions met.
     //
-    // Emit one +d conclusion per distinct grounded supporter head literal
+    // Emit one +d conclusion per semantic grounded supporter head literal
     // (e.g., distinct temporal windows). Use deterministic ordering so output
     // does not depend on supporter discovery order.
     //
     // If q is already +d, keep emitting any newly-applicable temporal windows.
-    let mut existing_positive_q: FxHashSet<String> = conclusions
+    let mut existing_positive_q: FxHashSet<_> = conclusions
         .iter()
         .filter(|c| {
             c.conclusion_type == ConclusionType::DefeasiblyProvable
                 && indexed.get_lit_id(&c.literal) == Some(q)
         })
-        .map(|c| c.literal.to_spl())
+        .map(|c| (c.literal.family_id(), c.literal.temporal.clone()))
         .collect();
 
     if applicable_supporters.is_empty() {
         let lit = indexed.resolve_literal(q);
-        if existing_positive_q.insert(lit.to_spl()) {
+        if existing_positive_q.insert((lit.family_id(), lit.temporal.clone())) {
             conclusions.push(Conclusion::defeasibly_provable(lit));
         }
     } else {
         // For duplicate supporters with the same grounded head literal, keep the
         // lexicographically-smallest label for deterministic attribution.
-        let mut supporters_by_literal: BTreeMap<String, &crate::rule::Rule> = BTreeMap::new();
+        let mut supporters_by_literal: FxHashMap<_, &crate::rule::Rule> = FxHashMap::default();
         for supporter in applicable_supporters {
-            let literal_key = supporter.head_literal().to_spl();
+            let head = supporter.head_literal();
+            let literal_key = (head.family_id(), head.temporal.clone());
             supporters_by_literal
                 .entry(literal_key)
                 .and_modify(|selected| {
@@ -624,9 +691,11 @@ fn try_prove_defeasible(
                 .or_insert(supporter);
         }
 
-        for supporter in supporters_by_literal.values() {
+        let mut supporters: Vec<_> = supporters_by_literal.into_values().collect();
+        supporters.sort_by(|a, b| a.label.cmp(&b.label));
+        for supporter in supporters {
             let lit = supporter.head_literal().clone();
-            if existing_positive_q.insert(lit.to_spl()) {
+            if existing_positive_q.insert((lit.family_id(), lit.temporal.clone())) {
                 conclusions.push(Conclusion::defeasibly_provable(lit).with_rule(&supporter.label));
             }
         }
@@ -661,10 +730,13 @@ fn try_disprove_defeasible(
         return;
     }
 
-    let nq = q.complement();
+    let opponents = indexed.opponent_ids(q);
 
     // Disjunct (2): +D ~q → -d q
-    if definite_proven.contains(nq) {
+    if opponents
+        .iter()
+        .any(|&opponent| definite_proven.contains(opponent))
+    {
         defeasible_disproven.insert(q);
         worklist.push_back((q, false));
         return;
@@ -697,7 +769,7 @@ fn try_disprove_defeasible(
     }
 
     // Disjunct (3): ∃ applicable attacker s that no t in Rsd[q] can beat
-    let attacking_rules = indexed.rules_with_head_id(nq);
+    let attacking_rules = indexed.attacking_rules(q);
     for attacker in &attacking_rules {
         let att_remaining = body_remaining
             .get(attacker.label.as_str())
@@ -722,7 +794,8 @@ fn try_disprove_defeasible(
 
         // Attacker s is applicable. Check: ∀t ∈ Rsd[q]: t discarded OR ¬(t > s)
         // But if any t is undecided (not discarded, not applicable), can't conclude
-        let any_t_undecided = sd_rules.iter().any(|t| {
+        let defenders: Vec<_> = indexed.defending_rules(q, attacker).into_iter().collect();
+        let any_t_undecided = defenders.iter().any(|t| {
             let t_discarded = rule_discarded
                 .get(t.label.as_str())
                 .copied()
@@ -737,7 +810,7 @@ fn try_disprove_defeasible(
             continue; // can't conclude yet for this attacker
         }
 
-        let all_t_fail = sd_rules.iter().all(|t| {
+        let all_t_fail = defenders.iter().all(|t| {
             let t_discarded = rule_discarded
                 .get(t.label.as_str())
                 .copied()

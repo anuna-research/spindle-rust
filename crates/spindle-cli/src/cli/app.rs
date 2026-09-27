@@ -46,9 +46,12 @@ pub(crate) enum Commands {
     Reason {
         /// Input file (mutually exclusive with --stdin)
         file: Option<PathBuf>,
-        /// Only show positive conclusions
+        /// Only show positive conclusions in detailed or JSON output
         #[arg(long)]
         positive: bool,
+        /// Show all four proof tags in text output (JSON is unchanged)
+        #[arg(long)]
+        detailed: bool,
         /// Output in JSON format
         #[arg(long)]
         json: bool,
