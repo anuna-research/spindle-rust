@@ -51,6 +51,21 @@ hypotheses. The aggregation guide describes the supported fragment in detail.
 The [modal verification reference](MODAL.md) describes the obligation,
 permission, and prohibition proofs and their Rust differential oracle.
 
+## Modal oracle
+
+`ModalOracle` executes the normalized single-head deontic reference model.
+It covers obligation (`must`), explicit permission (`may`), and prohibition
+(`forbidden`, an alias for obligation not to act). The modal suite compares all
+four proof tags across conflicts, priorities, defeaters, negative premises,
+cycles, and temporal families. See [MODAL.md](MODAL.md) for theorem statements
+and the boundary between model proofs and Rust comparison evidence.
+
+```sh
+# From the repository root
+scripts/check-lean-verification.sh
+cargo test -p spindle-core --test lean_modal_oracle_difftest -- --ignored --nocapture
+```
+
 ## Aggregation oracle
 
 `AggregationOracle` invokes the verified `evaluateProgram` entry point with

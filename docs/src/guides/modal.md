@@ -27,7 +27,8 @@ Spindle provides three built-in deontic operators:
 
 ### Obligation (`must`)
 
-An obligation states a normative duty. If `(must pay)` is concluded, then there is an obligation to pay.
+An obligation states a normative duty. `(must pay)` means **obliged to pay**.
+Obligation is already represented by `must`; `may` expresses permission.
 
 ### Permission (`may`)
 
@@ -128,7 +129,9 @@ The Rust `Literal` structural equality API retains spelling distinctions;
 Review these theories before upgrading. Pin the earlier binary to restore earlier interpretation.
 The Lean modal model proves modal laws and finite closure properties.
 Its oracle compares all four tags against Rust; this is not a Rust refinement proof.
-See `lean/MODAL.md` in the repository for the exact guarantees and limitations.
+See the [modal proof reference](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/MODAL.md)
+for the exact guarantees and limitations, and
+[verification commands](check-verification.md) to run the proofs and oracle comparisons.
 
 ## SPL Syntax
 

@@ -15,6 +15,7 @@ For example:
 
 ```sh
 cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
+cargo test -p spindle-core --test lean_modal_oracle_difftest -- --ignored --nocapture
 cargo test -p spindle-core --test lean_arith_oracle_difftest -- --ignored
 ```
 
@@ -25,6 +26,7 @@ The repository guides record theorem statements, hypotheses, and the full suite 
 
 - [Lean guide](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/README.md)
 - [Proof catalogue](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/PROOFS.md)
+- [Modal proof guide](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/MODAL.md)
 - [Aggregate proof guide](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/lean/AGGREGATION.md)
 
 [Verification](../internals/verification.md) explains the scope of these checks.

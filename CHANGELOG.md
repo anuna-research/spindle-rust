@@ -8,6 +8,12 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
+- **Lean modal verification**: single-head deontic model with proofs of
+  prohibition normalization, opposition, negation scope, typed defense, finite
+  closure, saturation, and derivability. Kernel-checked examples distinguish
+  weak and strong permission. `ModalOracle` compares all four proof tags with
+  Rust in both CI configurations; this is model verification and executable
+  comparison evidence, not a Rust refinement proof.
 - **Predicate identity**: public `PredicateKey` and `predicate_key()` accessors
   on `Literal` and `BodyLogicLiteral` expose functor plus arity, with diagnostic
   `functor/arity` formatting. Argument values, negation, modality, and temporal
@@ -103,6 +109,15 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
+- **Breaking — deontic semantics (#44)**: the default single-head strong-permission
+  profile makes `(forbidden p)` equivalent to `(must (not p))`. Permission and
+  prohibition compete through preferences, while opposite permissions can coexist.
+  Outer modal negation stays distinct from inner negation; negative modal premises
+  can consume constructive refutation, and nested modalities are rejected.
+  Negative output can include implicit opponents and canonical prohibition aliases.
+  Explanations add `defeasible_refutation` evidence; conflict diagnostics use
+  `ModalOpposition`. See the
+  [modal migration notes](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/docs/src/guides/modal.md#compatibility).
 - **Reasoning semantics**: Rust and the standard Lean oracles now follow
   traditional ambiguity-blocking DL(∂) with four constructive proof tags.
   Unsupported cycles remain undecided instead of receiving automatic negative
