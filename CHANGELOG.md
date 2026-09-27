@@ -7,6 +7,8 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-27
+
 ### Added
 - **CLI/WASM interfaces** ([#46](https://git.anuna.io/anuna-research/spindle-rust/pulls/46)):
   CLI `vocabulary`, `what-if --given`, and `abduce` commands; WASM
@@ -40,6 +42,50 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   weak and strong permission. `ModalOracle` compares all four proof tags with
   Rust in both CI configurations; this is model verification and executable
   comparison evidence, not a Rust refinement proof.
+
+### Changed
+- **Query literal input**: CLI and WASM share ground SPL literal parsing,
+  preserving numeric types, quoted symbols, modalities and temporal windows.
+  Legacy comma notation remains supported, but `p(2)` now has an integer
+  argument; use `(p "2")` for a numeric-looking symbol. Malformed or variable
+  inputs are rejected.
+- What-if and raw abduction results retain their display strings and add typed
+  literal fields. CLI capabilities now advertise the new commands, trust
+  details, vocabulary, v2 reasoning and portable extensions.
+- **CLI text output**: `reason` now lists proved literals once in canonical SPL
+  syntax. `--detailed` shows all four proof tags; `--positive` filters detailed
+  text or JSON. JSON v1/v2 fields and default full conclusion lists are unchanged.
+- **Breaking — JSON modal names**: shared literal DTOs now emit `must`, `may`,
+  and `forbidden` instead of `O`, `P`, and `F` in `mode.name`, including CLI
+  commands and structured WASM output. Custom names and both negation fields
+  are preserved. Envelope schema identifiers remain unchanged; consumers
+  matching the old names must migrate.
+- **Breaking — deontic semantics (#44)**: the default single-head strong-permission
+  profile makes `(forbidden p)` equivalent to `(must (not p))`. Permission and
+  prohibition compete through preferences, while opposite permissions can coexist.
+  Obligation-headed defeaters can block obligations but cannot attack explicit
+  permissions (Governatori et al., Definition 10).
+  Outer modal negation stays distinct from inner negation; negative modal premises
+  can consume constructive refutation, and nested modalities are rejected.
+  Negative output can include implicit opponents and canonical prohibition aliases.
+  Explanations add `defeasible_refutation` evidence; conflict diagnostics use
+  `ModalOpposition`. See the
+  [modal migration notes](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/docs/src/guides/modal.md#compatibility).
+
+### Fixed
+- Empty legacy comma arguments such as `p(a,,b)` now report `INVALID_LITERAL`
+  in the CLI and throw in WASM, instead of silently querying `p(a,b)`.
+- Grounded rule labels and trust challenge ordering are stable across CLI/WASM
+  runs, making proof references and diminishment steps reproducible.
+- Negative modal premises now ground independently of their position relative
+  to binding premises. Unbound refutation variables still cannot invent values.
+- Prohibition aliases such as `(forbidden p)` and `(must (not p))` emit one
+  defeasible positive conclusion per semantic literal and temporal window,
+  including detailed and JSON output.
+
+## [0.4.0] - 2026-09-17
+
+### Added
 - **Predicate identity**: public `PredicateKey` and `predicate_key()` accessors
   on `Literal` and `BodyLogicLiteral` expose functor plus arity, with diagnostic
   `functor/arity` formatting. Argument values, negation, modality, and temporal
@@ -101,67 +147,8 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - Additive `spindle.vocabulary/1` JSON DTOs in `spindle-contract`.
   - `Theory::metadata()` retains its label-keyed API; predicate metadata is
     available separately through `Theory::predicate_metadata()`.
-- **Arithmetic module** (SPEC-017): full arithmetic expression support in SPL.
-  - `Term` enum with `Symbol`, `Integer`, `Decimal`, `Float` variants.
-  - `FiniteFloat` wrapper: rejects NaN/Inf, normalizes `-0.0`, safe for `Eq`/`Hash`.
-  - `ArithExpr` AST with `NaryOp` (`+`, `-`, `*`, `/`, `min`, `max`),
-    `BinOp` (`div`, `rem`, `**`), and `UnaryOp` (`abs`).
-  - `ArithConstraint`: `bind` variable binding and comparison guards
-    (`=`, `!=`, `<`, `>`, `<=`, `>=`).
-  - `BodyLiteral`, `BodyLogicLiteral`, and `BodyArg` types for mixed
-    logic/arithmetic rule bodies.
-  - Cross-type numeric matching in grounding (REQ-010/CON-005):
-    `Integer(2)` matches `Decimal(2.0)` matches `Float(2.0)`.
-  - Type promotion chain: Integer -> Decimal -> Float.
-  - `rust_decimal` dependency for fixed-precision decimal arithmetic.
-- **SPL parser extensions**:
-  - Arithmetic expression parser for `+`, `-`, `*`, `/`, `div`, `rem`,
-    `**`, `abs`, `min`, `max`.
-  - `(bind ?var expr)` and comparison guard parsing in rule bodies.
-  - Arithmetic expressions in body literal argument positions.
-  - Numeric literal detection in predicate arguments.
-  - Lexer extended to accept operator characters in atoms.
-  - Parse-time guard checks: reserved keyword rejection (REQ-008),
-    arithmetic in head rejection (REQ-009), negated arithmetic
-    rejection (REQ-011).
-- **v2 JSON output** (REQ-012/CON-006):
-  - `--v2` flag on CLI, `reasonV2` method on WASM.
-  - Typed `Term` arguments in JSON schema (`spindle.reason.v2`).
-- **Test suites**:
-  - Unit tests for `Term`, `ArithExpr`, and type promotion (TEST-001, TEST-002, TEST-005).
-  - Arithmetic parsing and guard enforcement integration tests.
-  - Grounding integration tests with arithmetic pipeline.
-  - Worked examples, NFR, and proptest suites for arithmetic.
-  - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
-- **Query literal input**: CLI and WASM share ground SPL literal parsing,
-  preserving numeric types, quoted symbols, modalities and temporal windows.
-  Legacy comma notation remains supported, but `p(2)` now has an integer
-  argument; use `(p "2")` for a numeric-looking symbol. Malformed or variable
-  inputs are rejected.
-- What-if and raw abduction results retain their display strings and add typed
-  literal fields. CLI capabilities now advertise the new commands, trust
-  details, vocabulary, v2 reasoning and portable extensions.
-- **CLI text output**: `reason` now lists proved literals once in canonical SPL
-  syntax. `--detailed` shows all four proof tags; `--positive` filters detailed
-  text or JSON. JSON v1/v2 fields and default full conclusion lists are unchanged.
-- **Breaking — JSON modal names**: shared literal DTOs now emit `must`, `may`,
-  and `forbidden` instead of `O`, `P`, and `F` in `mode.name`, including CLI
-  commands and structured WASM output. Custom names and both negation fields
-  are preserved. Envelope schema identifiers remain unchanged; consumers
-  matching the old names must migrate.
-- **Breaking — deontic semantics (#44)**: the default single-head strong-permission
-  profile makes `(forbidden p)` equivalent to `(must (not p))`. Permission and
-  prohibition compete through preferences, while opposite permissions can coexist.
-  Obligation-headed defeaters can block obligations but cannot attack explicit
-  permissions (Governatori et al., Definition 10).
-  Outer modal negation stays distinct from inner negation; negative modal premises
-  can consume constructive refutation, and nested modalities are rejected.
-  Negative output can include implicit opponents and canonical prohibition aliases.
-  Explanations add `defeasible_refutation` evidence; conflict diagnostics use
-  `ModalOpposition`. See the
-  [modal migration notes](https://git.anuna.io/anuna-research/spindle-rust/src/branch/main/docs/src/guides/modal.md#compatibility).
 - **Reasoning semantics**: Rust and the standard Lean oracles now follow
   traditional ambiguity-blocking DL(∂) with four constructive proof tags.
   Unsupported cycles remain undecided instead of receiving automatic negative
@@ -198,24 +185,8 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - **Breaking**: `AbductionSolution.rules_used` now lists only the rules that
   produce that specific solution's fact-set, not every rule whose head matches
   the goal.
-- **Breaking**: `From<NumericValue> for Term` replaced with `TryFrom<NumericValue> for Term`.
-  Non-finite floats (NaN, Inf) now return an error instead of silently coercing to `0.0`.
-- `Literal::predicate_ids` migrated from `Vec<SymbolId>` to `Vec<Term>`.
-- `Substitution::terms` migrated from `SymbolId` values to `Term` values.
-- `RuleBody` migrated from `SmallVec<[Literal; 4]>` to `SmallVec<[BodyLiteral; 4]>`.
-- Body literals evaluated in source order with threaded substitutions.
-- Temporal variables rejected as arithmetic operands (REQ-006).
 
 ### Fixed
-- Empty legacy comma arguments such as `p(a,,b)` now report `INVALID_LITERAL`
-  in the CLI and throw in WASM, instead of silently querying `p(a,b)`.
-- Grounded rule labels and trust challenge ordering are stable across CLI/WASM
-  runs, making proof references and diminishment steps reproducible.
-- Negative modal premises now ground independently of their position relative
-  to binding premises. Unbound refutation variables still cannot invent values.
-- Prohibition aliases such as `(forbidden p)` and `(must (not p))` emit one
-  defeasible positive conclusion per semantic literal and temporal window,
-  including detailed and JSON output.
 - Documentation examples now use complementary defeater heads and defeasible
   defaults correctly. Temporal documentation describes current interval variables,
   Allen constraints, and family matching instead of the removed bridge stage.
@@ -239,6 +210,53 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   checks reject out-of-range values.
 - Reasoning tracks repeated body occurrences per slot and discards attackers
   with disproved premises consistently.
+
+## [0.3.0] - 2026-02-26
+
+### Added
+- **Arithmetic module** (SPEC-017): full arithmetic expression support in SPL.
+  - `Term` enum with `Symbol`, `Integer`, `Decimal`, `Float` variants.
+  - `FiniteFloat` wrapper: rejects NaN/Inf, normalizes `-0.0`, safe for `Eq`/`Hash`.
+  - `ArithExpr` AST with `NaryOp` (`+`, `-`, `*`, `/`, `min`, `max`),
+    `BinOp` (`div`, `rem`, `**`), and `UnaryOp` (`abs`).
+  - `ArithConstraint`: `bind` variable binding and comparison guards
+    (`=`, `!=`, `<`, `>`, `<=`, `>=`).
+  - `BodyLiteral`, `BodyLogicLiteral`, and `BodyArg` types for mixed
+    logic/arithmetic rule bodies.
+  - Cross-type numeric matching in grounding (REQ-010/CON-005):
+    `Integer(2)` matches `Decimal(2.0)` matches `Float(2.0)`.
+  - Type promotion chain: Integer -> Decimal -> Float.
+  - `rust_decimal` dependency for fixed-precision decimal arithmetic.
+- **SPL parser extensions**:
+  - Arithmetic expression parser for `+`, `-`, `*`, `/`, `div`, `rem`,
+    `**`, `abs`, `min`, `max`.
+  - `(bind ?var expr)` and comparison guard parsing in rule bodies.
+  - Arithmetic expressions in body literal argument positions.
+  - Numeric literal detection in predicate arguments.
+  - Lexer extended to accept operator characters in atoms.
+  - Parse-time guard checks: reserved keyword rejection (REQ-008),
+    arithmetic in head rejection (REQ-009), negated arithmetic
+    rejection (REQ-011).
+- **v2 JSON output** (REQ-012/CON-006):
+  - `--v2` flag on CLI, `reasonV2` method on WASM.
+  - Typed `Term` arguments in JSON schema (`spindle.reason.v2`).
+- **Test suites**:
+  - Unit tests for `Term`, `ArithExpr`, and type promotion (TEST-001, TEST-002, TEST-005).
+  - Arithmetic parsing and guard enforcement integration tests.
+  - Grounding integration tests with arithmetic pipeline.
+  - Worked examples, NFR, and proptest suites for arithmetic.
+  - v2 JSON typed argument serialization tests (TEST-012).
+
+### Changed
+- **Breaking**: `From<NumericValue> for Term` replaced with `TryFrom<NumericValue> for Term`.
+  Non-finite floats (NaN, Inf) now return an error instead of silently coercing to `0.0`.
+- `Literal::predicate_ids` migrated from `Vec<SymbolId>` to `Vec<Term>`.
+- `Substitution::terms` migrated from `SymbolId` values to `Term` values.
+- `RuleBody` migrated from `SmallVec<[Literal; 4]>` to `SmallVec<[BodyLiteral; 4]>`.
+- Body literals evaluated in source order with threaded substitutions.
+- Temporal variables rejected as arithmetic operands (REQ-006).
+
+### Fixed
 - `FiniteFloat` serde deserialization now validates through `FiniteFloat::new`,
   preventing non-canonical values (`-0.0`) and non-finite values from bypassing
   type invariants.
