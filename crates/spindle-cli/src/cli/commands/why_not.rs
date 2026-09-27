@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use spindle_core::pipeline::{PrepareOptions, prepare};
 use spindle_core::query::{QueryStatus, query, why_not};
-use spindle_core::temporal::TimePoint;
 
 use crate::cli::error::{CliError, Diagnostic};
 use crate::cli::input::{load_theory_source, parse_literal_arg, resolve_theory_source};
@@ -35,15 +34,11 @@ pub(crate) fn run_why_not(
     literal: &str,
     json: bool,
     stdin: bool,
-    reference_time: Option<TimePoint>,
+    opts: PrepareOptions,
 ) -> Result<CommandOutput, CliError> {
     let source = resolve_theory_source(file, stdin)?;
     let theory = load_theory_source(&source)?;
 
-    let opts = PrepareOptions {
-        reference_time,
-        ..Default::default()
-    };
     let prepared = prepare(&theory, opts).map_err(|e| {
         CliError::execution(
             "PREPARATION_ERROR",

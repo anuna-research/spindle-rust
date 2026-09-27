@@ -4,7 +4,12 @@
 	"title": "spindle.capabilities.v1",
 	"type": "object",
 	"additionalProperties": false,
-	"required": ["schema_version", "commands", "features", "schemas"],
+	"required": [
+		"schema_version",
+		"commands",
+		"features",
+		"schemas"
+	],
 	"properties": {
 		"schema_version": {
 			"const": "spindle.capabilities.v1"
@@ -13,7 +18,20 @@
 			"type": "array",
 			"items": {
 				"type": "string",
-				"enum": ["reason", "query", "requires", "explain", "why-not"]
+				"enum": [
+					"reason",
+					"query",
+					"requires",
+					"explain",
+					"why-not",
+					"vocabulary",
+					"what-if",
+					"abduce",
+					"validate",
+					"stats",
+					"capabilities",
+					"explain-code"
+				]
 			},
 			"uniqueItems": true
 		},
@@ -46,13 +64,40 @@
 				},
 				"reason_json": {
 					"type": "boolean"
+				},
+				"reason_v2": {
+					"type": "boolean"
+				},
+				"trust_weights": {
+					"type": "boolean"
+				},
+				"trust_details": {
+					"type": "boolean"
+				},
+				"vocabulary": {
+					"type": "boolean"
+				},
+				"portable_extensions": {
+					"type": "boolean"
+				},
+				"what_if": {
+					"type": "boolean"
+				},
+				"abduce": {
+					"type": "boolean"
 				}
 			}
 		},
 		"schemas": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["reason", "query", "requires", "explain", "why_not"],
+			"required": [
+				"reason",
+				"query",
+				"requires",
+				"explain",
+				"why_not"
+			],
 			"properties": {
 				"reason": {
 					"const": "spindle.reason.v1"
@@ -60,14 +105,20 @@
 				"query": {
 					"const": "spindle.query.v1"
 				},
-					"requires": {
-						"const": "spindle.requires.v2"
-					},
+				"requires": {
+					"const": "spindle.requires.v2"
+				},
 				"explain": {
 					"const": "spindle.explain.v1"
 				},
 				"why_not": {
 					"const": "spindle.why_not.v1"
+				},
+				"reason_v2": {
+					"const": "spindle.reason.v2"
+				},
+				"vocabulary": {
+					"const": "spindle.vocabulary/1"
 				}
 			}
 		}

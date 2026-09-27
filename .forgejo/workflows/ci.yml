@@ -81,8 +81,22 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install Node
+        uses: https://github.com/actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test WASM under Node
+        run: cd crates/spindle-wasm && wasm-pack test --node
+
       - name: Build WASM
         run: cd crates/spindle-wasm && wasm-pack build --target web --release
+
+      - name: Check CLI and WASM output parity
+        run: |
+          cargo build -p spindle-cli
+          wasm-pack build crates/spindle-wasm --target nodejs --out-dir /tmp/spindle-node
+          node scripts/check-interface-parity.cjs /tmp/spindle-node/spindle_wasm.js
 
       # Forgejo uses the v3 artifact protocol; upstream v4 requires GitHub.
       - name: Upload WASM artifact

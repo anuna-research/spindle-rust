@@ -19,11 +19,20 @@ struct FeaturesInfo {
     trust_explain_v1: bool,
     at: bool,
     reason_json: bool,
+    reason_v2: bool,
+    trust_weights: bool,
+    trust_details: bool,
+    vocabulary: bool,
+    portable_extensions: bool,
+    what_if: bool,
+    abduce: bool,
 }
 
 #[derive(serde::Serialize)]
 struct SchemasInfo {
     reason: String,
+    reason_v2: String,
+    vocabulary: String,
     query: String,
     requires: String,
     explain: String,
@@ -40,6 +49,13 @@ pub(crate) fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
                 "requires".to_string(),
                 "explain".to_string(),
                 "why-not".to_string(),
+                "vocabulary".to_string(),
+                "what-if".to_string(),
+                "abduce".to_string(),
+                "validate".to_string(),
+                "stats".to_string(),
+                "capabilities".to_string(),
+                "explain-code".to_string(),
             ],
             features: FeaturesInfo {
                 stdin: true,
@@ -48,9 +64,18 @@ pub(crate) fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
                 trust_explain_v1: false,
                 at: true,
                 reason_json: true,
+                reason_v2: true,
+                trust_weights: true,
+                trust_details: true,
+                vocabulary: true,
+                portable_extensions: true,
+                what_if: true,
+                abduce: true,
             },
             schemas: SchemasInfo {
                 reason: "spindle.reason.v1".to_string(),
+                reason_v2: "spindle.reason.v2".to_string(),
+                vocabulary: "spindle.vocabulary/1".to_string(),
                 query: "spindle.query.v1".to_string(),
                 requires: "spindle.requires.v2".to_string(),
                 explain: "spindle.explain.v1".to_string(),
@@ -61,15 +86,17 @@ pub(crate) fn run_capabilities(json: bool) -> Result<CommandOutput, CliError> {
     } else {
         let mut text = String::new();
         text.push_str("Spindle Capabilities:\n\n");
-        text.push_str("Commands: reason, query, requires, explain, why-not\n\n");
+        text.push_str("Commands: reason, query, requires, explain, why-not, vocabulary, what-if, abduce, validate, stats, capabilities, explain-code\n\n");
         text.push_str("Features:\n");
         text.push_str("  --stdin: yes\n");
         text.push_str("  --at: yes\n");
         text.push_str("  --json: yes\n");
+        text.push_str("  --v2: yes\n  --trust (including diminishment and thresholds): yes\n  --extensions: yes\n");
         text.push_str("  Trust overlay: no\n");
         text.push_str("  Given flags: no\n\n");
         text.push_str("Schema versions:\n");
         text.push_str("  reason: spindle.reason.v1\n");
+        text.push_str("  reason_v2: spindle.reason.v2\n  vocabulary: spindle.vocabulary/1\n");
         text.push_str("  query: spindle.query.v1\n");
         text.push_str("  requires: spindle.requires.v2\n");
         text.push_str("  explain: spindle.explain.v1\n");

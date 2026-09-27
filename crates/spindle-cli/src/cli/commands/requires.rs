@@ -3,60 +3,16 @@
 use std::path::PathBuf;
 
 use spindle_core::pipeline::{PrepareOptions, prepare};
-use spindle_core::query::{
-    DEFAULT_MAX_RAW_CANDIDATES, RequiresOptions, RequiresSearchStatus, requires_with_options,
-};
-use spindle_core::temporal::TimePoint;
+use spindle_core::query::{DEFAULT_MAX_RAW_CANDIDATES, RequiresOptions, requires_with_options};
 
-use crate::cli::error::{CliError, Diagnostic};
+use crate::cli::error::CliError;
 use crate::cli::input::{load_theory_source, parse_literal_arg, resolve_theory_source};
-use crate::cli::output::{CommandOutput, LiteralStructJson, TrustPayload};
-
-#[derive(serde::Serialize)]
-struct RequiresOutput {
-    schema_version: String,
-    query: RequiresQuery,
-    satisfied: bool,
-    solutions: Vec<RequiresSolution>,
-    verification_mode: String,
-    search_status: String,
-    verification: RequiresVerification,
-    evaluated_at: Option<String>,
-    trust: Option<TrustPayload>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    truncated: Option<TruncatedInfo>,
-    diagnostics: Vec<Diagnostic>,
-}
-
-#[derive(serde::Serialize)]
-struct RequiresQuery {
-    goal_spl: String,
-    goal_struct: LiteralStructJson,
-}
+use crate::cli::output::CommandOutput;
 
 #[derive(serde::Serialize)]
 struct RequiresSolution {
     facts: Vec<String>,
     score: f64,
-}
-
-#[derive(serde::Serialize)]
-struct RequiresVerification {
-    raw_examined: usize,
-    accepted: usize,
-    rejected: usize,
-}
-
-#[derive(serde::Serialize)]
-struct TruncatedInfo {
-    solutions: bool,
-}
-
-fn search_status_name(status: RequiresSearchStatus) -> &'static str {
-    match status {
-        RequiresSearchStatus::BoundedComplete => "BoundedComplete",
-        RequiresSearchStatus::BudgetExhausted => "BudgetExhausted",
-    }
 }
 
 fn render_requires_text(goal_spl: &str, solutions: &[RequiresSolution], satisfied: bool) -> String {
@@ -84,7 +40,7 @@ pub(crate) fn run_requires(
     max: usize,
     json: bool,
     stdin: bool,
-    reference_time: Option<TimePoint>,
+    opts: PrepareOptions,
 ) -> Result<CommandOutput, CliError> {
     // Validate max parameter - must be at least 1 to satisfy contract
     if max == 0 {
@@ -102,10 +58,6 @@ pub(crate) fn run_requires(
     let source = resolve_theory_source(file, stdin)?;
     let theory = load_theory_source(&source)?;
 
-    let opts = PrepareOptions {
-        reference_time,
-        ..Default::default()
-    };
     let prepared = prepare(&theory, opts).map_err(|e| {
         CliError::execution(
             "PREPARATION_ERROR",
@@ -139,47 +91,12 @@ pub(crate) fn run_requires(
     });
 
     if json {
-        let satisfied = result.already_provable;
-
-        let mut diagnostics = vec![];
-        let mut truncated = None;
-
-        // Check if we hit the max-solutions display limit.
-        if solutions.len() > max {
-            diagnostics.push(Diagnostic::warning(
-                "SOLUTIONS_LIMIT_HIT",
-                format!("Results limited to {max} solutions"),
-            ));
-            truncated = Some(TruncatedInfo { solutions: true });
-            solutions.truncate(max);
-        }
-
-        if satisfied {
-            solutions.clear();
-        }
-
-        let output = RequiresOutput {
-            schema_version: "spindle.requires.v2".to_string(),
-            query: RequiresQuery {
-                goal_spl: lit.to_spl(),
-                goal_struct: LiteralStructJson::from(&lit),
-            },
-            satisfied,
-            solutions,
-            verification_mode: "verified".to_string(),
-            search_status: search_status_name(result.search_status).to_string(),
-            verification: RequiresVerification {
-                raw_examined: result.verification.raw_examined,
-                accepted: result.verification.accepted,
-                rejected: result.verification.rejected,
-            },
-            evaluated_at: prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
-            trust: None,
-            truncated,
-            diagnostics,
-        };
-
-        CommandOutput::json(output)
+        CommandOutput::json(spindle_contract::query::requires_output(
+            &lit,
+            &result,
+            max,
+            prepared.evaluated_at.and_then(|t| t.to_rfc3339()),
+        ))
     } else {
         let text = render_requires_text(&lit.to_spl(), &solutions, result.already_provable);
         Ok(CommandOutput::text(text))

@@ -1,0 +1,7 @@
+; spindle reason examples/lookup-functions.spl --extensions examples/lookup-functions.json --json --v2
+(given (item alice 2))
+(given (item bob 5))
+(normally classify
+  (and (item ?person ?value) (bind ?class (classification ?value)))
+  (classification-of ?person ?class))
+(normally tally (agg ?total total ?value (item ?person ?value)) (total-value ?total))

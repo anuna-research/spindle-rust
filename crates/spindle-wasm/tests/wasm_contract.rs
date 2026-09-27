@@ -21,6 +21,7 @@ fn test_reason_output_serializes_with_literal_struct() {
             positive: true,
             trust_degree: None,
             trust_sources: None,
+            trust_details: None,
         }],
         diagnostics: vec![],
         stats: Some(TheoryStats {

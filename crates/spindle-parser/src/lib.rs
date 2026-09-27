@@ -23,3 +23,6 @@ pub use predicate_indicator::{
     PredicateIndicatorError, parse_predicate_indicator, parse_predicate_indicator_with_limit,
 };
 pub use spl::parse_spl;
+
+pub mod literal_input;
+pub use literal_input::parse_literal_input;
