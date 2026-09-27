@@ -8,12 +8,26 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Added
-- CLI/WASM feature parity: vocabulary inspection, portable typed lookup functions
-  and named aggregators, full reasoning trust details, WASM explanations and
-  verified requirements, WASM reference-time settings, CLI what-if and raw abduction.
-- Shared ground-literal input preserves typed arguments and temporal windows;
-  malformed input is rejected. Legacy comma notation remains supported.
-- WASM integration tests now run under Node in CI, including the new interfaces.
+- **CLI/WASM interfaces** ([#46](https://git.anuna.io/anuna-research/spindle-rust/pulls/46)):
+  CLI `vocabulary`, `what-if --given`, and `abduce` commands; WASM
+  `vocabulary()`, `explain(literal)`, and `requires(goal, maxSolutions)` methods.
+  Explanations and verified requirements use the CLI's existing JSON envelopes;
+  `abduce` continues to return unverified candidates.
+- **Portable extensions**: CLI `--extensions FILE` and WASM
+  `registerExtensions(json)` accept `spindle.extensions.v1` documents defining
+  typed lookup functions and named integer aggregators. Registrations validate
+  names, signatures, terms and duplicate keys before use; WASM replaces them
+  atomically and preserves existing registrations on invalid input.
+- **Structured trust details**: CLI `reason --trust` and WASM
+  `reasonWithTrust(v2)` expose ordered diminishment steps and named threshold
+  outcomes in `trust_details`, alongside trust degrees and sources.
+- **WASM reference time**: `setReferenceTime(rfc3339)` applies an as-of filter to
+  reasoning and queries; passing null clears it. Reference time and extensions
+  persist across `parseSpl`, `reasonSpl`, and `clear`.
+- **Hypothetical preparation options**: Rust `what_if_with_options` applies the
+  same reference time and extension registry to baseline and hypothetical worlds,
+  inserting hypothetical facts before grounding so they can introduce bindings.
+- Node-based WASM integration tests and direct CLI/WASM output comparisons in CI.
 - **Modal team defense**: following Governatori et al. Definitions 8(2.3.2)
   and 10(2.3.2), a superior defeater can counter an obligation attacker, but a
   separate productive rule is still required to derive a modal conclusion.
@@ -121,6 +135,14 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
+- **Query literal input**: CLI and WASM share ground SPL literal parsing,
+  preserving numeric types, quoted symbols, modalities and temporal windows.
+  Legacy comma notation remains supported, but `p(2)` now has an integer
+  argument; use `(p "2")` for a numeric-looking symbol. Malformed or variable
+  inputs are rejected.
+- What-if and raw abduction results retain their display strings and add typed
+  literal fields. CLI capabilities now advertise the new commands, trust
+  details, vocabulary, v2 reasoning and portable extensions.
 - **CLI text output**: `reason` now lists proved literals once in canonical SPL
   syntax. `--detailed` shows all four proof tags; `--positive` filters detailed
   text or JSON. JSON v1/v2 fields and default full conclusion lists are unchanged.
@@ -185,9 +207,10 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Temporal variables rejected as arithmetic operands (REQ-006).
 
 ### Fixed
-- Literal input rejects empty comma-separated arguments instead of silently
-  querying a different predicate.
-- Stable grounded rule labels and trust challenge ordering across CLI/WASM runs.
+- Empty legacy comma arguments such as `p(a,,b)` now report `INVALID_LITERAL`
+  in the CLI and throw in WASM, instead of silently querying `p(a,b)`.
+- Grounded rule labels and trust challenge ordering are stable across CLI/WASM
+  runs, making proof references and diminishment steps reproducible.
 - Negative modal premises now ground independently of their position relative
   to binding premises. Unbound refutation variables still cannot invent values.
 - Prohibition aliases such as `(forbidden p)` and `(must (not p))` emit one
