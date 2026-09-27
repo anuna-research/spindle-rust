@@ -680,7 +680,7 @@ Each `WeightedConclusion` contains:
 The `reason` command accepts a `--trust` flag that displays trust weights alongside conclusions:
 
 ```bash
-spindle reason --trust theory.spl
+spindle reason --detailed --trust theory.spl
 ```
 
 Output format:
@@ -688,9 +688,9 @@ Output format:
 ```
 Conclusions:
 
-  +D bird (trust: 0.95) [agent:security]
-  +d flies (trust: 0.90) [agent:coder]
-  -d -flies (trust: 0.90) [agent:coder]
+  +D (bird) (trust: 0.95) [agent:security]
+  +d (flies) (trust: 0.90) [agent:coder]
+  -d (not (flies)) (trust: 0.90) [agent:coder]
 ```
 
 Each conclusion shows:
@@ -699,7 +699,9 @@ Each conclusion shows:
 - The trust degree in parentheses
 - The contributing sources in brackets
 
-Without `--trust`, conclusions display in the standard format without trust information.
+Without `--trust`, conclusions display without trust information. Omitting
+`--detailed` shows each proved literal once, using the definite proof's trust
+when both definite and defeasible proofs exist.
 
 ## Trust-Filtered Queries
 
@@ -907,7 +909,7 @@ This example demonstrates the complete trust workflow from theory definition thr
 **CLI invocation with trust output**:
 
 ```bash
-spindle reason --trust review.spl
+spindle reason --detailed --trust review.spl
 ```
 
 **Output**:
@@ -915,22 +917,22 @@ spindle reason --trust review.spl
 ```
 Conclusions:
 
-  +D lint_clean (trust: 0.85) [agent:coder]
-  +D manual_review_ok (trust: 0.80) [agent:qa]
-  +D no_vulnerabilities (trust: 0.95) [agent:security]
-  +D tests_pass (trust: 0.85) [agent:coder]
-  +d lint_clean (trust: 0.85) [agent:coder]
-  +d tests_pass (trust: 0.85) [agent:coder]
-  +d no_vulnerabilities (trust: 0.95) [agent:security]
-  +d manual_review_ok (trust: 0.80) [agent:qa]
-  +d code_ready (trust: 0.85) [agent:coder]
-  +d security_clear (trust: 0.95) [agent:security]
-  +d qa_approved (trust: 0.80) [agent:qa]
-  +d ready_to_deploy (trust: 0.80) [agent:coder, agent:qa, agent:security, system:policy]
-  -D ready_to_deploy (trust: 0.00)
-  -D security_clear (trust: 0.00)
-  -D code_ready (trust: 0.00)
-  -D qa_approved (trust: 0.00)
+  +D (lint_clean) (trust: 0.85) [agent:coder]
+  +D (manual_review_ok) (trust: 0.80) [agent:qa]
+  +D (no_vulnerabilities) (trust: 0.95) [agent:security]
+  +D (tests_pass) (trust: 0.85) [agent:coder]
+  +d (lint_clean) (trust: 0.85) [agent:coder]
+  +d (tests_pass) (trust: 0.85) [agent:coder]
+  +d (no_vulnerabilities) (trust: 0.95) [agent:security]
+  +d (manual_review_ok) (trust: 0.80) [agent:qa]
+  +d (code_ready) (trust: 0.85) [agent:coder]
+  +d (security_clear) (trust: 0.95) [agent:security]
+  +d (qa_approved) (trust: 0.80) [agent:qa]
+  +d (ready_to_deploy) (trust: 0.80) [agent:coder, agent:qa, agent:security, system:policy]
+  -D (ready_to_deploy) (trust: 0.00)
+  -D (security_clear) (trust: 0.00)
+  -D (code_ready) (trust: 0.00)
+  -D (qa_approved) (trust: 0.00)
 ```
 
 The deployment conclusion (`ready_to_deploy`) has trust `0.80` — the weakest link across the derivation chain: `min(1.0, 0.95, 0.85, 0.80) = 0.80`. This meets the `deploy` threshold (0.8) and can proceed.

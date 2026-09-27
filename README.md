@@ -85,10 +85,10 @@ This project is currently pre-1.0 and follows strict Semantic Versioning for
 
 ```bash
 # Reason about a theory (SPL format)
-spindle examples/penguin.spl
+spindle reason examples/penguin.spl
 
-# Show only positive conclusions
-spindle --positive examples/penguin.spl
+# Show all four proof tags (including refutations)
+spindle reason --detailed examples/penguin.spl
 
 # Validate a theory file
 spindle validate examples/penguin.spl
@@ -149,7 +149,19 @@ explicit permission or establish that the action happened.
 (prefer hat-play no-play)
 ```
 
-This derives `+d [P]play`: the preferred permission defeats the prohibition.
+The default CLI output shows each proved literal once in SPL syntax:
+
+```text
+Proved:
+
+  (hat)
+  (may (play))
+```
+
+The preferred permission defeats the prohibition. `(may (play))` is canonical
+SPL for `(may play)`. Use `--detailed` for all four proof tags; `--positive`
+filters detailed or JSON output. JSON v1/v2 still include all tags by default. Standard structured mode names
+use `must`, `may`, and `forbidden`.
 Without the preference, the competing defaults block each other.
 
 Negation has scope: `(not (must pay))` negates the obligation, while

@@ -109,6 +109,14 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
   - v2 JSON typed argument serialization tests (TEST-012).
 
 ### Changed
+- **CLI text output**: `reason` now lists proved literals once in canonical SPL
+  syntax. `--detailed` shows all four proof tags; `--positive` filters detailed
+  text or JSON. JSON v1/v2 fields and default full conclusion lists are unchanged.
+- **Breaking — JSON modal names**: shared literal DTOs now emit `must`, `may`,
+  and `forbidden` instead of `O`, `P`, and `F` in `mode.name`, including CLI
+  commands and structured WASM output. Custom names and both negation fields
+  are preserved. Envelope schema identifiers remain unchanged; consumers
+  matching the old names must migrate.
 - **Breaking — deontic semantics (#44)**: the default single-head strong-permission
   profile makes `(forbidden p)` equivalent to `(must (not p))`. Permission and
   prohibition compete through preferences, while opposite permissions can coexist.

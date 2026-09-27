@@ -1,5 +1,6 @@
 //! Reason command implementation
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use spindle_contract::literal::{LiteralStructJson, LiteralStructJsonV2};
@@ -9,6 +10,7 @@ use spindle_contract::reason::{
 };
 use spindle_core::conclusion::ConclusionType;
 use spindle_core::pipeline::{PrepareOptions, compute_weighted_conclusions, prepare};
+use spindle_core::projection::FamilyId;
 use spindle_core::temporal::TimePoint;
 use spindle_core::trust::WeightedConclusion;
 
@@ -16,15 +18,27 @@ use crate::cli::error::CliError;
 use crate::cli::input::{load_theory_source, resolve_theory_source};
 use crate::cli::output::CommandOutput;
 
+pub(crate) struct ReasonOutputOptions {
+    pub positive_only: bool,
+    pub detailed: bool,
+    pub json: bool,
+    pub trust: bool,
+    pub v2: bool,
+}
+
 pub(crate) fn run_reason(
     file: Option<&PathBuf>,
-    positive_only: bool,
-    json: bool,
     stdin: bool,
     reference_time: Option<TimePoint>,
-    trust: bool,
-    v2: bool,
+    output: ReasonOutputOptions,
 ) -> Result<CommandOutput, CliError> {
+    let ReasonOutputOptions {
+        positive_only,
+        detailed,
+        json,
+        trust,
+        v2,
+    } = output;
     let source = resolve_theory_source(file, stdin)?;
     let theory = load_theory_source(&source)?;
 
@@ -143,41 +157,65 @@ pub(crate) fn run_reason(
             CommandOutput::json(output)
         }
     } else {
-        let mut text = String::new();
-        text.push_str("Conclusions:\n\n");
-
-        for (i, c) in conclusions.iter().enumerate() {
-            if positive_only && !c.is_positive() {
-                continue;
+        let rows: Vec<usize> = if detailed {
+            conclusions
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| !positive_only || c.is_positive())
+                .map(|(i, _)| i)
+                .collect()
+        } else {
+            // Facts carry both +D and +d. Show each exact semantic literal once,
+            // using its definite proof (and trust) when one is available.
+            let mut selected = HashMap::new();
+            for (i, c) in conclusions
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.is_positive())
+            {
+                let key = (FamilyId::from(&c.literal), c.literal.temporal.clone());
+                selected
+                    .entry(key)
+                    .and_modify(|previous: &mut usize| {
+                        if c.conclusion_type == ConclusionType::DefinitelyProvable
+                            && conclusions[*previous].conclusion_type
+                                != ConclusionType::DefinitelyProvable
+                        {
+                            *previous = i;
+                        }
+                    })
+                    .or_insert(i);
             }
-
-            let symbol = match c.conclusion_type {
-                ConclusionType::DefinitelyProvable => "+D",
-                ConclusionType::DefinitelyNotProvable => "-D",
-                ConclusionType::DefeasiblyProvable => "+d",
-                ConclusionType::DefeasiblyNotProvable => "-d",
-            };
-
-            if let Some(ref wcs) = weighted {
-                if let Some(wc) = wcs.get(i) {
-                    let sources_str = if wc.sources.is_empty() {
-                        String::new()
-                    } else {
-                        let mut src_list: Vec<String> =
-                            wc.sources.iter().map(|s| s.id.clone()).collect();
-                        src_list.sort();
-                        format!(" [{}]", src_list.join(", "))
-                    };
-                    text.push_str(&format!(
-                        "  {} {} (trust: {:.2}){}\n",
-                        symbol, c.literal, wc.degree, sources_str
-                    ));
-                } else {
-                    text.push_str(&format!("  {} {}\n", symbol, c.literal));
-                }
+            let mut rows: Vec<_> = selected.into_values().collect();
+            rows.sort_by_key(|&i| (conclusions[i].literal.to_spl(), i));
+            rows
+        };
+        if !detailed && rows.is_empty() {
+            return Ok(CommandOutput::text("No positive conclusions proved.\n"));
+        }
+        let mut text = if detailed {
+            "Conclusions:\n\n"
+        } else {
+            "Proved:\n\n"
+        }
+        .to_string();
+        for i in rows {
+            let c = &conclusions[i];
+            let prefix = if detailed {
+                format!("{} ", c.conclusion_type.symbol())
             } else {
-                text.push_str(&format!("  {} {}\n", symbol, c.literal));
+                String::new()
+            };
+            text.push_str(&format!("  {prefix}{}", c.literal.to_spl()));
+            if let Some(wc) = weighted.as_ref().and_then(|wcs| wcs.get(i)) {
+                text.push_str(&format!(" (trust: {:.2})", wc.degree));
+                if !wc.sources.is_empty() {
+                    let mut sources: Vec<_> = wc.sources.iter().map(|s| s.id.as_str()).collect();
+                    sources.sort();
+                    text.push_str(&format!(" [{}]", sources.join(", ")));
+                }
             }
+            text.push('\n');
         }
 
         Ok(CommandOutput::text(text))

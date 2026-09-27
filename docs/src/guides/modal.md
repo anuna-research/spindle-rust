@@ -69,7 +69,11 @@ The negative proof conditions mirror these checks; an unresolved cycle stays und
 (given hat)
 ```
 
-This derives `+d [P]play` and refutes the prohibition.
+The default text view lists `(hat)` and `(may (play))` under `Proved:`.
+With `--detailed`, the permission appears as `+d (may (play))` and the
+refuted prohibition as `-d (must (not (play)))`. The tables below use the
+traditional `[O]`/`[P]` notation to explain the internal representation;
+CLI reasoning text and JSON `literal_spl` use SPL syntax.
 Reversing the preference derives the prohibition instead.
 Removing the preference blocks both defaults; removing `hat` leaves the prohibition applicable.
 `()` is an unconditional body and needs no `true` fact.
@@ -123,6 +127,10 @@ noncompeting permission/prohibition rules, conflicting opposite permissions, or 
 Negative conclusions can use canonical `[O]~p` instead of `[F]p` and include implicit modal opponents.
 Explicit positive conclusions retain their supporting rule's spelling.
 Consumers should compare semantic identity rather than rendered strings.
+Structured JSON uses `must`, `may`, and `forbidden` for standard `mode.name`
+values. Update consumers that previously matched `O`, `P`, or `F`.
+`mode.negation: true` means outer negation, not a prohibition; the inner
+`negated` flag remains separate.
 Explanation consumers must accept the new `DefeasibleRefutation` enum variant (`defeasible_refutation` in JSON).
 Conflict diagnostics use `ConflictKind::ModalOpposition` and no longer flag opposite permissions as contradictory.
 The Rust `Literal` structural equality API retains spelling distinctions;

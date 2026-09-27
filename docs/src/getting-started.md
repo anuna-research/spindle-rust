@@ -44,22 +44,29 @@ spindle reason hello.spl
 Output:
 
 ```
-+D bird
-+d bird
-+d flies
-+d has_feathers
--D flies
--D has_feathers
+Proved:
+
+  (bird)
+  (flies)
+  (has_feathers)
 ```
 
 ### Understanding the Output
 
-| Conclusion | Meaning |
-|------------|---------|
-| `+D bird` | `bird` is **definitely** provable (it's a fact) |
-| `+d bird` | `bird` is **defeasibly** provable |
-| `+d flies` | `flies` is defeasibly provable via r1 |
-| `-D flies` | `flies` is **not** definitely provable (no strict rule) |
+The default text view lists each proved literal once in SPL syntax. Parentheses
+around a zero-argument predicate, such as `(bird)`, are equivalent to `bird`.
+
+Use `spindle reason --detailed hello.spl` to see proof strength and refutations:
+
+| Tag | Meaning |
+|---|---|
+| `+D` | Definitely proved from facts and strict rules |
+| `+d` | Defeasibly proved |
+| `-D` | Constructively refuted as a definite conclusion |
+| `-d` | Constructively refuted as a defeasible conclusion |
+
+A fact has both `+D` and `+d`; the concise view merges those into one line.
+`--json` continues to return the full tagged conclusions by default.
 
 ## The Penguin Example
 
@@ -89,21 +96,18 @@ spindle reason penguin.spl
 Output:
 
 ```
-+D bird
-+D penguin
-+d bird
-+d penguin
-+d ~flies
--D flies
--D ~flies
--d flies
+Proved:
+
+  (bird)
+  (not (flies))
+  (penguin)
 ```
 
-Key result: `+d ~flies` - Tweety defeasibly doesn't fly because the penguin rule (`r2`) beats the bird rule (`r1`).
+Key result: `(not (flies))` - Tweety defeasibly doesn't fly because the penguin rule (`r2`) beats the bird rule (`r1`).
 
 ## Next steps
 
-The result `+d ~flies` completes this tutorial: the explicit priority resolves the conflict.
+The result `(not (flies))` completes this tutorial: the explicit priority resolves the conflict.
 
 - [Inspect the theory](guides/inspect-theory.md) with CLI filters, JSON output, syntax checks, and statistics.
 - [Rust library](integration/rust.md) covers programmatic theory construction.

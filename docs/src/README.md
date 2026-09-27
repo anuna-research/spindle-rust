@@ -32,19 +32,14 @@ Tractable inference makes defeasible logic practical where other non-monotonic f
 **Result:**
 
 ```
-Conclusions:
+Proved:
 
-  +D penguin(tweety)
-  +D bird(tweety)
-  +d penguin(tweety)
-  +d bird(tweety)
-  +d ~flies(tweety)
-  -D flies(tweety)
-  -d flies(tweety)
-  -D ~flies(tweety)
+  (bird tweety)
+  (not (flies tweety))
+  (penguin tweety)
 ```
 
-Tweety is defeasibly proven not to fly (`+d ~flies(tweety)`), because `penguins-dont-fly` defeats `birds-fly`.
+Tweety is defeasibly proven not to fly (`(not (flies tweety))`), because `penguins-dont-fly` defeats `birds-fly`.
 
 ## Features
 
