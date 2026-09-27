@@ -179,6 +179,11 @@ Negation of modal literals in SPL uses the `not` wrapper:
 
 ## Using Modal Operators in Rules
 
+Each code block is a separate example. Rule-only examples need matching facts
+to produce conclusions; add those facts when trying the rules in the CLI.
+Plain negative premises such as `(not paid)` or `(not citizen)` require
+explicit negative evidence; missing positive facts do not satisfy them.
+
 Modal operators can appear in both the body and head of rules, in all rule types.
 
 ### Examples
@@ -403,7 +408,7 @@ Regulatory compliance rules express obligations subject to exceptions:
 ; All companies must file annual reports
 (normally r1 company (must file-annual-report))
 
-; Small companies are exempt from detailed reporting
+; Small companies are exempt from annual reporting
 (normally r2 (and company small-company) (not (must file-annual-report)))
 (prefer r2 r1)
 
@@ -448,8 +453,9 @@ Chains of reasoning track obligations:
 ; Being in violation creates an obligation to remedy
 (normally r3 in-violation (must remedy))
 
-; Payment within grace period removes the violation
-(normally r4 (and in-violation paid-within-grace) (not in-violation))
+; Payment within the grace period defeats the violation rule
+; Use the obligation as a premise, not the violation this rule defeats.
+(normally r4 (and (must pay) paid-within-grace) (not in-violation))
 (prefer r4 r2)
 ```
 
@@ -505,13 +511,16 @@ A single theory combines obligations, permissions, and prohibitions:
    (normally r2 bird flies)
 
    ; Normative rules
-   (normally r3 (and endangered-species (may hunt)) (not (may hunt)))
+   (normally r3 endangered-species (forbidden hunt))
    ```
 
-4. **Metadata records the intended interpretation of custom modes**
+4. **Metadata documents the meaning of ordinary predicates**
    ```spl
-   ; [K] = epistemic "known to be true"
-   ; Use metadata to document the mode's meaning
-   (meta r1 (description "Agents know their own obligations"))
-   (normally r1 (must ?x) (K ?x))
+   ; This is a domain predicate, not a new modal operator.
+   (meta r1 (description "Record actions that are obligatory"))
+   (normally r1 (must ?x) (obligatory-action ?x))
    ```
+
+   SPL provides the three standard modal wrappers. `(K ?x)` would be an
+   ordinary predicate named `K`; metadata does not make it a modal operator.
+   Custom modes can be constructed through the Rust API with `Mode::new("K")`.
