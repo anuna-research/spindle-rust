@@ -8,14 +8,18 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Changed
-- **Output notation**: every CLI and WASM output now renders literals in SPL
+- **Breaking — output notation**: CLI and WASM literal renderers now use SPL
   form (`(forbidden (play))`, `(not (flies))`) instead of the bracket form
   (`[F]play`, `~flies`), matching `reason`. This covers the `explain`,
   `why-not`, `query` and `abduce` text views and the string fields of the JSON
   envelopes: `proof_tree.literal` in `spindle.explain.v1`, `facts` in abduce
   output, `new_conclusions` and `changed_conclusions[].literal` in what-if
   output, and the WASM `query`, `whyNot`, `getPositiveConclusions` and
-  `getRules` results. The typed `*_struct` fields are unchanged.
+  `getRules` results. The typed `*_struct` fields and envelope schema identifiers
+  are unchanged. Consumers matching display strings must migrate to SPL or use
+  the structured fields where available. Legacy literal input remains accepted.
+
+### Fixed
 - **abduce premise semantics**: `abduce` and `requires` now judge body
   literals with the reasoner's premise semantics, so an outer-negated modal
   premise such as `(not (forbidden p))` that holds by constructive refutation
@@ -25,6 +29,9 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 - Modal guide: new section explaining why an obligation-headed defeater cannot
   block an explicit permission, with ranked-rule and body-conditional encodings
   of the hat-and-detention example.
+- Refreshed the README with a runnable CLI walkthrough, arithmetic and modal
+  examples, verified requirement queries, and complete Rust and browser WASM
+  examples. Added focused guide links and a concise workspace overview.
 
 ## [0.5.0] - 2026-09-27
 

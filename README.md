@@ -1,202 +1,171 @@
 # Spindle-Rust
 
-[![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)](.)
-[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](LICENSE)
 
-A Rust implementation of the [SPINdle](https://research.csiro.au/bpli/tools/spindle/) defeasible logic reasoning engine.
+A defeasible logic reasoning engine for rules, exceptions, and conflicting
+conclusions. Write a theory in SPL (Spindle Lisp), ask what follows, and inspect
+why a conclusion holds—or what prevents it. Use the command-line tool, embed the
+Rust library, or run the same engine in a browser or Node.js through WebAssembly.
 
-This project is part of the SPINdle family:
-- **[SPINdle](https://research.csiro.au/bpli/tools/spindle/)** - The original Java implementation (v2.2.4) by NICTA (later Data61/CSIRO, now [CSIRO Technology](https://www.csiro.au/en/Newsletters/D61-NextGenConnect/2026-05))
-- **[spindle-racket](https://codeberg.org/anuna/spindle-racket)** - A Racket port with trust-weighted reasoning and `#lang spindle`
-- **spindle-rust** - This Rust port, based on spindle-racket v1.7.0
+[Documentation](https://spindle-rust.anuna.io) ·
+[SPL reference](docs/src/reference/spl.md) ·
+[CLI reference](docs/src/reference/cli.md) ·
+[Changelog](CHANGELOG.md)
 
-## Features
+## Quick start
 
-- **Defeasible Logic Reasoning**: Implements non-monotonic reasoning with four rule types:
-  - Facts (`>>`) - Unconditional truths
-  - Strict rules (`->`) - Must hold if antecedent is true
-  - Defeasible rules (`=>`) - Normally hold unless defeated
-  - Defeaters (`~>`) - Block conclusions without proving anything
+Requires Rust 1.87 or later. From a checkout of this repository:
 
-- **Reasoning Mode**:
-  - Traditional DL(∂) - Traditional forward chaining
-
-- **Deontic Reasoning**: Obligations (`must`), explicit permissions (`may`), and prohibitions (`forbidden`)
-  - Prohibition aliases an obligation not to act
-  - Preferences resolve permission/prohibition conflicts; opposite permissions can coexist
-  - Lean modal proofs and Rust/Lean comparisons cover the single-head strong-permission profile
-
-- **Temporal Reasoning**: Allen interval algebra with 13 temporal relations
-
-- **Superiority Relations**: Conflict resolution via rule preferences
-
-- **First-Order Variables**: Datalog-style grounding with `?x` variable syntax
-
-- **Arithmetic Expressions**: Numeric computation in rule bodies
-  - Operators: `+`, `-`, `*`, `/`, `div`, `rem`, `**`, `abs`, `min`, `max`, `round`, `floor`, `ceil`
-  - Variable binding: `(bind ?total (+ ?price ?tax))`
-  - Comparison guards: `(> ?age 18)`, `(<= ?score 100)`
-  - Three numeric types: Integer, Decimal (fixed-precision), Float
-  - Cross-type matching: `Integer(2)` equals `Decimal(2.0)` equals `Float(2.0)`
-
-- **Finite-Domain Aggregation (SPL, CLI, and typed Rust API)**: Sum, minimum, maximum, and count over completed reasoning snapshots
-  - Distinct rows contribute once; equal values from different rows contribute separately
-  - Stratification, grouping, source priorities, and multiple heads
-  - Defeasible snapshot evidence prevents automatic `+D` from aggregate premises
-  - Lean aggregate lowering proofs and mandatory Lean/Rust differential agreement
-  - Use `(agg ?total sum ?value (amount ?value))`
-
-- **Predicate Model & Vocabulary**: Structural predicate identity independent of reasoning
-  - First-class declarations: `(predicate assign-to ((task symbol) (agent symbol)))`
-  - Structured metadata targets: `(meta (predicate assign-to 2) (description "..."))`
-  - Derived, deterministic theory signatures and vocabularies (signatures, argument profiles, provenance)
-  - Non-semantic shape validation — never changes conclusions
-
-- **Input Format**:
-  - SPL (Spindle Lisp) - Lisp-based DSL
-
-- **Explanations**: Proof trees with natural language and JSON output
-
-- **Trust-Aware Reasoning**: Source attribution and trust-weighted conclusions
-
-- **Query Operators**:
-  - What-if: Hypothetical reasoning
-  - Why-not: Explanation of failures
-  - Abduction: Finding hypotheses to prove goals
-
-- **WebAssembly Support**: Run in browsers and Node.js via wasm-bindgen
-
-## Installation
-
-```bash
+```sh
 cargo install --path crates/spindle-cli
-```
-
-## Versioning Policy
-
-This project is currently pre-1.0 and follows strict Semantic Versioning for
-`0.y.z` releases:
-
-- Breaking changes bump `y` (for example, `0.1.3` -> `0.2.0`)
-- Backward-compatible changes and fixes bump `z` (for example, `0.1.3` -> `0.1.4`)
-- `1.0.0` will be used once API stability guarantees are in place
-
-## Usage
-
-```bash
-# Reason about a theory (SPL format)
 spindle reason examples/penguin.spl
-
-# Show all four proof tags (including refutations)
-spindle reason --detailed examples/penguin.spl
-
-# Validate a theory file
-spindle validate examples/penguin.spl
-
-# Show statistics
-spindle stats examples/penguin.spl
 ```
 
-## SPL Format
+The example says that birds normally fly, penguins normally do not, and the
+penguin rule takes priority:
 
 ```lisp
-; Facts
 (given bird)
 (given penguin)
 
-; Defeasible rules
 (normally r1 bird flies)
 (normally r2 penguin (not flies))
-
-; Superiority
 (prefer r2 r1)
-
-; Predicates with variables
-(given (parent alice bob))
-(normally r3 (parent ?x ?y) (ancestor ?x ?y))
-
-; Predicate declaration + structured metadata target (optional)
-(predicate ancestor ((descendant symbol) (forebear symbol)))
-(meta (predicate ancestor 2) (description "Transitive parent relation."))
-
-; Arithmetic: bind and compare
-(given (item widget 25))
-(given (tax-rate 0.1))
-(normally r4
-  (and (item ?name ?price) (tax-rate ?rate)
-       (bind ?total (+ ?price (* ?price ?rate))))
-  (total-cost ?name ?total))
-(normally r5
-  (and (total-cost ?name ?t) (> ?t 20))
-  (expensive ?name))
 ```
 
-## Obligations and Permissions
+Output:
 
-| SPL | Meaning |
+```text
+Proved:
+
+  (bird)
+  (not (flies))
+  (penguin)
+```
+
+A fact cannot be defeated by a default. A `normally` rule can: here the
+preference resolves the conflict in favor of `(not flies)`. SPL output uses
+canonical parentheses, so `(not (flies))` means the same thing.
+
+Explore the same theory:
+
+```sh
+# Query a literal; quote SPL expressions for the shell
+spindle query '(not flies)' examples/penguin.spl
+
+# Explain a proof or inspect why a goal fails
+spindle explain '(not flies)' examples/penguin.spl
+spindle why-not flies examples/penguin.spl
+
+# Inspect every proof tag, or get typed JSON for an application
+spindle reason --detailed examples/penguin.spl
+spindle reason --v2 examples/penguin.spl
+
+# Validate the theory and inspect its predicate vocabulary
+spindle validate examples/penguin.spl
+spindle vocabulary examples/penguin.spl
+```
+
+The engine implements traditional ambiguity-blocking **DL(∂)** with four proof
+tags: `+D` / `-D` for definite proof / refutation, and `+d` / `-d` for defeasible
+proof / refutation. Negative tags need constructive proofs; unsupported cycles
+can remain undecided. Default text output lists proved literals once; JSON
+includes all tags unless filtered with `--positive`.
+
+## Writing rules
+
+| SPL form | Meaning |
 |---|---|
-| `(must pay)` | Obliged to pay |
-| `(may pay)` | Explicitly permitted to pay |
-| `(forbidden pay)` | Obliged not to pay; equivalent to `(must (not pay))` |
+| `(given bird)` | An unconditional fact |
+| `(always r1 penguin bird)` | A strict implication |
+| `(normally r2 bird flies)` | A default that can be defeated |
+| `(except r3 injured (not flies))` | Block `flies` without proving `(not flies)` |
+| `(prefer r3 r2)` | Give one rule priority over another |
 
-`may` does not mean obliged. An obligation does not automatically derive an
-explicit permission or establish that the action happened.
+Predicates take arguments, variables start with `?`, and rule bodies can combine
+conditions with `and`. Arithmetic can bind values and filter matches. Save this
+as `prices.spl`:
 
-```spl
+```lisp
+(given (price widget 25))
+(given (price pencil 3))
+
+(normally discounted
+  (and (price ?item ?price)
+       (bind ?sale (- ?price 5))
+       (> ?sale 0))
+  (sale-price ?item ?sale))
+```
+
+```sh
+spindle reason prices.spl
+```
+
+This derives `(sale-price widget 20)`. The pencil fails the positive-price guard.
+Arithmetic supports integers, fixed-precision decimals, and finite floats.
+See [variables](docs/src/guides/grounding.md) and
+[arithmetic](docs/src/guides/arithmetic.md) for binding and numeric rules.
+
+## Obligations and permissions
+
+Use `must`, `may`, and `forbidden` for obligations, explicit permissions, and
+prohibitions. For example, save this as `permission.spl`:
+
+```lisp
 (given hat)
 (normally no-play () (forbidden play))
 (normally hat-play hat (may play))
 (prefer hat-play no-play)
 ```
 
-The default CLI output shows each proved literal once in SPL syntax:
-
-```text
-Proved:
-
-  (hat)
-  (may (play))
+```sh
+spindle reason permission.spl
+spindle query '(may play)' permission.spl
 ```
 
-The preferred permission defeats the prohibition. `(may (play))` is canonical
-SPL for `(may play)`. Use `--detailed` for all four proof tags; `--positive`
-filters detailed or JSON output. JSON v1/v2 still include all tags by default. Standard structured mode names
-use `must`, `may`, and `forbidden`.
-Without the preference, the competing defaults block each other.
+The original theory proves `(hat)` and `(may (play))`: the preferred permission
+defeats the prohibition. Permission does not imply obligation or establish that
+an action happened. `(forbidden play)` means `(must (not play))`.
 
-Negation has scope: `(not (must pay))` negates the obligation, while
-`(must (not pay))` obliges nonpayment. Weak permission is a constructive
-refutation of a prohibition; it does not produce a `(may ...)` conclusion.
-Missing evidence alone is insufficient.
+Negation has scope: `(not (must play))` negates an obligation, while
+`(must (not play))` obliges nonperformance. An obligation-headed defeater can
+block an opposing obligation but cannot block an explicit permission.
+See the [modal guide](docs/src/guides/modal.md) for conflict rules and examples.
 
-See the [modal guide](docs/src/guides/modal.md) for conflicts, negated premises,
-and compatibility changes, and the [Lean modal reference](lean/MODAL.md) for
-proof guarantees and limitations.
+## Asking what would be needed
 
-## Library Usage
+`what-if` adds hypothetical facts without changing the original theory.
+`abduce` proposes candidate fact sets; `requires` checks candidates by running
+full reasoning. For a small example, save this as `access.spl`:
 
-```rust
-use spindle_core::prelude::*;
-
-let mut theory = Theory::new();
-
-// Add facts
-theory.add_fact("bird");
-theory.add_fact("penguin");
-
-// Add rules
-let r1 = theory.add_defeasible_rule(&["bird"], "flies");
-let r2 = theory.add_defeasible_rule(&["penguin"], "~flies");
-
-// Superiority: penguins override birds
-theory.add_superiority(&r2, &r1);
-
-// Reason
-use spindle_core::reason::reason;
-let conclusions = reason(&theory);
+```lisp
+(normally access (and member paid) admitted)
 ```
 
-## Predicate Aggregation
+```sh
+spindle what-if admitted access.spl --given member --given paid
+spindle abduce admitted access.spl
+spindle requires admitted access.spl --json
+```
+
+The hypothetical query proves `admitted`. Requirements can include adding
+`member` and `paid`, or asserting the goal itself. Check `search_status` and
+truncation diagnostics when using bounded search. Both search operators
+recognize modal premises satisfied by constructive refutation.
+See [query operators](docs/src/guides/queries.md).
+
+## More capabilities
+
+| Capability | Guide |
+|---|---|
+| Sum, count, minimum, and maximum over completed reasoning snapshots | [Aggregation](docs/src/guides/aggregation.md) |
+| Source attribution, trust degrees, and diminishment from defeated challenges | [Trust](docs/src/guides/trust.md) |
+| Temporal windows, reference-time filtering, and Allen interval relations | [Temporal reasoning](docs/src/guides/temporal.md) |
+| Proof trees and natural-language, JSON, JSON-LD, and DOT explanations | [Explanations](docs/src/guides/explanations.md) |
+| Predicate declarations, metadata, vocabulary, and shape diagnostics | [Inspecting a theory](docs/src/guides/inspect-theory.md) |
+| Portable lookup functions and aggregators; pure Rust host functions | [Extensions](docs/aggregation-extensions.md) |
+
+For example, this aggregate derives `(total 30)`:
 
 ```lisp
 (given (amount 10))
@@ -206,201 +175,135 @@ let conclusions = reason(&theory);
   (total ?sum))
 ```
 
-Run `spindle reason examples/aggregation.spl --json` for a grouped example.
-Strata are inferred automatically; aggregates read completed earlier conclusions.
-The named aggregators define their empty-input behavior: `sum` and `count` return
-zero, while `min-of` and `max-of` require at least one row. `agg` directly binds
-its output variable; no `bind` wrapper is needed. The explicit `fold` form remains
-available for custom extractions and seeds.
+Run `spindle reason examples/aggregation.spl` for a grouped example. Aggregation
+currently supports integer/symbol predicates; modal, temporal, trust-weighted,
+wildcard, decimal, and floating-point aggregate programs are rejected.
 
-Input rows are ordinary predicates in the theory, including derived conclusions.
-Computed results are bound directly: the example produces `(total 30)` without
-listing `30` anywhere. No `aggregate-domain` declaration is required. Each `agg`
-accepts one row pattern; use a helper relation for joins and filters.
+## Embed in Rust
 
-The SPL bridge supports integer/symbol predicate instances. Modal, temporal,
-trust-weighted, wildcard, decimal, and floating-point aggregate programs are
-rejected. Aggregate enumeration uses the configured grounding instance budget
-and returns an error on exhaustion. See [the syntax and extension guide](docs/aggregation-extensions.md).
+Add `spindle-core` and `spindle-parser` using the
+[dependency instructions](docs/src/integration/rust.md#installation), then parse
+SPL and reason over the resulting theory:
 
-For the typed reference API, use [`spindle_core::aggregation::evaluate`](crates/spindle-core/src/aggregation.rs)
-with a typed `Program` and an explicit domain of integer/symbol constants.
-`SchemaRule`, `Condition`, `Fold`, and `Pattern` describe the source program;
-the result contains structured user conclusions with all four proof tags.
-The domain must include aggregate results. Rust integer arithmetic is checked
-and reports overflow as an error.
+```rust
+use spindle_core::reason::reason;
+use spindle_parser::parse_spl;
 
-A strict aggregate rule remains strict, but its aggregate premise uses defeasible
-snapshot evidence. It can therefore support `+d` without automatically granting
-`+D`. An independent definite proof of the same head can still grant `+D`.
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let theory = parse_spl(r#"
+        (given bird)
+        (given penguin)
+        (normally r1 bird flies)
+        (normally r2 penguin (not flies))
+        (prefer r2 r1)
+    "#)?;
 
-The [aggregation guide](lean/AGGREGATION.md) explains the semantics, proofs,
-verification boundaries, and Rust integration. The
-[differential fixtures](crates/spindle-core/tests/lean_aggregation_oracle_difftest.rs)
-provide executable examples of grouping, chained folds, and priorities.
-
-The default reasoner uses traditional ambiguity-blocking **DL(∂)**. Negative
-tags require constructive proofs: an unsupported cycle can remain undecided.
-Every definite proof also gives a defeasible proof, including conflicting facts.
-See the [formal semantics](specs/DEFEASIBLE-LOGIC-SEMANTICS.md).
-
-**Verification boundary:** aggregate proofs and the oracle use the same four
-constructive DL(∂) proof conditions. The regression where a defeated
-premise disables an attacker now requires `count(q) = 1` in both Lean and Rust.
-Differential tests require equality of every reported tag. This is executable
-conformance evidence for the tested fragment, not a proof of the Rust implementation;
-checked integer overflow and host extension functions remain outside the Lean model.
-
-## Extension Functions
-
-Builtins and host-registered pure functions use the same `FunctionRegistry`.
-Pass a registry through `PrepareOptions::function_registry` to use expressions
-such as `(bind ?day (day-of-week ?date))`. Calls receive and return `Term` values,
-including symbols; arithmetic functions enforce numeric argument types.
-Registered functions can also compute fold contributions. The CLI includes the
-builtin prelude; custom Rust functions are registered by embedding applications.
-See [registration and verification boundaries](docs/aggregation-extensions.md).
-
-## WebAssembly Usage
-
-Build the WASM package:
-
-```bash
-cd crates/spindle-wasm
-wasm-pack build --target web --release
+    for conclusion in reason(&theory)? {
+        if conclusion.conclusion_type.is_positive() {
+            println!("{} {}",
+                conclusion.conclusion_type.symbol(),
+                conclusion.literal.to_spl());
+        }
+    }
+    Ok(())
+}
 ```
 
-Use in JavaScript/TypeScript:
+Each conclusion has a proof tag, so a fact can appear at both `+D` and `+d`.
+The [Rust reference](docs/src/integration/rust.md) covers programmatic theory
+construction, preparation options, queries, and extension functions.
 
-```typescript
-import init, { Spindle } from 'spindle-wasm';
+## Run in a browser
+
+Install `wasm-pack`, then build from the repository root:
+
+```sh
+make wasm
+```
+
+Copy `crates/spindle-wasm/pkg` into your web app. Run this as a JavaScript module
+beside `pkg`, served over HTTP:
+
+```javascript
+import init, { Spindle } from './pkg/spindle_wasm.js';
 
 await init();
-
 const spindle = new Spindle();
+try {
+    spindle.parseSpl(`
+        (given bird)
+        (given penguin)
+        (normally r1 bird flies)
+        (normally r2 penguin (not flies))
+        (prefer r2 r1)
+    `);
 
-// Add theory programmatically
-spindle.addFact("bird");
-spindle.addFact("penguin");
-spindle.addDefeasibleRule(["bird"], "flies");
-spindle.addDefeasibleRule(["penguin"], "~flies");
-spindle.addSuperiority("r2", "r1");
+    const result = spindle.reasonV2();
+    console.log(result.schema_version); // "spindle.reason.v2"
+    for (const conclusion of result.conclusions) {
+        if (conclusion.positive) {
+            console.log(conclusion.conclusion_type, conclusion.literal_spl);
+        }
+    }
 
-// Or parse SPL
-spindle.parseSpl(`
-  (given bird)
-  (given penguin)
-  (normally r1 bird flies)
-  (normally r2 penguin (not flies))
-  (prefer r2 r1)
-`);
-
-// Reason
-const conclusions = spindle.reason();
-// => [{conclusion_type: "+D", literal: "bird", positive: true}, ...]
-
-// Query
-const result = spindle.query("~flies");
-// => {status: "provable", literal: "~flies", conclusion_type: "+d"}
-
-// What-if hypothetical reasoning
-const whatIf = spindle.whatIf(["wounded"], "~flies");
-// => {provable: true, new_conclusions: [...]}
-
-// Why-not failure explanation
-const whyNot = spindle.whyNot("flies");
-// => {literal: "flies", would_derive: "r1", blockers: [...]}
-
-// Abduction
-const abduce = spindle.abduce("flies", 3);
-// => {goal: "flies", solutions: [[...], [...]]}
+    console.log(spindle.query('(not flies)').status); // "provable"
+    console.log(spindle.whyNot('flies').blockers);
+} finally {
+    spindle.free();
+}
 ```
 
-## Crate Structure
+`reason()` and `reasonV2()` return structured envelopes with `conclusions`,
+diagnostics, and statistics. V2 preserves typed term arguments in
+`literal_struct`; `literal_spl` provides canonical SPL for display.
+`requires(goal, maxSolutions)` returns verified requirements in the same
+`spindle.requires.v2` envelope as the CLI.
 
-- `spindle-core` - Core reasoning engine
-  - `reason/` - Traditional DL(∂) forward chaining with `Reasoner` trait
-  - `pipeline/` - Composable `PipelineStage` stages (validate, temporal, wildcard, ground)
-  - `query/` - Query operators with `QueryOperator` trait (what-if, why-not, abduction)
-  - `explanation/` - Proof trees with `ExplanationFormatter` trait (natural language, JSON, JSON-LD, DOT)
-  - `analysis/` - Theory analysis (conflicts, validation, superiority suggestions)
-  - `aggregation` - Typed finite-domain aggregate lowering and snapshot evaluation
-  - `arith` - Arithmetic expression AST, evaluation, and type promotion
-  - `body` - Body literals with arithmetic constraints (`BodyLiteral`, `BodyArg`)
-  - `term` - Typed term values (`Symbol`, `Integer`, `Decimal`, `Float`)
-  - `temporal` - Allen interval algebra
-  - `grounding` - Datalog-style variable grounding with arithmetic evaluation
-  - `trust` - Trust-weighted reasoning
-- `spindle-parser` - SPL format parser
-  - `spl/` - Lexer, expression dispatch, literal/rule/metadata handlers
-  - `spl/arith` - Arithmetic expression and constraint parsing
-- `spindle-cli` - Command-line interface
-- `spindle-wasm` - WebAssembly bindings for JavaScript/TypeScript
+Use `make wasm-node` for Node.js or `make wasm-bundler` for bundlers. See the
+[WASM reference](docs/src/integration/wasm.md) for all methods and the
+[browser guide](docs/src/guides/run-in-browser.md) for integration details.
 
-## Testing
+## Development and verification
 
-The workspace test suite covers:
-- Core reasoning (facts, rules, conflicts, superiority)
-- Modal opposition, permission/prohibition preferences, negation scope, and temporal families
-- Arithmetic expressions, type promotion, and numeric evaluation
-- Edge cases (cycles, empty theories, defeaters)
-- Stress tests (long chains, wide theories)
-- Query operators (what-if, why-not, abduction)
-- Property-based tests (proptest)
-- Pipeline integration tests
-- Regression tests for known bugs
-- Golden explanation tests
+The Cargo workspace contains five crates:
 
-```bash
-make test
-make check
+| Crate | Purpose |
+|---|---|
+| `spindle-core` | Theory types, preparation, reasoning, queries, and explanations |
+| `spindle-parser` | SPL lexer and parser |
+| `spindle-cli` | The `spindle` command-line tool |
+| `spindle-contract` | Shared CLI/WASM JSON contracts |
+| `spindle-wasm` | JavaScript bindings through WebAssembly |
+
+```sh
+make build       # Build all crates
+make test        # Workspace tests and doctests
+make check       # Formatting and clippy; zero warnings
+make bench       # Criterion benchmarks
 ```
 
-To check the Lean proofs and run the aggregate and modal differential suites (requires
-[elan](https://github.com/leanprover/elan)):
+Tests include regression cases, property tests, query and explanation checks,
+and CLI/WASM comparisons. Lean models and differential suites cover supported
+reasoning fragments, including aggregation and deontic reasoning. These provide
+kernel-checked model proofs and executable comparisons with Rust; they do not
+constitute a proof of the Rust implementation. See
+[verification](lean/README.md) for prerequisites and commands.
 
-```bash
-scripts/check-lean-verification.sh
-cargo test -p spindle-core --test lean_aggregation_oracle_difftest -- --ignored --nocapture
-cargo test -p spindle-core --test lean_modal_oracle_difftest -- --ignored --nocapture
+To preview the documentation, use the mdBook version pinned in
+[the documentation workflow](.forgejo/workflows/docs.yml):
+
+```sh
+mdbook serve docs
 ```
 
-The verification script builds `AggregationOracle`, `ModalOracle`, and the other
-oracles. Missing binaries fail explicit differential runs; ordinary Cargo runs
-skip these external-oracle tests. Forgejo and Woodpecker CI run the modal suite.
+## Releases and license
 
-The modal proofs cover normalization, opposition, negation scope, typed defense,
-finite closure, saturation, and derivability. Kernel-checked examples distinguish
-weak from strong permission. Comparisons check all four tags against Rust; they
-provide executable evidence rather than a proof of the Rust implementation.
-See [lean/README.md](lean/README.md) for the other oracles.
+The project is pre-1.0. Breaking changes bump the minor version (`0.y.0`);
+backward-compatible changes and fixes bump the patch version (`0.y.z`). See the
+[changelog](CHANGELOG.md) for release details and migration notes.
 
-## Documentation
+Spindle-Rust is part of the [SPINdle](https://research.csiro.au/bpli/tools/spindle/)
+family, based on [spindle-racket](https://codeberg.org/anuna/spindle-racket)
+v1.7.0. The original Java engine was developed at NICTA, later Data61/CSIRO.
 
-Full documentation is available at [docs/](docs/).
-Local documentation builds use the mdBook version pinned in `.forgejo/workflows/docs.yml`.
-From the repository root, serve the book locally:
-
-```bash
-cd docs && mdbook serve
-```
-
-Forgejo builds the book for pull requests that change its sources, configuration,
-theme, included `CHANGELOG.md`, or documentation workflow.
-After those changes reach `main`, it deploys to [spindle-rust.anuna.io](https://spindle-rust.anuna.io)
-through the Cloudflare Pages project `spindle-docs`.
-Generated `docs/book/` files and review notes do not trigger deployment.
-
-The workflow uses Actions secrets `CF_API_TOKEN` (Cloudflare Pages write access)
-and `CF_ACCOUNT_ID`. The token needs access to the account containing `spindle-docs`.
-A manual run on `main` can retry deployment without a content change.
-
-## References
-
-- [SPINdle Project](https://research.csiro.au/bpli/tools/spindle/) - Original Java implementation by NICTA (later Data61/CSIRO, now [CSIRO Technology](https://www.csiro.au/en/Newsletters/D61-NextGenConnect/2026-05))
-- Nute, D. (1994). "Defeasible Logic" - Foundational paper
-- [spindle-racket](https://codeberg.org/anuna/spindle-racket) - Racket implementation
-
-## License
-
-LGPL-3.0-or-later (same as original SPINdle)
+Licensed under [LGPL-3.0-or-later](LICENSE).
