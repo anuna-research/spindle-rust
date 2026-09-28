@@ -254,7 +254,7 @@ impl Spindle {
         let proof = spindle_core::explanation::explain(&prepared.theory, &lit).map_err(js_error)?;
         let diagnostics = if proof.is_none() {
             serde_json::json!([{
-                "severity":"warning", "code":"NOT_PROVABLE", "message":format!("Literal {lit} is not provable")
+                "severity":"warning", "code":"NOT_PROVABLE", "message":format!("Literal {} is not provable", lit.to_spl())
             }])
         } else {
             serde_json::json!([])

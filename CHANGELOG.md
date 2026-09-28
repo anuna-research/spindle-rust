@@ -7,6 +7,16 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 
 ## [Unreleased]
 
+### Changed
+- **Text output notation**: `explain`, `why-not`, `query`, and the abduce text
+  view now render literals in SPL form (`(forbidden (play))`) instead of the
+  bracket form (`[F]play`), matching `reason`. JSON envelopes are unchanged.
+
+### Documentation
+- Modal guide: new section explaining why an obligation-headed defeater cannot
+  block an explicit permission, with ranked-rule and body-conditional encodings
+  of the hat-and-detention example.
+
 ## [0.5.0] - 2026-09-27
 
 ### Added

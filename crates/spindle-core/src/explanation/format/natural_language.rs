@@ -36,7 +36,8 @@ impl ExplanationFormatter for NaturalLanguageFormatter {
         // Header
         output.push_str(&format!(
             "Explanation for {} {}\n",
-            explanation.conclusion_type, explanation.literal
+            explanation.conclusion_type,
+            explanation.literal.to_spl()
         ));
         output.push_str(&format!(
             "{}\n\n",
@@ -114,7 +115,7 @@ fn proof_node_to_natural_language(node: &ProofNode, num: usize, indent: &str) ->
     if node.derivation_type == DerivationType::DefeasibleRefutation {
         return format!(
             "{indent}{num}. \"{}\" was constructively refuted (-d)\n",
-            node.literal
+            node.literal.to_spl()
         );
     }
 
@@ -133,7 +134,10 @@ fn proof_node_to_natural_language(node: &ProofNode, num: usize, indent: &str) ->
 
         output.push_str(&format!(
             "{}{}. \"{}\" was {}\n",
-            indent, num, node.literal, derivation_str
+            indent,
+            num,
+            node.literal.to_spl(),
+            derivation_str
         ));
         output.push_str(&format!(
             "{}   Using {}: {}\n",

@@ -74,7 +74,7 @@ pub(crate) fn run_explain(
                 // Per contract §8.2: explain with no proof tree is exit code 0
                 let diagnostics = vec![Diagnostic::warning(
                     "NOT_PROVABLE",
-                    format!("Literal {lit} is not provable"),
+                    format!("Literal {} is not provable", lit.to_spl()),
                 )];
 
                 let output = ExplainOutput {
@@ -89,7 +89,10 @@ pub(crate) fn run_explain(
                 };
                 CommandOutput::json(output)
             } else {
-                let text = format!("{lit} is not provable.\nUse 'spindle why-not' to see why.");
+                let text = format!(
+                    "{} is not provable.\nUse 'spindle why-not' to see why.",
+                    lit.to_spl()
+                );
                 Ok(CommandOutput::text(text))
             }
         }

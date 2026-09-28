@@ -118,7 +118,7 @@ impl fmt::Display for AbductionResult {
             if sol.is_already_provable() {
                 writeln!(f, "  {}. Already provable", i + 1)?;
             } else {
-                let facts: Vec<_> = sol.facts.iter().map(|l: &Literal| l.to_string()).collect();
+                let facts: Vec<_> = sol.facts.iter().map(Literal::to_spl).collect();
                 writeln!(f, "  {}. Add facts: {{{}}}", i + 1, facts.join(", "))?;
             }
         }

@@ -378,7 +378,7 @@ fn test_query_negated_literal() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("~flies"));
+        .stdout(predicate::str::contains("(not (flies))"));
 }
 
 // ============================================================================
