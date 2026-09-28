@@ -45,13 +45,13 @@ pub fn requires_output(
     output
 }
 
-/// Serialize raw abduction candidates with legacy display strings and typed facts.
+/// Serialize raw abduction candidates with SPL fact strings and typed facts.
 pub fn abduction_output(goal: &str, result: &spindle_core::query::AbductionResult) -> Value {
     json!({"goal":goal, "solutions": result.solutions.iter().map(|s| {
         let mut rules: Vec<_> = s.rules_used.iter().cloned().collect(); rules.sort();
         let mut structured: Vec<_> = s.facts.iter().collect();
         structured.sort_by_key(|l| serde_json::to_string(&crate::literal::LiteralStructJsonV2::from(*l)).expect("literal DTO is serializable"));
-        let facts: Vec<_> = structured.iter().map(ToString::to_string).collect();
+        let facts: Vec<_> = structured.iter().map(|l| l.to_spl()).collect();
         json!({"facts": facts, "facts_struct":structured.into_iter().map(crate::literal::LiteralStructJsonV2::from).collect::<Vec<_>>(), "rules_used": rules, "confidence":s.confidence})
     }).collect::<Vec<_>>()})
 }
@@ -61,10 +61,10 @@ pub fn what_if_output(result: &spindle_core::query::WhatIfResult) -> Value {
     use crate::literal::LiteralStructJsonV2;
     json!({
         "provable":result.is_provable(),
-        "new_conclusions":result.new_conclusions.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        "new_conclusions":result.new_conclusions.iter().map(Literal::to_spl).collect::<Vec<_>>(),
         "new_conclusions_struct":result.new_conclusions.iter().map(LiteralStructJsonV2::from).collect::<Vec<_>>(),
         "changed_conclusions":result.changed_conclusions.iter().map(|(lit,old,new)| json!({
-            "literal":lit.to_string(), "literal_struct":LiteralStructJsonV2::from(lit),
+            "literal":lit.to_spl(), "literal_struct":LiteralStructJsonV2::from(lit),
             "old_type":old.symbol(), "new_type":new.symbol()
         })).collect::<Vec<_>>()
     })

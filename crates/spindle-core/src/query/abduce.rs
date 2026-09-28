@@ -149,10 +149,12 @@ fn fact_set_key(facts: &[Literal]) -> String {
     keys.join("\x1f")
 }
 
-/// Check whether `lit` is satisfied according to the literal's own match
-/// semantics. Atemporal premises match by family; bounded premises stay exact.
+/// Check whether `lit` is satisfied with the reasoner's premise semantics.
+/// Atemporal premises match by family; bounded premises stay exact; an
+/// outer-negated modal premise such as `(not (forbidden p))` is also
+/// satisfied by constructive refutation of the positive modality.
 fn is_body_satisfied(lit: &Literal, conclusions: &[Conclusion]) -> bool {
-    has_positive_match(lit, conclusions)
+    super::premise_satisfied(lit, conclusions)
 }
 
 /// Perform abductive reasoning: "What facts would make this goal provable?"

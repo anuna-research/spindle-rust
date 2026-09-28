@@ -8,9 +8,18 @@ and this project follows pre-1.0 Semantic Versioning (`0.y.z`).
 ## [Unreleased]
 
 ### Changed
-- **Text output notation**: `explain`, `why-not`, `query`, and the abduce text
-  view now render literals in SPL form (`(forbidden (play))`) instead of the
-  bracket form (`[F]play`), matching `reason`. JSON envelopes are unchanged.
+- **Output notation**: every CLI and WASM output now renders literals in SPL
+  form (`(forbidden (play))`, `(not (flies))`) instead of the bracket form
+  (`[F]play`, `~flies`), matching `reason`. This covers the `explain`,
+  `why-not`, `query` and `abduce` text views and the string fields of the JSON
+  envelopes: `proof_tree.literal` in `spindle.explain.v1`, `facts` in abduce
+  output, `new_conclusions` and `changed_conclusions[].literal` in what-if
+  output, and the WASM `query`, `whyNot`, `getPositiveConclusions` and
+  `getRules` results. The typed `*_struct` fields are unchanged.
+- **abduce premise semantics**: `abduce` and `requires` now judge body
+  literals with the reasoner's premise semantics, so an outer-negated modal
+  premise such as `(not (forbidden p))` that holds by constructive refutation
+  is no longer reported as a missing fact.
 
 ### Documentation
 - Modal guide: new section explaining why an obligation-headed defeater cannot
