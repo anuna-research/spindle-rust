@@ -72,7 +72,7 @@ pub struct BlockingCondition {
 impl BlockingCondition {
     /// Create a missing premise blocking condition
     pub fn missing_premise(rule_label: impl Into<String>, missing: Vec<Literal>) -> Self {
-        let missing_str: Vec<_> = missing.iter().map(|l| l.to_string()).collect();
+        let missing_str: Vec<_> = missing.iter().map(|l| l.to_spl()).collect();
         Self {
             blocking_type: BlockingType::MissingPremise,
             rule_label: rule_label.into(),
@@ -167,7 +167,7 @@ impl fmt::Display for WhyNotResult {
     /// Convert to human-readable string
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_provable() {
-            write!(f, "{} is provable", self.literal)?;
+            write!(f, "{} is provable", self.literal.to_spl())?;
             if let Some(ref rule) = self.would_derive {
                 write!(f, " (derived by rule: {rule})")?;
             }
@@ -178,11 +178,11 @@ impl fmt::Display for WhyNotResult {
             return write!(
                 f,
                 "{} is not provable: no rules can derive it",
-                self.literal
+                self.literal.to_spl()
             );
         }
 
-        writeln!(f, "{} is not provable:", self.literal)?;
+        writeln!(f, "{} is not provable:", self.literal.to_spl())?;
 
         if let Some(ref rule) = self.would_derive {
             writeln!(f, "  Would be derived by rule: {rule}")?;
@@ -517,7 +517,7 @@ mod tests {
         assert!(result.is_provable());
 
         let display = result.to_string();
-        assert!(display.contains("flies is provable"));
+        assert!(display.contains("(flies) is provable"));
         assert!(display.contains("derived by rule"));
     }
 

@@ -21,7 +21,7 @@ fn examples() -> Vec<String> {
     assert!(current.is_none(), "unclosed SPL fence");
     assert_eq!(
         examples.len(),
-        7,
+        12,
         "update the example audit when SPL fences change"
     );
     examples

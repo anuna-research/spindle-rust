@@ -401,7 +401,7 @@ fn test_penguin_example() {
     assert!(conclusions.iter().any(|c| c.contains("penguin")));
 
     // ~flies should be derived (penguin exception beats bird rule)
-    assert!(conclusions.iter().any(|c| c.contains("~flies")));
+    assert!(conclusions.iter().any(|c| c.contains("(not (flies))")));
 }
 
 #[wasm_bindgen_test]
@@ -415,10 +415,10 @@ fn test_chain_reasoning() {
 
     let conclusions = spindle.get_positive_conclusions().unwrap();
 
-    assert!(conclusions.iter().any(|c| c.contains(" a")));
-    assert!(conclusions.iter().any(|c| c.contains(" b")));
-    assert!(conclusions.iter().any(|c| c.contains(" c")));
-    assert!(conclusions.iter().any(|c| c.contains(" d")));
+    assert!(conclusions.iter().any(|c| c.contains(" (a)")));
+    assert!(conclusions.iter().any(|c| c.contains(" (b)")));
+    assert!(conclusions.iter().any(|c| c.contains(" (c)")));
+    assert!(conclusions.iter().any(|c| c.contains(" (d)")));
 }
 
 #[wasm_bindgen_test]

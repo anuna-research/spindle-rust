@@ -69,7 +69,7 @@ fn hypothetical_facts_ground_new_bindings_and_candidates_are_unverified() {
     let v = run(&["what-if", "(q 2)", "--given", "(p 2)"], source);
     assert_eq!(v["provable"], true);
     let v = run(&["abduce", "q"], "(normally r p q)");
-    assert_eq!(v["solutions"][0]["facts"][0], "p");
+    assert_eq!(v["solutions"][0]["facts"][0], "(p)");
 }
 
 #[test]

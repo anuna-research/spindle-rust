@@ -115,7 +115,7 @@ fn tweety_json_bird() {
     );
 
     // Check literal value
-    assert_eq!(value["literal"], "bird");
+    assert_eq!(value["literal"], "(bird)");
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn tweety_json_penguin() {
     let value: serde_json::Value =
         serde_json::from_str(&output).expect("JSON formatter output should be valid JSON");
 
-    assert_eq!(value["literal"], "penguin");
+    assert_eq!(value["literal"], "(penguin)");
     // penguin is a fact, so conclusion_type should be +D
     assert_eq!(value["conclusion_type"], "+D");
 }
@@ -277,7 +277,7 @@ fn nixon_json_republican() {
     let output = JsonFormatter.format(&expl);
 
     let value: serde_json::Value = serde_json::from_str(&output).expect("should be valid JSON");
-    assert_eq!(value["literal"], "republican");
+    assert_eq!(value["literal"], "(republican)");
     assert_eq!(value["conclusion_type"], "+D");
 }
 
@@ -357,7 +357,7 @@ fn tweety_convenience_methods() {
 
     // to_json()
     let json = expl.to_json();
-    assert_eq!(json["literal"], "bird");
+    assert_eq!(json["literal"], "(bird)");
 
     // to_jsonld()
     let jsonld = expl.to_jsonld();
@@ -439,7 +439,7 @@ fn facts_only_all_formatters() {
         // JSON
         let json_str = JsonFormatter.format(&expl);
         let value: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(value["literal"].as_str().unwrap(), *fact_name);
+        assert_eq!(value["literal"].as_str().unwrap(), format!("({fact_name})"));
         assert_eq!(value["conclusion_type"], "+D");
 
         // JSON-LD

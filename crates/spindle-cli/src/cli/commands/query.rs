@@ -67,13 +67,13 @@ pub(crate) fn run_query(
         let text = match result.status {
             QueryStatus::Provable => {
                 let ct = result.conclusion_type.unwrap();
-                format!("{} {}", ct.symbol(), result.literal)
+                format!("{} {}", ct.symbol(), result.literal.to_spl())
             }
             QueryStatus::Refuted => {
-                format!("Refuted: {}", result.literal)
+                format!("Refuted: {}", result.literal.to_spl())
             }
             QueryStatus::Unknown => {
-                format!("Unknown: {}", result.literal)
+                format!("Unknown: {}", result.literal.to_spl())
             }
         };
         Ok(CommandOutput::text(text))

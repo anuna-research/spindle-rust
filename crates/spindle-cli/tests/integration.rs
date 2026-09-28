@@ -378,7 +378,7 @@ fn test_query_negated_literal() {
         .arg(&path)
         .assert()
         .success()
-        .stdout(predicate::str::contains("~flies"));
+        .stdout(predicate::str::contains("(not (flies))"));
 }
 
 // ============================================================================
@@ -1050,4 +1050,100 @@ fn query_and_explain_json_share_readable_modal_names() {
         );
         assert_eq!(json["literal_struct"]["negated"], false);
     }
+}
+
+// ============================================================================
+// Output notation: every command renders literals in SPL form
+// ============================================================================
+
+const MODAL_THEORY: &str = r#"
+(given hat)
+(given detention)
+(normally no-play () (forbidden play))
+(normally hat-play hat (may play))
+(normally detention-no-play detention (forbidden play))
+(prefer hat-play no-play)
+(prefer detention-no-play hat-play)
+(normally ok (and visitor (not (forbidden photograph))) photography-not-prohibited)
+"#;
+
+fn bracket_free() -> impl Predicate<str> {
+    predicate::str::contains("[F]")
+        .or(predicate::str::contains("[O]"))
+        .or(predicate::str::contains("[P]"))
+        .or(predicate::str::contains("[-"))
+        .or(predicate::str::contains("~"))
+        .not()
+}
+
+#[test]
+fn test_all_commands_render_literals_in_spl_form() {
+    let (_dir, path) = setup_theory_file(MODAL_THEORY, "spl");
+    let path = path.to_str().unwrap();
+    let invocations: Vec<Vec<&str>> = vec![
+        vec!["reason", path, "--detailed"],
+        vec!["query", "(may play)", path],
+        vec!["query", "(forbidden play)", path],
+        vec!["explain", "(forbidden play)", path],
+        vec!["explain", "(may play)", path],
+        vec!["why-not", "(may play)", path],
+        vec!["requires", "photography-not-prohibited", path],
+        vec!["abduce", "(must play)", path],
+        vec!["abduce", "(may play)", path],
+        vec![
+            "what-if",
+            "(not (may play))",
+            path,
+            "--given",
+            "(forbidden photograph)",
+        ],
+    ];
+    for args in &invocations {
+        for json in [false, true] {
+            let mut cmd = spindle();
+            cmd.args(args);
+            if json {
+                cmd.arg("--json");
+            }
+            let output = cmd.output().unwrap();
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            assert!(
+                bracket_free().eval(&stdout),
+                "bracket notation in `spindle {}{}`:\n{stdout}",
+                args.join(" "),
+                if json { " --json" } else { "" }
+            );
+        }
+    }
+}
+
+#[test]
+fn test_explain_json_proof_tree_uses_spl_literals() {
+    let (_dir, path) = setup_theory_file(MODAL_THEORY, "spl");
+    let output = spindle()
+        .arg("explain")
+        .arg("(forbidden play)")
+        .arg(&path)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["proof_tree"]["literal"], "(forbidden (play))");
+    assert_eq!(
+        json["proof_tree"]["proof_tree"]["proof_step"]["body_proofs"][0]["literal"],
+        "(detention)"
+    );
+}
+
+#[test]
+fn test_requires_accepts_refuted_modal_premise() {
+    let (_dir, path) = setup_theory_file(MODAL_THEORY, "spl");
+    spindle()
+        .arg("requires")
+        .arg("photography-not-prohibited")
+        .arg(&path)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("{(visitor)}"))
+        .stdout(predicate::str::contains("(not (forbidden").not());
 }

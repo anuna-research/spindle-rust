@@ -226,6 +226,173 @@ blocks the obligation without imposing a prohibition. This example does not
 grant permission either. Under the strong-permission profile, an
 obligation-headed defeater cannot block an explicit permission.
 
+## A defeater cannot cancel a permission
+
+The previous example blocks an *obligation*. The reverse does not work: a
+defeater whose head is an obligation, and `(forbidden p)` is `(must (not p))`,
+never blocks an explicit permission, no matter how it is ranked by `prefer`.
+
+Playing is normally forbidden, but wearing a hat grants permission. Detention
+is written as a defeater in the hope of withdrawing that permission.
+
+```spl
+(given hat)
+(given detention)
+
+(normally no-play () (forbidden play))
+(normally hat-play hat (may play))
+(prefer hat-play no-play)
+
+(except detention-no-play detention (forbidden play))
+(prefer detention-no-play hat-play)
+```
+
+Expected proved conclusions:
+
+```text
+(hat)
+(detention)
+(may (play))
+```
+
+The permission survives, and the second `prefer` line is irrelevant. Under
+Definition 10 of the strong-permission profile, only an **obligation rule** can
+attack a permission. Defeaters are not obligation rules, so `detention-no-play`
+is never a candidate attacker, and superiority only matters between an
+attacker and its defenders. `spindle reason --detailed` shows `+d (may (play))`
+with no refutation from the defeater.
+
+This is the mirror image of the copying-fee example above. A defeater may
+protect an obligation or a permission from an obligation attacker, and it may
+block an obligation, but it cannot block a permission.
+
+There are two ways to make detention count. Choose by what detention should mean.
+
+**Detention imposes a prohibition.** Use a defeasible rule, which is an
+obligation rule and therefore a legitimate attacker, and rank it above the
+permission:
+
+```spl
+(given hat)
+(given detention)
+
+(normally no-play () (forbidden play))
+(normally hat-play hat (may play))
+(prefer hat-play no-play)
+
+(normally detention-no-play detention (forbidden play))
+(prefer detention-no-play hat-play)
+```
+
+Expected proved conclusions:
+
+```text
+(hat)
+(detention)
+(forbidden (play))
+```
+
+Without the final `prefer` line, neither `(may play)` nor `(forbidden play)` is
+proved: each rule is an undefeated attacker of the other.
+
+**Detention only withdraws the hat privilege.** Use a defeater whose head is
+the outer-negated permission. Outer-negated heads are a Spindle extension to the
+paper's rule language, and they oppose the unnegated assertion with ordinary
+superiority, so this defeater can attack `(may play)`:
+
+```spl
+(given hat)
+(given detention)
+
+(normally no-play () (forbidden play))
+(normally hat-play hat (may play))
+(prefer hat-play no-play)
+
+(except detention-no-play detention (not (may play)))
+```
+
+Expected proved conclusions:
+
+```text
+(hat)
+(detention)
+```
+
+Only the input facts are proved. The permission is blocked, and nothing is
+asserted in its place, not even the prohibition, because `hat-play` still
+defeats `no-play`. No `prefer` line is needed, since an
+undefeated applicable attacker is enough to block. Adding
+`(prefer hat-play detention-no-play)` would restore `(may (play))`.
+
+### Expressing the intent directly
+
+In words, the intent is: playing is forbidden by default; a hat lifts that
+prohibition; detention reinstates it even for a hat wearer. That is a chain of
+three defaults, each overriding the one before, and the ranked-rules encoding
+above says exactly that. The permission and both prohibitions are ordinary
+obligation and permission rules, and the two `prefer` lines are the ranking:
+
+```spl
+(given hat)
+(given detention)
+
+(normally no-play () (forbidden play))
+(normally hat-play hat (may play))
+(normally detention-no-play detention (forbidden play))
+(prefer hat-play no-play)
+(prefer detention-no-play hat-play)
+```
+
+Expected proved conclusions:
+
+```text
+(hat)
+(detention)
+(forbidden (play))
+```
+
+Remove `(given detention)` and `(may (play))` is proved instead.
+
+Reserve `except` for genuine doubt, where a condition should stop a conclusion
+without asserting anything in its place. Detention is not doubt about the hat
+rule; it is a stronger rule with its own conclusion.
+
+The other natural encoding puts the exception in the body of the permission
+rule instead of in the ranking:
+
+```spl
+(given hat)
+(given (not detention))
+
+(normally no-play () (forbidden play))
+(normally hat-play (and hat (not detention)) (may play))
+(prefer hat-play no-play)
+```
+
+Expected proved conclusions:
+
+```text
+(hat)
+(not (detention))
+(may (play))
+```
+
+The two encodings differ when detention is unknown. A plain negative premise
+such as `(not detention)` is strong negation: it needs `(not detention)` to be
+proved, usually as a fact. With no fact about detention either way, the
+body-conditional rule cannot apply and playing stays forbidden, while the
+ranked-rules version grants the permission. Choose the ranking when the hat
+should win unless detention is established; choose the body condition when
+the permission should require positive evidence that there is no detention.
+
+| Version of `detention-no-play` | Extra `prefer` | Proved, apart from facts |
+|---|---|---|
+| `except` with head `(forbidden play)` | any or none | `(may (play))` |
+| `normally` with head `(forbidden play)` | none | nothing |
+| `normally` with head `(forbidden play)` | `detention-no-play` over `hat-play` | `(forbidden (play))` |
+| `except` with head `(not (may play))` | none | nothing |
+| `except` with head `(not (may play))` | `hat-play` over `detention-no-play` | `(may (play))` |
+
 ## Strong-permission profile
 
 Spindle uses the **single-head SDL strong-permission profile** by default.

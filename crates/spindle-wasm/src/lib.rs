@@ -254,7 +254,7 @@ impl Spindle {
         let proof = spindle_core::explanation::explain(&prepared.theory, &lit).map_err(js_error)?;
         let diagnostics = if proof.is_none() {
             serde_json::json!([{
-                "severity":"warning", "code":"NOT_PROVABLE", "message":format!("Literal {lit} is not provable")
+                "severity":"warning", "code":"NOT_PROVABLE", "message":format!("Literal {} is not provable", lit.to_spl())
             }])
         } else {
             serde_json::json!([])
@@ -303,7 +303,7 @@ impl Spindle {
         Ok(conclusions
             .iter()
             .filter(|c| c.conclusion_type.is_positive())
-            .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal))
+            .map(|c| format!("{} {}", c.conclusion_type.symbol(), c.literal.to_spl()))
             .collect())
     }
 
@@ -320,7 +320,7 @@ impl Spindle {
                 QueryStatus::Refuted => "refuted".to_string(),
                 QueryStatus::Unknown => "unknown".to_string(),
             },
-            literal: literal.to_string(),
+            literal: lit.to_spl(),
             conclusion_type: result.conclusion_type.map(|ct| ct.symbol().to_string()),
         };
 
@@ -351,7 +351,7 @@ impl Spindle {
             .map_err(|e| JsError::new(&e.to_string()))?;
 
         let js_result = JsWhyNotResult {
-            literal: literal.to_string(),
+            literal: lit.to_spl(),
             is_provable: result.is_provable(),
             would_derive: result.would_derive,
             blockers: result
@@ -407,8 +407,8 @@ impl Spindle {
             .map(|r| JsRule {
                 label: r.label.clone(),
                 rule_type: format!("{:?}", r.rule_type),
-                body: r.body.iter().map(|l| l.to_string()).collect(),
-                head: r.head.iter().map(|l| l.to_string()).collect(),
+                body: r.body.iter().map(|l| l.to_spl()).collect(),
+                head: r.head.iter().map(|l| l.to_spl()).collect(),
             })
             .collect();
 
@@ -732,10 +732,10 @@ mod tests {
         spindle.add_defeasible_rule(vec!["c".to_string()], "d");
 
         let conclusions = spindle.get_positive_conclusions().unwrap();
-        assert!(conclusions.iter().any(|c| c.contains(" a")));
-        assert!(conclusions.iter().any(|c| c.contains(" b")));
-        assert!(conclusions.iter().any(|c| c.contains(" c")));
-        assert!(conclusions.iter().any(|c| c.contains(" d")));
+        assert!(conclusions.iter().any(|c| c.contains(" (a)")));
+        assert!(conclusions.iter().any(|c| c.contains(" (b)")));
+        assert!(conclusions.iter().any(|c| c.contains(" (c)")));
+        assert!(conclusions.iter().any(|c| c.contains(" (d)")));
     }
 
     #[test]
@@ -776,7 +776,7 @@ mod tests {
         let conclusions = spindle.get_positive_conclusions().unwrap();
         assert!(conclusions.iter().any(|c| c.contains("bird")));
         assert!(conclusions.iter().any(|c| c.contains("penguin")));
-        assert!(conclusions.iter().any(|c| c.contains("~flies")));
+        assert!(conclusions.iter().any(|c| c.contains("(not (flies))")));
     }
 
     // Note: parse error tests require WASM target due to JsError

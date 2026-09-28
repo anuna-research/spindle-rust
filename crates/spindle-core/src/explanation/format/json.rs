@@ -23,7 +23,7 @@ impl JsonFormatter {
     pub fn to_value(&self, explanation: &Explanation) -> serde_json::Value {
         serde_json::json!({
             "conclusion_type": explanation.conclusion_type.symbol(),
-            "literal": explanation.literal.to_string(),
+            "literal": explanation.literal.to_spl(),
             "proof_tree": explanation.proof_tree.as_ref().map(proof_node_to_json),
             "blocked_alternatives": explanation.blocked_alternatives.iter()
                 .map(blocked_proof_to_json)
@@ -42,7 +42,7 @@ impl JsonFormatter {
 /// Convert proof node to JSON.
 fn proof_node_to_json(node: &ProofNode) -> serde_json::Value {
     serde_json::json!({
-        "literal": node.literal.to_string(),
+        "literal": node.literal.to_spl(),
         "derivation_type": match node.derivation_type {
             DerivationType::Definite => "definite",
             DerivationType::Defeasible => "defeasible",
@@ -67,7 +67,7 @@ fn proof_node_to_json(node: &ProofNode) -> serde_json::Value {
 /// Convert blocked proof to JSON.
 fn blocked_proof_to_json(blocked: &BlockedProof) -> serde_json::Value {
     serde_json::json!({
-        "literal": blocked.literal.to_string(),
+        "literal": blocked.literal.to_spl(),
         "rule_label": blocked.rule_label,
         "reason": blocked.reason.to_string(),
         "blocking_rule": blocked.blocking_rule,
@@ -98,7 +98,7 @@ mod tests {
 
         let json = explanation.to_json();
         assert_eq!(json["conclusion_type"], "+d");
-        assert_eq!(json["literal"], "flies");
+        assert_eq!(json["literal"], "(flies)");
     }
 
     #[test]
@@ -113,7 +113,7 @@ mod tests {
 
         let json = explanation.to_json();
         assert!(json["proof_tree"].is_object());
-        assert_eq!(json["proof_tree"]["literal"], "flies");
+        assert_eq!(json["proof_tree"]["literal"], "(flies)");
         assert_eq!(json["proof_tree"]["derivation_type"], "defeasible");
         assert_eq!(json["proof_tree"]["proof_step"]["rule_label"], "r1");
         assert_eq!(json["proof_tree"]["proof_step"]["rule_type"], "defeasible");

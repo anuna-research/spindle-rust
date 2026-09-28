@@ -4,7 +4,7 @@ Spindle’s explanation system exposes the derivation path of defeasible reasoni
 
 ## Explanation Coverage
 
-Defeasible reasoning involves rules that can be overridden, conflicts between competing conclusions, and subtle interactions between superiority relations. A bare conclusion like `+d ~flies` tells you the result but not the story. The explanation system answers questions such as:
+Defeasible reasoning involves rules that can be overridden, conflicts between competing conclusions, and subtle interactions between superiority relations. A bare conclusion like `+d (not (flies))` tells you the result but not the story. The explanation system answers questions such as:
 
 - Which rules fired to produce this conclusion?
 - Were there competing rules that were defeated?
@@ -94,14 +94,14 @@ println!("{}", text);
 Produces human-readable output with headers, indented proof trees, and numbered lists:
 
 ```
-Explanation for +d ~flies
+Explanation for +d (not (flies))
 This was proven using defeasible rules and was not defeated by any conflicting rule.
 
 Derivation:
-  1. "~flies" was derived defeasibly
+  1. "(not (flies))" was derived defeasibly
      Using defeasible rule: r2
      Prerequisites:
-       1. "penguin" was established as a fact
+       1. "(penguin)" was established as a fact
           Using fact: f1
 
 Blocked Alternatives:
@@ -124,9 +124,9 @@ Produces a structured JSON value with nested proof trees:
 ```json
 {
   "conclusion_type": "+d",
-  "literal": "~flies",
+  "literal": "(not (flies))",
   "proof_tree": {
-    "literal": "~flies",
+    "literal": "(not (flies))",
     "derivation_type": "defeasible",
     "proof_step": {
       "rule_label": "r2",
@@ -134,7 +134,7 @@ Produces a structured JSON value with nested proof trees:
       "rule_text": "penguin -> ~flies",
       "body_proofs": [
         {
-          "literal": "penguin",
+          "literal": "(penguin)",
           "derivation_type": "definite",
           "proof_step": {
             "rule_label": "f1",
@@ -148,7 +148,7 @@ Produces a structured JSON value with nested proof trees:
   },
   "blocked_alternatives": [
     {
-      "literal": "flies",
+      "literal": "(flies)",
       "rule_label": "r1",
       "reason": "superiority",
       "blocking_rule": "r2",
